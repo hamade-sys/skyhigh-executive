@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SkyHigh Executive — Airline Strategy Tycoon</title>
+  <meta name="description" content="Lead your airline empire through 20 quarters of strategic decisions, crises, and legacy-building.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/animations.css">
+
+  <!-- Map libraries (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- SPLASH SCREEN                                           -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="screen-splash" class="screen">
+    <div class="splash-logo">SkyHigh</div>
+    <div class="splash-subtitle">Executive Edition</div>
+    <div class="splash-tagline">Build an airline empire. Navigate crises. Shape your legacy. 20 quarters to prove you belong at the top.</div>
+    <div id="splash-cta" style="display:flex;flex-direction:column;align-items:center;gap:1rem">
+      <button id="btn-new-game" class="btn btn-primary btn-lg">
+        ✈ Begin New Campaign
+      </button>
+      <div class="text-muted" style="font-size:0.75rem;letter-spacing:0.1em">Press anywhere to start</div>
+    </div>
+    <div class="splash-by">AN OZUNA INTERACTIVE PRODUCTION</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- SETUP SCREEN                                            -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="screen-setup" class="screen">
+    <div class="setup-header">Airline Identity Setup</div>
+    <div class="setup-step-label">Define your executive profile before the first quarter</div>
+
+    <div class="setup-form">
+
+      <!-- CEO & Airline Info -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Executive Profile</span>
+          <span class="card-badge badge-gold">Required</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+          <div class="form-group">
+            <label class="form-label" for="input-ceo">CEO Name</label>
+            <input id="input-ceo" class="form-input" type="text" placeholder="Alex Rivera" maxlength="30">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="input-airline">Airline Name</label>
+            <input id="input-airline" class="form-input" type="text" placeholder="SkyHigh Airlines" maxlength="40">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+          <div class="form-group">
+            <label class="form-label" for="input-code">IATA Code (2-3 letters)</label>
+            <input id="input-code" class="form-input" type="text" placeholder="SHX" maxlength="3" style="text-transform:uppercase">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Airline Logo</label>
+            <!-- Livery preview strip -->
+            <div class="livery-preview" id="livery-preview">
+              <span id="livery-logo-preview" style="font-size:1.6rem">🦅</span>
+              <span id="livery-name-preview" class="livery-preview-name">Eagle Wing</span>
+            </div>
+          </div>
+        </div>
+        <!-- Logo picker grid -->
+        <div class="logo-picker-grid" id="logo-picker-grid">
+          <!-- Populated by JS from AIRLINE_LOGOS -->
+        </div>
+      </div>
+
+      <!-- Doctrine -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Airline Doctrine</span>
+          <span class="card-badge badge-info">Shapes your bonuses</span>
+        </div>
+        <div class="doctrine-grid">
+          <div class="doctrine-card" data-doctrine="BUDGET_EXPANSION">
+            <div class="doctrine-icon">📈</div>
+            <div class="doctrine-name">Budget Expansion</div>
+            <div class="doctrine-tag">"Volume is victory."</div>
+            <div class="doctrine-desc">+20% demand, -15% fares. Build the biggest network fastest.</div>
+          </div>
+          <div class="doctrine-card" data-doctrine="PREMIUM_SERVICE">
+            <div class="doctrine-icon">⭐</div>
+            <div class="doctrine-name">Premium Service</div>
+            <div class="doctrine-tag">"Every flight a first class experience."</div>
+            <div class="doctrine-desc">+30% fares, +15% prestige growth. Charge what the brand is worth.</div>
+          </div>
+          <div class="doctrine-card" data-doctrine="CARGO_DOMINANCE">
+            <div class="doctrine-icon">📦</div>
+            <div class="doctrine-name">Cargo Dominance</div>
+            <div class="doctrine-tag">"Cargo never sleeps."</div>
+            <div class="doctrine-desc">+25% cargo revenue, -20% demand volatility. Stable in crises.</div>
+          </div>
+          <div class="doctrine-card" data-doctrine="SAFETY_FIRST">
+            <div class="doctrine-icon">🛡</div>
+            <div class="doctrine-name">Safety First</div>
+            <div class="doctrine-tag">"Zero incidents. Zero compromises."</div>
+            <div class="doctrine-desc">+25% Safety Shield, -20% crisis chance. The airline regulators trust.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Home Hub -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Home Hub Airport</span>
+          <span class="card-badge badge-gold">+5 all stats</span>
+        </div>
+        <div class="hub-select">
+          <div class="hub-option" data-hub="JFK">
+            <div class="hub-code">JFK</div>
+            <div class="hub-city">New York</div>
+          </div>
+          <div class="hub-option" data-hub="LHR">
+            <div class="hub-code">LHR</div>
+            <div class="hub-city">London</div>
+          </div>
+          <div class="hub-option" data-hub="DXB">
+            <div class="hub-code">DXB</div>
+            <div class="hub-city">Dubai</div>
+          </div>
+          <div class="hub-option" data-hub="SIN">
+            <div class="hub-code">SIN</div>
+            <div class="hub-city">Singapore</div>
+          </div>
+          <div class="hub-option" data-hub="FRA">
+            <div class="hub-code">FRA</div>
+            <div class="hub-city">Frankfurt</div>
+          </div>
+          <div class="hub-option" data-hub="NRT">
+            <div class="hub-code">NRT</div>
+            <div class="hub-city">Tokyo</div>
+          </div>
+          <div class="hub-option" data-hub="GRU">
+            <div class="hub-code">GRU</div>
+            <div class="hub-city">São Paulo</div>
+          </div>
+          <div class="hub-option" data-hub="SVO">
+            <div class="hub-code">SVO</div>
+            <div class="hub-city">Moscow</div>
+          </div>
+          <div class="hub-option" data-hub="LAX">
+            <div class="hub-code">LAX</div>
+            <div class="hub-city">Los Angeles</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Starting Fleet hint -->
+      <div style="background:rgba(200,147,58,0.08);border:1px solid rgba(200,147,58,0.2);border-radius:var(--radius-lg);padding:0.75rem 1rem;font-size:0.8rem;color:var(--text-sec)">
+        ✈ You start with 2× A320neo Narrowbodies and $50M in reserves. Build your network from the world map.
+      </div>
+
+      <button id="btn-start-game" class="btn btn-primary btn-lg btn-full">
+        🚀 Launch Airline
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- GAME SCREEN                                             -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="screen-game" class="screen" style="flex-direction:column">
+
+    <!-- HEADER — ATO style -->
+    <header id="game-header">
+      <!-- Left: Avatar + airline identity -->
+      <div class="ato-header-left">
+        <div class="ato-avatar" id="header-logo-avatar">✈</div>
+        <div class="ato-identity">
+          <div class="ato-airline-name" id="airline-name-display">SkyHigh Airlines</div>
+          <div class="ato-airline-sub" id="airline-code-display">SHX</div>
+        </div>
+      </div>
+
+      <!-- Center-left: company value + cash chips -->
+      <div class="ato-resource-bar">
+        <div class="ato-chip">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+          <span class="ato-chip-val" id="company-value-display">50,000K</span>
+        </div>
+        <div class="ato-chip ato-chip-gold">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#FFD700" stroke="#B8860B" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h4.5a1.5 1.5 0 010 3H9m0 0h5a1.5 1.5 0 010 3H9" stroke="#B8860B" stroke-width="1.5" fill="none"/></svg>
+          <span class="ato-chip-val ato-chip-gold-text" id="cash-amount">50,000K</span>
+        </div>
+        <div class="ato-chip ato-chip-green">
+          <div class="ato-green-circle" id="credits-amount">10</div>
+          <button class="ato-plus-btn" title="Use credits">+</button>
+        </div>
+      </div>
+
+      <!-- Center: date + quarter + phase -->
+      <div class="ato-header-center">
+        <div class="ato-date-block">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span id="game-date-display">1985.01</span>
+        </div>
+        <div class="ato-qtr-block">
+          <span class="ato-qtr-label">QTR</span>
+          <span class="ato-qtr-num" id="round-num">1</span>
+          <span class="ato-qtr-of" id="round-of">/ 20</span>
+        </div>
+        <div id="stage-pill" class="stage-pill stage-1">Stage 1</div>
+        <div class="phase-indicator">
+          <div class="phase-dot active" id="phase-dot-command" title="Command"></div>
+          <div class="phase-dot" id="phase-dot-crisis" title="Crisis"></div>
+          <div class="phase-dot" id="phase-dot-result" title="Result"></div>
+          <div class="phase-dot" id="phase-dot-report" title="Report"></div>
+          <span class="phase-label" id="phase-label">COMMAND</span>
+        </div>
+      </div>
+
+      <!-- Right: star rating + reset -->
+      <div class="ato-header-right">
+        <div class="ato-rating-block">
+          <span class="ato-rating-label">RATING</span>
+          <div class="ato-star-row" id="star-display">★★★☆☆</div>
+        </div>
+        <button id="btn-reset-view" class="ato-icon-btn" title="Reset map view (R)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20A14.5 14.5 0 0 0 12 2"/><path d="M2 12h20"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- BODY: LEFT NAV + MAP + SIDEBAR -->
+    <div id="game-body">
+
+      <!-- LEFT ICON NAV — ATO style -->
+      <nav id="left-nav">
+        <div class="lnav-logo" id="lnav-logo-icon">✈</div>
+
+        <div class="lnav-item active" data-panel="overview" onclick="SkyHigh.UI.switchSidebarTab('overview')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>Ops</span>
+        </div>
+
+        <div class="lnav-item" data-panel="routes" onclick="SkyHigh.UI.switchSidebarTab('routes')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h18M3 6l9-3 9 3M3 18l9 3 9-3"/></svg>
+          <span>Routes</span>
+        </div>
+
+        <div class="lnav-item" data-panel="fleet" onclick="SkyHigh.UI.switchSidebarTab('fleet')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 19-7z"/></svg>
+          <span>Fleet</span>
+        </div>
+
+        <div class="lnav-sep"></div>
+
+        <div class="lnav-item" data-panel="finance" onclick="SkyHigh.UI.switchSidebarTab('finance')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          <span>Finance</span>
+        </div>
+
+        <div class="lnav-item" data-panel="events" onclick="SkyHigh.UI.switchSidebarTab('events')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Events</span>
+          <span class="lnav-badge" id="lnav-events-badge" style="display:none">!</span>
+        </div>
+
+        <div class="lnav-sep"></div>
+
+        <div class="lnav-item" data-panel="fleet" onclick="SkyHigh.UI._showBuyPlaneModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v20M4.93 4.93l14.14 14.14M2 12h20M4.93 19.07l14.14-14.14"/></svg>
+          <span>Buy</span>
+        </div>
+
+        <div class="lnav-item lnav-bottom" onclick="SkyHigh.UI.switchSidebarTab('overview')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Info</span>
+        </div>
+      </nav>
+
+      <!-- SIDEBAR — ATO-styled panel (LEFT, collapsible) -->
+      <div id="sidebar">
+
+        <!-- Slim section header — shows which tab is active, no duplicate nav -->
+        <div class="sidebar-panel-header">
+          <span id="sidebar-current-tab-name">Overview</span>
+        </div>
+
+        <!-- ── OVERVIEW TAB ── -->
+        <div class="at3-tab-content active" id="tab-overview">
+          <div class="at3-section-head">
+            <span>Command Phase</span>
+            <div class="ap-counter">
+              <span class="ap-label">AP</span>
+              <div id="ap-dots"><div class="ap-dot filled"></div><div class="ap-dot filled"></div><div class="ap-dot filled"></div></div>
+            </div>
+          </div>
+
+          <!-- Quick stats row -->
+          <div class="at3-stats-row">
+            <div class="at3-stat-cell">
+              <div class="at3-stat-label">Net / Qtr</div>
+              <div class="at3-stat-val positive" id="overview-net">—</div>
+            </div>
+            <div class="at3-stat-cell">
+              <div class="at3-stat-label">Routes</div>
+              <div class="at3-stat-val" id="overview-routes">0</div>
+            </div>
+            <div class="at3-stat-cell">
+              <div class="at3-stat-label">Fleet</div>
+              <div class="at3-stat-val" id="overview-fleet">0</div>
+            </div>
+            <div class="at3-stat-cell">
+              <div class="at3-stat-label">Debt</div>
+              <div class="at3-stat-val warning" id="overview-debt">$0</div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="at3-section-label">Actions</div>
+          <div class="at3-action-grid">
+            <button class="at3-action-btn" id="btn-buy-plane">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 015 12.84a19.79 19.79 0 01-3-8.67A2 2 0 013.83 2h3.12a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+              <span>Fleet</span>
+              <span class="at3-action-cost">1 AP</span>
+            </button>
+            <button class="at3-action-btn" id="btn-invest-safety">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>Safety</span>
+              <span class="at3-action-cost">$2M</span>
+            </button>
+            <button class="at3-action-btn" id="btn-train-crew">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+              <span>Crew</span>
+              <span class="at3-action-cost">$1.8M</span>
+            </button>
+            <button class="at3-action-btn" id="btn-marketing">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              <span>Campaign</span>
+              <span class="at3-action-cost">$1.5M</span>
+            </button>
+            <button class="at3-action-btn" id="btn-facilities">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              <span>Facilities</span>
+              <span class="at3-action-cost">1 AP</span>
+            </button>
+            <button class="at3-action-btn" id="btn-finance-action" onclick="SkyHigh.UI.switchSidebarTab('finance')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+              <span>Finance</span>
+              <span class="at3-action-cost">Loans / Fuel</span>
+            </button>
+          </div>
+
+          <div class="at3-divider"></div>
+          <button id="btn-end-command" class="at3-end-btn">
+            End Quarter  ›
+          </button>
+        </div>
+
+        <!-- ── ROUTES TAB ── -->
+        <div class="at3-tab-content" id="tab-routes">
+          <div class="at3-section-head"><span>Active Routes</span><span id="route-count-badge" class="at3-count-badge">0</span></div>
+          <div id="route-list"></div>
+          <div id="fleet-list" style="display:none"></div>
+        </div>
+
+        <!-- ── FLEET TAB ── -->
+        <div class="at3-tab-content" id="tab-fleet">
+          <div class="at3-section-head"><span>Fleet</span>
+            <button class="at3-pill-btn" id="btn-buy-plane-fleet">+ Acquire</button>
+          </div>
+          <div id="fleet-list-main"></div>
+          <div class="at3-section-head" style="margin-top:0.75rem"><span>Delivery Queue</span></div>
+          <div id="delivery-queue-tab"></div>
+        </div>
+
+        <!-- ── FINANCE TAB ── -->
+        <div class="at3-tab-content" id="tab-finance">
+          <div class="at3-finance-header">
+            <div class="at3-finance-cell">
+              <div class="at3-finance-label">Bank Rate</div>
+              <div class="at3-finance-val" id="fin-bank-rate">6.5%</div>
+            </div>
+            <div class="at3-finance-cell">
+              <div class="at3-finance-label">Credit Rating</div>
+              <div class="at3-finance-val" id="fin-credit-rating">A</div>
+            </div>
+            <div class="at3-finance-cell">
+              <div class="at3-finance-label">Total Debt</div>
+              <div class="at3-finance-val danger" id="fin-total-debt">$0</div>
+            </div>
+          </div>
+          <div class="at3-section-head">
+            <span>Active Loans</span>
+            <button class="at3-pill-btn" onclick="SkyHigh.UI.showLoanModal()">+ New Loan</button>
+          </div>
+          <div id="fin-loans-list">
+            <div class="at3-empty-state">No active loans. Use financing to grow faster.</div>
+          </div>
+          <div class="at3-section-head" style="margin-top:0.75rem">
+            <span>Fuel Reserves</span>
+            <button class="at3-pill-btn" onclick="SkyHigh.UI.showFuelModal()">Buy Fuel</button>
+          </div>
+          <div class="at3-fuel-status" id="fin-fuel-status">
+            <div class="at3-fuel-row">
+              <span class="at3-fuel-label">In Reserve</span>
+              <span class="at3-fuel-val" id="fin-fuel-litres">0 L</span>
+            </div>
+            <div class="at3-fuel-row">
+              <span class="at3-fuel-label">Locked Price</span>
+              <span class="at3-fuel-val" id="fin-fuel-price">—</span>
+            </div>
+            <div class="at3-fuel-row">
+              <span class="at3-fuel-label">Market Price</span>
+              <span class="at3-fuel-val" id="fin-market-price">—</span>
+            </div>
+            <div class="at3-fuel-row">
+              <span class="at3-fuel-label">Est. Savings</span>
+              <span class="at3-fuel-val positive" id="fin-fuel-saving">—</span>
+            </div>
+          </div>
+          <div class="at3-section-head" style="margin-top:0.75rem"><span>Quarter Obligations</span></div>
+          <div class="at3-finance-header">
+            <div class="at3-finance-cell">
+              <div class="at3-finance-label">Loan Payments</div>
+              <div class="at3-finance-val danger" id="fin-qtr-payment">$0</div>
+            </div>
+            <div class="at3-finance-cell">
+              <div class="at3-finance-label">Interest</div>
+              <div class="at3-finance-val warning" id="fin-qtr-interest">$0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── EVENTS TAB ── -->
+        <div class="at3-tab-content" id="tab-events">
+          <div class="at3-section-head"><span>Active World Events</span></div>
+          <div id="events-active-list">
+            <div class="at3-empty-state">No active events this quarter.</div>
+          </div>
+          <div class="at3-section-head" style="margin-top:0.75rem"><span>Upcoming (Next 3 Qtrs)</span></div>
+          <div id="events-upcoming-list"></div>
+        </div>
+
+      </div><!-- /sidebar -->
+
+      <!-- SIDEBAR TOGGLE — standalone between sidebar & map, always visible -->
+      <div id="sidebar-toggle-rail">
+        <button id="sidebar-toggle" onclick="SkyHigh.UI.toggleSidebar()" title="Toggle panel">
+          <svg id="sidebar-toggle-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+
+      <!-- MAP -->
+      <div id="map-container">
+        <!-- News ticker over map -->
+        <div id="news-ticker">
+          <span class="ticker-label">LIVE</span>
+          <div class="ticker-content">
+            <div class="ticker-text" id="ticker-text">SkyHigh Executive — Your journey to aviation legend begins now.</div>
+          </div>
+        </div>
+
+        <canvas id="map-canvas"></canvas>
+
+        <!-- Route Projection Panel -->
+        <div id="route-projection">
+          <div class="projection-header">
+            <div>
+              <div class="projection-route">
+                <span id="proj-origin">—</span>
+                <span style="color:var(--text-muted)"> → </span>
+                <span id="proj-dest">—</span>
+              </div>
+              <div style="display:flex;gap:0.75rem;margin-top:2px;font-size:0.72rem;color:var(--text-muted)">
+                <span id="proj-band"></span>
+                <span>·</span>
+                <span id="proj-dist">—</span>
+                <span>·</span>
+                <span id="proj-flighttime">—</span>
+              </div>
+            </div>
+            <div style="font-size:0.7rem;color:var(--text-muted);text-align:right" id="proj-opencost">—</div>
+          </div>
+
+          <!-- Route type toggle -->
+          <div class="route-type-toggle">
+            <button class="rtt-btn active" id="rtt-pax"   onclick="SkyHigh.UI.setRouteType('PAX')">👥 Passengers</button>
+            <button class="rtt-btn"        id="rtt-cargo" onclick="SkyHigh.UI.setRouteType('CARGO')">📦 Cargo</button>
+          </div>
+
+          <!-- Schedule row -->
+          <div class="proj-schedule-row">
+            <span class="proj-schedule-label">Flights / Week</span>
+            <div class="fpw-stepper">
+              <button class="fpw-btn" onclick="SkyHigh.UI.adjustFlightsPerWeek(-1)">−</button>
+              <span class="fpw-val" id="fpw-display">7</span>
+              <button class="fpw-btn" onclick="SkyHigh.UI.adjustFlightsPerWeek(+1)">+</button>
+            </div>
+            <!-- Business class toggle -->
+            <label class="biz-toggle">
+              <input type="checkbox" id="proj-biz-toggle" onchange="SkyHigh.UI.toggleBizClass(this.checked)">
+              <span>Business</span>
+            </label>
+          </div>
+
+          <!-- Fare slider -->
+          <div class="fare-slider-row">
+            <span class="fare-slider-label">Economy Fare</span>
+            <input type="range" id="fare-slider" min="70" max="150" value="100" class="fare-slider" oninput="SkyHigh.UI.onFareSlider(this.value)">
+            <span class="fare-pct" id="fare-pct">×1.0</span>
+          </div>
+
+          <div class="projection-stats">
+            <div class="proj-stat">
+              <div class="proj-stat-label">Revenue</div>
+              <div class="proj-stat-value positive" id="proj-revenue">—</div>
+            </div>
+            <div class="proj-stat">
+              <div class="proj-stat-label">Cost</div>
+              <div class="proj-stat-value negative" id="proj-cost">—</div>
+            </div>
+            <div class="proj-stat">
+              <div class="proj-stat-label">Profit</div>
+              <div class="proj-stat-value neutral" id="proj-profit">—</div>
+            </div>
+          </div>
+
+          <!-- Seat class breakdown bar -->
+          <div class="seat-class-bar" id="proj-seat-bar" style="margin-bottom:0.75rem"></div>
+
+          <!-- Plane selector -->
+          <div class="projection-plane-select" id="proj-plane-select">
+            <!-- Populated by JS from fleet + planes -->
+          </div>
+
+          <div style="display:flex;gap:0.5rem">
+            <button id="btn-confirm-route" class="btn btn-primary btn-sm" style="flex:1">✓ Open Route</button>
+            <button id="btn-clear-route" class="btn btn-ghost btn-sm">✕ Cancel</button>
+          </div>
+        </div>
+
+        <!-- Result Overlay -->
+        <div id="result-overlay">
+          <div class="result-card result-enter">
+            <div class="result-headline">Quarter Results</div>
+            <div class="result-net positive" id="result-net-display">+$0.0M</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:1rem 0">
+              <div style="text-align:center">
+                <div class="text-muted" style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase">Revenue</div>
+                <div class="text-mono text-success" style="font-size:1rem;font-weight:700;margin-top:4px" id="result-revenue-display">—</div>
+              </div>
+              <div style="text-align:center">
+                <div class="text-muted" style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase">Expenses</div>
+                <div class="text-mono text-danger" style="font-size:1rem;font-weight:700;margin-top:4px" id="result-expenses-display">—</div>
+              </div>
+            </div>
+            <div style="margin-bottom:1rem">
+              <div class="text-muted" style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Cash Reserves</div>
+              <div class="text-mono text-gold" style="font-size:1.5rem;font-weight:700" id="result-cash-display">—</div>
+            </div>
+            <button id="btn-result-next" class="btn btn-primary btn-full">Continue to Board Report →</button>
+          </div>
+        </div>
+
+        <!-- Report Overlay -->
+        <div id="report-overlay">
+          <div class="report-card">
+            <div class="report-episode" id="report-episode">Quarter 1 · Stage 1</div>
+            <div class="report-title" id="report-headline">Runway: Your Journey Begins</div>
+            <div class="report-ticker" id="report-ticker-text">Loading quarter summary...</div>
+
+            <div class="board-quote" id="report-board-quote">
+              Loading board reaction...
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div class="card-title" style="margin-bottom:0.75rem">Top Routes This Quarter</div>
+              <div id="report-routes-table"></div>
+            </div>
+
+            <button id="btn-report-next" class="btn btn-primary btn-full">Next Quarter →</button>
+          </div>
+        </div>
+
+        <!-- FLOATING ACTION BUTTONS — ATO bottom-right cluster -->
+        <div class="fab-cluster">
+          <div class="fab-btn" onclick="SkyHigh.UI._showBuyPlaneModal()" title="Buy or lease aircraft">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 19-7z"/></svg>
+            <span>Buy Plane</span>
+          </div>
+          <div class="fab-btn" onclick="SkyHigh.UI.switchSidebarTab('routes')" title="View all routes">
+            <div class="fab-badge" id="fab-route-badge">0</div>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h18M3 6l9-3 9 3M3 18l9 3 9-3"/></svg>
+            <span>Route</span>
+          </div>
+          <div class="fab-btn" onclick="SkyHigh.UI.showFacilitiesModal(SkyHigh.CoreSim.getState().hubAirportId)" title="Airport facilities">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            <span>Airport</span>
+          </div>
+          <div class="fab-btn" onclick="SkyHigh.UI.switchSidebarTab('fleet')" title="Fleet inventory">
+            <div class="fab-badge" id="fab-fleet-badge">2</div>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+            <span>Inventory</span>
+          </div>
+        </div>
+
+      </div><!-- /map-container -->
+
+      <!-- LOAN MODAL -->
+      <div class="modal-backdrop" id="modal-loan-backdrop">
+        <div class="modal" style="max-width:500px">
+          <div class="modal-header">
+            <div class="modal-title">💼 Take a Loan</div>
+            <button class="modal-close" onclick="SkyHigh.UI.closeLoanModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:1rem" id="loan-type-grid"></div>
+            <div class="form-group" style="margin-bottom:0.75rem">
+              <label class="form-label">Amount ($M)</label>
+              <input type="number" id="loan-amount-input" class="form-input" placeholder="e.g. 25" min="1" max="500">
+            </div>
+            <div class="form-group" style="margin-bottom:0.75rem">
+              <label class="form-label">Term (Quarters)</label>
+              <div id="loan-term-opts" style="display:flex;gap:0.4rem;flex-wrap:wrap"></div>
+            </div>
+            <div class="at3-loan-preview" id="loan-preview">
+              <div class="at3-loan-preview-row"><span>Interest Rate</span><span id="lp-rate">—</span></div>
+              <div class="at3-loan-preview-row"><span>Quarterly Payment</span><span id="lp-payment">—</span></div>
+              <div class="at3-loan-preview-row"><span>Total Repayment</span><span id="lp-total">—</span></div>
+              <div class="at3-loan-preview-row"><span>Credit Rating</span><span id="lp-rating">—</span></div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="SkyHigh.UI.closeLoanModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="SkyHigh.UI.confirmLoan()">Confirm Loan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- FUEL PURCHASE MODAL -->
+      <div class="modal-backdrop" id="modal-fuel-backdrop">
+        <div class="modal" style="max-width:440px">
+          <div class="modal-header">
+            <div class="modal-title">⛽ Bulk Fuel Purchase</div>
+            <button class="modal-close" onclick="SkyHigh.UI.closeFuelModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="at3-fuel-market-info" id="fuel-market-info"></div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:1rem" id="fuel-tier-list"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="SkyHigh.UI.closeFuelModal()">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RUNWAY CRISIS MODAL — special risk-assessment overlay -->
+      <div class="modal-backdrop" id="modal-runway-backdrop">
+        <div class="modal modal-runway" id="modal-runway">
+          <div class="runway-modal-header">
+            <div class="runway-alert-strip">
+              <span class="runway-alert-icon">🛫</span>
+              <span class="runway-alert-text" id="runway-phase-title">RUNWAY — AIRSPACE CLOSURE</span>
+              <span class="runway-timer-badge" id="runway-timer">90s</span>
+            </div>
+          </div>
+          <div class="runway-modal-body" id="runway-modal-body">
+            <!-- Dynamically filled by UI.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- CUSTOMER CARE REVEAL MODAL -->
+      <div class="modal-backdrop" id="modal-care-reveal-backdrop">
+        <div class="modal" style="max-width:420px;text-align:center">
+          <div class="modal-header" style="justify-content:center">
+            <div>
+              <div style="font-size:2rem;margin-bottom:0.5rem">📊</div>
+              <div class="modal-title">Hidden Competency Revealed</div>
+              <div style="font-size:0.8rem;color:var(--text-sec);margin-top:0.25rem">Customer Care Assessment</div>
+            </div>
+          </div>
+          <div class="modal-body">
+            <div class="care-reveal-score-row">
+              <div class="care-reveal-label">Your Customer Care Score</div>
+              <div class="care-reveal-score" id="care-reveal-score">50</div>
+              <div class="care-reveal-bar-track">
+                <div class="care-reveal-bar-fill" id="care-reveal-bar" style="width:50%"></div>
+              </div>
+            </div>
+            <div class="care-reveal-tier" id="care-reveal-tier">Adequate Response</div>
+            <div class="care-reveal-desc" id="care-reveal-desc">Loading...</div>
+            <div id="care-reveal-effects" style="margin-top:0.75rem;display:flex;gap:0.4rem;flex-wrap:wrap;justify-content:center"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary btn-full" onclick="SkyHigh.UI._closeCareReveal()">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /game-body -->
+
+    <!-- BOTTOM BAR — Competency bars -->
+    <div id="bottom-bar">
+      <div class="competency-row">
+        <div class="comp-item">
+          <div class="comp-label">Board</div>
+          <div class="comp-bar-track">
+            <div class="comp-bar-fill board" id="bar-board" style="width:65%"></div>
+          </div>
+          <div class="comp-value" id="val-board">65</div>
+        </div>
+        <div class="comp-item">
+          <div class="comp-label">Safety</div>
+          <div class="comp-bar-track">
+            <div class="comp-bar-fill safety" id="bar-safety" style="width:65%"></div>
+          </div>
+          <div class="comp-value" id="val-safety">65</div>
+        </div>
+        <div class="comp-item">
+          <div class="comp-label">Crew</div>
+          <div class="comp-bar-track">
+            <div class="comp-bar-fill crew" id="bar-crew" style="width:65%"></div>
+          </div>
+          <div class="comp-value" id="val-crew">65</div>
+        </div>
+        <div class="comp-item">
+          <div class="comp-label">Prestige</div>
+          <div class="comp-bar-track">
+            <div class="comp-bar-fill prestige" id="bar-prestige" style="width:60%"></div>
+          </div>
+          <div class="comp-value" id="val-prestige">60</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /screen-game -->
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- END GAME SCREEN                                         -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="screen-endgame" class="screen">
+    <div style="font-size:0.75rem;letter-spacing:0.3em;color:var(--text-muted);text-transform:uppercase;margin-bottom:1rem">
+      5-Year Executive Tenure Complete
+    </div>
+    <div class="legacy-title" id="end-legacy-title">Aviation Legend</div>
+    <div class="legacy-sub" id="end-ceo-name">CEO</div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;max-width:500px;margin:2rem 0">
+      <div style="text-align:center;background:rgba(255,255,255,0.04);border-radius:var(--radius-lg);padding:1.25rem">
+        <div style="font-size:0.65rem;letter-spacing:0.15em;color:var(--text-muted);text-transform:uppercase;margin-bottom:0.5rem">Airline</div>
+        <div style="font-family:var(--font-display);color:var(--accent);font-size:0.9rem" id="end-airline">—</div>
+      </div>
+      <div style="text-align:center;background:rgba(255,255,255,0.04);border-radius:var(--radius-lg);padding:1.25rem">
+        <div style="font-size:0.65rem;letter-spacing:0.15em;color:var(--text-muted);text-transform:uppercase;margin-bottom:0.5rem">Final Cash</div>
+        <div style="font-family:var(--font-data);color:var(--success);font-size:1.1rem;font-weight:700" id="end-cash">—</div>
+      </div>
+      <div style="text-align:center;background:rgba(255,255,255,0.04);border-radius:var(--radius-lg);padding:1.25rem">
+        <div style="font-size:0.65rem;letter-spacing:0.15em;color:var(--text-muted);text-transform:uppercase;margin-bottom:0.5rem">Crises Survived</div>
+        <div style="font-family:var(--font-data);color:var(--primary);font-size:1.5rem;font-weight:700" id="end-crises">—</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:1rem;margin-top:1rem">
+      <button id="btn-play-again" class="btn btn-primary btn-lg">▶ New Campaign</button>
+    </div>
+    <div style="margin-top:2rem;font-size:0.72rem;color:var(--text-muted)">AN OZUNA INTERACTIVE PRODUCTION</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- MODALS                                                  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <!-- Crisis Modal -->
+  <div class="modal-backdrop" id="modal-crisis-backdrop">
+    <div class="modal modal-crisis" id="modal-crisis">
+      <div class="modal-header">
+        <div>
+          <div class="crisis-severity">
+            <span id="crisis-icon">⚠️</span>
+            <span id="crisis-severity">CRITICAL</span>
+          </div>
+          <div class="modal-title" id="crisis-name">Crisis Title</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="boss-phases" id="boss-phases" style="display:none;margin-bottom:1rem"></div>
+        <div class="crisis-teaser" id="crisis-teaser">Crisis teaser text</div>
+        <div class="crisis-desc" id="crisis-desc">Crisis description</div>
+        <div class="crisis-choices" id="crisis-choices">
+          <!-- Choices injected by UI.js -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- (Buy Plane Modal now defined above with full tabs) -->
+
+  <!-- ─── NEW ROUTE SUCCESS MODAL ──────────────────────────── -->
+  <div class="modal-backdrop" id="modal-route-success-backdrop">
+    <div class="modal modal-route-success">
+      <div class="modal-header" style="border-color:rgba(46,204,113,0.3)">
+        <div>
+          <div style="font-size:2.5rem;margin-bottom:0.5rem">✈</div>
+          <div class="modal-title text-success">New Route Opened!</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="route-success-cities" id="route-success-cities">
+          <span id="rsc-origin">—</span>
+          <span class="rsc-arrow">✈ ──────── ✈</span>
+          <span id="rsc-dest">—</span>
+        </div>
+        <div class="route-success-stats">
+          <div class="rss-item">
+            <div class="rss-label">Distance</div>
+            <div class="rss-value" id="rss-dist">—</div>
+          </div>
+          <div class="rss-item">
+            <div class="rss-label">Flight Time</div>
+            <div class="rss-value" id="rss-time">—</div>
+          </div>
+          <div class="rss-item">
+            <div class="rss-label">Est. Profit/Qtr</div>
+            <div class="rss-value text-success" id="rss-profit">—</div>
+          </div>
+        </div>
+        <div class="route-success-seat-bar" id="rss-seat-bar"><!-- seat class vis --></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-full" onclick="document.getElementById('modal-route-success-backdrop').classList.remove('open')">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── FLEET EXPANSION MODAL (tabs: New / Lease / Used) ── -->
+  <div class="modal-backdrop" id="modal-buyplane-backdrop">
+    <div class="modal" style="max-width:680px">
+      <div class="modal-header">
+        <div class="modal-title">✈ Fleet Expansion</div>
+        <button class="modal-close" onclick="document.getElementById('modal-buyplane-backdrop').classList.remove('open')">✕</button>
+      </div>
+      <!-- Tabs -->
+      <div class="fleet-tabs">
+        <button class="fleet-tab active" data-tab="new"   onclick="SkyHigh.UI.switchFleetTab('new')">🆕 Buy New</button>
+        <button class="fleet-tab"        data-tab="lease" onclick="SkyHigh.UI.switchFleetTab('lease')">📋 Lease</button>
+        <button class="fleet-tab"        data-tab="used"  onclick="SkyHigh.UI.switchFleetTab('used')">🔄 Buy Used</button>
+        <button class="fleet-tab"        data-tab="queue" onclick="SkyHigh.UI.switchFleetTab('queue')">📦 Delivery Queue</button>
+      </div>
+      <!-- Manufacturer filter -->
+      <div class="mfr-filter" id="mfr-filter">
+        <button class="mfr-btn active" data-mfr="ALL"        onclick="SkyHigh.UI.filterByMfr('ALL')">All</button>
+        <button class="mfr-btn"        data-mfr="Airbus"     onclick="SkyHigh.UI.filterByMfr('Airbus')">Airbus</button>
+        <button class="mfr-btn"        data-mfr="Boeing"     onclick="SkyHigh.UI.filterByMfr('Boeing')">Boeing</button>
+        <button class="mfr-btn"        data-mfr="Embraer"    onclick="SkyHigh.UI.filterByMfr('Embraer')">Embraer</button>
+        <button class="mfr-btn"        data-mfr="ATR"        onclick="SkyHigh.UI.filterByMfr('ATR')">ATR / DHC</button>
+      </div>
+      <div class="modal-body" id="buy-plane-list" style="padding-top:0.5rem">
+        <!-- Populated by UI.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── FACILITIES MODAL ───────────────────────────────────── -->
+  <div class="modal-backdrop" id="modal-facilities-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">🏗 Airport Facilities</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px" id="facilities-airport-name">Select an airport</div>
+        </div>
+        <button class="modal-close" onclick="document.getElementById('modal-facilities-backdrop').classList.remove('open')">✕</button>
+      </div>
+      <div class="modal-body" id="facilities-list"><!-- Populated by UI.js --></div>
+    </div>
+  </div>
+
+  <!-- ─── TUTORIAL OVERLAY ──────────────────────────────────── -->
+  <div id="tutorial-overlay" style="display:none">
+    <div class="tutorial-card" id="tutorial-card">
+      <div class="tutorial-avatar">👩‍✈️</div>
+      <div class="tutorial-body">
+        <div class="tutorial-title" id="tutorial-title">Welcome to SkyHigh!</div>
+        <div class="tutorial-text"  id="tutorial-text">Let me guide you through your first quarter.</div>
+        <div class="tutorial-actions">
+          <button class="btn btn-ghost btn-sm" onclick="SkyHigh.UI.skipTutorial()">Skip</button>
+          <button class="btn btn-primary btn-sm" onclick="SkyHigh.UI.nextTutorialStep()">Next →</button>
+        </div>
+      </div>
+      <div class="tutorial-step" id="tutorial-step">1 / 5</div>
+    </div>
+  </div>
+
+  <!-- Transition overlay -->
+  <div id="transition-overlay"></div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+</div><!-- /app -->
+
+<!-- ─── SCRIPTS (load order matters — globals) ─────────────── -->
+<script src="src/design-tokens.js"></script>
+<script src="src/map-data.js"></script>
+<script src="src/game-data.js"></script>
+<script src="src/core-sim.js"></script>
+<script src="src/map-engine.js"></script>
+<script src="src/renderer.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/main.js"></script>
+
+</body>
+</html>

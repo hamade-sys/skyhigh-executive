@@ -1,0 +1,118 @@
+{
+  "comment": "SkyHigh Executive — Design Tokens (Executive Noir + Amber Authority)",
+  "color": {
+    "background": {
+      "base":     { "value": "#08080F", "usage": "App background" },
+      "surface":  { "value": "#10101A", "usage": "Panels, sidebars" },
+      "card":     { "value": "#15151F", "usage": "Cards, list items" },
+      "elevated": { "value": "#1C1C28", "usage": "Action areas, inputs" },
+      "overlay":  { "value": "rgba(8,8,15,0.85)", "usage": "Modal backdrop" }
+    },
+    "primary": {
+      "base":     { "value": "#C8933A", "usage": "Primary CTAs, highlights" },
+      "light":    { "value": "#E8B050", "usage": "Hover state, lighter accent" },
+      "dark":     { "value": "#A07020", "usage": "Pressed state" },
+      "glow":     { "value": "rgba(200,147,58,0.25)", "usage": "Focus ring, shadow" }
+    },
+    "accent": {
+      "gold":     { "value": "#F0D060", "usage": "Cash, hero numbers, prestige" },
+      "goldSoft": { "value": "rgba(240,208,96,0.15)", "usage": "Accent backgrounds" }
+    },
+    "semantic": {
+      "success":  { "value": "#2ECC71", "wcag": "AA on dark bg", "usage": "Profit, gains, OK" },
+      "warning":  { "value": "#F39C12", "wcag": "AA on dark bg", "usage": "Low stats, caution" },
+      "danger":   { "value": "#E74C3C", "wcag": "AA on dark bg", "usage": "Losses, crises, errors" },
+      "info":     { "value": "#3498DB", "wcag": "AA on dark bg", "usage": "Safety metrics, info" }
+    },
+    "map": {
+      "ocean":     { "value": "#0A1520" },
+      "land":      { "value": "#16241A" },
+      "landHover": { "value": "#1E3526" },
+      "landSelect":{ "value": "#2A4A32" },
+      "border":    { "value": "rgba(100,180,120,0.25)" },
+      "grid":      { "value": "rgba(255,255,255,0.04)" }
+    },
+    "stage": {
+      "1": { "value": "#2ECC71", "name": "Optimism" },
+      "2": { "value": "#F39C12", "name": "Pressure" },
+      "3": { "value": "#E74C3C", "name": "Tension" },
+      "4": { "value": "#C8933A", "name": "Prestige" }
+    },
+    "text": {
+      "primary":   { "value": "#EDE8D8", "wcag": "AA" },
+      "secondary": { "value": "#9A9080", "wcag": "AA for large text" },
+      "muted":     { "value": "#5A5448", "usage": "Disabled, placeholders" },
+      "gold":      { "value": "#C8933A" },
+      "success":   { "value": "#2ECC71" },
+      "danger":    { "value": "#E74C3C" }
+    }
+  },
+  "typography": {
+    "family": {
+      "display": "'Cinzel', 'Playfair Display', Georgia, serif",
+      "ui":      "'Inter', system-ui, sans-serif",
+      "data":    "'JetBrains Mono', monospace"
+    },
+    "scale": {
+      "hero":  { "size": "3.5rem",   "weight": 700, "family": "display", "tracking": "0.1em" },
+      "h1":    { "size": "2.25rem",  "weight": 700, "family": "display", "tracking": "0.06em" },
+      "h2":    { "size": "1.625rem", "weight": 600, "family": "display" },
+      "h3":    { "size": "1.25rem",  "weight": 600, "family": "ui" },
+      "body":  { "size": "0.9375rem","weight": 400, "family": "ui",      "lineHeight": "1.5" },
+      "label": { "size": "0.8125rem","weight": 500, "family": "ui",      "tracking": "0.05em" },
+      "micro": { "size": "0.6875rem","weight": 400, "family": "ui",      "tracking": "0.1em" },
+      "num":   { "size": "1.125rem", "weight": 700, "family": "data" },
+      "numSm": { "size": "0.9375rem","weight": 500, "family": "data" }
+    }
+  },
+  "spacing": {
+    "xs":   "4px",
+    "sm":   "8px",
+    "md":   "16px",
+    "lg":   "24px",
+    "xl":   "32px",
+    "xxl":  "48px",
+    "xxxl": "64px"
+  },
+  "radius": {
+    "sm":     "4px",
+    "md":     "8px",
+    "lg":     "12px",
+    "xl":     "16px",
+    "pill":   "999px",
+    "circle": "50%"
+  },
+  "shadow": {
+    "sm":     "0 1px 3px rgba(0,0,0,0.4)",
+    "md":     "0 4px 12px rgba(0,0,0,0.5)",
+    "lg":     "0 8px 24px rgba(0,0,0,0.6)",
+    "xl":     "0 16px 48px rgba(0,0,0,0.7)",
+    "gold":   "0 0 20px rgba(200,147,58,0.3)",
+    "crisis": "0 0 40px rgba(231,76,60,0.5)"
+  },
+  "motion": {
+    "duration": {
+      "fast":     "120ms",
+      "normal":   "220ms",
+      "slow":     "400ms",
+      "dramatic": "700ms",
+      "epic":     "1200ms"
+    },
+    "easing": {
+      "snappy":   "cubic-bezier(0.4, 0, 0.2, 1)",
+      "spring":   "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "dramatic": "cubic-bezier(0.16, 1, 0.3, 1)",
+      "easeIn":   "cubic-bezier(0.4, 0, 1, 1)",
+      "easeOut":  "cubic-bezier(0, 0, 0.2, 1)"
+    }
+  },
+  "zIndex": {
+    "map":       1,
+    "mapOverlay":2,
+    "sidebar":   10,
+    "modal":     50,
+    "crisis":    60,
+    "toast":     70,
+    "tooltip":   80
+  }
+}
