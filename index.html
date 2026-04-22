@@ -31,6 +31,12 @@
       <button id="btn-new-game" class="btn btn-primary btn-lg">
         ✈ Begin New Campaign
       </button>
+      <div id="splash-continue" style="display:none;flex-direction:column;align-items:center;gap:0.4rem">
+        <button id="btn-continue-game" class="btn btn-secondary btn-lg">
+          ↩ Continue Campaign
+        </button>
+        <div class="text-muted" style="font-size:0.7rem;margin-top:0.4rem" id="save-info-label"></div>
+      </div>
       <div class="text-muted" style="font-size:0.75rem;letter-spacing:0.1em">Press anywhere to start</div>
     </div>
     <div class="splash-by">AN OZUNA INTERACTIVE PRODUCTION</div>
@@ -159,6 +165,13 @@
             <div class="hub-city">Los Angeles</div>
           </div>
         </div>
+        <div style="margin-top:0.75rem">
+          <div class="form-group">
+            <label class="form-label">Or enter any IATA code</label>
+            <input id="input-custom-hub" class="form-input" type="text" placeholder="e.g. NRT, CDG, SYD" maxlength="3" style="text-transform:uppercase">
+            <div style="font-size:0.68rem;color:#8A8AAA;margin-top:4px">Type the 3-letter airport code. Check the Events tab in-game for all airports.</div>
+          </div>
+        </div>
       </div>
 
       <!-- Starting Fleet hint -->
@@ -231,11 +244,23 @@
           <span class="ato-rating-label">RATING</span>
           <div class="ato-star-row" id="star-display">★★★☆☆</div>
         </div>
+        <button class="ato-icon-btn" onclick="SkyHigh.UI.saveGame()" title="Save game">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        </button>
         <button id="btn-reset-view" class="ato-icon-btn" title="Reset map view (R)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20A14.5 14.5 0 0 0 12 2"/><path d="M2 12h20"/></svg>
         </button>
       </div>
     </header>
+
+    <!-- LIVE TICKER BAR — always-on info strip beneath header -->
+    <div class="game-ticker-bar" id="game-ticker-bar">
+      <div class="game-ticker-track">
+        <div class="game-ticker-content" id="game-ticker-content">
+          ✈ SkyHigh Executive &nbsp;●&nbsp; Build routes &nbsp;●&nbsp; Navigate crises &nbsp;●&nbsp; Shape your legacy
+        </div>
+      </div>
+    </div>
 
     <!-- BODY: LEFT NAV + MAP + SIDEBAR -->
     <div id="game-body">
@@ -385,9 +410,23 @@
           </div>
 
           <div class="at3-divider"></div>
-          <button id="btn-end-command" class="at3-end-btn">
-            End Quarter  ›
-          </button>
+          <div class="end-qtr-section">
+            <div class="end-qtr-explainer">
+              <details class="qtr-details">
+                <summary class="qtr-summary">ℹ️ What does End Quarter do?</summary>
+                <div class="qtr-explain-body">
+                  <p>• Locks in all your command decisions</p>
+                  <p>• Triggers a crisis or board decision event</p>
+                  <p>• Calculates revenue &amp; expenses for all routes</p>
+                  <p>• Routes show <strong>⏳</strong> until this runs</p>
+                  <p>• Advances the game clock by 1 quarter</p>
+                </div>
+              </details>
+            </div>
+            <button id="btn-end-command" class="at3-end-btn">
+              End Quarter  ›
+            </button>
+          </div>
         </div>
 
         <!-- ── ROUTES TAB ── -->
@@ -399,8 +438,19 @@
 
         <!-- ── FLEET TAB ── -->
         <div class="at3-tab-content" id="tab-fleet">
-          <div class="at3-section-head"><span>Fleet</span>
-            <button class="at3-pill-btn" id="btn-buy-plane-fleet">+ Acquire</button>
+          <div class="at3-section-head">
+            <span>Fleet</span>
+            <span style="font-size:0.65rem;color:#8A8AAA">Planes are needed to open routes</span>
+            <button class="at3-pill-btn" id="btn-buy-plane-fleet">+ Acquire Plane</button>
+          </div>
+          <div id="fleet-explainer" class="fleet-explainer">
+            <div style="font-size:0.75rem;color:#8A8AAA;line-height:1.5;padding:8px 0">
+              <strong style="color:#C8933A">How Fleet works:</strong><br>
+              • Buy or lease aircraft with the Acquire button<br>
+              • Aircraft are automatically used when you open routes<br>
+              • Leased planes cost per quarter but need less upfront cash<br>
+              • Your 2 A320neo aircraft are ready to fly immediately
+            </div>
           </div>
           <div id="fleet-list-main"></div>
           <div class="at3-section-head" style="margin-top:0.75rem"><span>Delivery Queue</span></div>
@@ -495,6 +545,9 @@
         </div>
 
         <canvas id="map-canvas"></canvas>
+
+        <!-- Hover label for airports and countries -->
+        <div id="map-hover-label" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(10,20,30,0.85);color:#C8933A;padding:4px 14px;border-radius:20px;font-size:0.72rem;letter-spacing:0.08em;pointer-events:none;display:none;backdrop-filter:blur(4px);border:1px solid rgba(200,147,58,0.3);z-index:10;white-space:nowrap"></div>
 
         <!-- Route Projection Panel -->
         <div id="route-projection">
@@ -728,6 +781,19 @@
           </div>
           <div class="modal-footer">
             <button class="btn btn-primary btn-full" onclick="SkyHigh.UI._closeCareReveal()">Continue →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Guide Character: Captain Marcus -->
+      <div id="guide-marcus" class="guide-marcus" style="display:none">
+        <div class="guide-avatar">🧑‍✈️</div>
+        <div class="guide-bubble">
+          <div class="guide-name">Captain Marcus <span class="guide-tag">GUIDE</span></div>
+          <div class="guide-text" id="guide-text">Welcome aboard!</div>
+          <div class="guide-actions">
+            <button class="guide-btn" onclick="SkyHigh.UI.guideNext()">Got it →</button>
+            <button class="guide-dismiss" onclick="SkyHigh.UI.guideDismiss()">✕</button>
           </div>
         </div>
       </div>

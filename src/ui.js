@@ -14,6 +14,44 @@ window.SkyHigh.UI = (() => {
   let tickerIdx       = 0;
   let overlay         = null;
 
+  // ── GUIDE CAPTAIN MARCUS STATE ────────────────────────────
+  let _guideStep   = 0;
+  let _guideActive = false;
+  let _endQuarterClickedOnce = false;
+
+  const _guideSteps = [
+    {
+      trigger: 'roundStart1',
+      text: "Welcome aboard! I'm Captain Marcus, your advisor for the first 5 quarters. You start with $50M and 2 A320neo aircraft. Your first job: open a route from your hub airport. Click your hub (the glowing amber dot) on the map to begin.",
+      highlight: 'map',
+    },
+    {
+      trigger: 'afterFirstClick',
+      text: "Great! You can see details about your hub airport. Now click any other airport on the map to open a route. Start with a nearby city — your A320neo has a 6,300km range.",
+      highlight: 'map',
+    },
+    {
+      trigger: 'routeProjection',
+      text: "This is your Route Projection panel. It shows estimated revenue, costs, and profit. Adjust flights per week and fare multiplier. When you're happy with the numbers, click 'Confirm Route'. Routes need an aircraft type selected.",
+      highlight: 'projection',
+    },
+    {
+      trigger: 'afterFirstRoute',
+      text: "Route opened! ✈ It shows '⏳ Awaiting Q-End' because revenue is calculated at quarter end. You can open more routes, invest in Safety or Crew training, or click 'End Quarter' when ready. Each action costs 1 AP — you have 3 per quarter.",
+      highlight: 'sidebar',
+    },
+    {
+      trigger: 'beforeEndQuarter',
+      text: "Clicking 'End Quarter' locks in your decisions, then presents a crisis event (board decision or world event). After resolving it, your quarterly results appear — revenue, costs, and net profit across all routes.",
+      highlight: 'endBtn',
+    },
+    {
+      trigger: 'afterFirstCrisis',
+      text: "Crisis resolved! Each decision has lasting effects — some earn Cascade Cards (permanent bonuses or penalties). After the results screen, the next quarter begins. By Q5 you'll be flying solo — I'll step back then. Good luck!",
+      highlight: null,
+    },
+  ];
+
   // Route projection state
   let projState = {
     flightsPerWeek: 7,
@@ -116,7 +154,12 @@ window.SkyHigh.UI = (() => {
 
       if (!ceoName)    { UI.toast('Please enter your CEO name.', 'warning'); return; }
       if (!doctrineEl) { UI.toast('Please select a doctrine.', 'warning'); return; }
-      if (!hubEl)      { UI.toast('Please select your hub.', 'warning'); return; }
+
+      // Custom hub input takes precedence over grid selection
+      const customHub = document.getElementById('input-custom-hub')?.value.trim().toUpperCase();
+      const hubId = customHub || hubEl?.dataset.hub || 'JFK';
+
+      if (!customHub && !hubEl) { UI.toast('Please select your hub.', 'warning'); return; }
 
       const logoId = logoEl?.dataset.logo || 'EAGLE';
       const logoEmoji = SkyHigh.AIRLINE_LOGOS?.find(l => l.id === logoId)?.emoji || '✈';
@@ -124,7 +167,7 @@ window.SkyHigh.UI = (() => {
       SkyHigh.CoreSim.init({
         ceoName, airlineName: airline, airlineCode: code,
         doctrineId: doctrineEl.dataset.doctrine,
-        hubAirportId: hubEl.dataset.hub,
+        hubAirportId: hubId,
         logoId,
       });
       // Store logo in state
@@ -155,6 +198,9 @@ window.SkyHigh.UI = (() => {
       const logo = SkyHigh.AIRLINE_LOGOS?.find(l => l.id === s.logoId);
       const hl = document.querySelector('.header-logo');
       if (hl && logo) hl.textContent = logo.emoji;
+
+      // Fly to a better default view — shows all continents, hides Antarctica
+      SkyHigh.MapEngine.flyTo(20, 10, 1.1);
 
       UI._buildPlaneSelector();
       UI.updateHUD();
@@ -237,6 +283,9 @@ window.SkyHigh.UI = (() => {
         const starsVal = SkyHigh.CoreSim.getStarRating();
         atoStarEl.textContent = '★'.repeat(starsVal) + '☆'.repeat(5 - starsVal);
       }
+
+      // Update live game ticker
+      UI._updateGameTicker();
     },
 
     _updateBar(name, value) {
@@ -426,9 +475,11 @@ window.SkyHigh.UI = (() => {
         return;
       }
       container.innerHTML = s.routes.map(r => {
-        const cls = r.lastProfit > 0 ? 'profitable' : r.lastProfit < 0 ? 'loss' : 'idle';
+        const cls = r.lastProfit > 0 ? 'profitable' : r.lastProfit < 0 ? 'loss' : 'new';
         const profitCls = r.lastProfit > 0 ? 'positive' : r.lastProfit < 0 ? 'negative' : 'idle';
-        const profitText = r.lastProfit === 0 ? 'pending' : UI._formatCash(r.lastProfit);
+        const profitText = r.lastProfit === 0
+          ? '<span title="Revenue is calculated when you click End Quarter" style="color:#8A8AAA;font-size:0.72rem;cursor:help">⏳ Awaiting Q-End</span>'
+          : UI._formatCash(r.lastProfit);
         const typeCls = r.routeType === 'CARGO' ? 'cargo' : 'pax';
         const typeLabel = r.routeType === 'CARGO' ? 'CARGO' : 'PAX';
         return `<div class="at3-route-row" data-route="${r.id}">
@@ -774,21 +825,84 @@ window.SkyHigh.UI = (() => {
       document.getElementById('btn-facilities')?.addEventListener('click', UI._showFacilitiesSelectModal);
 
       document.getElementById('btn-invest-safety')?.addEventListener('click', () => {
-        const r = SkyHigh.CoreSim.investInSafety();
-        if (r.ok) { UI.toast('Safety investment +8 Shield.', 'success'); UI.updateHUD(); }
-        else UI.toast(r.reason, 'error');
+        const btn = document.getElementById('btn-invest-safety');
+        if (btn.dataset.confirming === 'true') {
+          const r = SkyHigh.CoreSim.investInSafety();
+          if (r.ok) {
+            UI.toast('Safety investment complete. +8 Shield.', 'success');
+            UI.updateHUD();
+          } else {
+            UI.toast(r.reason, 'error');
+          }
+          btn.dataset.confirming = 'false';
+          btn.querySelector('span:first-of-type').textContent = 'Safety';
+          btn.style.borderColor = '';
+        } else {
+          btn.dataset.confirming = 'true';
+          btn.querySelector('span:first-of-type').textContent = 'Confirm?';
+          btn.style.borderColor = '#C8933A';
+          setTimeout(() => {
+            if (btn.dataset.confirming === 'true') {
+              btn.dataset.confirming = 'false';
+              btn.querySelector('span:first-of-type').textContent = 'Safety';
+              btn.style.borderColor = '';
+            }
+          }, 3000);
+        }
       });
 
       document.getElementById('btn-train-crew')?.addEventListener('click', () => {
-        const r = SkyHigh.CoreSim.investInCrewTraining();
-        if (r.ok) { UI.toast('Crew training +10 Loyalty.', 'success'); UI.updateHUD(); }
-        else UI.toast(r.reason, 'error');
+        const btn = document.getElementById('btn-train-crew');
+        if (btn.dataset.confirming === 'true') {
+          const r = SkyHigh.CoreSim.investInCrewTraining();
+          if (r.ok) {
+            UI.toast('Crew training complete. +10 Loyalty.', 'success');
+            UI.updateHUD();
+          } else {
+            UI.toast(r.reason, 'error');
+          }
+          btn.dataset.confirming = 'false';
+          btn.querySelector('span:first-of-type').textContent = 'Crew';
+          btn.style.borderColor = '';
+        } else {
+          btn.dataset.confirming = 'true';
+          btn.querySelector('span:first-of-type').textContent = 'Confirm?';
+          btn.style.borderColor = '#C8933A';
+          setTimeout(() => {
+            if (btn.dataset.confirming === 'true') {
+              btn.dataset.confirming = 'false';
+              btn.querySelector('span:first-of-type').textContent = 'Crew';
+              btn.style.borderColor = '';
+            }
+          }, 3000);
+        }
       });
 
       document.getElementById('btn-marketing')?.addEventListener('click', () => {
-        const r = SkyHigh.CoreSim.runMarketingCampaign('Global');
-        if (r.ok) { UI.toast('Marketing launched. +15% demand for 2 qtrs.', 'success'); UI.updateHUD(); }
-        else UI.toast(r.reason, 'error');
+        const btn = document.getElementById('btn-marketing');
+        if (btn.dataset.confirming === 'true') {
+          const r = SkyHigh.CoreSim.runMarketingCampaign('Global');
+          if (r.ok) {
+            UI.toast('Marketing launched. +15% demand for 2 qtrs.', 'success');
+            UI.updateHUD();
+          } else {
+            UI.toast(r.reason, 'error');
+          }
+          btn.dataset.confirming = 'false';
+          btn.querySelector('span:first-of-type').textContent = 'Campaign';
+          btn.style.borderColor = '';
+        } else {
+          btn.dataset.confirming = 'true';
+          btn.querySelector('span:first-of-type').textContent = 'Confirm?';
+          btn.style.borderColor = '#C8933A';
+          setTimeout(() => {
+            if (btn.dataset.confirming === 'true') {
+              btn.dataset.confirming = 'false';
+              btn.querySelector('span:first-of-type').textContent = 'Campaign';
+              btn.style.borderColor = '';
+            }
+          }, 3000);
+        }
       });
 
       document.getElementById('btn-clear-route')?.addEventListener('click', () => {
@@ -860,6 +974,11 @@ window.SkyHigh.UI = (() => {
     },
 
     _endCommand() {
+      // Guide: first time End Quarter is clicked
+      if (!_endQuarterClickedOnce) {
+        _endQuarterClickedOnce = true;
+        UI._advanceGuide('beforeEndQuarter');
+      }
       const result = SkyHigh.CoreSim.endCommandPhase();
       if (!result.ok) return;
       UI.updateHUD();
@@ -988,6 +1107,9 @@ window.SkyHigh.UI = (() => {
           document.getElementById('modal-runway-backdrop')?.classList.remove('open');
           SkyHigh.Renderer.setCrisisMode(false);
           UI.updateHUD();
+          // Guide: after first crisis in rounds 1-5
+          const sNow = SkyHigh.CoreSim.getState();
+          if (sNow.round <= 5) UI._advanceGuide('afterFirstCrisis');
           // Reveal hidden customer care score before proceeding
           setTimeout(() => UI._showCareReveal(), 450);
         } else {
@@ -995,6 +1117,9 @@ window.SkyHigh.UI = (() => {
           document.getElementById('modal-crisis')?.classList.remove('boss-event');
           SkyHigh.Renderer.setCrisisMode(false);
           UI.updateHUD();
+          // Guide: after first crisis in rounds 1-5
+          const sNow = SkyHigh.CoreSim.getState();
+          if (sNow.round <= 5) UI._advanceGuide('afterFirstCrisis');
           setTimeout(() => UI._runResultPhase(), 500);
         }
       }
@@ -1320,6 +1445,8 @@ window.SkyHigh.UI = (() => {
     advanceFromReport() {
       document.getElementById('report-overlay')?.classList.remove('visible');
       const result = SkyHigh.CoreSim.endReportPhase();
+      // Auto-save after each quarter
+      UI.saveGame();
 
       if (result.gameOver) {
         UI._showEndGame(result.legacyTitle);
@@ -1382,6 +1509,21 @@ window.SkyHigh.UI = (() => {
         }
         const rect = container.getBoundingClientRect();
         SkyHigh.MapEngine.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
+
+        // Update hover label
+        const hoverLabel = document.getElementById('map-hover-label');
+        if (hoverLabel) {
+          const sel2 = SkyHigh.MapEngine.getSelection();
+          if (sel2.hoveredAirport) {
+            hoverLabel.textContent = `${sel2.hoveredAirport.name} (${sel2.hoveredAirport.id})`;
+            hoverLabel.style.display = 'block';
+          } else if (sel2.hoveredCountry) {
+            hoverLabel.textContent = `${sel2.hoveredCountry.emoji || '\uD83C\uDF0D'} ${sel2.hoveredCountry.name}`;
+            hoverLabel.style.display = 'block';
+          } else {
+            hoverLabel.style.display = 'none';
+          }
+        }
       });
 
       container.addEventListener('mouseup', e => {
@@ -1397,6 +1539,8 @@ window.SkyHigh.UI = (() => {
       container.addEventListener('mouseleave', () => {
         isDragging = false;
         container.style.cursor = 'grab';
+        const hoverLabel = document.getElementById('map-hover-label');
+        if (hoverLabel) hoverLabel.style.display = 'none';
       });
 
       container.addEventListener('wheel', e => {
@@ -1747,6 +1891,8 @@ window.SkyHigh.UI = (() => {
     _showRouteProjection() {
       const sel = SkyHigh.MapEngine.getSelection();
       if (!sel.originAirport || !sel.destAirport) return;
+      // Guide: first time projection panel opens
+      UI._advanceGuide('routeProjection');
 
       const proj = SkyHigh.CoreSim.projectRoute(
         sel.originAirport.id, sel.destAirport.id, selectedPlaneId,
@@ -1818,6 +1964,8 @@ window.SkyHigh.UI = (() => {
         projState = { flightsPerWeek: 7, fareMultiplier: 1.0, routeType: 'PAX', bizClass: false };
         UI.updateHUD();
         UI._renderRouteList();
+        // Guide: first route opened
+        UI._advanceGuide('afterFirstRoute');
 
         // Show success modal
         const proj = SkyHigh.CoreSim.projectRoute(sel.originAirport.id, sel.destAirport.id, selectedPlaneId);
@@ -2093,6 +2241,13 @@ window.SkyHigh.UI = (() => {
         <div class="round-intro-label" style="margin-top:2px;font-size:0.7rem">${SkyHigh.HEADLINES[s.round] || ''}</div>`;
       document.body.appendChild(banner);
       setTimeout(() => banner.remove(), 2800);
+
+      // Guide character: show on round 1
+      if (s.round === 1) {
+        setTimeout(() => UI._advanceGuide('roundStart1'), 3000);
+      } else if (s.round > 5) {
+        UI.guideDismiss();
+      }
     },
 
     // ── TUTORIAL SYSTEM ───────────────────────────────────
@@ -2201,6 +2356,103 @@ window.SkyHigh.UI = (() => {
     // Legacy helper stubs
     setOrigin(airportId) { SkyHigh.MapEngine.setOriginAirport(airportId); UI._hideOverlayCard(); },
     setDest(airportId)   { SkyHigh.MapEngine.setDestAirport(airportId);   UI._hideOverlayCard(); UI._showRouteProjection(); },
+
+    // ── GAME TICKER UPDATE (Fix 4) ────────────────────────
+    _updateGameTicker() {
+      const s = SkyHigh.CoreSim.getState?.();
+      if (!s) return;
+      const el = document.getElementById('game-ticker-content');
+      if (!el) return;
+      const msgs = [
+        `Q${s.round}/20`,
+        `Cash: ${UI._formatCash(s.cash)}`,
+        s.routes.length ? `${s.routes.length} active route${s.routes.length !== 1 ? 's' : ''}` : 'No routes — click airports to open routes',
+        `Board: ${s.boardConfidence} · Safety: ${s.safetyShield} · Crew: ${s.crewLoyalty}`,
+        s.cascadeCards?.length ? `Board Cards: ${s.cascadeCards.join(', ')}` : 'No board cards yet',
+      ];
+      el.textContent = msgs.join('   ●   ');
+    },
+
+    // ── GUIDE CAPTAIN MARCUS (Fix 5) ─────────────────────
+    _showGuide(text) {
+      const el = document.getElementById('guide-marcus');
+      const textEl = document.getElementById('guide-text');
+      if (!el || !textEl) return;
+      textEl.innerHTML = text;
+      el.style.display = 'flex';
+      // Re-trigger animation
+      el.style.animation = 'none';
+      requestAnimationFrame(() => { el.style.animation = ''; });
+    },
+
+    guideNext() {
+      const s = SkyHigh.CoreSim.getState?.();
+      if (!s || s.round > 5) { UI.guideDismiss(); return; }
+      _guideStep = Math.min(_guideStep + 1, _guideSteps.length - 1);
+      const step = _guideSteps[_guideStep];
+      if (step) UI._showGuide(step.text);
+    },
+
+    guideDismiss() {
+      const el = document.getElementById('guide-marcus');
+      if (el) el.style.display = 'none';
+      _guideActive = false;
+    },
+
+    _advanceGuide(trigger) {
+      const s = SkyHigh.CoreSim.getState?.();
+      if (!s || s.round > 5) return;
+      const idx = _guideSteps.findIndex(step => step.trigger === trigger);
+      if (idx >= 0 && idx >= _guideStep) {
+        _guideStep = idx;
+        _guideActive = true;
+        UI._showGuide(_guideSteps[idx].text);
+      }
+    },
+
+    // ── SAVE / LOAD (Fix 9) ───────────────────────────────
+    saveGame() {
+      const s = SkyHigh.CoreSim.getState?.();
+      if (!s) return;
+      const save = {
+        v: 2,
+        savedAt: Date.now(),
+        profile: {
+          ceoName:      s.ceoName,
+          airlineName:  s.airlineName,
+          airlineCode:  s.airlineCode,
+          hubAirportId: s.hubAirportId,
+          doctrineId:   s.doctrineId,
+        },
+        state: JSON.parse(JSON.stringify(s)),
+      };
+      try {
+        localStorage.setItem('skyhigh_save', JSON.stringify(save));
+        UI.toast('Game saved!', 'success', 2000);
+      } catch(e) {
+        UI.toast('Save failed — storage may be full', 'error');
+      }
+    },
+
+    loadGame() {
+      try {
+        const raw = localStorage.getItem('skyhigh_save');
+        if (!raw) return null;
+        const save = JSON.parse(raw);
+        if (!save?.state) return null;
+        return save;
+      } catch(e) {
+        return null;
+      }
+    },
+
+    hasSave() {
+      return !!localStorage.getItem('skyhigh_save');
+    },
+
+    deleteSave() {
+      localStorage.removeItem('skyhigh_save');
+    },
   };
 
   return UI;

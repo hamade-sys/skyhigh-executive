@@ -4559,3 +4559,177 @@ body.sidebar-collapsed #sidebar-toggle { /* fallback */ }
   border: 1px solid rgba(0,194,203,0.25);
   margin-bottom: 8px;
 }
+
+/* ── TICKER STRIP (Fix 4) ──────────────────────────────────── */
+.ticker-strip {
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  background: linear-gradient(90deg, rgba(10,20,30,0.95) 0%, rgba(200,147,58,0.12) 50%, rgba(10,20,30,0.95) 100%);
+  border-top: 1px solid rgba(200,147,58,0.3);
+  border-bottom: 1px solid rgba(200,147,58,0.3);
+  padding: 6px 0;
+}
+.ticker-text {
+  display: inline-block;
+  animation: ticker-scroll 20s linear infinite;
+  padding-left: 100%;
+  color: #C8933A;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+/* ── GAME HEADER TICKER BAR (Fix 4) ───────────────────────── */
+.game-ticker-bar {
+  width: 100%;
+  background: rgba(200,147,58,0.08);
+  border-bottom: 1px solid rgba(200,147,58,0.2);
+  overflow: hidden;
+  height: 22px;
+  flex-shrink: 0;
+}
+.game-ticker-track {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+.game-ticker-content {
+  position: absolute;
+  white-space: nowrap;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: rgba(200,147,58,0.7);
+  animation: ticker-move 30s linear infinite;
+  padding-left: 100%;
+}
+@keyframes ticker-move {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+
+/* ── ROUTE STATUS DOT — NEW (Fix 1) ───────────────────────── */
+.at3-route-status.new {
+  background: rgba(100,120,200,0.55);
+  box-shadow: 0 0 5px rgba(100,120,200,0.4);
+}
+
+/* ── END QUARTER SECTION (Fix 7) ──────────────────────────── */
+.end-qtr-section { margin-top: 0.5rem; }
+.qtr-details { margin-bottom: 0.5rem; }
+.qtr-summary {
+  font-size: 0.68rem;
+  color: #8A8AAA;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding: 4px 0;
+}
+.qtr-summary:hover { color: #C8933A; }
+.qtr-explain-body {
+  background: rgba(200,147,58,0.06);
+  border-left: 2px solid rgba(200,147,58,0.3);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 10px;
+  margin-top: 4px;
+}
+.qtr-explain-body p {
+  margin: 0 0 4px;
+  font-size: 0.7rem;
+  color: #8A8AAA;
+  line-height: 1.4;
+}
+.qtr-explain-body p:last-child { margin-bottom: 0; }
+
+/* ── FLEET EXPLAINER (Fix 8) ──────────────────────────────── */
+.fleet-explainer {
+  border: 1px solid rgba(200,147,58,0.15);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-top: 0.4rem;
+  background: rgba(200,147,58,0.04);
+}
+
+/* ── GUIDE MARCUS (Fix 5) ─────────────────────────────────── */
+.guide-marcus {
+  position: absolute;
+  bottom: 80px;
+  right: 16px;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 320px;
+  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
+  animation: guide-enter 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes guide-enter {
+  from { transform: translateY(20px) scale(0.9); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+.guide-avatar {
+  font-size: 2.4rem;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+}
+.guide-bubble {
+  background: rgba(14,28,42,0.97);
+  border: 1px solid rgba(200,147,58,0.4);
+  border-radius: 14px 14px 14px 4px;
+  padding: 12px 14px;
+  backdrop-filter: blur(12px);
+}
+.guide-name {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #C8933A;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.guide-tag {
+  background: rgba(200,147,58,0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.55rem;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.guide-text {
+  font-size: 0.8rem;
+  color: #E8E4F0;
+  line-height: 1.55;
+  margin-bottom: 10px;
+}
+.guide-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.guide-btn {
+  background: rgba(200,147,58,0.15);
+  border: 1px solid rgba(200,147,58,0.4);
+  color: #C8933A;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.guide-btn:hover { background: rgba(200,147,58,0.28); }
+.guide-dismiss {
+  background: none;
+  border: none;
+  color: #5A5870;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 4px 6px;
+}

@@ -128,8 +128,8 @@ window.SkyHigh.MapEngine = (() => {
       // dx, dy in screen pixels → convert to map-space
       camera.targetX -= dx / (canvasW * camera.zoom);
       camera.targetY -= dy / (canvasH * camera.zoom);
-      // Clamp Y (don't scroll past poles)
-      camera.targetY = Math.max(0.05, Math.min(0.95, camera.targetY));
+      // Clamp Y (don't scroll past poles — 0.78 prevents Antarctica)
+      camera.targetY = Math.max(0.08, Math.min(0.78, camera.targetY));
     },
 
     // ── ZOOM ───────────────────────────────────────────────
@@ -145,7 +145,7 @@ window.SkyHigh.MapEngine = (() => {
       camera.targetZoom = newZoom;
       camera.targetX = mapX - (cx - canvasW / 2) / (canvasW * newZoom);
       camera.targetY = mapY - (cy - canvasH / 2) / (canvasH * newZoom);
-      camera.targetY = Math.max(0.05, Math.min(0.95, camera.targetY));
+      camera.targetY = Math.max(0.08, Math.min(0.78, camera.targetY));
       camera.animating = true;
     },
 
@@ -159,11 +159,11 @@ window.SkyHigh.MapEngine = (() => {
       camera.animating = true;
     },
 
-    // Reset to global view
+    // Reset to global view (centered on Europe/Africa, no Antarctica)
     resetView() {
       camera.targetX    = 0.5;
-      camera.targetY    = 0.45;
-      camera.targetZoom = 1.0;
+      camera.targetY    = 0.40;
+      camera.targetZoom = 1.1;
       camera.animating  = true;
     },
 

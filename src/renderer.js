@@ -97,7 +97,9 @@ window.SkyHigh.Renderer = (() => {
     _buildCountryFeatures(topo) {
       if (!window.topojson) return;
       const countries = topojson.feature(topo, topo.objects.countries);
-      countryFeatures = countries.features.map(feature => {
+      countryFeatures = countries.features
+        .filter(f => parseInt(f.id) !== 10)  // exclude Antarctica
+        .map(feature => {
         const iso  = parseInt(feature.id);
         const info = SkyHigh.WORLD_COUNTRIES?.[iso] ||
                      { name: `Country #${iso}`, region: 'Unknown', risk: 'MEDIUM', tier: 'MEDIUM', emoji: '🌍' };

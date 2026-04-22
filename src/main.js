@@ -7,6 +7,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize UI
   SkyHigh.UI.init();
 
+  // Check for existing save and show Continue button
+  if (SkyHigh.UI.hasSave?.()) {
+    const saveEl = document.getElementById('splash-continue');
+    if (saveEl) saveEl.style.display = 'flex';
+    const save = SkyHigh.UI.loadGame?.();
+    const infoEl = document.getElementById('save-info-label');
+    if (infoEl && save) {
+      const d = new Date(save.savedAt);
+      infoEl.textContent = `${save.profile?.airlineName || 'Unknown Airline'} · Q${save.state?.round} · ${d.toLocaleDateString()}`;
+    }
+  }
+
+  // Continue Campaign button
+  document.getElementById('btn-continue-game')?.addEventListener('click', () => {
+    const save = SkyHigh.UI.loadGame?.();
+    if (!save) { SkyHigh.UI.toast('No save found.', 'error'); return; }
+    SkyHigh.CoreSim.init(save.profile);
+    Object.assign(SkyHigh.CoreSim.getState(), save.state);
+    SkyHigh.UI.showScreen('game');
+    setTimeout(() => SkyHigh.UI._initGame(), 300);
+  });
+
   // Animate splash
   setTimeout(() => {
     document.getElementById('splash-cta')?.classList.add('fadeInUp');
