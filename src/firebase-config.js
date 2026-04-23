@@ -1,22 +1,17 @@
 // ============================================================
 // SkyHigh Executive — Firebase Configuration
 // ============================================================
-// To use login, saves, and teams:
-// 1. Go to https://console.firebase.google.com
-// 2. Create a project → Add Web App → Copy the config below
-// 3. Enable Authentication → Email/Password
-// 4. Enable Firestore Database (start in test mode for dev)
-// ============================================================
 window.SkyHigh = window.SkyHigh || {};
 
 window.SkyHigh.FIREBASE_CONFIG = {
-  apiKey:            "AIzaSyPLACEHOLDER",
-  authDomain:        "skyhigh-executive.firebaseapp.com",
-  projectId:         "skyhigh-executive",
-  storageBucket:     "skyhigh-executive.appspot.com",
-  messagingSenderId: "000000000000",
-  appId:             "1:000000000000:web:PLACEHOLDER",
+  apiKey:            "AIzaSyC7WFanr4Nt3hzUf8zVedbB9NTjkmtXpKU",
+  authDomain:        "skyhigh-b4a73.firebaseapp.com",
+  projectId:         "skyhigh-b4a73",
+  storageBucket:     "skyhigh-b4a73.firebasestorage.app",
+  messagingSenderId: "983281606700",
+  appId:             "1:983281606700:web:828216229c6c607e02f189",
+  measurementId:     "G-R5HN8Z569X",
 };
 
-// Set to true once you have a real Firebase project configured above
-window.SkyHigh.FIREBASE_ENABLED = false;
+// Firebase is now live
+window.SkyHigh.FIREBASE_ENABLED = true;
