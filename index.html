@@ -49,8 +49,7 @@
         </button>
         <div id="splash-logged-in-row" style="display:none;align-items:center;gap:0.75rem">
           <span id="splash-username-display" style="font-size:0.8rem;color:rgba(200,147,58,0.9)"></span>
-          <button id="btn-manage-team" class="btn btn-ghost" style="font-size:0.75rem">👥 Team</button>
-          <button id="btn-go-admin" class="btn btn-ghost" style="display:none;font-size:0.75rem;color:#E74C3C">⚙ Admin</button>
+<button id="btn-go-admin" class="btn btn-ghost" style="display:none;font-size:0.75rem;color:#E74C3C">⚙ Admin</button>
           <button id="btn-auth-logout" class="btn btn-ghost" style="font-size:0.75rem;color:#5A5870">Sign Out</button>
         </div>
       </div>
@@ -118,7 +117,7 @@
       <!-- Register form -->
       <div id="auth-form-register" class="auth-form" style="display:none">
         <div class="auth-field">
-          <label class="auth-label">Username <span class="auth-hint">(visible to teammates)</span></label>
+          <label class="auth-label">Username <span class="auth-hint">(your public name)</span></label>
           <input id="auth-reg-username" class="auth-input" type="text" placeholder="captain_marcus" maxlength="20" autocomplete="username">
         </div>
         <div class="auth-field">
@@ -138,85 +137,6 @@
           Continue without account
         </button>
       </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!-- TEAM LOBBY SCREEN                                       -->
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <div id="screen-team" class="screen team-screen">
-    <div class="team-card">
-
-      <!-- Header -->
-      <div class="team-header">
-        <div class="team-logo">✈ SkyHigh</div>
-        <div class="team-user-pill" id="team-user-pill">
-          <span id="team-user-avatar">👤</span>
-          <span id="team-user-name">Player</span>
-        </div>
-      </div>
-
-      <!-- No team yet — create or join -->
-      <div id="team-lobby-state" class="team-lobby-state">
-        <div class="team-section-title">Team Up or Fly Solo</div>
-        <p class="team-desc">Play alone as CEO or form a team of up to 5 people — each with a unique executive role shaping your airline together.</p>
-
-        <div class="team-two-col">
-          <!-- Create -->
-          <div class="team-action-card">
-            <div class="team-action-icon">🏗️</div>
-            <div class="team-action-label">Create Team</div>
-            <input id="input-team-name" class="auth-input" type="text" placeholder="e.g. Skyward United Co." maxlength="40">
-            <button class="auth-btn-primary" onclick="SkyHigh.UI.teamCreate()">Create  →</button>
-          </div>
-
-          <!-- Join -->
-          <div class="team-action-card">
-            <div class="team-action-icon">🔗</div>
-            <div class="team-action-label">Join Team</div>
-            <input id="input-invite-code" class="auth-input" type="text" placeholder="e.g. SKY-4X9P" maxlength="8" style="text-transform:uppercase">
-            <button class="auth-btn-primary" onclick="SkyHigh.UI.teamJoin()">Join  →</button>
-          </div>
-        </div>
-
-        <div class="team-solo-row">
-          <button class="auth-btn-ghost" onclick="SkyHigh.UI.teamSkip()">
-            Fly Solo (no team)  →
-          </button>
-        </div>
-      </div>
-
-      <!-- Team formed — roster -->
-      <div id="team-roster-state" class="team-roster-state" style="display:none">
-        <div class="team-name-display" id="team-name-display">Team Name</div>
-
-        <div class="team-invite-row">
-          <span class="team-invite-label">Invite Code</span>
-          <span class="team-invite-code" id="team-invite-code">—</span>
-          <button class="team-copy-btn" onclick="SkyHigh.UI.teamCopyCode()" title="Copy">📋</button>
-        </div>
-
-        <!-- Member slots -->
-        <div class="team-slots" id="team-slots">
-          <!-- Populated by JS -->
-        </div>
-
-        <!-- Role picker for self -->
-        <div class="team-role-section">
-          <div class="team-section-title" style="font-size:0.8rem;margin-bottom:0.6rem">Your Role</div>
-          <div class="team-role-grid" id="team-role-grid">
-            <!-- Populated by JS -->
-          </div>
-        </div>
-
-        <button class="auth-btn-primary" style="margin-top:1rem" onclick="SkyHigh.UI.teamReady()">
-          Ready — Set Up Airline  →
-        </button>
-        <button class="auth-btn-ghost" style="margin-top:0.5rem" onclick="SkyHigh.UI.teamLeave()">
-          Leave Team
-        </button>
-      </div>
-
     </div>
   </div>
 

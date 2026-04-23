@@ -90,13 +90,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     SkyHigh.UI.authShowTab('login');
   });
 
-  // Manage Team (for logged-in users returning to team screen)
-  document.getElementById('btn-manage-team')?.addEventListener('click', () => {
-    const user = SkyHigh.Auth?.getUser?.();
-    SkyHigh.UI.showScreen('team');
-    SkyHigh.UI._renderTeamLobbyState?.(user);
-  });
-
   // Logout from splash
   document.getElementById('btn-auth-logout')?.addEventListener('click', () => {
     SkyHigh.UI.authLogout?.();
@@ -119,14 +112,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (e.key === 'Enter') SkyHigh.UI.authRegister();
     });
   });
-  // Enter key on invite code input
-  document.getElementById('input-invite-code')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') SkyHigh.UI.teamJoin();
-  });
-  document.getElementById('input-team-name')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') SkyHigh.UI.teamCreate();
-  });
-
   // ── GAME SCREEN BUTTONS ──────────────────────────────────
 
   // Return to global view button

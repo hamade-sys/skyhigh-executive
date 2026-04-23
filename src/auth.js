@@ -9,8 +9,7 @@ window.SkyHigh.Auth = (() => {
   'use strict';
 
   let _app = null, _auth = null, _db = null;
-  let _currentUser = null;  // { uid, username, email, teamId, role }
-  let _teamListener = null; // Firestore unsubscribe fn
+  let _currentUser = null;  // { uid, username, email }
 
   // ── ROLE METADATA ────────────────────────────────────────
   const ROLES = {
@@ -69,11 +68,9 @@ window.SkyHigh.Auth = (() => {
           username,
           email,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          teamId:    null,
-          role:      null,
         });
 
-        _currentUser = { uid: cred.user.uid, username, email, teamId: null, role: null };
+        _currentUser = { uid: cred.user.uid, username, email };
         return { ok: true, user: _currentUser };
       } catch(e) {
         return { ok: false, reason: _friendlyError(e) };
@@ -106,8 +103,6 @@ window.SkyHigh.Auth = (() => {
           uid:      cred.user.uid,
           username: cred.user.displayName || data.username || email,
           email:    cred.user.email,
-          teamId:   data.teamId || null,
-          role:     data.role   || null,
         };
         return { ok: true, user: _currentUser };
       } catch(e) {
@@ -117,7 +112,6 @@ window.SkyHigh.Auth = (() => {
 
     // ── LOGOUT ─────────────────────────────────────────────
     async logout() {
-      if (_teamListener) { _teamListener(); _teamListener = null; }
       if (_auth) await _auth.signOut();
       _currentUser = null;
     },
@@ -134,8 +128,6 @@ window.SkyHigh.Auth = (() => {
               uid:      user.uid,
               username: user.displayName || data.username || user.email,
               email:    user.email,
-              teamId:   data.teamId || null,
-              role:     data.role   || null,
             };
             resolve(_currentUser);
           } else {
@@ -143,115 +135,6 @@ window.SkyHigh.Auth = (() => {
           }
         });
       });
-    },
-
-    // ── TEAM: CREATE ───────────────────────────────────────
-    async createTeam(teamName) {
-      if (!_currentUser) return { ok: false, reason: 'Not logged in' };
-      if (!teamName?.trim()) return { ok: false, reason: 'Team name required' };
-
-      const inviteCode = _genCode();
-      const teamId = _db.collection('teams').doc().id;
-
-      await _db.collection('teams').doc(teamId).set({
-        teamId,
-        teamName: teamName.trim(),
-        inviteCode,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        createdBy: _currentUser.uid,
-        status: 'lobby',
-        gameState: null,
-        members: [{
-          uid:      _currentUser.uid,
-          username: _currentUser.username,
-          role:     'CEO',
-          online:   true,
-          joinedAt: Date.now(),
-        }],
-      });
-
-      // Update user profile
-      await _db.collection('users').doc(_currentUser.uid).update({ teamId, role: 'CEO' });
-      _currentUser.teamId = teamId;
-      _currentUser.role   = 'CEO';
-
-      return { ok: true, teamId, inviteCode };
-    },
-
-    // ── TEAM: JOIN BY INVITE CODE ──────────────────────────
-    async joinTeam(inviteCode) {
-      if (!_currentUser) return { ok: false, reason: 'Not logged in' };
-      if (!inviteCode?.trim()) return { ok: false, reason: 'Enter an invite code' };
-
-      const snap = await _db.collection('teams')
-        .where('inviteCode', '==', inviteCode.trim().toUpperCase())
-        .limit(1).get();
-
-      if (snap.empty) return { ok: false, reason: 'Invite code not found' };
-
-      const teamDoc = snap.docs[0];
-      const team = teamDoc.data();
-
-      if (team.members.length >= 5) return { ok: false, reason: 'Team is full (max 5 players)' };
-      if (team.status === 'playing') return { ok: false, reason: 'Game already in progress' };
-      if (team.members.find(m => m.uid === _currentUser.uid)) return { ok: true, teamId: team.teamId, alreadyMember: true };
-
-      // Pick next available role
-      const takenRoles = team.members.map(m => m.role);
-      const allRoles = ['CEO', 'CMO', 'CFO', 'CHRO', 'COO'];
-      const assignedRole = allRoles.find(r => !takenRoles.includes(r)) || 'COO';
-
-      await _db.collection('teams').doc(team.teamId).update({
-        members: firebase.firestore.FieldValue.arrayUnion({
-          uid:      _currentUser.uid,
-          username: _currentUser.username,
-          role:     assignedRole,
-          online:   true,
-          joinedAt: Date.now(),
-        }),
-      });
-
-      await _db.collection('users').doc(_currentUser.uid).update({ teamId: team.teamId, role: assignedRole });
-      _currentUser.teamId = team.teamId;
-      _currentUser.role   = assignedRole;
-
-      return { ok: true, teamId: team.teamId };
-    },
-
-    // ── TEAM: CHANGE ROLE ──────────────────────────────────
-    async changeRole(teamId, newRole) {
-      if (!_currentUser) return { ok: false, reason: 'Not logged in' };
-
-      const teamDoc = await _db.collection('teams').doc(teamId).get();
-      const team = teamDoc.data();
-      if (!team) return { ok: false, reason: 'Team not found' };
-
-      // Check role not already taken
-      if (team.members.find(m => m.role === newRole && m.uid !== _currentUser.uid))
-        return { ok: false, reason: `${newRole} role is already taken` };
-
-      // Update member's role in the array
-      const updatedMembers = team.members.map(m =>
-        m.uid === _currentUser.uid ? { ...m, role: newRole } : m
-      );
-      await _db.collection('teams').doc(teamId).update({ members: updatedMembers });
-      await _db.collection('users').doc(_currentUser.uid).update({ role: newRole });
-      _currentUser.role = newRole;
-
-      return { ok: true };
-    },
-
-    // ── TEAM: LISTEN (real-time) ───────────────────────────
-    listenTeam(teamId, callback) {
-      if (!_db) return;
-      if (_teamListener) _teamListener();
-      _teamListener = _db.collection('teams').doc(teamId).onSnapshot(snap => {
-        if (snap.exists) callback(snap.data());
-      });
-    },
-
-    stopListenTeam() {
-      if (_teamListener) { _teamListener(); _teamListener = null; }
     },
 
     // ── PRESENCE ──────────────────────────────────────────
@@ -287,15 +170,6 @@ window.SkyHigh.Auth = (() => {
         await _db.collection('users').doc(_currentUser.uid)
           .collection('saves').doc('latest').set(saveData);
 
-        // If in a team, also save to team
-        if (_currentUser.teamId) {
-          await _db.collection('teams').doc(_currentUser.teamId).update({
-            gameState: saveData.gameState,
-            lastSavedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            lastSavedBy: _currentUser.username,
-          });
-        }
-
         return { ok: true };
       } catch(e) {
         return { ok: false, reason: e.message };
@@ -306,14 +180,6 @@ window.SkyHigh.Auth = (() => {
     async cloudLoad() {
       if (!_currentUser || !_db) return null;
       try {
-        // Try team save first, then personal save
-        if (_currentUser.teamId) {
-          const teamDoc = await _db.collection('teams').doc(_currentUser.teamId).get();
-          const teamData = teamDoc.data();
-          if (teamData?.gameState) {
-            return JSON.parse(teamData.gameState);
-          }
-        }
         const saveDoc = await _db.collection('users').doc(_currentUser.uid)
           .collection('saves').doc('latest').get();
         if (saveDoc.exists && saveDoc.data()?.gameState) {
@@ -334,31 +200,6 @@ window.SkyHigh.Auth = (() => {
         .where('username', '<=', q + '\uf8ff')
         .limit(8).get();
       return snap.docs.map(d => ({ uid: d.id, username: d.data().username }));
-    },
-
-    // ── GET TEAM ───────────────────────────────────────────
-    async getTeam(teamId) {
-      if (!_db || !teamId) return null;
-      const doc = await _db.collection('teams').doc(teamId).get();
-      return doc.exists ? doc.data() : null;
-    },
-
-    // ── LEAVE TEAM ─────────────────────────────────────────
-    async leaveTeam() {
-      if (!_currentUser?.teamId || !_db) return;
-      const teamId = _currentUser.teamId;
-      const teamDoc = await _db.collection('teams').doc(teamId).get();
-      const team = teamDoc.data();
-      if (!team) return;
-      const updatedMembers = team.members.filter(m => m.uid !== _currentUser.uid);
-      if (updatedMembers.length === 0) {
-        await _db.collection('teams').doc(teamId).delete();
-      } else {
-        await _db.collection('teams').doc(teamId).update({ members: updatedMembers });
-      }
-      await _db.collection('users').doc(_currentUser.uid).update({ teamId: null, role: null });
-      _currentUser.teamId = null;
-      _currentUser.role   = null;
     },
 
     // ── ADMIN API ────────────────────────────────────────────
