@@ -2928,7 +2928,7 @@ window.SkyHigh.UI = (() => {
     showDestinationDropdown() {
       const s = SkyHigh.CoreSim.getState?.();
       if (!s) return;
-      const hub = SkyHigh.MAP_DATA.getAirport?.(s.hubAirportId);
+      const hub = SkyHigh.GeoUtils.getAirport(s.hubAirportId);
       if (!hub) return;
 
       // Toggle
