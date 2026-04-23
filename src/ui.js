@@ -2850,125 +2850,223 @@ window.SkyHigh.UI = (() => {
       UI.toast('Signed out.', 'info', 2000);
     },
 
-    // ── DESTINATION PICKER ────────────────────────────────────────
-    _destPickerOpen: false,
-
-    showDestinationPicker() {
-      const s = SkyHigh.CoreSim.getState?.();
-      if (!s) return;
-      const hub = SkyHigh.MAP_DATA.getAirport(s.hubAirportId);
-      if (!hub) return;
-
-      const panel = document.getElementById('dest-picker-panel');
-      if (!panel) return;
-
-      UI._destPickerOpen = true;
-      panel.style.display = 'flex';
-      requestAnimationFrame(() => panel.classList.add('dest-picker-visible'));
-
-      // Render airport list sorted by distance
-      UI._renderDestList('', hub);
-
-      // Focus search
-      setTimeout(() => document.getElementById('dest-search-input')?.focus(), 150);
+    // Route FAB: open projection if dest already chosen, else hint user
+    _fabRouteClick() {
+      const sel = SkyHigh.MapEngine.getSelection?.();
+      if (sel?.originAirport && sel?.destAirport) {
+        UI._showRouteProjection();
+      } else {
+        UI.toast('Pick a destination first — use the 📍 Destination button', 'info', 3000);
+        // Pulse the destination button to draw attention
+        const btn = document.getElementById('fab-btn-destination');
+        if (btn) {
+          btn.style.transition = 'box-shadow 0.15s';
+          btn.style.boxShadow = '0 0 0 3px rgba(200,147,58,0.7)';
+          setTimeout(() => { btn.style.boxShadow = ''; }, 700);
+        }
+      }
     },
 
-    hideDestinationPicker() {
-      const panel = document.getElementById('dest-picker-panel');
-      if (!panel) return;
-      panel.classList.remove('dest-picker-visible');
-      setTimeout(() => { panel.style.display = 'none'; }, 280);
-      UI._destPickerOpen = false;
+    // ── DESTINATION DROPDOWN ──────────────────────────────────────
+    // Country-based destination picker with fly-to + glow.
+    // Two sections: Recommended (nearby) + All Destinations.
+    _destDropdownOpen: false,
+
+    // Haversine distance helper (km)
+    _haversineDist(lat1, lon1, lat2, lon2) {
+      const R = 6371, r = d => d * Math.PI / 180;
+      const dLat = r(lat2 - lat1), dLon = r(lon2 - lon1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(r(lat1)) * Math.cos(r(lat2)) * Math.sin(dLon/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     },
 
-    _renderDestList(query, hub) {
-      const list = document.getElementById('dest-list');
-      if (!list || !hub) return;
-
-      const airports = SkyHigh.MAP_DATA.airports || [];
-      const s = SkyHigh.CoreSim.getState?.();
+    // Build per-country summary sorted by closest-airport distance from hub
+    _buildCountryList(hub) {
+      const airports  = SkyHigh.MAP_DATA.airports || [];
+      const countries = SkyHigh.WORLD_COUNTRIES   || {};
+      const s         = SkyHigh.CoreSim.getState?.();
       const openRouteIds = new Set((s?.routes || []).map(r => r.destinationId));
 
-      // Inline haversine distance (km)
-      function calcDist(a, b) {
-        const R = 6371, toRad = d => d * Math.PI / 180;
-        const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
-        const x = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon/2)**2;
-        return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
-      }
+      // Group airports by countryIso
+      const byCountry = {};
+      airports.forEach(ap => {
+        if (ap.id === hub.id) return;
+        const iso = ap.countryIso;
+        if (!iso) return;
+        const dist = UI._haversineDist(hub.lat, hub.lon, ap.lat, ap.lon);
+        if (!byCountry[iso]) {
+          byCountry[iso] = { iso, airports: [], minDist: Infinity, hasRoute: false };
+        }
+        byCountry[iso].airports.push({ ...ap, dist });
+        if (dist < byCountry[iso].minDist) byCountry[iso].minDist = dist;
+        if (openRouteIds.has(ap.id)) byCountry[iso].hasRoute = true;
+      });
 
-      // Filter and sort by distance
-      let filtered = airports
-        .filter(a => a.id !== hub.id)
-        .map(a => {
-          const dist = calcDist(hub, a);
-          return { ...a, dist };
-        })
-        .sort((a, b) => a.dist - b.dist);
+      // Attach world info, compute center of country airports
+      return Object.values(byCountry).map(c => {
+        const info = countries[c.iso] || { name: `Country #${c.iso}`, region: 'Unknown', emoji: '🌍' };
+        const closestApt = c.airports.sort((a,b) => a.dist - b.dist)[0];
+        const centerLat = c.airports.reduce((s,a) => s + a.lat, 0) / c.airports.length;
+        const centerLon = c.airports.reduce((s,a) => s + a.lon, 0) / c.airports.length;
+        return {
+          iso: c.iso,
+          name: info.name,
+          emoji: info.emoji || '🌍',
+          region: info.region || '',
+          risk: info.risk || 'MEDIUM',
+          tier: info.tier || 'MEDIUM',
+          minDist: c.minDist,
+          closestApt,
+          centerLat,
+          centerLon,
+          hasRoute: c.hasRoute,
+          airports: c.airports,
+        };
+      }).sort((a, b) => a.minDist - b.minDist);
+    },
+
+    showDestinationDropdown() {
+      const s = SkyHigh.CoreSim.getState?.();
+      if (!s) return;
+      const hub = SkyHigh.MAP_DATA.getAirport?.(s.hubAirportId);
+      if (!hub) return;
+
+      // Toggle
+      if (UI._destDropdownOpen) { UI.hideDestinationDropdown(); return; }
+
+      const panel = document.getElementById('dest-dropdown-panel');
+      if (!panel) return;
+
+      UI._destDropdownOpen = true;
+      document.getElementById('fab-btn-destination')?.classList.add('active');
+
+      // Clear search
+      const searchEl = document.getElementById('dest-search-input');
+      if (searchEl) searchEl.value = '';
+
+      panel.style.display = 'flex';
+      requestAnimationFrame(() => panel.classList.add('ddp-visible'));
+
+      // Store hub for re-renders
+      UI._destHub = hub;
+      UI._renderCountryList('');
+
+      setTimeout(() => searchEl?.focus(), 160);
+    },
+
+    hideDestinationDropdown() {
+      const panel = document.getElementById('dest-dropdown-panel');
+      if (!panel) return;
+      panel.classList.remove('ddp-visible');
+      setTimeout(() => { panel.style.display = 'none'; }, 240);
+      UI._destDropdownOpen = false;
+      UI._destHub = null;
+      document.getElementById('fab-btn-destination')?.classList.remove('active');
+      // Clear country glow
+      SkyHigh.MapEngine?.clearHighlight?.();
+    },
+
+    _renderCountryList(query) {
+      const list = document.getElementById('dest-country-list');
+      if (!list) return;
+      const hub = UI._destHub;
+      if (!hub) return;
+
+      let countries = UI._buildCountryList(hub);
 
       if (query) {
         const q = query.toLowerCase();
-        filtered = filtered.filter(a =>
-          a.id.toLowerCase().includes(q) ||
-          a.city.toLowerCase().includes(q) ||
-          (a.name || '').toLowerCase().includes(q)
+        countries = countries.filter(c =>
+          c.name.toLowerCase().includes(q) ||
+          c.region.toLowerCase().includes(q) ||
+          c.closestApt?.id?.toLowerCase().includes(q) ||
+          c.closestApt?.city?.toLowerCase().includes(q)
         );
       }
 
-      if (!filtered.length) {
-        list.innerHTML = '<div class="dest-empty">No airports found</div>';
+      if (!countries.length) {
+        list.innerHTML = '<div class="ddp-empty">No destinations found</div>';
         return;
       }
 
-      // Group by distance band
-      const nearby    = filtered.filter(a => a.dist < 2000);
-      const regional  = filtered.filter(a => a.dist >= 2000 && a.dist < 5000);
-      const longhaul  = filtered.filter(a => a.dist >= 5000 && a.dist < 9000);
-      const ultralong = filtered.filter(a => a.dist >= 9000);
+      // Split: recommended = closest airport within 4500 km
+      const RECOMMEND_THRESHOLD = 4500;
+      const recommended = query ? [] : countries.filter(c => c.minDist <= RECOMMEND_THRESHOLD);
+      const rest        = query ? countries : countries.filter(c => c.minDist > RECOMMEND_THRESHOLD);
 
-      function renderGroup(label, emoji, airports) {
-        if (!airports.length) return '';
-        return `
-          <div class="dest-group-header">${emoji} ${label}</div>
-          ${airports.map(a => {
-            const hasRoute = openRouteIds.has(a.id);
-            return `<div class="dest-item ${hasRoute ? 'dest-item-routed' : ''}" onclick="SkyHigh.UI.selectDestination('${a.id}')">
-              <span class="dest-item-iata">${a.id}</span>
-              <span class="dest-item-city">${a.city}<span class="dest-item-name">${a.name ? ' · ' + a.name : ''}</span></span>
-              <span class="dest-item-dist">${Math.round(a.dist).toLocaleString()} km</span>
-              ${hasRoute ? '<span class="dest-item-tag">Route</span>' : ''}
-            </div>`;
-          }).join('')}`;
+      function distBadge(km) {
+        if (km < 2000)  return '<span class="ddp-dist-badge close">CLOSE</span>';
+        if (km < 5000)  return '<span class="ddp-dist-badge medium">MEDIUM</span>';
+        if (km < 9000)  return '<span class="ddp-dist-badge long">LONG</span>';
+        return '<span class="ddp-dist-badge ultra">ULTRA</span>';
       }
 
-      list.innerHTML = query
-        ? filtered.map(a => {
-            const hasRoute = openRouteIds.has(a.id);
-            return `<div class="dest-item ${hasRoute ? 'dest-item-routed' : ''}" onclick="SkyHigh.UI.selectDestination('${a.id}')">
-              <span class="dest-item-iata">${a.id}</span>
-              <span class="dest-item-city">${a.city}</span>
-              <span class="dest-item-dist">${Math.round(a.dist).toLocaleString()} km</span>
-              ${hasRoute ? '<span class="dest-item-tag">Route</span>' : ''}
-            </div>`;
-          }).join('')
-        : renderGroup('Nearby', '🟢', nearby) +
-          renderGroup('Regional', '🔵', regional) +
-          renderGroup('Long-haul', '🟡', longhaul) +
-          renderGroup('Ultra-long', '🔴', ultralong);
+      function renderRow(c) {
+        const distStr = c.minDist >= 1000
+          ? `${(c.minDist/1000).toFixed(1)}k km`
+          : `${Math.round(c.minDist)} km`;
+        const routedBadge = c.hasRoute ? '<span class="ddp-routed-badge">✈ Route</span>' : '';
+        return `<div class="ddp-country-row" onclick="SkyHigh.UI.selectDestinationCountry(${c.iso})">
+          <span class="ddp-flag">${c.emoji}</span>
+          <div class="ddp-country-info">
+            <div class="ddp-country-name">${c.name} ${routedBadge}</div>
+            <div class="ddp-country-meta">${c.closestApt?.city || ''} · ${c.closestApt?.id || ''} · ${distStr}</div>
+          </div>
+          ${distBadge(c.minDist)}
+          <span class="ddp-row-arrow">›</span>
+        </div>`;
+      }
+
+      let html = '';
+
+      if (recommended.length) {
+        html += `<div class="ddp-section">
+          <span class="ddp-section-dot green"></span>
+          RECOMMENDED — Nearby Routes
+        </div>`;
+        html += recommended.map(renderRow).join('');
+      }
+
+      if (rest.length) {
+        html += `<div class="ddp-section">
+          <span class="ddp-section-dot gold"></span>
+          ${query ? 'RESULTS' : 'ALL DESTINATIONS — Future Expansion'}
+        </div>`;
+        html += rest.map(renderRow).join('');
+      }
+
+      list.innerHTML = html;
     },
 
-    selectDestination(airportId) {
-      const apt = SkyHigh.MAP_DATA.getAirport(airportId);
-      if (!apt) return;
-      UI.hideDestinationPicker();
+    selectDestinationCountry(isoNumeric) {
+      // Find country data
+      const countries = UI._buildCountryList(UI._destHub || {});
+      const c = countries.find(x => x.iso === isoNumeric);
+      if (!c) return;
 
-      // Fly to destination
-      SkyHigh.MapEngine.flyTo(apt.lat, apt.lon, 3.5);
+      // Close dropdown
+      UI.hideDestinationDropdown();
 
-      // After fly animation, show airport overlay
+      // Glow the selected country
+      SkyHigh.MapEngine.highlightCountry(isoNumeric);
+
+      // Fly to country center, zoom in nicely
+      const zoomLevel = c.minDist < 2000 ? 3.8 : c.minDist < 6000 ? 3.2 : 2.5;
+      SkyHigh.MapEngine.flyTo(c.centerLat, c.centerLon, zoomLevel);
+
+      // After fly animation, show country overlay
       setTimeout(() => {
-        UI._handleMapSelect('AIRPORT', apt);
-      }, 900);
+        UI._showCountryOverlay({
+          iso: c.iso,
+          name: c.name,
+          emoji: c.emoji,
+          region: c.region,
+          risk: c.risk,
+          tier: c.tier,
+          clickPx: window.innerWidth / 2,
+          clickPy: window.innerHeight / 2,
+        });
+      }, 950);
     },
   };
 

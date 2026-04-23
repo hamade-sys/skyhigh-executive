@@ -227,23 +227,33 @@ window.SkyHigh.MapEngine = (() => {
     handleClick(px, py) {
       const airport = API.getAirportAt(px, py);
       if (airport) {
-        selection.selectedCountry = API._countryFromAirport(airport);
+        // Country glow is ONLY set via highlightCountry() from the destination picker
         if (_onSelect) _onSelect('AIRPORT', airport);
         return { type: 'AIRPORT', data: airport };
       }
 
       const country = API.getCountryAt(px, py);
       if (country) {
-        selection.selectedCountry = country;
-        // Pass click coordinates so overlay can be positioned
+        // Country glow is ONLY set via highlightCountry() from the destination picker
         if (_onSelect) _onSelect('COUNTRY', { ...country, clickPx: px, clickPy: py });
         return { type: 'COUNTRY', data: country };
       }
 
-      // Click void — deselect
+      // Click void — deselect and clear picker glow
       selection.selectedCountry = null;
       if (_onSelect) _onSelect('DESELECT', null);
       return { type: 'DESELECT' };
+    },
+
+    // ── DESTINATION PICKER GLOW ─────────────────────────────
+    // Call this from the destination dropdown to make a country glow.
+    // Glow is ONLY applied through this method (not on raw map clicks).
+    highlightCountry(iso) {
+      selection.selectedCountry = (iso != null) ? { iso } : null;
+    },
+
+    clearHighlight() {
+      selection.selectedCountry = null;
     },
 
     // ── ROUTE SELECTION FLOW ───────────────────────────────

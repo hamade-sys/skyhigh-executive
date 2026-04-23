@@ -756,17 +756,21 @@
       <!-- MAP -->
       <div id="map-container">
 
-        <!-- Destination Picker Panel -->
-        <div id="dest-picker-panel" class="dest-picker-panel" style="display:none" data-no-map-click>
-          <div class="dest-picker-header">
-            <div class="dest-picker-title">✈ Choose Destination</div>
-            <button class="dest-picker-close" onclick="SkyHigh.UI.hideDestinationPicker()">✕</button>
+        <!-- Destination Dropdown Panel -->
+        <div id="dest-dropdown-panel" class="dest-dropdown-panel" style="display:none" data-no-map-click>
+          <div class="ddp-header">
+            <div class="ddp-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+              DESTINATION
+            </div>
+            <button class="ddp-close" onclick="SkyHigh.UI.hideDestinationDropdown()">✕</button>
           </div>
-          <div class="dest-search-wrap">
-            <input id="dest-search-input" class="dest-search-input" type="text" placeholder="Search airport, city…" autocomplete="off"
-              oninput="SkyHigh.UI._renderDestList(this.value, SkyHigh.MAP_DATA.getAirport(SkyHigh.CoreSim.getState()?.hubAirportId))">
+          <div class="ddp-search-wrap">
+            <svg class="ddp-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input id="dest-search-input" class="ddp-search-input" type="text" placeholder="Search country or airport…" autocomplete="off"
+              oninput="SkyHigh.UI._renderCountryList(this.value)">
           </div>
-          <div id="dest-list" class="dest-list"></div>
+          <div id="dest-country-list" class="ddp-list"></div>
         </div>
 
         <canvas id="map-canvas"></canvas>
@@ -900,7 +904,11 @@
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 19-7z"/></svg>
             <span>Buy Plane</span>
           </div>
-          <div class="fab-btn" onclick="SkyHigh.UI.showDestinationPicker()" title="Add new route">
+          <div class="fab-btn fab-btn-dest" id="fab-btn-destination" onclick="SkyHigh.UI.showDestinationDropdown()" title="Choose destination country">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="10" r="3"/><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+            <span>Destination</span>
+          </div>
+          <div class="fab-btn" onclick="SkyHigh.UI._fabRouteClick()" title="Open route projection panel">
             <div class="fab-badge" id="fab-route-badge">0</div>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h18M3 6l9-3 9 3M3 18l9 3 9-3"/></svg>
             <span>Route</span>
