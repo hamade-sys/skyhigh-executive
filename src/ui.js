@@ -1542,7 +1542,8 @@ window.SkyHigh.UI = (() => {
 
     // ── RESULT PHASE ──────────────────────────────────────
     _runResultPhase() {
-      SkyHigh.CoreSim.getState().phase = 'RESULT';
+      // DO NOT manually set phase here — endCrisisPhase() requires CRISIS phase
+      // and transitions it to RESULT itself. Setting it early caused ok:false.
       const results = SkyHigh.CoreSim.endCrisisPhase();
       UI.updateHUD();
       if (!results.ok) return;

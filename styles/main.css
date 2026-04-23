@@ -4660,18 +4660,19 @@ body.sidebar-collapsed #sidebar-toggle { /* fallback */ }
 
 /* ── GUIDE MARCUS (Fix 5) ─────────────────────────────────── */
 .guide-marcus {
-  position: absolute;
-  bottom: 56px;
-  left: 376px;
-  z-index: 150;
+  position: fixed;          /* fixed so it's always relative to viewport, never on the map */
+  bottom: 90px;
+  left: 68px;               /* sits inside the sidebar panel, well away from the map canvas */
+  z-index: 250;
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  max-width: 300px;
+  max-width: 310px;
   filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
   animation: guide-enter 0.4s cubic-bezier(0.34,1.56,0.64,1);
-  pointer-events: none;
+  pointer-events: none;     /* NEVER block map clicks — the guide is read-only overlay */
 }
+/* Buttons are safe to be interactive — guide is now fixed inside the sidebar, off the map */
 .guide-marcus button { pointer-events: all; }
 @keyframes guide-enter {
   from { transform: translateY(20px) scale(0.9); opacity: 0; }
