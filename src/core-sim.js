@@ -171,6 +171,14 @@ window.SkyHigh.CoreSim = (() => {
       const existing = state.routes.find(r => (r.originId === originId && r.destId === destId) || (r.originId === destId && r.destId === originId));
       if (existing) return { ok: false, reason: 'Route already exists' };
 
+      // ── FLEET AVAILABILITY CHECK ───────────────────────────────
+      // Each physical aircraft can only serve one route at a time.
+      const allFleet = [...state.fleet, ...(state.leasedFleet || [])];
+      const owned    = allFleet.filter(p => p.planeId === planeId).length;
+      const inUse    = state.routes.filter(r => r.planeId === planeId).length;
+      if (owned === 0) return { ok: false, reason: `You don't own any ${planeId} aircraft — buy or lease one first` };
+      if (inUse >= owned) return { ok: false, reason: `All ${owned} ${planeId.replace(/_/g,' ')} aircraft are already assigned to routes — buy another to expand` };
+
       const plane = SkyHigh.PLANES.find(p => p.id === planeId);
       if (!plane) return { ok: false, reason: 'Invalid plane class' };
 
