@@ -32,15 +32,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
-  // Dev/local admin access via keyboard shortcut: Ctrl+Shift+A on splash
-  document.addEventListener('keydown', e => {
-    if (e.ctrlKey && e.shiftKey && e.key === 'A') {
-      const pin = prompt('Admin PIN:');
-      if (pin === 'skyhigh-admin-2025') {
-        SkyHigh.Admin._devOpen();
-      }
-    }
-  });
 
   // ── SAVE: Check for existing save ───────────────────────
   // Try cloud save first if logged in, else fall back to localStorage

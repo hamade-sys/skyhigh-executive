@@ -12,33 +12,74 @@ window.SkyHigh.Admin = (() => {
 
   const ADM = {
 
-    // Dev/local admin — no Firebase needed (called via Ctrl+Shift+A + PIN)
-    _devOpen() {
+    // ── ADMIN LOGIN MODAL ─────────────────────────────────────
+    // Hardcoded local credentials (works without Firebase)
+    _LOCAL_CREDS: { username: 'skyhigh_admin', password: 'SkyHigh@2025' },
+
+    showLogin() {
+      const overlay = document.getElementById('admin-login-overlay');
+      if (overlay) {
+        overlay.style.display = 'flex';
+        setTimeout(() => document.getElementById('adm-login-user')?.focus(), 50);
+      }
+      // Enter key support
+      ['adm-login-user', 'adm-login-pass'].forEach(id => {
+        document.getElementById(id)?.addEventListener('keydown', e => {
+          if (e.key === 'Enter') ADM.submitLogin();
+        });
+      });
+    },
+
+    hideLogin() {
+      const overlay = document.getElementById('admin-login-overlay');
+      if (overlay) overlay.style.display = 'none';
+      const err = document.getElementById('adm-login-error');
+      if (err) err.style.display = 'none';
+      document.getElementById('adm-login-user') && (document.getElementById('adm-login-user').value = '');
+      document.getElementById('adm-login-pass') && (document.getElementById('adm-login-pass').value = '');
+    },
+
+    async submitLogin() {
+      const username = document.getElementById('adm-login-user')?.value.trim();
+      const password = document.getElementById('adm-login-pass')?.value;
+      const errEl    = document.getElementById('adm-login-error');
+
+      // Try Firebase admin first (if enabled and logged in)
+      if (SkyHigh.Auth?.isEnabled?.() && SkyHigh.Auth?.isLoggedIn?.()) {
+        const isAdmin = await SkyHigh.Auth.checkIsAdmin();
+        if (isAdmin) {
+          ADM.hideLogin();
+          ADM._open(SkyHigh.Auth.getUser()?.username || 'Admin');
+          return;
+        }
+      }
+
+      // Fall back to local credentials
+      const { username: u, password: p } = ADM._LOCAL_CREDS;
+      if (username === u && password === p) {
+        ADM.hideLogin();
+        ADM._open('skyhigh_admin');
+      } else {
+        if (errEl) { errEl.textContent = 'Incorrect username or password.'; errEl.style.display = 'block'; }
+        const passEl = document.getElementById('adm-login-pass');
+        if (passEl) { passEl.value = ''; passEl.focus(); }
+      }
+    },
+
+    _open(adminName) {
       const adminUser = document.getElementById('adm-admin-user');
-      if (adminUser) adminUser.textContent = 'Dev Admin';
+      if (adminUser) adminUser.textContent = adminName;
       SkyHigh.UI.showScreen('admin');
       ADM.switchTab('overview');
     },
 
     async open() {
-      if (!SkyHigh.Auth.isEnabled()) {
-        SkyHigh.UI.toast('Firebase not configured — use Ctrl+Shift+A for dev admin', 'info', 4000);
-        return;
+      // Firebase admin button (splash logged-in row) → verify then open
+      if (SkyHigh.Auth?.isEnabled?.() && SkyHigh.Auth?.isLoggedIn?.()) {
+        const ok = await SkyHigh.Auth.checkIsAdmin();
+        if (ok) { ADM._open(SkyHigh.Auth.getUser()?.username || 'Admin'); return; }
       }
-      if (!SkyHigh.Auth.isLoggedIn()) {
-        SkyHigh.UI.toast('Please sign in first', 'error');
-        SkyHigh.UI.showScreen('auth');
-        return;
-      }
-      const ok = await SkyHigh.Auth.checkIsAdmin();
-      if (!ok) {
-        SkyHigh.UI.toast('Access denied — admin only', 'error', 3000);
-        return;
-      }
-      const adminUser = document.getElementById('adm-admin-user');
-      if (adminUser) adminUser.textContent = SkyHigh.Auth.getUser()?.username || 'Admin';
-      SkyHigh.UI.showScreen('admin');
-      ADM.switchTab('overview');
+      ADM.showLogin();
     },
 
     exit() {

@@ -5459,3 +5459,28 @@ body.sidebar-collapsed #sidebar-toggle { /* fallback */ }
 /* Loading / empty */
 .adm-loading { padding: 2rem; text-align: center; color: rgba(160,160,190,0.5); font-size: 0.85rem; }
 .adm-empty   { padding: 2rem; text-align: center; color: rgba(160,160,190,0.4); font-size: 0.85rem; }
+
+/* ── ADMIN LOGIN CARD ───────────────────────────────────── */
+.adm-login-card {
+  background: #1A1A2E;
+  border: 1px solid rgba(200,147,58,0.3);
+  border-radius: 18px;
+  padding: 2rem 2rem 1.5rem;
+  width: 340px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+.adm-login-logo {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #C8933A;
+  margin-bottom: 0.2rem;
+  text-align: center;
+}
+.adm-login-subtitle {
+  font-size: 0.72rem;
+  color: rgba(160,160,190,0.5);
+  text-align: center;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+}

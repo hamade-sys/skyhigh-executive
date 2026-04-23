@@ -57,6 +57,26 @@
       <div class="text-muted" style="font-size:0.75rem;letter-spacing:0.1em">Press anywhere to start</div>
     </div>
     <div class="splash-by">AN OZUNA INTERACTIVE PRODUCTION</div>
+    <button id="btn-admin-entry" onclick="SkyHigh.Admin.showLogin()" style="position:absolute;bottom:1rem;right:1.25rem;background:none;border:none;font-size:0.62rem;color:rgba(160,160,190,0.25);cursor:pointer;letter-spacing:0.08em;padding:4px 8px;transition:color .2s" onmouseover="this.style.color='rgba(200,147,58,0.5)'" onmouseout="this.style.color='rgba(160,160,190,0.25)'">⚙ ADMIN</button>
+  </div>
+
+  <!-- ADMIN LOGIN MODAL -->
+  <div id="admin-login-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99999;align-items:center;justify-content:center;backdrop-filter:blur(6px)">
+    <div class="adm-login-card">
+      <div class="adm-login-logo">⚙ Admin Access</div>
+      <div class="adm-login-subtitle">SkyHigh Executive</div>
+      <div class="adm-form-group">
+        <label class="adm-form-label">Username</label>
+        <input id="adm-login-user" class="adm-form-input" type="text" placeholder="admin" autocomplete="off" autofocus>
+      </div>
+      <div class="adm-form-group">
+        <label class="adm-form-label">Password</label>
+        <input id="adm-login-pass" class="adm-form-input" type="password" placeholder="••••••••" autocomplete="off">
+      </div>
+      <div id="adm-login-error" style="display:none;color:#E74C3C;font-size:0.78rem;margin-bottom:0.75rem;text-align:center"></div>
+      <button class="adm-btn adm-btn-gold" style="width:100%;padding:0.7rem;font-size:0.9rem" onclick="SkyHigh.Admin.submitLogin()">Sign In →</button>
+      <button class="adm-btn" style="width:100%;margin-top:0.5rem" onclick="SkyHigh.Admin.hideLogin()">Cancel</button>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ -->
