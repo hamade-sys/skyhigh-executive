@@ -1754,8 +1754,12 @@ window.SkyHigh.UI = (() => {
       card.className = 'map-overlay-card';
       card.id = 'active-overlay';
 
-      const x = Math.min(pos.x + 15, window.innerWidth  - 320);
-      const y = Math.min(pos.y - 20, window.innerHeight - 320);
+      const mapEl = document.getElementById('map-container');
+      const mapW  = mapEl ? mapEl.clientWidth  : window.innerWidth;
+      const mapH  = mapEl ? mapEl.clientHeight : window.innerHeight;
+      const FAB_CLEAR = 110; // FABs are ~90px wide + 20px margin from right edge
+      const x = Math.max(10, Math.min(pos.x + 15, mapW - 320 - FAB_CLEAR));
+      const y = Math.max(10, Math.min(pos.y - 20,  mapH - 340));
       card.style.left = `${x}px`;
       card.style.top  = `${y}px`;
 
@@ -1814,10 +1818,14 @@ window.SkyHigh.UI = (() => {
       card.className = 'map-overlay-card country-overlay-card';
       card.id = 'active-overlay';
 
-      const cx = country.clickPx ?? window.innerWidth / 2;
-      const cy = country.clickPy ?? window.innerHeight / 2;
-      const x  = Math.max(10, Math.min(cx + 10, window.innerWidth  - 330));
-      const y  = Math.max(10, Math.min(cy - 10, window.innerHeight - 400));
+      const mapEl2 = document.getElementById('map-container');
+      const mapW2  = mapEl2 ? mapEl2.clientWidth  : window.innerWidth;
+      const mapH2  = mapEl2 ? mapEl2.clientHeight : window.innerHeight;
+      const FAB_CLEAR2 = 110; // FABs ~90px + 20px margin
+      const cx = country.clickPx ?? mapW2 / 2;
+      const cy = country.clickPy ?? mapH2 / 2;
+      const x  = Math.max(10, Math.min(cx + 10, mapW2 - 330 - FAB_CLEAR2));
+      const y  = Math.max(10, Math.min(cy - 10,  mapH2 - 420));
       card.style.left = `${x}px`;
       card.style.top  = `${y}px`;
 
@@ -1908,8 +1916,11 @@ window.SkyHigh.UI = (() => {
       card.className = 'map-overlay-card hangar-card';
       card.id = 'active-overlay';
 
-      const x = Math.max(10, Math.min(pos.x + 15, window.innerWidth  - 350));
-      const y = Math.max(10, Math.min(pos.y - 20,  window.innerHeight - 480));
+      const mapElH = document.getElementById('map-container');
+      const mapWH  = mapElH ? mapElH.clientWidth  : window.innerWidth;
+      const mapHH  = mapElH ? mapElH.clientHeight : window.innerHeight;
+      const x = Math.max(10, Math.min(pos.x + 15, mapWH - 350 - 110));
+      const y = Math.max(10, Math.min(pos.y - 20,  mapHH - 500));
       card.style.left = `${x}px`;
       card.style.top  = `${y}px`;
 
@@ -3063,8 +3074,8 @@ window.SkyHigh.UI = (() => {
           region: c.region,
           risk: c.risk,
           tier: c.tier,
-          clickPx: window.innerWidth / 2,
-          clickPy: window.innerHeight / 2,
+          clickPx: null,   // will default to mapW2/2 inside _showCountryOverlay
+          clickPy: null,
         });
       }, 950);
     },
