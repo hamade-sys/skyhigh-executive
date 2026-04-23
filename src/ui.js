@@ -1655,27 +1655,14 @@ window.SkyHigh.UI = (() => {
     },
 
     // ── MAP INTERACTION ───────────────────────────────────
+    // Map is READ-ONLY. Destinations are selected ONLY via the Destination
+    // dropdown button. Direct clicks/taps on the canvas do nothing.
     _bindMapEvents() {
       const container = document.getElementById('map-container');
       if (!container) return;
       container.style.cursor = 'default';
 
-      // Click only — no drag, no zoom
-      let touchStartX = 0, touchStartY = 0, touchMoved = false;
-
-      container.addEventListener('mousedown', e => {
-        if (e.target.closest('[data-no-map-click]')) return;
-        // just track position for click detection
-        e._clickX = e.clientX;
-        e._clickY = e.clientY;
-      });
-
-      container.addEventListener('click', e => {
-        if (e.target.closest('[data-no-map-click]')) return;
-        const rect = container.getBoundingClientRect();
-        UI._onMapClick(e.clientX - rect.left, e.clientY - rect.top);
-      });
-
+      // Hover only — shows country/airport name label while mousing over the map
       container.addEventListener('mousemove', e => {
         const rect = container.getBoundingClientRect();
         SkyHigh.MapEngine.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
@@ -1697,30 +1684,6 @@ window.SkyHigh.UI = (() => {
       container.addEventListener('mouseleave', () => {
         const hoverLabel = document.getElementById('map-hover-label');
         if (hoverLabel) hoverLabel.style.display = 'none';
-      });
-
-      // Touch: single tap only (no pinch, no drag)
-      container.addEventListener('touchstart', e => {
-        if (e.touches.length === 1) {
-          touchStartX = e.touches[0].clientX;
-          touchStartY = e.touches[0].clientY;
-          touchMoved = false;
-        }
-      }, { passive: true });
-
-      container.addEventListener('touchmove', e => {
-        if (e.touches.length === 1) {
-          const dx = e.touches[0].clientX - touchStartX;
-          const dy = e.touches[0].clientY - touchStartY;
-          if (Math.abs(dx) > 8 || Math.abs(dy) > 8) touchMoved = true;
-        }
-      }, { passive: true });
-
-      container.addEventListener('touchend', e => {
-        if (!touchMoved && e.changedTouches.length === 1) {
-          const rect = container.getBoundingClientRect();
-          UI._onMapClick(e.changedTouches[0].clientX - rect.left, e.changedTouches[0].clientY - rect.top);
-        }
       });
 
       // Prevent scroll propagation from the route projection panel
