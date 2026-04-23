@@ -137,19 +137,6 @@ window.SkyHigh.Auth = (() => {
       });
     },
 
-    // ── PRESENCE ──────────────────────────────────────────
-    async setOnline(teamId, online) {
-      if (!_db || !_currentUser || !teamId) return;
-      try {
-        const teamDoc = await _db.collection('teams').doc(teamId).get();
-        const team = teamDoc.data();
-        if (!team) return;
-        const updatedMembers = team.members.map(m =>
-          m.uid === _currentUser.uid ? { ...m, online } : m
-        );
-        await _db.collection('teams').doc(teamId).update({ members: updatedMembers });
-      } catch(e) { /* ignore */ }
-    },
 
     // ── CLOUD SAVE ─────────────────────────────────────────
     async cloudSave(gameState) {
@@ -214,19 +201,12 @@ window.SkyHigh.Auth = (() => {
     async adminGetStats() {
       if (!_db) return {};
       try {
-        const [usersSnap, teamsSnap] = await Promise.all([
-          _db.collection('users').get(),
-          _db.collection('teams').get(),
-        ]);
-        const teams = teamsSnap.docs.map(d => d.data());
-        const activeGames = teams.filter(t => t.status === 'playing').length;
-        const lobbyCount  = teams.filter(t => t.status === 'lobby').length;
+        const usersSnap = await _db.collection('users').get();
+        const users = usersSnap.docs.map(d => d.data());
         return {
-          totalUsers: usersSnap.size,
-          totalTeams: teams.length,
-          activeGames,
-          lobbyCount,
-          totalMembers: teams.reduce((s, t) => s + (t.members?.length || 0), 0),
+          totalUsers:   usersSnap.size,
+          activeGames:  users.filter(u => !u.banned).length,
+          bannedUsers:  users.filter(u => u.banned).length,
         };
       } catch(e) { return {}; }
     },
@@ -249,15 +229,6 @@ window.SkyHigh.Auth = (() => {
       } catch(e) { console.warn(e); return []; }
     },
 
-    async adminListTeams() {
-      if (!_db) return [];
-      try {
-        const snap = await _db.collection('teams').get();
-        return snap.docs.map(d => d.data()).sort((a, b) =>
-          (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
-        );
-      } catch(e) { return []; }
-    },
 
     async adminUpdateUser(uid, data) {
       if (!_db) return { ok: false };
@@ -270,71 +241,14 @@ window.SkyHigh.Auth = (() => {
     async adminDeleteUser(uid) {
       if (!_db) return { ok: false };
       try {
-        // Remove from team first
-        const userDoc = await _db.collection('users').doc(uid).get();
-        const teamId = userDoc.data()?.teamId;
-        if (teamId) {
-          const teamDoc = await _db.collection('teams').doc(teamId).get();
-          if (teamDoc.exists) {
-            const updated = (teamDoc.data().members || []).filter(m => m.uid !== uid);
-            if (updated.length === 0) await _db.collection('teams').doc(teamId).delete();
-            else await _db.collection('teams').doc(teamId).update({ members: updated });
-          }
-        }
         await _db.collection('users').doc(uid).delete();
         return { ok: true };
       } catch(e) { return { ok: false, reason: e.message }; }
     },
 
-    async adminDeleteTeam(teamId) {
-      if (!_db) return { ok: false };
-      try {
-        // Reset all member teamId references
-        const teamDoc = await _db.collection('teams').doc(teamId).get();
-        if (teamDoc.exists) {
-          const members = teamDoc.data().members || [];
-          await Promise.all(members.map(m =>
-            _db.collection('users').doc(m.uid).update({ teamId: null, role: null }).catch(()=>{})
-          ));
-        }
-        await _db.collection('teams').doc(teamId).delete();
-        return { ok: true };
-      } catch(e) { return { ok: false, reason: e.message }; }
-    },
-
-    async adminCreateLobby(config) {
-      // config: { teamName, isPrivate, maxPlayers, allowedRoles, notes }
-      if (!_currentUser || !_db) return { ok: false, reason: 'Not logged in' };
-      const inviteCode = _genCode();
-      const teamId = _db.collection('teams').doc().id;
-      try {
-        await _db.collection('teams').doc(teamId).set({
-          teamId,
-          teamName:     config.teamName || 'Admin Lobby',
-          inviteCode,
-          createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
-          createdBy:    _currentUser.uid,
-          status:       'lobby',
-          isPrivate:    config.isPrivate || false,
-          maxPlayers:   config.maxPlayers || 4,
-          allowedRoles: config.allowedRoles || ['CEO','CMO','CFO','CHRO'],
-          notes:        config.notes || '',
-          gameState:    null,
-          members:      [],
-        });
-        return { ok: true, teamId, inviteCode };
-      } catch(e) { return { ok: false, reason: e.message }; }
-    },
   };
 
   // ── HELPERS ───────────────────────────────────────────────
-  function _genCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
-    return code.slice(0,3) + '-' + code.slice(3);
-  }
-
   function _friendlyError(e) {
     const map = {
       'auth/email-already-in-use': 'Email already registered',

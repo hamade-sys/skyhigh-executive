@@ -156,8 +156,6 @@
         <nav class="adm-nav">
           <button class="adm-nav-btn active" data-tab="overview"  onclick="SkyHigh.Admin.switchTab('overview')">📊 Overview</button>
           <button class="adm-nav-btn"        data-tab="users"     onclick="SkyHigh.Admin.switchTab('users')">👥 Users</button>
-          <button class="adm-nav-btn"        data-tab="teams"     onclick="SkyHigh.Admin.switchTab('teams')">🏆 Teams</button>
-          <button class="adm-nav-btn"        data-tab="lobbies"   onclick="SkyHigh.Admin.switchTab('lobbies')">🎮 Lobbies</button>
           <button class="adm-nav-btn"        data-tab="analytics" onclick="SkyHigh.Admin.switchTab('analytics')">📈 Analytics</button>
         </nav>
         <div class="adm-sidebar-footer">
@@ -188,27 +186,6 @@
             </div>
           </div>
           <div id="adm-users-table" class="adm-table-wrap"></div>
-        </div>
-
-        <!-- Teams -->
-        <div id="adm-tab-teams" class="adm-tab-content" style="display:none">
-          <div class="adm-page-header">
-            <div class="adm-page-title">Team Management</div>
-            <button class="adm-btn" onclick="SkyHigh.Admin.loadTeams()">↺ Refresh</button>
-          </div>
-          <div id="adm-teams-table" class="adm-table-wrap"></div>
-        </div>
-
-        <!-- Lobbies -->
-        <div id="adm-tab-lobbies" class="adm-tab-content" style="display:none">
-          <div class="adm-page-header">
-            <div class="adm-page-title">Lobby Browser</div>
-            <div style="display:flex;gap:0.5rem">
-              <button class="adm-btn adm-btn-gold" onclick="SkyHigh.Admin.createPrivateLobby()">+ Create Private Lobby</button>
-              <button class="adm-btn" onclick="SkyHigh.Admin.loadLobbies()">↺ Refresh</button>
-            </div>
-          </div>
-          <div id="adm-lobbies-list" class="adm-lobbies-grid"></div>
         </div>
 
         <!-- Analytics -->
