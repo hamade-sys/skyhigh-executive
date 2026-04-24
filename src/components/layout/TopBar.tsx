@@ -15,8 +15,8 @@ export function TopBar() {
   const airlineValue = computeAirlineValue(player);
 
   return (
-    <header className="sticky top-0 z-40 bg-bg/95 backdrop-blur border-b border-line">
-      <div className="flex items-center gap-6 px-6 py-3">
+    <header className="pointer-events-none fixed top-3 left-3 right-3 z-40">
+      <div className="pointer-events-auto flex items-center gap-6 px-4 py-2.5 rounded-xl border border-line bg-surface/90 backdrop-blur shadow-[var(--shadow-2)]">
         {/* Airline identity */}
         <div className="flex items-center gap-3 min-w-0">
           <span
