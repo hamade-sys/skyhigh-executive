@@ -70,6 +70,10 @@ export interface GameStore extends GameState {
     aircraftIds: string[];
     dailyFrequency: number;
     pricingTier: PricingTier;
+    econFare?: number | null;
+    busFare?: number | null;
+    firstFare?: number | null;
+    isCargo?: boolean;
   }): { ok: boolean; error?: string };
 
   closeRoute(routeId: string): void;
@@ -309,7 +313,7 @@ export const useGame = create<GameStore>()(
         });
       },
 
-      openRoute: ({ originCode, destCode, aircraftIds, dailyFrequency, pricingTier }) => {
+      openRoute: ({ originCode, destCode, aircraftIds, dailyFrequency, pricingTier, econFare, busFare, firstFare, isCargo }) => {
         const s = get();
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player team" };
@@ -339,12 +343,16 @@ export const useGame = create<GameStore>()(
           aircraftIds,
           dailyFrequency,
           pricingTier,
+          econFare: econFare ?? null,
+          busFare: busFare ?? null,
+          firstFare: firstFare ?? null,
           status: "active" as const,
           openQuarter: s.currentQuarter,
           avgOccupancy: 0,
           quarterlyRevenue: 0,
           quarterlyFuelCost: 0,
           quarterlySlotCost: 0,
+          isCargo: isCargo ?? false,
         };
 
         set({
@@ -660,6 +668,13 @@ export const useGame = create<GameStore>()(
           fleet: t.fleet.map((f) => ({
             ...f,
             retirementQuarter: f.retirementQuarter ?? f.purchaseQuarter + 16,
+          })),
+          routes: t.routes.map((r) => ({
+            ...r,
+            econFare: r.econFare ?? null,
+            busFare: r.busFare ?? null,
+            firstFare: r.firstFare ?? null,
+            isCargo: r.isCargo ?? false,
           })),
         }));
       },

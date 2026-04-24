@@ -64,14 +64,23 @@ export interface Route {
   destCode: string;
   distanceKm: number;
   aircraftIds: string[];
-  dailyFrequency: number;        // 1..10
+  dailyFrequency: number;        // 1..24
   pricingTier: PricingTier;
+
+  /** Per-class fare overrides (USD per seat). null = use base tier formula. */
+  econFare: number | null;
+  busFare: number | null;
+  firstFare: number | null;
+
   status: "active" | "pending" | "closed";
   openQuarter: number;
   avgOccupancy: number;          // 0..1
   quarterlyRevenue: number;
   quarterlyFuelCost: number;
   quarterlySlotCost: number;
+
+  /** True if route carries cargo instead of passengers. */
+  isCargo?: boolean;
 }
 
 // ─── Sliders ──────────────────────────────────────────────

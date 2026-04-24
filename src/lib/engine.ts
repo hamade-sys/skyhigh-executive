@@ -91,6 +91,30 @@ export function baseFareForDistance(km: number): number {
   return 950;
 }
 
+/** Per-class fare range (PRD A11). Returns {min, base, max} for a class. */
+export interface FareRange { min: number; base: number; max: number }
+
+export function classFareRange(
+  km: number,
+  cls: "econ" | "bus" | "first",
+): FareRange {
+  if (cls === "econ") {
+    if (km < 2000) return { min: 60, base: 120, max: 280 };
+    if (km < 5000) return { min: 150, base: 350, max: 800 };
+    if (km < 10_000) return { min: 300, base: 650, max: 1500 };
+    return { min: 500, base: 950, max: 2200 };
+  }
+  if (cls === "bus") {
+    if (km < 2000) return { min: 180, base: 360, max: 750 };
+    if (km < 5000) return { min: 450, base: 1100, max: 2500 };
+    if (km < 10_000) return { min: 900, base: 2200, max: 5000 };
+    return { min: 1500, base: 3500, max: 8000 };
+  }
+  // first = business × 3.5 (PRD A11)
+  const bus = classFareRange(km, "bus");
+  return { min: bus.base * 3.5, base: bus.base * 3.5, max: bus.max * 3.5 };
+}
+
 // ─── Slider levels + impacts (PRD A2 + B1) ─────────────────
 export const SLIDER_LABELS: Record<SliderLevel, string> = {
   0: "Very Low",
@@ -246,36 +270,106 @@ export function computeRouteEconomics(
 
   const distanceKm = route.distanceKm || haversineKm(origin, dest);
   const rawDemand = routeDemandPerDay(route.originCode, route.destCode, quarter);
-  // Loyalty demand multiplier (PRD §5.8) — subtle scaling
   const loyaltyFactor = loyaltyRetentionFactor(team.customerLoyaltyPct);
   const demand = {
     ...rawDemand,
     total: rawDemand.total * loyaltyFactor,
   };
 
-  // Daily capacity = aircraft seats × daily_departures per plane
   const planes = route.aircraftIds
     .map((id) => team.fleet.find((f) => f.id === id))
     .filter((x): x is FleetAircraft => !!x && x.status === "active");
-  const seatsPerFlight = planes.reduce((sum, p) => {
-    const spec = AIRCRAFT_BY_ID[p.specId];
-    if (!spec) return sum;
-    return sum + spec.seats.first + spec.seats.business + spec.seats.economy;
-  }, 0);
-  const dailyCapacity = seatsPerFlight * route.dailyFrequency;
 
-  // Simplified MVP market share: single-team assumption (100% until rivals
-  // exist). When rivals exist we compute per-route attractiveness.
+  // ─ Cargo route (A4) ────────────────────────────────────
+  if (route.isCargo) {
+    const tonnesPerFlight = planes.reduce((sum, p) => {
+      const spec = AIRCRAFT_BY_ID[p.specId];
+      return sum + (spec?.cargoTonnes ?? 0);
+    }, 0);
+    const dailyCapacityT = tonnesPerFlight * route.dailyFrequency;
+    // Cargo demand = min of the two cities' business demand (A4)
+    const cargoDemandT = Math.min(
+      cityBusinessAtQuarter(origin, quarter),
+      cityBusinessAtQuarter(dest, quarter),
+    );
+    const dailyTonnes = Math.min(dailyCapacityT, cargoDemandT);
+    const occupancy = dailyCapacityT > 0 ? Math.min(0.98, dailyTonnes / dailyCapacityT) : 0;
+    const pricePerTonne = distanceKm < 3000 ? 3.5 : 5.5;
+    const quarterlyRevenue = dailyTonnes * pricePerTonne * 1000 * QUARTER_DAYS;
+    // Storage cost instead of slot fees (A4)
+    const storageCostByTier: Record<number, number> = { 1: 800_000, 2: 450_000, 3: 250_000, 4: 150_000 };
+    const quarterlySlotCost =
+      (storageCostByTier[origin.tier] ?? 150_000) +
+      (storageCostByTier[dest.tier] ?? 150_000);
+
+    // Fuel
+    const fuelPricePerL = (fuelIndex / 100) * 0.18;
+    const totalFuelBurnPerFlight = planes.reduce((sum, p) => {
+      const spec = AIRCRAFT_BY_ID[p.specId];
+      if (!spec) return sum;
+      return sum + spec.fuelBurnPerKm * (p.ecoUpgrade ? 0.9 : 1.0) * distanceKm;
+    }, 0);
+    const quarterlyFuelCost =
+      totalFuelBurnPerFlight * fuelPricePerL * route.dailyFrequency * QUARTER_DAYS;
+
+    return {
+      distanceKm,
+      dailyDemand: cargoDemandT,
+      dailyCapacity: dailyCapacityT,
+      occupancy,
+      dailyPax: dailyTonnes, // repurposed as tonnes/day
+      ticketPrice: pricePerTonne,
+      quarterlyRevenue,
+      quarterlyFuelCost,
+      quarterlySlotCost,
+      quarterlyProfit: quarterlyRevenue - quarterlyFuelCost - quarterlySlotCost,
+    };
+  }
+
+  // ─ Passenger route (default) ───────────────────────────
+  const seatsPerFlight = {
+    first: 0, bus: 0, econ: 0,
+  };
+  for (const p of planes) {
+    const spec = AIRCRAFT_BY_ID[p.specId];
+    if (!spec) continue;
+    seatsPerFlight.first += spec.seats.first;
+    seatsPerFlight.bus += spec.seats.business;
+    seatsPerFlight.econ += spec.seats.economy;
+  }
+  const totalSeatsPerFlight =
+    seatsPerFlight.first + seatsPerFlight.bus + seatsPerFlight.econ;
+  const dailyCapacity = totalSeatsPerFlight * route.dailyFrequency;
+
   const dailyPax = Math.min(dailyCapacity, demand.total);
   const occupancy =
     dailyCapacity > 0 ? Math.min(0.98, dailyPax / dailyCapacity) : 0;
 
-  // Ticket pricing
-  const baseFare = baseFareForDistance(distanceKm);
-  const ticketPrice = baseFare * PRICE_TIER[route.pricingTier];
+  // ─ Per-class fares (A7 + A11) ──────────────────────────
+  const tier = PRICE_TIER[route.pricingTier];
+  const econFare = route.econFare ?? classFareRange(distanceKm, "econ").base * tier;
+  const busFare = route.busFare ?? classFareRange(distanceKm, "bus").base * tier;
+  const firstFare = route.firstFare ?? classFareRange(distanceKm, "first").base * tier;
 
-  // Revenue
-  const quarterlyRevenue = dailyPax * ticketPrice * QUARTER_DAYS;
+  // Blended ticket price used by market share / demand sensitivity
+  const seatMix = totalSeatsPerFlight > 0
+    ? {
+        f: seatsPerFlight.first / totalSeatsPerFlight,
+        b: seatsPerFlight.bus / totalSeatsPerFlight,
+        e: seatsPerFlight.econ / totalSeatsPerFlight,
+      }
+    : { f: 0, b: 0, e: 1 };
+  const ticketPrice =
+    firstFare * seatMix.f + busFare * seatMix.b + econFare * seatMix.e;
+
+  // Revenue: pax × fare, per class (pax distributed proportionally to seat mix)
+  const quarterlyFirstPax = seatsPerFlight.first * route.dailyFrequency * QUARTER_DAYS * occupancy;
+  const quarterlyBusPax = seatsPerFlight.bus * route.dailyFrequency * QUARTER_DAYS * occupancy;
+  const quarterlyEconPax = seatsPerFlight.econ * route.dailyFrequency * QUARTER_DAYS * occupancy;
+  const quarterlyRevenue =
+    quarterlyFirstPax * firstFare +
+    quarterlyBusPax * busFare +
+    quarterlyEconPax * econFare;
 
   // Fuel
   const fuelPricePerL = (fuelIndex / 100) * 0.18;

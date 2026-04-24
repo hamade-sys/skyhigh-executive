@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Badge, Button, Card, CardBody, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
-import { distanceBetween } from "@/lib/engine";
+import { classFareRange, distanceBetween } from "@/lib/engine";
 import { CITIES_BY_CODE } from "@/data/cities";
 import type { FleetAircraft, PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
+import { fmtMoney } from "@/lib/format";
 
 export interface RouteSetupModalProps {
   origin: string | null;
@@ -28,6 +29,10 @@ export function RouteSetupModal({ origin, dest, onClose }: RouteSetupModalProps)
   const [tier, setTier] = useState<PricingTier>("standard");
   const [selectedPlaneIds, setSelectedPlaneIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [econFare, setEconFare] = useState<number | null>(null);
+  const [busFare, setBusFare] = useState<number | null>(null);
+  const [firstFare, setFirstFare] = useState<number | null>(null);
+  const [isCargo, setIsCargo] = useState(false);
 
   const isOpen = !!(origin && dest);
 
@@ -45,6 +50,10 @@ export function RouteSetupModal({ origin, dest, onClose }: RouteSetupModalProps)
     setSelectedPlaneIds(idle ? [idle.id] : []);
     setFreq(2);
     setTier("standard");
+    setEconFare(null);
+    setBusFare(null);
+    setFirstFare(null);
+    setIsCargo(false);
     setError(null);
   }, [origin, dest, isOpen, player]);
 
@@ -63,6 +72,10 @@ export function RouteSetupModal({ origin, dest, onClose }: RouteSetupModalProps)
       aircraftIds: selectedPlaneIds,
       dailyFrequency: freq,
       pricingTier: tier,
+      econFare,
+      busFare,
+      firstFare,
+      isCargo,
     });
     if (!r.ok) {
       setError(r.error ?? "Unknown error");
@@ -70,6 +83,32 @@ export function RouteSetupModal({ origin, dest, onClose }: RouteSetupModalProps)
     }
     onClose();
   }
+
+  // Class availability from selected planes
+  const hasFirst = useMemo(() => selectedPlaneIds.some((id) => {
+    const p = player?.fleet.find((f) => f.id === id);
+    const spec = p && AIRCRAFT_BY_ID[p.specId];
+    return spec && spec.seats.first > 0;
+  }), [selectedPlaneIds, player]);
+  const hasBusiness = useMemo(() => selectedPlaneIds.some((id) => {
+    const p = player?.fleet.find((f) => f.id === id);
+    const spec = p && AIRCRAFT_BY_ID[p.specId];
+    return spec && spec.seats.business > 0;
+  }), [selectedPlaneIds, player]);
+  const allCargo = useMemo(() => selectedPlaneIds.every((id) => {
+    const p = player?.fleet.find((f) => f.id === id);
+    const spec = p && AIRCRAFT_BY_ID[p.specId];
+    return spec && spec.family === "cargo";
+  }) && selectedPlaneIds.length > 0, [selectedPlaneIds, player]);
+  const econRange = dest ? classFareRange(dist, "econ") : null;
+  const busRange = dest ? classFareRange(dist, "bus") : null;
+  const firstRange = dest ? classFareRange(dist, "first") : null;
+
+  // Auto-enable cargo if all selected planes are cargo
+  useEffect(() => {
+    if (allCargo && !isCargo) setIsCargo(true);
+    if (!allCargo && isCargo) setIsCargo(false);
+  }, [allCargo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Modal open={isOpen} onClose={onClose}>
@@ -125,6 +164,48 @@ export function RouteSetupModal({ origin, dest, onClose }: RouteSetupModalProps)
             Real-world trunks run up to ~20 daily each way (JFK–LHR, DXB–LHR).
           </div>
         </div>
+
+        {/* Per-class fare sliders (passenger routes only) */}
+        {!isCargo && selectedPlaneIds.length > 0 && econRange && (
+          <div className="space-y-3">
+            <Label>Seat-class fares (optional override)</Label>
+            <FareSlider
+              label="Economy"
+              range={econRange}
+              value={econFare ?? econRange.base}
+              onChange={setEconFare}
+              onReset={() => setEconFare(null)}
+              isOverride={econFare !== null}
+            />
+            {hasBusiness && busRange && (
+              <FareSlider
+                label="Business"
+                range={busRange}
+                value={busFare ?? busRange.base}
+                onChange={setBusFare}
+                onReset={() => setBusFare(null)}
+                isOverride={busFare !== null}
+              />
+            )}
+            {hasFirst && firstRange && (
+              <FareSlider
+                label="First"
+                range={firstRange}
+                value={firstFare ?? firstRange.base}
+                onChange={setFirstFare}
+                onReset={() => setFirstFare(null)}
+                isOverride={firstFare !== null}
+              />
+            )}
+          </div>
+        )}
+
+        {isCargo && (
+          <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-[0.8125rem] text-ink-2">
+            Cargo route · revenue based on minimum of origin/destination business
+            demand as daily tonnes. Storage fees replace slot fees.
+          </div>
+        )}
 
         <div>
           <Label>Assign aircraft (idle fleet)</Label>
@@ -201,6 +282,52 @@ function Label({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
       {children}
+    </div>
+  );
+}
+
+function FareSlider({
+  label, range, value, onChange, onReset, isOverride,
+}: {
+  label: string;
+  range: { min: number; base: number; max: number };
+  value: number;
+  onChange: (n: number) => void;
+  onReset: () => void;
+  isOverride: boolean;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[0.75rem] text-ink-2">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="tabular font-mono text-[0.75rem] text-ink">
+            ${Math.round(value).toLocaleString()}
+          </span>
+          {isOverride && (
+            <button
+              onClick={onReset}
+              className="text-[0.6875rem] text-ink-muted hover:text-ink underline"
+            >
+              reset
+            </button>
+          )}
+        </div>
+      </div>
+      <input
+        type="range"
+        min={range.min}
+        max={range.max}
+        step={Math.max(1, Math.round((range.max - range.min) / 100))}
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
+        className="w-full accent-primary"
+      />
+      <div className="flex justify-between text-[0.6875rem] text-ink-muted tabular">
+        <span>${range.min.toLocaleString()}</span>
+        <span>base ${range.base.toLocaleString()}</span>
+        <span>${range.max.toLocaleString()}</span>
+      </div>
     </div>
   );
 }
