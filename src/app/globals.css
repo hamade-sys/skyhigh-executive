@@ -1,0 +1,232 @@
+/* ────────────────────────────────────────────────────────────────
+   SkyForce · Flight Deck Modernist
+   Warm off-white, deep navy, terracotta. 1985 airline boardroom.
+   ──────────────────────────────────────────────────────────────── */
+
+@import url("https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&f[]=gambarino@400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+@import "tailwindcss";
+
+/* ───────────────────────────────────────────────────────────────
+   :root — raw tokens (OKLCH-tinted neutrals toward navy brand hue)
+   ─────────────────────────────────────────────────────────────── */
+:root {
+  /* Surfaces — warm off-white, subtly tinted toward brand */
+  --bg: #f7f3ec;
+  --surface: #ffffff;
+  --surface-2: #f0ebe0;
+  --surface-hover: #efe8d6;
+
+  /* Lines & separators — warm, consistent with bg */
+  --line: #e5ddca;
+  --line-strong: #b9ac94;
+
+  /* Ink — deep navy text scale, perceptually uniform steps */
+  --ink: #10253f;
+  --ink-2: #3a5475;
+  --ink-muted: #7a8ca0;
+  --ink-faint: #a9b6c6;
+
+  /* Primary — navy. Used for brand, primary buttons, active tabs. */
+  --primary: #14355e;
+  --primary-hover: #0e2747;
+  --primary-fg: #f7f3ec;
+
+  /* Accent — terracotta. Restrained; 10% rule. Replaces gold. */
+  --accent: #d14a2e;
+  --accent-hover: #b83e24;
+  --accent-soft: rgba(209, 74, 46, 0.08);
+  --accent-soft-2: rgba(209, 74, 46, 0.16);
+
+  /* Semantic — muted, editorial, not SaaS-primary */
+  --positive: #1e6b5c;
+  --positive-soft: rgba(30, 107, 92, 0.1);
+  --negative: #c23b1f;
+  --negative-soft: rgba(194, 59, 31, 0.1);
+  --warning: #c38a1e;
+  --warning-soft: rgba(195, 138, 30, 0.12);
+  --info: #2b6b88;
+  --info-soft: rgba(43, 107, 136, 0.1);
+
+  /* Map — readable, editorial, not dark-ocean */
+  --map-ocean: #e8eef3;
+  --map-land: #f0ebe0;
+  --map-land-hover: #e5dfce;
+  --map-land-select: #dcd3ba;
+  --map-line: #b9ac94;
+  --map-arc: #d14a2e;
+  --map-arc-muted: rgba(185, 172, 148, 0.5);
+  --map-hub: #14355e;
+
+  /* Radius */
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 6px;
+  --r-4: 8px;
+  --r-5: 12px;
+  --r-6: 16px;
+  --r-pill: 999px;
+
+  /* Shadows — soft, editorial */
+  --shadow-1: 0 1px 2px rgba(16, 37, 63, 0.04);
+  --shadow-2: 0 2px 8px rgba(16, 37, 63, 0.06), 0 1px 2px rgba(16, 37, 63, 0.04);
+  --shadow-3: 0 8px 24px rgba(16, 37, 63, 0.08), 0 2px 4px rgba(16, 37, 63, 0.04);
+  --shadow-4: 0 16px 40px rgba(16, 37, 63, 0.12), 0 4px 8px rgba(16, 37, 63, 0.06);
+
+  /* Typography */
+  --font-display: "Gambarino", "Times New Roman", Georgia, serif;
+  --font-sans: "Switzer", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-normal: 220ms;
+  --dur-slow: 360ms;
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   @theme — expose tokens to Tailwind utilities
+   ─────────────────────────────────────────────────────────────── */
+@theme inline {
+  /* Surfaces */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
+
+  /* Lines */
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  /* Ink / text */
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+
+  /* Primary + accent */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+
+  /* Semantic */
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+
+  /* Map */
+  --color-map-ocean: var(--map-ocean);
+  --color-map-land: var(--map-land);
+  --color-map-arc: var(--map-arc);
+  --color-map-hub: var(--map-hub);
+
+  /* Fonts — Tailwind utility `font-display`, `font-sans`, `font-mono` */
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  /* Radius */
+  --radius-sm: var(--r-2);
+  --radius-md: var(--r-4);
+  --radius-lg: var(--r-5);
+  --radius-xl: var(--r-6);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Base layer — reset, typography, focus
+   ─────────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    color-scheme: light;
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11"; /* Switzer stylistic niceties */
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 0.9375rem; /* 15px */
+    line-height: 1.55;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Headings — Gambarino for hero display, Switzer for product UI titles */
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+
+  /* Tabular figures everywhere by default for data legibility */
+  body {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Mono content uses JetBrains Mono */
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+  }
+
+  /* Keyboard-only focus rings */
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: var(--r-2);
+  }
+
+  /* Selection */
+  ::selection {
+    background: var(--accent-soft-2);
+    color: var(--ink);
+  }
+
+  /* Reduce motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Utility — numeric display (big stat value, tabular)
+   ─────────────────────────────────────────────────────────────── */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Hairline — subtle 1px rule that respects device pixel ratio */
+.hairline {
+  border-color: var(--line);
+  border-width: 1px;
+}
