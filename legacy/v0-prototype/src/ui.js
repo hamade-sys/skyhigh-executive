@@ -1655,81 +1655,90 @@ window.SkyHigh.UI = (() => {
     },
 
     // ── MAP INTERACTION ───────────────────────────────────
-    // Globe supports: drag to spin, scroll/pinch to zoom, hover labels.
-    // Destinations are selected ONLY via the Destination dropdown.
+    // Drag/scroll on the CANVAS spins/zooms the globe.
+    // All overlay buttons (FABs, dropdowns) remain fully clickable
+    // because events are bound to the canvas element, not the container.
     _bindMapEvents() {
       const container = document.getElementById('map-container');
       if (!container) return;
-      container.style.cursor = 'grab';
 
-      let isDragging = false;
-      let lastX = 0, lastY = 0;
+      // Bind drag/zoom directly to the canvas so FAB buttons are never blocked.
+      const cv = document.getElementById('map-canvas');
 
-      // ── DRAG TO SPIN GLOBE ──────────────────────────────
-      container.addEventListener('pointerdown', e => {
-        if (e.button !== 0 && e.pointerType !== 'touch') return;
-        isDragging = true;
-        lastX = e.clientX;
-        lastY = e.clientY;
-        container.style.cursor = 'grabbing';
-        container.setPointerCapture?.(e.pointerId);
-      });
+      let isDragging = false, lastX = 0, lastY = 0, dragMoved = false;
 
-      container.addEventListener('pointermove', e => {
-        const rect = container.getBoundingClientRect();
-        const px = e.clientX - rect.left;
-        const py = e.clientY - rect.top;
+      // ── DRAG TO SPIN GLOBE (canvas only) ───────────────
+      if (cv) {
+        cv.style.cursor = 'grab';
 
-        if (isDragging) {
+        cv.addEventListener('pointerdown', e => {
+          if (e.button !== 0) return;
+          isDragging  = true;
+          dragMoved   = false;
+          lastX = e.clientX;
+          lastY = e.clientY;
+          cv.style.cursor = 'grabbing';
+        });
+
+        cv.addEventListener('pointermove', e => {
+          if (!isDragging) return;
           const dx = e.clientX - lastX;
           const dy = e.clientY - lastY;
           lastX = e.clientX;
           lastY = e.clientY;
-          if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+          if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+            dragMoved = true;
             SkyHigh.MapEngine.pan(dx, dy);
           }
-          return;   // don't update hover labels while dragging
-        }
+        });
 
-        // Hover labels
-        SkyHigh.MapEngine.handlePointerMove(px, py);
-        const hoverLabel = document.getElementById('map-hover-label');
-        if (hoverLabel) {
+        const _endDrag = () => { isDragging = false; cv.style.cursor = 'grab'; };
+        cv.addEventListener('pointerup',     _endDrag);
+        cv.addEventListener('pointercancel', _endDrag);
+        cv.addEventListener('pointerleave',  _endDrag);
+
+        // Click on canvas → select airport / country
+        cv.addEventListener('click', e => {
+          if (dragMoved) return;   // was a drag, not a tap
+          const rect = cv.getBoundingClientRect();
+          SkyHigh.MapEngine.handleClick(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        // ── SCROLL ZOOM (canvas) ──────────────────────────
+        cv.addEventListener('wheel', e => {
+          e.preventDefault();
+          const rect   = cv.getBoundingClientRect();
+          const factor = e.deltaY < 0 ? 1.10 : 0.91;
+          SkyHigh.MapEngine.zoomAt(factor, e.clientX - rect.left, e.clientY - rect.top);
+        }, { passive: false });
+      }
+
+      // ── HOVER LABELS (container — wider hit area) ───────
+      container.addEventListener('mousemove', e => {
+        if (isDragging) return;
+        const rect = container.getBoundingClientRect();
+        SkyHigh.MapEngine.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
+        const lbl = document.getElementById('map-hover-label');
+        if (lbl) {
           const sel = SkyHigh.MapEngine.getSelection();
           if (sel.hoveredAirport) {
-            hoverLabel.textContent = `${sel.hoveredAirport.name} (${sel.hoveredAirport.id})`;
-            hoverLabel.style.display = 'block';
+            lbl.textContent = `${sel.hoveredAirport.name} (${sel.hoveredAirport.id})`;
+            lbl.style.display = 'block';
           } else if (sel.hoveredCountry) {
-            hoverLabel.textContent = `${sel.hoveredCountry.emoji || '🌍'} ${sel.hoveredCountry.name}`;
-            hoverLabel.style.display = 'block';
+            lbl.textContent = `${sel.hoveredCountry.emoji || '🌍'} ${sel.hoveredCountry.name}`;
+            lbl.style.display = 'block';
           } else {
-            hoverLabel.style.display = 'none';
+            lbl.style.display = 'none';
           }
         }
       });
 
-      const _endDrag = () => {
-        isDragging = false;
-        container.style.cursor = 'grab';
-      };
-      container.addEventListener('pointerup',     _endDrag);
-      container.addEventListener('pointercancel', _endDrag);
-
       container.addEventListener('mouseleave', () => {
-        _endDrag();
-        const hoverLabel = document.getElementById('map-hover-label');
-        if (hoverLabel) hoverLabel.style.display = 'none';
+        const lbl = document.getElementById('map-hover-label');
+        if (lbl) lbl.style.display = 'none';
       });
 
-      // ── SCROLL / PINCH TO ZOOM ──────────────────────────
-      container.addEventListener('wheel', e => {
-        e.preventDefault();
-        const rect   = container.getBoundingClientRect();
-        const factor = e.deltaY < 0 ? 1.10 : 0.91;
-        SkyHigh.MapEngine.zoomAt(factor, e.clientX - rect.left, e.clientY - rect.top);
-      }, { passive: false });
-
-      // ── PINCH-TO-ZOOM (touch) ────────────────────────────
+      // ── PINCH-TO-ZOOM (touch, container) ────────────────
       let _prevPinchDist = 0;
       container.addEventListener('touchstart', e => {
         if (e.touches.length === 2) _prevPinchDist = Math.hypot(
