@@ -206,6 +206,16 @@ export function serviceScoreFromSliders(s: Sliders): number {
 // ─── Route quarterly economics ─────────────────────────────
 const QUARTER_DAYS = 91;
 
+/** Quarterly hub terminal fee by tier (PRD §4.2). */
+export function hubTerminalFeeUsd(cityCode: string): number {
+  const c = CITIES_BY_CODE[cityCode];
+  if (!c) return 0;
+  if (c.tier === 1) return 15_000_000;
+  if (c.tier === 2) return 12_000_000;
+  if (c.tier === 3) return 6_000_000;
+  return 3_000_000;
+}
+
 export interface RouteEconomics {
   distanceKm: number;
   dailyDemand: number;
@@ -568,6 +578,14 @@ export function runQuarterClose(
   let maintenanceCost = next.fleet.filter((f) => f.status === "active").length *
     500_000;
   if (next.flags.has("aging_fleet")) maintenanceCost += 15_000_000;
+
+  // ─ Hub terminal fees (§4.2 + §4.4 2× for secondary) ────
+  const primaryHubFee = hubTerminalFeeUsd(next.hubCode);
+  const secondaryHubFees = (next.secondaryHubCodes ?? []).reduce(
+    (sum, code) => sum + hubTerminalFeeUsd(code) * 2, 0,
+  );
+  const hubFee = primaryHubFee + secondaryHubFees;
+  maintenanceCost += hubFee;
 
   // ─ Depreciation ─────────────────────────────────────────
   let depreciation = 0;

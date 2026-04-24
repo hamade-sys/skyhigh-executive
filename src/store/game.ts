@@ -86,6 +86,10 @@ export interface GameStore extends GameState {
   advanceToNext(): void;
   resetGame(): void;
 
+  addSecondaryHub(cityCode: string): { ok: boolean; error?: string };
+  removeSecondaryHub(cityCode: string): void;
+  claimFlashDeal(count: number): { ok: boolean; error?: string };
+
   // Quarter timer (A12)
   startQuarterTimer(seconds?: number): void;
   pauseQuarterTimer(): void;
@@ -127,6 +131,7 @@ function makeStartingTeam(args: {
     code: args.code,
     color: args.color,
     hubCode: args.hubCode,
+    secondaryHubCodes: [],
     doctrine: args.doctrine,
     isPlayer: args.isPlayer,
     cashUsd: 150_000_000,
@@ -180,6 +185,7 @@ export const useGame = create<GameStore>()(
           purchasePrice: 25_000_000, bookValue: 25_000_000,
           leaseQuarterly: null, ecoUpgrade: false, ecoUpgradeQuarter: null, ecoUpgradeCost: 0,
           cabinConfig: "default", routeId: null,
+          retirementQuarter: 1 + 16, // 20 real years → 16 quarters
         };
         const starter2: FleetAircraft = { ...starter1, id: mkId("ac") };
         player.fleet = [starter1, starter2];
@@ -248,6 +254,7 @@ export const useGame = create<GameStore>()(
           leaseQuarterly: acquisitionType === "lease" ? spec.leasePerQuarterUsd : null,
           ecoUpgrade: false, ecoUpgradeQuarter: null, ecoUpgradeCost: 0,
           cabinConfig: "default", routeId: null,
+          retirementQuarter: s.currentQuarter + 16,
         };
 
         set({
@@ -438,11 +445,24 @@ export const useGame = create<GameStore>()(
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return;
 
-        // Transition ordered → active planes
+        // Transition ordered → active planes, and retire aircraft whose
+        // retirementQuarter has been reached (A13).
         const teamReady: Team = {
           ...ensureStreaks(player),
-          fleet: player.fleet.map((f) =>
-            f.status === "ordered" ? { ...f, status: "active" } : f),
+          fleet: player.fleet.map((f) => {
+            const retiring = f.retirementQuarter !== undefined && s.currentQuarter >= f.retirementQuarter;
+            if (retiring) return { ...f, status: "retired" as const, routeId: null };
+            if (f.status === "ordered") return { ...f, status: "active" as const };
+            return f;
+          }),
+          routes: player.routes.map((r) => {
+            // Drop retired aircraft from routes
+            const stillFlying = r.aircraftIds.filter((id) => {
+              const f = player.fleet.find((x) => x.id === id);
+              return f && (f.retirementQuarter === undefined || s.currentQuarter < f.retirementQuarter);
+            });
+            return { ...r, aircraftIds: stillFlying };
+          }),
           flags: new Set(player.flags),
           sliderStreaks: { ...player.sliderStreaks },
         };
@@ -525,6 +545,72 @@ export const useGame = create<GameStore>()(
         });
       },
 
+      // ── Secondary hubs (§4.4) ──────────────────────────────
+      addSecondaryHub: (cityCode) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        if (s.currentQuarter < 3) return { ok: false, error: "Secondary hubs unlock Q3" };
+        if (cityCode === player.hubCode) return { ok: false, error: "Already your primary hub" };
+        if (player.secondaryHubCodes.includes(cityCode)) return { ok: false, error: "Already a secondary hub" };
+        if (!CITIES_BY_CODE[cityCode]) return { ok: false, error: "Unknown city" };
+        // One-time activation cost: 1× terminal fee as deposit
+        const spec = CITIES_BY_CODE[cityCode];
+        if (!spec) return { ok: false, error: "Unknown city" };
+        const activationCost =
+          spec.tier === 1 ? 30_000_000 :
+          spec.tier === 2 ? 22_000_000 :
+          spec.tier === 3 ? 12_000_000 : 6_000_000;
+        if (player.cashUsd < activationCost) return { ok: false, error: `Need ${activationCost / 1e6}M activation cost` };
+        set({
+          teams: s.teams.map((t) => t.id === player.id ? {
+            ...t,
+            cashUsd: t.cashUsd - activationCost,
+            secondaryHubCodes: [...t.secondaryHubCodes, cityCode],
+          } : t),
+        });
+        return { ok: true };
+      },
+
+      removeSecondaryHub: (cityCode) => {
+        const s = get();
+        set({
+          teams: s.teams.map((t) => t.id === s.playerTeamId ? {
+            ...t,
+            secondaryHubCodes: t.secondaryHubCodes.filter((c) => c !== cityCode),
+          } : t),
+        });
+      },
+
+      // ── Flash Deal (§6.3, S3) ──────────────────────────────
+      claimFlashDeal: (count) => {
+        const s = get();
+        if (s.currentQuarter !== 13) return { ok: false, error: "Flash Deal only at Q13" };
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const deposit = 4_000_000 * count;
+        if (player.cashUsd < deposit) return { ok: false, error: "Insufficient cash for deposit" };
+        if (count < 1 || count > 10) return { ok: false, error: "Flash Deal max 10 per team" };
+        // Eco-engine A320neos (unlocks Q12 so available at Q13)
+        const planes: FleetAircraft[] = Array.from({ length: count }, () => ({
+          id: mkId("ac"), specId: "A320neo", status: "ordered",
+          acquisitionType: "buy", purchaseQuarter: s.currentQuarter,
+          purchasePrice: 28_000_000, bookValue: 28_000_000,
+          leaseQuarterly: null, ecoUpgrade: true, ecoUpgradeQuarter: s.currentQuarter, ecoUpgradeCost: 0,
+          cabinConfig: "default", routeId: null,
+          retirementQuarter: s.currentQuarter + 16,
+        }));
+        set({
+          teams: s.teams.map((t) => t.id === player.id ? {
+            ...t,
+            cashUsd: t.cashUsd - deposit,
+            fleet: [...t.fleet, ...planes],
+            flags: new Set([...Array.from(t.flags), "flash_deal_claimed", "modern_fleet"]),
+          } : t),
+        });
+        return { ok: true };
+      },
+
       // ── Quarter timer (A12) ────────────────────────────────
       startQuarterTimer: (seconds = 1800) => {
         set({ quarterTimerSecondsRemaining: seconds, quarterTimerPaused: false });
@@ -570,6 +656,11 @@ export const useGame = create<GameStore>()(
           flags: new Set(Array.isArray(t.flags) ? t.flags : Array.from(t.flags ?? [])),
           deferredEvents: t.deferredEvents ?? [],
           rcfBalanceUsd: t.rcfBalanceUsd ?? 0,
+          secondaryHubCodes: t.secondaryHubCodes ?? [],
+          fleet: t.fleet.map((f) => ({
+            ...f,
+            retirementQuarter: f.retirementQuarter ?? f.purchaseQuarter + 16,
+          })),
         }));
       },
     },

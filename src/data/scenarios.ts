@@ -25,6 +25,8 @@ export interface ScenarioOption {
   description: string;
   effect: OptionEffect;
   effectTags?: string[];      // ["-$3.0M", "Crew +12", "Board +3"]
+  /** Flag name(s) that must NOT be set on the team for this option to be available. */
+  blockedByFlags?: string[];
 }
 
 export interface Scenario {
@@ -371,7 +373,7 @@ export const SCENARIOS: Scenario[] = [
         description: "Maximum savings. Strike risk every quarter.",
         effect: { cash: -25 * M, brandPts: -10, loyaltyDelta: -5 },
         effectTags: ["-$25M", "Savings $95M/yr Q17+", "30% strike/Q"],
-        // disabled if gov_board_card flag is set
+        blockedByFlags: ["gov_board_card"],
       },
       { id: "B", label: "3-phase rollout",
         description: "Slower savings, lower strike risk.",
@@ -423,7 +425,8 @@ export const SCENARIOS: Scenario[] = [
       { id: "A", label: "Mass redundancy",
         description: "Annual savings $120M. Loyalty and brand take major hits.",
         effect: { brandPts: -20, loyaltyDelta: -10 },
-        effectTags: ["Savings $120M/yr", "Brand -20", "Loyalty -10%"] },
+        effectTags: ["Savings $120M/yr", "Brand -20", "Loyalty -10%"],
+        blockedByFlags: ["gov_board_card", "redundancy_freeze"] },
       { id: "B", label: "Temporary measures",
         description: "Furloughs, freezes. Full recovery at Q16.",
         effect: { brandPts: -5, loyaltyDelta: -3 },

@@ -5,6 +5,7 @@ import { Badge, Button } from "@/components/ui";
 import { SCENARIOS, SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { useGame, selectPlayer } from "@/store/game";
 import { cn } from "@/lib/cn";
+import type { Team } from "@/types/game";
 
 export function DecisionsPanel() {
   const s = useGame();
@@ -29,6 +30,7 @@ export function DecisionsPanel() {
               key={sc.id}
               scenario={sc}
               submittedOptionId={submitted?.optionId ?? null}
+              flags={player.flags}
               onSubmit={(optionId) => submit({ scenarioId: sc.id, optionId: optionId as "A" | "B" | "C" | "D" | "E" })}
             />
           );
@@ -63,14 +65,23 @@ export function DecisionsPanel() {
 }
 
 function ScenarioCard({
-  scenario, submittedOptionId, onSubmit,
+  scenario, submittedOptionId, onSubmit, flags,
 }: {
   scenario: (typeof SCENARIOS)[number];
   submittedOptionId: string | null;
+  flags: Team["flags"];
   onSubmit: (optionId: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const locked = !!submittedOptionId;
+
+  function isBlocked(opt: (typeof scenario.options)[number]): string | null {
+    if (!opt.blockedByFlags) return null;
+    for (const f of opt.blockedByFlags) {
+      if (flags.has(f)) return f;
+    }
+    return null;
+  }
 
   const severityTone =
     scenario.severity === "CATASTROPHIC" || scenario.severity === "HIGH" ? "negative"
@@ -94,22 +105,29 @@ function ScenarioCard({
 
       <div className="space-y-1.5">
         {scenario.options.map((opt) => {
+          const blocker = isBlocked(opt);
           const isSelected = locked ? opt.id === submittedOptionId : opt.id === selected;
+          const disabled = locked || !!blocker;
           return (
             <button
               key={opt.id}
-              onClick={() => !locked && setSelected(opt.id)}
-              disabled={locked}
+              onClick={() => !disabled && setSelected(opt.id)}
+              disabled={disabled}
               className={cn(
                 "w-full text-left rounded-md border px-3 py-2 transition-all",
                 isSelected ? "border-primary bg-[rgba(20,53,94,0.05)]" : "border-line hover:bg-surface-hover",
-                locked && !isSelected && "opacity-50",
+                disabled && !isSelected && "opacity-50 cursor-not-allowed",
               )}
             >
               <div className="flex items-start gap-2">
                 <span className="font-mono text-[0.875rem] text-accent shrink-0 w-4 mt-0.5">{opt.id}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-ink text-[0.875rem]">{opt.label}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-ink text-[0.875rem]">{opt.label}</span>
+                    {blocker && (
+                      <Badge tone="negative">Blocked · {blocker.replace(/_/g, " ")}</Badge>
+                    )}
+                  </div>
                   <div className="text-[0.8125rem] text-ink-2 mt-0.5 leading-relaxed">{opt.description}</div>
                   {opt.effectTags && (
                     <div className="flex flex-wrap gap-1 mt-1.5">

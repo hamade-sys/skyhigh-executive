@@ -50,18 +50,28 @@ export function FleetPanel() {
             const spec = AIRCRAFT_BY_ID[f.specId];
             if (!spec) return null;
             const route = player.routes.find((r) => r.id === f.routeId);
+            const quartersToRetirement = f.retirementQuarter - s.currentQuarter;
+            const aging = quartersToRetirement <= 2 && f.status !== "retired";
+            const retired = f.status === "retired";
             return (
               <div key={f.id} className="rounded-md border border-line bg-surface p-3">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
                     <div className="font-medium text-ink text-[0.9375rem] truncate">{spec.name}</div>
                     <div className="text-[0.6875rem] text-ink-muted font-mono mt-0.5">
-                      {f.id.slice(-6)} · Q{f.purchaseQuarter} · {f.acquisitionType}
+                      {f.id.slice(-6)} · Q{f.purchaseQuarter} · {f.acquisitionType} · retires Q{f.retirementQuarter}
                     </div>
                   </div>
-                  <Badge tone={f.status === "active" ? "positive" : f.status === "ordered" ? "warning" : "neutral"}>
-                    {f.status}
-                  </Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {aging && <Badge tone="warning">Aging {quartersToRetirement}Q</Badge>}
+                    <Badge tone={
+                      retired ? "negative"
+                        : f.status === "active" ? "positive"
+                        : f.status === "ordered" ? "warning" : "neutral"
+                    }>
+                      {f.status}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-x-3 gap-y-1 text-[0.75rem]">
                   <span className="text-ink-muted">Book value</span>

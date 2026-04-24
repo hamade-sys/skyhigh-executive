@@ -40,7 +40,7 @@ export interface AircraftSpec {
 export interface FleetAircraft {
   id: string;                    // instance id
   specId: string;
-  status: "active" | "ordered" | "grounded" | "leased";
+  status: "active" | "ordered" | "grounded" | "leased" | "retired";
   acquisitionType: "buy" | "lease";
   purchaseQuarter: number;       // when ordered (arrives +1)
   purchasePrice: number;
@@ -51,6 +51,8 @@ export interface FleetAircraft {
   ecoUpgradeCost: number;
   cabinConfig: CabinConfig;
   routeId: string | null;        // assigned route or null
+  /** Quarter at which the aircraft retires (purchaseQuarter + 16 for passenger). */
+  retirementQuarter: number;
 }
 
 // ─── Routes ───────────────────────────────────────────────
@@ -149,6 +151,7 @@ export interface Team {
   code: string;                  // IATA-style, 2-3 letters
   color: string;                 // hex for map arcs
   hubCode: string;
+  secondaryHubCodes: string[];   // additional hubs added after Q3 at 2× fee
   doctrine: DoctrineId;
   isPlayer: boolean;             // player (single-team demo) vs mocked rival
 

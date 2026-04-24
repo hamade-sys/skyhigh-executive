@@ -5,14 +5,19 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Input } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
 import { fmtMoney } from "@/lib/format";
+import { CITIES } from "@/data/cities";
 
 export function AdminPanel() {
   const s = useGame();
   const player = selectPlayer(s);
   const router = useRouter();
   const [cashAdjust, setCashAdjust] = useState(0);
+  const [secondaryHub, setSecondaryHub] = useState("");
+  const [flashDealCount, setFlashDealCount] = useState(3);
 
   if (!player) return null;
+
+  const tier1 = CITIES.filter((c) => c.tier === 1).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-5">
@@ -121,6 +126,91 @@ export function AdminPanel() {
           ))}
         </div>
       </section>
+
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          Secondary hubs (§4.4 · 2× terminal fee)
+        </div>
+        <div className="flex gap-2 mb-2">
+          <select
+            value={secondaryHub}
+            onChange={(e) => setSecondaryHub(e.target.value)}
+            className="flex-1 h-9 px-2 rounded-md border border-line bg-surface text-[0.8125rem] text-ink"
+          >
+            <option value="">Pick a tier-1 city…</option>
+            {tier1
+              .filter((c) => c.code !== player.hubCode)
+              .filter((c) => !player.secondaryHubCodes.includes(c.code))
+              .map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name} · {c.code}
+                </option>
+              ))}
+          </select>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!secondaryHub}
+            onClick={() => {
+              if (!secondaryHub) return;
+              const r = s.addSecondaryHub(secondaryHub);
+              if (!r.ok) alert(r.error ?? "Failed");
+              else setSecondaryHub("");
+            }}
+          >
+            Add
+          </Button>
+        </div>
+        {player.secondaryHubCodes.length > 0 && (
+          <div className="space-y-1">
+            {player.secondaryHubCodes.map((code) => (
+              <div key={code} className="flex items-center justify-between text-[0.8125rem] py-1 border-b border-line last:border-0">
+                <span className="font-mono text-primary">{code}</span>
+                <button
+                  className="text-[0.75rem] text-negative hover:underline"
+                  onClick={() => s.removeSecondaryHub(code)}
+                >
+                  Close hub
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {s.currentQuarter === 13 && !player.flags.has("flash_deal_claimed") && (
+        <section className="rounded-md border border-accent bg-[var(--accent-soft)] p-3">
+          <div className="font-semibold text-ink text-[0.875rem] mb-1">
+            Flash Deal available at Q13
+          </div>
+          <p className="text-[0.8125rem] text-ink-2 mb-2">
+            Eco-engine A320neo order. $4M deposit per plane, eco upgrade included.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={flashDealCount}
+              onChange={(e) => setFlashDealCount(parseInt(e.target.value, 10))}
+              className="flex-1 accent-primary"
+            />
+            <span className="tabular font-mono text-ink w-8 text-right text-[0.8125rem]">
+              {flashDealCount}
+            </span>
+            <Button
+              size="sm"
+              variant="accent"
+              onClick={() => {
+                const r = s.claimFlashDeal(flashDealCount);
+                if (!r.ok) alert(r.error ?? "Failed");
+              }}
+            >
+              Claim {fmtMoney(4_000_000 * flashDealCount)}
+            </Button>
+          </div>
+        </section>
+      )}
 
       <section className="pt-3 border-t border-line">
         <Button
