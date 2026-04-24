@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Input } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
 import { fmtMoney } from "@/lib/format";
 import { CITIES } from "@/data/cities";
+import { runQuarterClose } from "@/lib/engine";
 
 export function AdminPanel() {
   const s = useGame();
@@ -18,6 +19,23 @@ export function AdminPanel() {
   if (!player) return null;
 
   const tier1 = CITIES.filter((c) => c.tier === 1).sort((a, b) => a.name.localeCompare(b.name));
+
+  // Dry-run quarter close preview
+  const preview = useMemo(() => {
+    // Deep-clone-ish: structuredClone + restore Set for flags
+    const clone = {
+      ...player,
+      flags: new Set(player.flags),
+      deferredEvents: [...(player.deferredEvents ?? [])],
+      fleet: player.fleet.map((f) => ({ ...f })),
+      routes: player.routes.map((r) => ({ ...r })),
+    };
+    return runQuarterClose(clone as typeof player, {
+      baseInterestRatePct: s.baseInterestRatePct,
+      fuelIndex: s.fuelIndex,
+      quarter: s.currentQuarter,
+    });
+  }, [player, s.baseInterestRatePct, s.fuelIndex, s.currentQuarter]);
 
   return (
     <div className="space-y-5">
@@ -92,13 +110,33 @@ export function AdminPanel() {
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
           Quarter control
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 mb-3">
           <Button size="sm" variant="secondary" onClick={s.closeQuarter}>
             Force close Q{s.currentQuarter}
           </Button>
           <Button size="sm" variant="secondary" onClick={s.advanceToNext}>
             Advance quarter
           </Button>
+        </div>
+
+        {/* Preview quarter close (dry-run) */}
+        <div className="rounded-md border border-line bg-surface-2/40 p-3 text-[0.75rem] space-y-1">
+          <div className="flex items-center justify-between font-medium text-ink-2 mb-1.5">
+            <span>Preview of quarter close (dry-run)</span>
+            <span className="font-mono text-ink-muted">Q{s.currentQuarter}</span>
+          </div>
+          <PreviewRow k="Revenue" v={fmtMoney(preview.revenue)} />
+          <PreviewRow k="Fuel + slot" v={fmtMoney(preview.fuelCost + preview.slotCost)} />
+          <PreviewRow k="Staff + sliders" v={fmtMoney(preview.staffCost + preview.otherSliderCost)} />
+          <PreviewRow k="Maint + depr" v={fmtMoney(preview.maintenanceCost + preview.depreciation)} />
+          <PreviewRow k="Interest + RCF + taxes" v={fmtMoney(preview.interest + preview.rcfInterest + preview.passengerTax + preview.fuelExcise + preview.carbonLevy + preview.tax)} />
+          <PreviewRow k="Net profit" v={fmtMoney(preview.netProfit)} tone={preview.netProfit >= 0 ? "pos" : "neg"} bold />
+          {preview.triggeredEvents.length > 0 && (
+            <div className="pt-1.5 mt-1.5 border-t border-line">
+              <span className="text-ink-muted">Deferred events that will roll: </span>
+              {preview.triggeredEvents.map((e) => e.scenario).join(", ")}
+            </div>
+          )}
         </div>
       </section>
 
@@ -235,6 +273,21 @@ function Row({ k, v }: { k: string; v: string }) {
     <div className="flex items-baseline justify-between">
       <span className="text-ink-muted">{k}</span>
       <span className="tabular font-mono text-ink">{v}</span>
+    </div>
+  );
+}
+
+function PreviewRow({
+  k, v, tone, bold,
+}: {
+  k: string; v: string; tone?: "pos" | "neg"; bold?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between">
+      <span className="text-ink-muted">{k}</span>
+      <span className={`tabular font-mono ${
+        tone === "pos" ? "text-positive" : tone === "neg" ? "text-negative" : "text-ink"
+      } ${bold ? "font-semibold" : ""}`}>{v}</span>
     </div>
   );
 }

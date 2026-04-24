@@ -185,6 +185,39 @@ export function OverviewPanel() {
         </div>
       </div>
 
+      {/* Pending deferred events */}
+      {player.deferredEvents && player.deferredEvents.filter((e) => !e.resolved).length > 0 && (
+        <div>
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+            Pending risk events
+          </div>
+          <div className="space-y-1.5">
+            {player.deferredEvents
+              .filter((e) => !e.resolved)
+              .sort((a, b) => a.targetQuarter - b.targetQuarter)
+              .map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-baseline justify-between rounded-md border border-line bg-surface-2/60 px-3 py-2 text-[0.8125rem]"
+                >
+                  <div className="min-w-0">
+                    <span className="font-mono text-primary text-[0.75rem] mr-2">{e.sourceScenario}</span>
+                    <span className="text-ink-2">{e.noteAtQueue}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="tabular font-mono text-[0.6875rem] text-ink">
+                      Q{e.targetQuarter}
+                    </span>
+                    <Badge tone={e.probability >= 0.5 ? "negative" : "warning"}>
+                      {Math.round(e.probability * 100)}%
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       <Button
         className="w-full"
         variant="primary"
