@@ -5,12 +5,14 @@ import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/com
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { useGame, selectPlayer } from "@/store/game";
 import { fmtMoney } from "@/lib/format";
+import type { CabinConfig } from "@/types/game";
 
 export function FleetPanel() {
   const s = useGame();
   const player = selectPlayer(s);
   const [buyOpen, setBuyOpen] = useState(false);
   const [ordering, setOrdering] = useState<{ specId: string; type: "buy" | "lease" } | null>(null);
+  const [orderCabin, setOrderCabin] = useState<CabinConfig>("default");
   const [error, setError] = useState<string | null>(null);
 
   if (!player) return null;
@@ -19,13 +21,14 @@ export function FleetPanel() {
 
   function confirmOrder() {
     if (!ordering) return;
-    const r = s.orderAircraft({ specId: ordering.specId, acquisitionType: ordering.type });
+    const r = s.orderAircraft({ specId: ordering.specId, acquisitionType: ordering.type, cabinConfig: orderCabin });
     if (!r.ok) {
       setError(r.error ?? "Unknown error");
       return;
     }
     setOrdering(null);
     setBuyOpen(false);
+    setOrderCabin("default");
     setError(null);
   }
 
@@ -153,13 +156,48 @@ export function FleetPanel() {
             const spec = AIRCRAFT_BY_ID[ordering.specId];
             if (!spec) return null;
             const cost = ordering.type === "buy" ? spec.buyPriceUsd : spec.leasePerQuarterUsd;
+            const isPassenger = spec.family === "passenger";
             return (
-              <div className="space-y-2">
-                <Row k="Aircraft" v={spec.name} />
-                <Row k="Acquisition" v={ordering.type === "buy" ? "Outright purchase" : "Lease (quarterly)"} />
-                <Row k="Cost" v={fmtMoney(cost)} />
-                <Row k="Arrives" v={`Q${s.currentQuarter + 1}`} />
-                {error && <div className="text-negative text-[0.875rem] mt-2">{error}</div>}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Row k="Aircraft" v={spec.name} />
+                  <Row k="Acquisition" v={ordering.type === "buy" ? "Outright purchase" : "Lease (quarterly)"} />
+                  <Row k="Cost" v={fmtMoney(cost)} />
+                  <Row k="Arrives" v={`Q${s.currentQuarter + 1}`} />
+                </div>
+                {isPassenger && (
+                  <div>
+                    <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+                      Cabin configuration
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[0.8125rem]">
+                      {([
+                        { id: "default" as const, label: "Manufacturer default", sub: `${spec.seats.first}F / ${spec.seats.business}C / ${spec.seats.economy}Y` },
+                        { id: "economy-only" as const, label: "Economy only", sub: "Higher capacity, lower yield" },
+                        { id: "business-heavy" as const, label: "Business heavy", sub: "Lower capacity, higher yield" },
+                        { id: "custom" as const, label: "Custom (admin)", sub: "Facilitator configured" },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setOrderCabin(opt.id)}
+                          disabled={opt.id === "custom"}
+                          className={`text-left rounded-md border px-3 py-2 transition-colors ${
+                            orderCabin === opt.id
+                              ? "border-primary bg-[rgba(20,53,94,0.04)]"
+                              : "border-line hover:bg-surface-hover"
+                          } ${opt.id === "custom" ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          <div className="font-medium text-ink text-[0.8125rem]">{opt.label}</div>
+                          <div className="text-[0.6875rem] text-ink-muted mt-0.5">{opt.sub}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-[0.6875rem] text-ink-muted mt-2">
+                      Locked on delivery. Change later via refurbishment (5% of book value, 1Q out of service).
+                    </div>
+                  </div>
+                )}
+                {error && <div className="text-negative text-[0.875rem]">{error}</div>}
               </div>
             );
           })()}

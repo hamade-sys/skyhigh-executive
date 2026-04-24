@@ -14,6 +14,7 @@ import {
   type QuarterCloseResult,
 } from "@/lib/engine";
 import type {
+  CabinConfig,
   DeferredEvent,
   DoctrineId,
   FleetAircraft,
@@ -58,11 +59,15 @@ export interface GameStore extends GameState {
   orderAircraft(args: {
     specId: string;
     acquisitionType: "buy" | "lease";
+    cabinConfig?: CabinConfig;
   }): { ok: boolean; error?: string };
 
   addEcoUpgrade(aircraftId: string): { ok: boolean; error?: string };
 
   decommissionAircraft(aircraftId: string): void;
+
+  refurbishAircraft(aircraftId: string, newCabin: CabinConfig):
+    { ok: boolean; error?: string };
 
   openRoute(args: {
     originCode: string;
@@ -77,6 +82,14 @@ export interface GameStore extends GameState {
   }): { ok: boolean; error?: string };
 
   closeRoute(routeId: string): void;
+  updateRoute(routeId: string, patch: {
+    dailyFrequency?: number;
+    pricingTier?: PricingTier;
+    econFare?: number | null;
+    busFare?: number | null;
+    firstFare?: number | null;
+    aircraftIds?: string[];
+  }): { ok: boolean; error?: string };
 
   submitDecision(args: {
     scenarioId: string;
@@ -119,6 +132,12 @@ function emptyStreaks() {
 
 function mkId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function fmtMoneyPlain(n: number): string {
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
 }
 
 function makeStartingTeam(args: {
@@ -238,7 +257,7 @@ export const useGame = create<GameStore>()(
         });
       },
 
-      orderAircraft: ({ specId, acquisitionType }) => {
+      orderAircraft: ({ specId, acquisitionType, cabinConfig = "default" }) => {
         const s = get();
         const spec = AIRCRAFT_BY_ID[specId];
         if (!spec) return { ok: false, error: "Unknown aircraft" };
@@ -257,7 +276,7 @@ export const useGame = create<GameStore>()(
           bookValue: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
           leaseQuarterly: acquisitionType === "lease" ? spec.leasePerQuarterUsd : null,
           ecoUpgrade: false, ecoUpgradeQuarter: null, ecoUpgradeCost: 0,
-          cabinConfig: "default", routeId: null,
+          cabinConfig, routeId: null,
           retirementQuarter: s.currentQuarter + 16,
         };
 
@@ -293,6 +312,34 @@ export const useGame = create<GameStore>()(
                 : f),
             },
           ),
+        });
+        return { ok: true };
+      },
+
+      refurbishAircraft: (aircraftId, newCabin) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player" };
+        const plane = player.fleet.find((f) => f.id === aircraftId);
+        if (!plane) return { ok: false, error: "Aircraft not found" };
+        if (plane.acquisitionType !== "buy")
+          return { ok: false, error: "Only owned aircraft can be refurbished" };
+        const cost = plane.bookValue * 0.05;
+        if (player.cashUsd < cost)
+          return { ok: false, error: `Need ${fmtMoneyPlain(cost)} cash` };
+
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            cashUsd: t.cashUsd - cost,
+            fleet: t.fleet.map((f) => f.id === aircraftId
+              ? { ...f, cabinConfig: newCabin, status: "grounded" as const, routeId: null }
+              : f),
+            routes: t.routes.map((r) => ({
+              ...r,
+              aircraftIds: r.aircraftIds.filter((id) => id !== aircraftId),
+            })),
+          }),
         });
         return { ok: true };
       },
@@ -384,6 +431,61 @@ export const useGame = create<GameStore>()(
         });
       },
 
+      updateRoute: (routeId, patch) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player" };
+        const route = player.routes.find((r) => r.id === routeId);
+        if (!route) return { ok: false, error: "Route not found" };
+        if (patch.dailyFrequency !== undefined &&
+            (patch.dailyFrequency < 1 || patch.dailyFrequency > 24))
+          return { ok: false, error: "Daily frequency 1–24" };
+
+        // If aircraft reassigned, validate range + availability
+        let newAircraftIds = patch.aircraftIds ?? route.aircraftIds;
+        if (patch.aircraftIds) {
+          const planes = newAircraftIds
+            .map((id) => player.fleet.find((f) => f.id === id));
+          for (const p of planes) {
+            if (!p) return { ok: false, error: "Aircraft not found" };
+            const spec = AIRCRAFT_BY_ID[p.specId];
+            if (!spec) return { ok: false, error: "Spec missing" };
+            if (spec.rangeKm < route.distanceKm)
+              return { ok: false, error: `${spec.name} out of range` };
+            // Must be idle or already on this route
+            if (p.routeId && p.routeId !== routeId)
+              return { ok: false, error: `${spec.name} already on another route` };
+          }
+        }
+
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            routes: t.routes.map((r) => r.id !== routeId ? r : {
+              ...r,
+              dailyFrequency: patch.dailyFrequency ?? r.dailyFrequency,
+              pricingTier: patch.pricingTier ?? r.pricingTier,
+              econFare: patch.econFare !== undefined ? patch.econFare : r.econFare,
+              busFare: patch.busFare !== undefined ? patch.busFare : r.busFare,
+              firstFare: patch.firstFare !== undefined ? patch.firstFare : r.firstFare,
+              aircraftIds: newAircraftIds,
+            }),
+            fleet: t.fleet.map((f) => {
+              if (patch.aircraftIds) {
+                if (patch.aircraftIds.includes(f.id)) {
+                  return { ...f, status: "active" as const, routeId };
+                }
+                if (f.routeId === routeId) {
+                  return { ...f, status: "active" as const, routeId: null };
+                }
+              }
+              return f;
+            }),
+          }),
+        });
+        return { ok: true };
+      },
+
       submitDecision: ({ scenarioId, optionId, lockInQuarters }) => {
         const s = get();
         const scenario = SCENARIOS_BY_QUARTER[s.currentQuarter]?.find(
@@ -461,6 +563,8 @@ export const useGame = create<GameStore>()(
             const retiring = f.retirementQuarter !== undefined && s.currentQuarter >= f.retirementQuarter;
             if (retiring) return { ...f, status: "retired" as const, routeId: null };
             if (f.status === "ordered") return { ...f, status: "active" as const };
+            // Refurbished aircraft return to service after 1 quarter out
+            if (f.status === "grounded") return { ...f, status: "active" as const };
             return f;
           }),
           routes: player.routes.map((r) => {
