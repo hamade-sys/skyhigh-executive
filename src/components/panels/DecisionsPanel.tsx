@@ -10,6 +10,37 @@ import { fmtMoney } from "@/lib/format";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
+/**
+ * Per PRD update: only show FINANCIAL tags on decision cards. Strategic-
+ * reveal tags ("Brand +3", "Loyalty −5%", "X% risk Q9", "Slots at risk")
+ * give away the right answer and are stripped from the player-facing UI.
+ *
+ * A tag is "financial" if it contains a $ sign or starts with the words
+ * Annual / Locked / Savings / Cost / Revenue (case-insensitive).
+ */
+function isFinancialTag(tag: string): boolean {
+  if (tag.includes("$")) return true;
+  const lower = tag.toLowerCase().trim();
+  return (
+    lower.startsWith("annual") ||
+    lower.startsWith("locked") ||
+    lower.startsWith("savings") ||
+    lower.startsWith("cost ") ||
+    lower.startsWith("revenue")
+  );
+}
+
+/** Whether a tag describes a positive (revenue/savings/inflow) financial effect. */
+function isPositiveFinancial(tag: string): boolean {
+  const lower = tag.toLowerCase();
+  return (
+    lower.includes("savings") ||
+    lower.includes("revenue") ||
+    lower.includes("+$") ||
+    lower.includes("+ $")
+  );
+}
+
 export function DecisionsPanel() {
   const s = useGame();
   const player = selectPlayer(s);
@@ -118,38 +149,89 @@ function ScenarioCard({
       <p className="italic text-ink-2 text-[0.875rem] leading-relaxed mb-2">{scenario.teaser}</p>
       <p className="text-ink-2 text-[0.875rem] leading-relaxed mb-3">{scenario.context}</p>
 
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {scenario.options.map((opt) => {
           const blocker = isBlocked(opt);
           const isSelected = locked ? opt.id === submittedOptionId : opt.id === selected;
           const disabled = locked || !!blocker;
+          // Only financial tags surface in the player-facing UI. The first
+          // financial tag is treated as the headline cost and shown on the
+          // right; any extras (rare) appear under it on the right column.
+          const financialTags = (opt.effectTags ?? []).filter(isFinancialTag);
+          const headline = financialTags[0];
+          const extras = financialTags.slice(1);
           return (
             <button
               key={opt.id}
               onClick={() => !disabled && setSelected(opt.id)}
               disabled={disabled}
               className={cn(
-                "w-full text-left rounded-md border px-3 py-2 transition-all",
-                isSelected ? "border-primary bg-[rgba(20,53,94,0.05)]" : "border-line hover:bg-surface-hover",
+                "w-full text-left rounded-lg border transition-all",
+                "px-4 py-3",
+                isSelected ? "border-primary bg-[rgba(20,53,94,0.05)] shadow-[var(--shadow-1)]" : "border-line hover:bg-surface-hover hover:border-line",
                 disabled && !isSelected && "opacity-50 cursor-not-allowed",
               )}
             >
-              <div className="flex items-start gap-2">
-                <span className="font-mono text-[0.875rem] text-accent shrink-0 w-4 mt-0.5">{opt.id}</span>
+              <div className="flex items-start gap-4">
+                {/* Letter chip */}
+                <span
+                  className={cn(
+                    "shrink-0 w-7 h-7 rounded-md flex items-center justify-center font-mono text-[0.875rem] font-semibold",
+                    isSelected
+                      ? "bg-primary text-primary-fg"
+                      : "bg-surface-2 text-ink-2",
+                  )}
+                >
+                  {opt.id}
+                </span>
+
+                {/* Body — option label + description */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-ink text-[0.875rem]">{opt.label}</span>
+                    <span className="font-semibold text-ink text-[0.9375rem] leading-tight">
+                      {opt.label}
+                    </span>
                     {blocker && (
                       <Badge tone="negative">Blocked · {blocker.replace(/_/g, " ")}</Badge>
                     )}
                   </div>
-                  <div className="text-[0.8125rem] text-ink-2 mt-0.5 leading-relaxed">{opt.description}</div>
-                  {opt.effectTags && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {opt.effectTags.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
-                    </div>
-                  )}
+                  <div className="text-[0.8125rem] text-ink-2 mt-1 leading-relaxed">
+                    {opt.description}
+                  </div>
                 </div>
+
+                {/* Right-side financial column — the "cost" */}
+                {headline ? (
+                  <div className="shrink-0 text-right min-w-[120px]">
+                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                      Financial impact
+                    </div>
+                    <div
+                      className={cn(
+                        "tabular font-display text-[1rem] mt-0.5 leading-tight",
+                        isPositiveFinancial(headline) ? "text-positive" : "text-negative",
+                      )}
+                    >
+                      {headline}
+                    </div>
+                    {extras.length > 0 && (
+                      <div className="text-[0.6875rem] text-ink-muted tabular mt-1 leading-relaxed">
+                        {extras.map((t) => (
+                          <div key={t}>{t}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="shrink-0 text-right min-w-[120px]">
+                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                      Financial impact
+                    </div>
+                    <div className="text-[0.8125rem] text-ink-muted italic mt-0.5">
+                      No direct cost
+                    </div>
+                  </div>
+                )}
               </div>
             </button>
           );

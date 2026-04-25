@@ -24,7 +24,13 @@ export interface ScenarioOption {
   label: string;
   description: string;
   effect: OptionEffect;
-  effectTags?: string[];      // ["-$3.0M", "Crew +12", "Board +3"]
+  /** Display-only tags. Per PRD update, the boardroom decision UI
+   *  surfaces only FINANCIAL tags (those starting with $, "Annual ",
+   *  "Locked ", or with a +$/−$ prefix). Strategic-reveal tags
+   *  ("Brand +3", "Loyalty −5%", "X% risk Q9") are kept for backwards
+   *  compatibility but filtered out of the player-facing UI so the
+   *  numbers don't give away the right answer. */
+  effectTags?: string[];
   /** Flag name(s) that must NOT be set on the team for this option to be available. */
   blockedByFlags?: string[];
   /** When set, the option is only available if the team currently meets
@@ -500,25 +506,25 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: "S18", title: "The Cocoa Crisis", quarter: 9, severity: "LOW", timeLimitMinutes: 30,
-    teaser: "Cocoa prices spiked. Chocolate service costs triple. Onboard amenities decision.",
+    teaser: "West African cocoa supply has collapsed and prices have tripled.",
     context:
-      "West African cocoa supply has collapsed. Your premium cabin chocolate program costs triple. Four paths: pay the premium, drop it, new supplier, or rebrand the moment.",
+      "Passengers onboard our flights have come to love the signature chocolate we serve in premium cabins — it's a small ritual that's quietly become part of why business and first-class travellers choose us. With the West African cocoa supply collapse, the program now costs triple. How do we respond without losing what made it special?",
     options: [
       { id: "A", label: "Pay the premium",
-        description: "Keep quality. Small loyalty bump.",
+        description: "Hold the line on quality. Passengers won't notice anything changed.",
         effect: { brandPts: 3, loyaltyDelta: 2 },
-        effectTags: ["Annual cost -$4.2M", "Brand +3", "Loyalty +2%"] },
+        effectTags: ["Annual cost −$4.2M"] },
       { id: "B", label: "Drop chocolate service",
-        description: "Save full cost. Brand and loyalty hit.",
+        description: "Cut the program entirely. The ritual disappears from the cabin.",
         effect: { brandPts: -10, loyaltyDelta: -8, opsPts: -3 },
-        effectTags: ["Savings $12M/yr", "Brand -10", "Loyalty -8%"] },
-      { id: "C", label: "New supplier",
-        description: "Different origin, lower quality.",
+        effectTags: ["Annual savings +$12M"] },
+      { id: "C", label: "Switch to a budget supplier",
+        description: "Keep something on the menu but at a lower grade. Passengers will notice the difference.",
         effect: { brandPts: -5, loyaltyDelta: -3 },
-        effectTags: ["Brand -5", "Loyalty -3%"] },
-      { id: "D", label: "Rebrand as ethical sourcing",
-        description: "70% success. Elevated service flag or greenwashing perception.",
-        effect: {}, effectTags: ["70% brand +8", "30% brand -6"] },
+        effectTags: [] },
+      { id: "D", label: "Rebrand as ethical, single-origin sourcing",
+        description: "Reframe the moment as a values-led choice. The market may either reward or punish the spin.",
+        effect: {}, effectTags: ["Annual cost −$6M"] },
     ],
     autoSubmitOptionId: "B",
   },
