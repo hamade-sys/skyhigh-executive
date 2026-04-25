@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useUi } from "@/store/ui";
 
 export interface PanelProps {
   title: string;
@@ -21,15 +21,7 @@ export function Panel({
   children,
   actions,
 }: PanelProps) {
-  const router = useRouter();
-  const params = useSearchParams();
-
-  function close() {
-    const sp = new URLSearchParams(params.toString());
-    sp.delete("panel");
-    const q = sp.toString();
-    router.push(q ? `/?${q}` : "/");
-  }
+  const close = useUi((s) => s.closePanel);
 
   return (
     <aside

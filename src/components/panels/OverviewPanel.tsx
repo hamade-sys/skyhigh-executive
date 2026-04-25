@@ -7,13 +7,12 @@ import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { NEWS_BY_QUARTER } from "@/data/world-news";
 import { computeAirlineValue, fleetCount } from "@/lib/engine";
 import { DOCTRINE_BY_ID } from "@/data/doctrines";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useUi, type PanelId } from "@/store/ui";
 
 export function OverviewPanel() {
   const s = useGame();
   const player = selectPlayer(s);
-  const router = useRouter();
-  const params = useSearchParams();
+  const openPanel = useUi((u) => u.openPanel);
 
   if (!player) return null;
 
@@ -39,11 +38,7 @@ export function OverviewPanel() {
   );
   const todayNews = NEWS_BY_QUARTER[s.currentQuarter] ?? [];
 
-  function openPanel(id: string) {
-    const sp = new URLSearchParams(params.toString());
-    sp.set("panel", id);
-    router.push(`/?${sp.toString()}`);
-  }
+  const onOpen = (id: PanelId) => openPanel(id);
 
   return (
     <div className="space-y-5">
@@ -146,7 +141,7 @@ export function OverviewPanel() {
             <li>
               <button
                 className="text-accent hover:underline"
-                onClick={() => openPanel("decisions")}
+                onClick={() => onOpen("decisions")}
               >
                 {pendingDecisions.length} board decision
                 {pendingDecisions.length > 1 ? "s" : ""} open
@@ -156,7 +151,7 @@ export function OverviewPanel() {
           <li>
             <button
               className="text-ink-2 hover:underline"
-              onClick={() => openPanel("ops")}
+              onClick={() => onOpen("ops")}
             >
               Review quarterly ops sliders
             </button>
@@ -180,7 +175,7 @@ export function OverviewPanel() {
           </div>
           <button
             className="text-[0.75rem] text-ink-muted hover:text-ink"
-            onClick={() => openPanel("news")}
+            onClick={() => onOpen("news")}
           >
             All {todayNews.length} →
           </button>
@@ -354,7 +349,7 @@ export function OverviewPanel() {
       <Button
         className="w-full"
         variant="primary"
-        onClick={() => openPanel("ops")}
+        onClick={() => onOpen("ops")}
       >
         Open Ops form →
       </Button>

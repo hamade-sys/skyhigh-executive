@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   Plane,
@@ -14,19 +13,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useGame, selectPlayer } from "@/store/game";
+import { useUi, type PanelId } from "@/store/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { cn } from "@/lib/cn";
 
-export type PanelId =
-  | "overview"
-  | "fleet"
-  | "routes"
-  | "financials"
-  | "ops"
-  | "decisions"
-  | "news"
-  | "leaderboard"
-  | "admin";
+export type { PanelId };
 
 const NAV: Array<{ id: PanelId; label: string; Icon: LucideIcon }> = [
   { id: "overview",    label: "Overview",    Icon: LayoutDashboard },
@@ -41,27 +32,20 @@ const NAV: Array<{ id: PanelId; label: string; Icon: LucideIcon }> = [
 ];
 
 export function NavRail() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const current = params.get("panel") as PanelId | null;
-  const s = useGame();
-  const player = selectPlayer(s);
+  const current = useUi((s) => s.panel);
+  const togglePanel = useUi((s) => s.togglePanel);
+  const player = useGame(selectPlayer);
+  const currentQuarter = useGame((state) => state.currentQuarter);
+  const fuelIndex = useGame((state) => state.fuelIndex);
+  const baseInterestRatePct = useGame((state) => state.baseInterestRatePct);
 
   const pendingDecisions =
-    (SCENARIOS_BY_QUARTER[s.currentQuarter] ?? []).filter(
+    (SCENARIOS_BY_QUARTER[currentQuarter] ?? []).filter(
       (sc) =>
         !player?.decisions.some(
-          (d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter,
+          (d) => d.scenarioId === sc.id && d.quarter === currentQuarter,
         ),
     ) ?? [];
-
-  function toggle(id: PanelId) {
-    const sp = new URLSearchParams(params.toString());
-    if (current === id) sp.delete("panel");
-    else sp.set("panel", id);
-    const q = sp.toString();
-    router.push(q ? `/?${q}` : "/");
-  }
 
   return (
     <aside
@@ -81,7 +65,7 @@ export function NavRail() {
           return (
             <button
               key={item.id}
-              onClick={() => toggle(item.id)}
+              onClick={() => togglePanel(item.id)}
               title={item.label}
               className={cn(
                 "group relative w-10 h-10 rounded-lg flex items-center justify-center",
@@ -115,14 +99,13 @@ export function NavRail() {
 
       <div className="flex-1" />
 
-      {/* Bottom indicators */}
       <div className="flex flex-col items-center gap-2 text-[0.625rem] text-ink-muted font-mono tabular">
         <div className="flex flex-col items-center leading-tight">
-          <span>{Math.round(s.fuelIndex)}</span>
+          <span>{Math.round(fuelIndex)}</span>
           <span className="text-[0.5625rem] uppercase tracking-wider">fuel</span>
         </div>
         <div className="flex flex-col items-center leading-tight">
-          <span>{s.baseInterestRatePct.toFixed(1)}</span>
+          <span>{baseInterestRatePct.toFixed(1)}</span>
           <span className="text-[0.5625rem] uppercase tracking-wider">rate</span>
         </div>
       </div>

@@ -100,17 +100,6 @@ function arcPathGreatCircle(
   );
 }
 
-function pointAlongArc(
-  a: [number, number],
-  b: [number, number],
-  t: number,
-  project: (lonlat: [number, number]) => [number, number] | null,
-): [number, number] | null {
-  const lon = a[0] + (b[0] - a[0]) * t;
-  const lat = a[1] + (b[1] - a[1]) * t;
-  return project([lon, lat]);
-}
-
 export function WorldMap({
   team,
   rivals,
@@ -151,22 +140,12 @@ export function WorldMap({
     return () => obs.disconnect();
   }, []);
 
-  // Animation tick for moving dots along arcs
-  const [tick, setTick] = useState(0);
+  // Moving dots use native <animateMotion> — no React tick required.
+  // Respect reduced-motion preference by toggling once on mount.
+  const [reducedMotion, setReducedMotion] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) return;
-    let raf = 0;
-    let last = performance.now();
-    function loop(now: number) {
-      const dt = now - last;
-      last = now;
-      setTick((t) => (t + dt * 0.00015) % 1);
-      raf = requestAnimationFrame(loop);
-    }
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, []);
 
   const projection = useMemo(() => {
@@ -189,7 +168,10 @@ export function WorldMap({
     [projection],
   );
 
-  const activeRoutes = team.routes.filter((r) => r.status === "active");
+  const activeRoutes = useMemo(
+    () => team.routes.filter((r) => r.status === "active"),
+    [team.routes],
+  );
   const ownDestCodes = useMemo(() => {
     const set = new Set<string>();
     for (const r of activeRoutes) {
@@ -382,7 +364,7 @@ export function WorldMap({
           </g>
         )}
 
-        {/* Route arcs + animated dots */}
+        {/* Route arcs + native SVG animated dots (no React re-renders) */}
         <g fill="none" strokeLinecap="round">
           {activeRoutes.map((r, i) => {
             const a = CITIES_BY_CODE[r.originCode];
@@ -401,31 +383,31 @@ export function WorldMap({
               project,
             );
             if (!d) return null;
-            const phase = (tick + i * 0.11) % 1;
-            const dotPos = pointAlongArc(
-              [a.lon, a.lat],
-              [b.lon, b.lat],
-              phase,
-              project,
-            );
+            const pathId = `arc-${r.id}`;
+            const duration = `${8 + (i % 5) * 0.8}s`; // staggered, deterministic
             return (
               <g key={r.id}>
                 <path
+                  id={pathId}
                   d={d}
                   stroke={color}
                   strokeWidth={1.75 * Math.sqrt(scale / DEFAULT_SCALE)}
                   strokeOpacity="0.6"
                 />
-                {dotPos && (
-                  <circle
-                    cx={dotPos[0]}
-                    cy={dotPos[1]}
-                    r={2.4 * Math.sqrt(scale / DEFAULT_SCALE)}
-                    fill={color}
-                    stroke="var(--surface)"
-                    strokeWidth="0.8"
-                  />
-                )}
+                <circle
+                  r={2.4 * Math.sqrt(scale / DEFAULT_SCALE)}
+                  fill={color}
+                  stroke="var(--surface)"
+                  strokeWidth="0.8"
+                >
+                  {!reducedMotion && (
+                    <animateMotion
+                      dur={duration}
+                      repeatCount="indefinite"
+                      path={d}
+                    />
+                  )}
+                </circle>
               </g>
             );
           })}

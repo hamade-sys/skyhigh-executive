@@ -6,7 +6,7 @@ import { useGame, selectPlayer } from "@/store/game";
 import type { SliderLevel, Sliders } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useUi } from "@/store/ui";
 
 const SLIDER_LIST: Array<{ key: keyof Sliders; label: string; sub: string }> = [
   { key: "staff", label: "Staff & Training", sub: "Cabin, pilots, ground, training" },
@@ -21,8 +21,7 @@ export function OpsPanel() {
   const s = useGame();
   const player = selectPlayer(s);
   const setSliders = useGame((g) => g.setSliders);
-  const router = useRouter();
-  const params = useSearchParams();
+  const closePanel = useUi((u) => u.closePanel);
 
   if (!player) return null;
 
@@ -43,10 +42,7 @@ export function OpsPanel() {
       if (!confirm(`${pendingDecisions.length} board decision${pendingDecisions.length > 1 ? "s" : ""} still open. Close anyway?`)) return;
     }
     s.closeQuarter();
-    // Close the panel after close — the modal will appear
-    const sp = new URLSearchParams(params.toString());
-    sp.delete("panel");
-    router.push(sp.toString() ? `/?${sp.toString()}` : "/");
+    closePanel();
   }
 
   return (

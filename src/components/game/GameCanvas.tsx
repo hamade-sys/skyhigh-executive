@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useMemo, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { WorldMap } from "@/components/game/WorldMap";
-import { NavRail, type PanelId } from "@/components/game/NavRail";
+import { NavRail } from "@/components/game/NavRail";
+import { useUi, type PanelId } from "@/store/ui";
 import { Panel } from "@/components/game/Panel";
 import { TopBar } from "@/components/layout/TopBar";
 import { QuarterCloseModal } from "@/components/game/QuarterCloseModal";
@@ -40,16 +41,17 @@ const PANEL_META: Record<
 
 function CanvasInner() {
   const router = useRouter();
-  const params = useSearchParams();
-  const s = useGame();
-  const player = selectPlayer(s);
-  const rivals = selectRivals(s);
+  // Fine-grained store subscriptions so clicks and typing don't force
+  // a whole-canvas re-render.
+  const phase = useGame((state) => state.phase);
+  const playerTeamId = useGame((state) => state.playerTeamId);
+  const player = useGame(selectPlayer);
+  const rivals = useGame(selectRivals);
+  const currentPanel = useUi((s) => s.panel);
 
   // Hydration-aware
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
-
-  const currentPanel = params.get("panel") as PanelId | null;
 
   // Route setup state (lifted up to share between map + modal)
   const [origin, setOrigin] = useState<string | null>(null);
@@ -69,9 +71,9 @@ function CanvasInner() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (s.phase === "idle" || !s.playerTeamId) router.replace("/onboarding");
-    else if (s.phase === "endgame") router.replace("/endgame");
-  }, [hydrated, s.phase, s.playerTeamId, router]);
+    if (phase === "idle" || !playerTeamId) router.replace("/onboarding");
+    else if (phase === "endgame") router.replace("/endgame");
+  }, [hydrated, phase, playerTeamId, router]);
 
   if (!hydrated) {
     return (
@@ -81,7 +83,7 @@ function CanvasInner() {
     );
   }
 
-  if (s.phase === "idle" || !s.playerTeamId || !player) {
+  if (phase === "idle" || !playerTeamId || !player) {
     // PRD §13.1 pre-game lobby
     return (
       <main className="flex-1 flex items-center justify-center px-6 py-12">

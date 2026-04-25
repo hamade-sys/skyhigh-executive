@@ -7,8 +7,9 @@ import { computeAirlineValue } from "@/lib/engine";
 import { QuarterTimerChip } from "@/components/game/QuarterTimer";
 
 export function TopBar() {
-  const s = useGame();
-  const player = selectPlayer(s);
+  // Fine-grained subscriptions so unrelated store writes don't re-render this.
+  const player = useGame(selectPlayer);
+  const currentQuarter = useGame((state) => state.currentQuarter);
 
   if (!player) return null;
 
@@ -74,10 +75,10 @@ export function TopBar() {
       <div className="flex items-center gap-4 shrink-0 pl-4 border-l border-line h-full">
         <div className="hidden md:flex flex-col items-end leading-tight">
           <span className="font-display text-[1rem] text-ink">
-            {fmtQuarterShort(s.currentQuarter)}
+            {fmtQuarterShort(currentQuarter)}
           </span>
           <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mt-0.5 tabular">
-            {fmtQuarter(s.currentQuarter)}
+            {fmtQuarter(currentQuarter)}
           </span>
         </div>
         <QuarterTimerChip />
