@@ -98,7 +98,10 @@ export function NavRail() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-14 bottom-0 z-30 flex flex-col overflow-visible",
+        // z-50 to stay above the Leaflet map (which makes its own
+        // stacking context at z-index: 0). Same as Panel/TopBar so they
+        // never disappear behind the globe.
+        "fixed left-0 top-14 bottom-0 z-50 flex flex-col overflow-visible",
         "border-r border-line bg-surface/90 backdrop-blur-md",
         "transition-[width] duration-[var(--dur-fast)]",
         railWidth,

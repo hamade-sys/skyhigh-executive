@@ -26,7 +26,10 @@ export function Panel({
   return (
     <aside
       className={cn(
-        "fixed top-16 bottom-3 right-3 z-30 flex flex-col",
+        // z-50 puts the panel above the Leaflet map (which creates a
+        // stacking context at z-0) AND above the topbar (z-40).
+        // Modal dialogs use the native top layer so they still cover this.
+        "fixed top-16 bottom-3 right-3 z-50 flex flex-col",
         "rounded-xl border border-line bg-surface/95 backdrop-blur-md",
         "shadow-[0_24px_60px_-16px_rgba(16,37,63,0.25),0_8px_20px_-8px_rgba(16,37,63,0.12)]",
         "animate-[panel-in_220ms_var(--ease-out-quart)]",

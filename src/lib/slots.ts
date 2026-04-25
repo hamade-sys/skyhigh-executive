@@ -124,7 +124,10 @@ export interface ResolvedBid {
   teamId: string;
   airportCode: string;
   slotsWon: number;
-  cashSpent: number;
+  /** Weekly price per slot the team committed to (Model B recurring fee).
+   *  Total quarterly cost added to this team's lease at this airport
+   *  is `slotsWon × weeklyPricePerSlot × 13`. */
+  weeklyPricePerSlot: number;
 }
 
 export function resolveSlotAuctions(
@@ -147,7 +150,13 @@ export function resolveSlotAuctions(
     );
     for (const bid of sorted) {
       if (remaining <= 0) {
-        awards.push({ teamId: bid.teamId, airportCode: code, slotsWon: 0, cashSpent: 0 });
+        // Loser — record as 0 win so caller can show feedback. NO charge.
+        awards.push({
+          teamId: bid.teamId,
+          airportCode: code,
+          slotsWon: 0,
+          weeklyPricePerSlot: 0,
+        });
         continue;
       }
       const won = Math.min(bid.slots, remaining);
@@ -156,7 +165,7 @@ export function resolveSlotAuctions(
         teamId: bid.teamId,
         airportCode: code,
         slotsWon: won,
-        cashSpent: won * bid.pricePerSlot,
+        weeklyPricePerSlot: bid.pricePerSlot,
       });
     }
     out[code] = { ...state, available: remaining };

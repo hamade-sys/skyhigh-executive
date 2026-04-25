@@ -24,7 +24,10 @@ export function TopBar() {
   return (
     <header
       className={cn(
-        "fixed top-0 left-0 right-0 h-14 z-40",
+        // z-[60] — highest of the chrome stack. Panel + Rail are both z-50;
+        // the topbar must stay above them so the airline identity, KPI strip,
+        // and Next-Quarter button are never covered.
+        "fixed top-0 left-0 right-0 h-14 z-[60]",
         "flex items-center gap-5 pl-4 pr-4",
         "border-b border-line bg-surface/85 backdrop-blur-md",
       )}

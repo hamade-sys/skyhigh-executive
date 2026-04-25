@@ -40,7 +40,7 @@ export function RouteLaunchBar({
         (r.originCode === o.code || r.destCode === o.code),
       );
     return (
-      <div className="pointer-events-none fixed top-[4.25rem] left-1/2 -translate-x-1/2 z-30">
+      <div className="pointer-events-none fixed top-[4.25rem] left-1/2 -translate-x-1/2 z-50">
         <div
           className={cn(
             "pointer-events-auto flex items-center gap-3 px-3 py-2 rounded-lg",
@@ -96,7 +96,7 @@ export function RouteLaunchBar({
     : 0;
 
   return (
-    <div className="pointer-events-none fixed top-[4.25rem] left-1/2 -translate-x-1/2 z-30">
+    <div className="pointer-events-none fixed top-[4.25rem] left-1/2 -translate-x-1/2 z-50">
       <div
         className={cn(
           "pointer-events-auto flex items-center gap-3 px-3 py-2 rounded-lg",

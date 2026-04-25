@@ -22,6 +22,7 @@ import {
 import { toast } from "./toasts";
 import { fmtQuarter } from "@/lib/format";
 import type {
+  AirportLease,
   CabinConfig,
   CargoContract,
   DeferredEvent,
@@ -292,8 +293,14 @@ function makeStartingTeam(args: {
     fuelTanks: { small: 0, medium: 0, large: 0 },
     fuelStorageLevelL: 0,
     fuelStorageAvgCostPerL: 0,
-    // PRD G10 — each team starts with 30 slots at their hub
+    // PRD G10 — each team starts with 30 slots at their hub.
+    // Legacy field kept for save migration; airportLeases is the active
+    // bookkeeping model now.
     slotsByAirport: { [args.hubCode]: 30 },
+    // PRD update — Model B recurring slot fees. Hub starts free (sunk
+    // capex baked into hub terminal fee) so totalWeeklyCost is 0 there.
+    // Slots won via auction will populate this with their bid prices.
+    airportLeases: { [args.hubCode]: { slots: 30, totalWeeklyCost: 0 } },
     pendingSlotBids: [],
     // PRD C9 — hub auto-activated for cargo (bundled with hub terminal fee)
     cargoStorageActivations: [args.hubCode],
@@ -1237,21 +1244,31 @@ export const useGame = create<GameStore>()(
           s.airportSlots ?? {},
           bidsByAirport,
         );
-        // Apply awards to teams (cash + slotsByAirport) and clear their bids.
+        // Apply awards to teams (Model B — recurring fees, no upfront pay).
+        // Each won slot adds `weeklyPricePerSlot` to the team's airport lease
+        // total weekly cost; the slots count rises by slotsWon. Quarterly
+        // expense accrues based on this lease state at the next close.
         const teamsWithAwards = [closed, ...rivals].map((t) => {
-          const won = awards.filter((a) => a.teamId === t.id);
-          let cashDelta = 0;
-          const slotsByAirport = { ...t.slotsByAirport };
+          const won = awards.filter((a) => a.teamId === t.id && a.slotsWon > 0);
+          if (won.length === 0) {
+            return { ...t, pendingSlotBids: [] };
+          }
+          const newLeases: Record<string, AirportLease> = { ...(t.airportLeases ?? {}) };
+          const newSlots: Record<string, number> = { ...t.slotsByAirport };
           for (const w of won) {
-            cashDelta -= w.cashSpent;
-            slotsByAirport[w.airportCode] =
-              (slotsByAirport[w.airportCode] ?? 0) + w.slotsWon;
+            const cur = newLeases[w.airportCode] ?? { slots: 0, totalWeeklyCost: 0 };
+            newLeases[w.airportCode] = {
+              slots: cur.slots + w.slotsWon,
+              totalWeeklyCost: cur.totalWeeklyCost + w.slotsWon * w.weeklyPricePerSlot,
+            };
+            // Keep legacy mirror in sync for any code still reading it
+            newSlots[w.airportCode] = (newSlots[w.airportCode] ?? 0) + w.slotsWon;
           }
           return {
             ...t,
-            cashUsd: t.cashUsd + cashDelta,
-            slotsByAirport,
-            pendingSlotBids: [],  // bids resolved
+            airportLeases: newLeases,
+            slotsByAirport: newSlots,
+            pendingSlotBids: [],
           };
         });
 

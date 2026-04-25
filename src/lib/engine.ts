@@ -573,9 +573,12 @@ export function computeRouteEconomics(
     totalFuelBurnPerFlight * fuelPricePerL *
     route.dailyFrequency * QUARTER_DAYS * hedge * fuelTankDiscount;
 
-  // Slot fee
-  const fee = slotFeeUsd(dest.tier);
-  const quarterlySlotCost = fee * route.dailyFrequency * QUARTER_DAYS;
+  // Slot fees (PRD update — Model B): the per-route slot cost is now zero
+  // because slot fees are charged ONCE per quarter at the team level (sum
+  // of all leased slots × weekly rent × 13 weeks). The route still
+  // "consumes" weekly_freq slots at each endpoint but that's a capacity
+  // check against team.airportLeases, not a per-route fee.
+  const quarterlySlotCost = 0;
 
   const quarterlyProfit = quarterlyRevenue - quarterlyFuelCost - quarterlySlotCost;
 

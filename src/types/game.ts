@@ -241,8 +241,14 @@ export interface Team {
   fuelStorageLevelL: number;
   fuelStorageAvgCostPerL: number;
 
-  // Slots held at each airport (PRD G10)
+  // Slots held at each airport (PRD G10).
+  // LEGACY field — Model A interpretation (one-time auction price). Kept
+  // for save migration; new mechanics read airportLeases instead.
   slotsByAirport: Record<string, number>;
+  /** Slot leases per airport (PRD update — Model B recurring fees).
+   *  Each lease tracks count + total weekly fee blend across slots
+   *  acquired at different prices. */
+  airportLeases: Record<string, AirportLease>;
 
   // Airports where cargo storage has been activated (PRD C9 setup cost paid)
   cargoStorageActivations: string[];
@@ -355,4 +361,18 @@ export interface AirportSlotState {
   nextOpening: number;
   /** Quarter at which the next yearly tick fires (Q5/Q9/Q13/Q17/Q21). */
   nextTickQuarter: number;
+}
+
+/** A single team's slot lease at one airport (PRD update — Model B
+ *  recurring fees). The bid price won at auction becomes the recurring
+ *  weekly fee per slot, charged for as long as the team holds the slot.
+ *  When a team wins more slots at a different price, totalWeeklyCost
+ *  blends them so quarterly cost is exact. */
+export interface AirportLease {
+  /** Number of slots held at this airport. */
+  slots: number;
+  /** Sum of weekly per-slot prices across all slots held (so
+   *  totalWeeklyCost = sum(price[i]) for i in slots). Quarterly cost =
+   *  totalWeeklyCost × 13. */
+  totalWeeklyCost: number;
 }
