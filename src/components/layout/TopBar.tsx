@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useGame, selectPlayer } from "@/store/game";
-import { fmtMoney, fmtPct, fmtQuarter, fmtQuarterShort } from "@/lib/format";
+import { useUi } from "@/store/ui";
+import { fmtMoney, fmtQuarter, fmtQuarterShort } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { computeAirlineValue, brandRating } from "@/lib/engine";
 import { QuarterTimerChip } from "@/components/game/QuarterTimer";
@@ -10,7 +11,7 @@ import { HelpModal } from "@/components/game/HelpModal";
 import { NotificationCenter } from "@/components/game/NotificationCenter";
 import { Button } from "@/components/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, Trophy } from "lucide-react";
 
 export function TopBar() {
   // Fine-grained subscriptions so unrelated store writes don't re-render this.
@@ -92,6 +93,7 @@ export function TopBar() {
           </span>
         </div>
         <QuarterTimerChip />
+        <LeaderboardButton />
         <NotificationCenter />
         <button
           onClick={() => setHelpOpen(true)}
@@ -105,6 +107,27 @@ export function TopBar() {
       </div>
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </header>
+  );
+}
+
+function LeaderboardButton() {
+  const openPanel = useUi((u) => u.openPanel);
+  const currentPanel = useUi((u) => u.panel);
+  const isOpen = currentPanel === "leaderboard";
+  return (
+    <button
+      onClick={() => openPanel("leaderboard")}
+      aria-label="Leaderboard"
+      title="Leaderboard"
+      className={cn(
+        "w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+        isOpen
+          ? "bg-surface-hover text-ink"
+          : "text-ink-muted hover:text-ink hover:bg-surface-hover",
+      )}
+    >
+      <Trophy size={16} />
+    </button>
   );
 }
 

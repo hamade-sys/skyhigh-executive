@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, Input, Modal, ModalBody, ModalHeader } from "@/components/ui";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
+import { planeImagePath } from "@/lib/aircraft-images";
 import { fmtMoney } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { Plane } from "lucide-react";
 import type { AircraftSpec, SecondHandListing } from "@/types/game";
 
 interface Props {
@@ -190,10 +192,28 @@ export function AircraftMarketModal({
 
 function AircraftRow({ spec, onBuy, onLease }: { spec: AircraftSpec; onBuy: () => void; onLease: () => void }) {
   const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
+  const imgSrc = planeImagePath(spec.id);
   return (
     <div className="rounded-md border border-line p-3 flex items-start gap-3 hover:bg-surface-hover">
+      {/* 3-view illustration. Falls back to a generic plane icon if no
+          image is mapped for this spec (kept lazy-loaded so the market
+          list scrolls smoothly on slow connections). */}
+      <div className="shrink-0 w-28 h-20 rounded-md bg-surface-2/50 border border-line/60 flex items-center justify-center overflow-hidden">
+        {imgSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imgSrc}
+            alt={`${spec.name} 3-view illustration`}
+            loading="lazy"
+            className="max-w-full max-h-full object-contain p-1"
+          />
+        ) : (
+          <Plane size={28} className="text-ink-muted" strokeWidth={1.25} />
+        )}
+      </div>
+
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-ink text-[0.9375rem]">{spec.name}</span>
           <Badge tone={spec.family === "cargo" ? "warning" : "neutral"}>
             {spec.family}

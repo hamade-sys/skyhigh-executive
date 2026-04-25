@@ -10,6 +10,7 @@ import {
   ModalHeader,
 } from "@/components/ui";
 import { fmtMoney } from "@/lib/format";
+import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
 import type { AircraftSpec } from "@/types/game";
 
@@ -140,21 +141,39 @@ function PurchaseOrderBody({
   return (
     <Modal open onClose={onClose} className="w-[min(700px,calc(100vw-3rem))]">
       <ModalHeader>
-        <div className="flex items-center gap-2 mb-1.5">
-          <Badge tone="accent">Purchase order</Badge>
-          <Badge tone={acquisitionType === "buy" ? "primary" : "neutral"}>
-            {acquisitionType === "buy" ? "Buy" : "Lease"}
-          </Badge>
-        </div>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight">
-          {spec.name}
-        </h2>
-        <div className="text-ink-muted text-[0.8125rem] mt-1 font-mono">
-          {spec.family === "passenger"
-            ? `${spec.seats.first}F / ${spec.seats.business}C / ${spec.seats.economy}Y default`
-            : `${spec.cargoTonnes ?? 0}T cargo`}
-          {" · "}{spec.rangeKm.toLocaleString()} km
-          {" · "}{spec.fuelBurnPerKm} L/km
+        <div className="flex items-start gap-4">
+          {/* Hero illustration */}
+          <div className="shrink-0 w-32 h-24 rounded-md bg-surface-2/50 border border-line/60 flex items-center justify-center overflow-hidden">
+            {planeImagePath(spec.id) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={planeImagePath(spec.id)!}
+                alt={`${spec.name} illustration`}
+                className="max-w-full max-h-full object-contain p-1"
+              />
+            ) : (
+              <span className="text-ink-muted text-[0.625rem] uppercase tracking-wider">No image</span>
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Badge tone="accent">Purchase order</Badge>
+              <Badge tone={acquisitionType === "buy" ? "primary" : "neutral"}>
+                {acquisitionType === "buy" ? "Buy" : "Lease"}
+              </Badge>
+            </div>
+            <h2 className="font-display text-[1.5rem] text-ink leading-tight">
+              {spec.name}
+            </h2>
+            <div className="text-ink-muted text-[0.8125rem] mt-1 font-mono">
+              {spec.family === "passenger"
+                ? `${spec.seats.first}F / ${spec.seats.business}C / ${spec.seats.economy}Y default`
+                : `${spec.cargoTonnes ?? 0}T cargo`}
+              {" · "}{spec.rangeKm.toLocaleString()} km
+              {" · "}{spec.fuelBurnPerKm} L/km
+            </div>
+          </div>
         </div>
       </ModalHeader>
 

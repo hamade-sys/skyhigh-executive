@@ -14,6 +14,7 @@ import { Panel } from "@/components/game/Panel";
 import { TopBar } from "@/components/layout/TopBar";
 import { QuarterCloseModal } from "@/components/game/QuarterCloseModal";
 import { OverviewPanel } from "@/components/panels/OverviewPanel";
+import { ReportsPanel } from "@/components/panels/ReportsPanel";
 import { DashboardPanel } from "@/components/panels/DashboardPanel";
 import { FleetPanel } from "@/components/panels/FleetPanel";
 import { RoutesPanel } from "@/components/panels/RoutesPanel";
@@ -38,14 +39,18 @@ const PANEL_META: Record<
   PanelId,
   { title: string; subtitle?: string; width?: "narrow" | "wide"; render: () => React.ReactNode }
 > = {
+  reports:     { title: "Reports",     subtitle: "Overview, management, and financials in one place", width: "wide", render: () => <ReportsPanel /> },
+  // Legacy single-tab entries, kept so any deep link / focus signal that
+  // still mentions them resolves to the same panels (rendered inside
+  // Reports normally).
   overview:    { title: "Overview",    width: "narrow", render: () => <OverviewPanel /> },
   dashboard:   { title: "Management report", subtitle: "Snapshot, trajectory, P&L by period, ops breakdown", width: "wide", render: () => <DashboardPanel /> },
+  financials:  { title: "Financials",  subtitle: "Balance sheet, debt, quarterly history", width: "wide", render: () => <FinancialsPanel /> },
   fleet:       { title: "Fleet",       subtitle: "Aircraft owned, leased, and on order", width: "wide", render: () => <FleetPanel /> },
   routes:      { title: "Routes",      subtitle: "Active network and profitability", width: "wide", render: () => <RoutesPanel /> },
-  financials:  { title: "Financials",  subtitle: "Balance sheet, debt, quarterly history", width: "wide", render: () => <FinancialsPanel /> },
   ops:         { title: "Quarterly ops", subtitle: "Set spend levels and close the quarter", width: "narrow", render: () => <OpsPanel /> },
   decisions:   { title: "Board decisions", subtitle: "Scenarios — final once submitted", width: "wide", render: () => <DecisionsPanel /> },
-  news:        { title: "World news",  subtitle: "Headlines this quarter + forecast", width: "narrow", render: () => <NewsPanel /> },
+  news:        { title: "World news",  subtitle: "Headlines this quarter + forecast", width: "wide", render: () => <NewsPanel /> },
   leaderboard: { title: "Leaderboard", subtitle: "Ranked by Brand Value", width: "narrow", render: () => <LeaderboardPanel /> },
   slots:       { title: "Slot market",  subtitle: "Bid for airport runway slots — resolves at quarter close", width: "wide", render: () => <SlotMarketPanel /> },
   admin:       { title: "Facilitator", subtitle: "Admin controls for this simulation", width: "narrow", render: () => <AdminPanel /> },

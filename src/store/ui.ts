@@ -3,11 +3,12 @@
 import { create } from "zustand";
 
 export type PanelId =
-  | "overview"
-  | "dashboard"
+  | "reports"        // tabbed: overview / mgmt report / financials
+  | "overview"       // legacy — still openable so deep links work
+  | "dashboard"      // legacy
+  | "financials"     // legacy
   | "fleet"
   | "routes"
-  | "financials"
   | "ops"
   | "decisions"
   | "news"

@@ -2,16 +2,12 @@
 
 import { useState } from "react";
 import {
-  LayoutDashboard,
   Plane,
   Route as RouteIcon,
-  DollarSign,
   SlidersHorizontal,
   Hexagon,
-  Trophy,
   Gavel,
   BarChart3,
-  Settings2,
   ChevronLeft,
   ChevronRight,
   Newspaper,
@@ -26,17 +22,16 @@ import { cn } from "@/lib/cn";
 
 export type { PanelId };
 
+/** Player-facing nav. Reports tab consolidates Overview + Mgmt report
+ *  + Financials. Leaderboard moved to TopBar; Facilitator is its own
+ *  role and not exposed to player UIs. */
 const NAV: Array<{ id: PanelId; label: string; Icon: LucideIcon }> = [
-  { id: "overview",    label: "Overview",    Icon: LayoutDashboard },
-  { id: "dashboard",   label: "Mgmt report", Icon: BarChart3 },
+  { id: "reports",     label: "Reports",     Icon: BarChart3 },
   { id: "fleet",       label: "Fleet",       Icon: Plane },
   { id: "routes",      label: "Routes",      Icon: RouteIcon },
-  { id: "financials",  label: "Financials",  Icon: DollarSign },
   { id: "ops",         label: "Ops form",    Icon: SlidersHorizontal },
   { id: "decisions",   label: "Decisions",   Icon: Hexagon },
-  { id: "leaderboard", label: "Leaderboard", Icon: Trophy },
   { id: "slots",       label: "Slot market", Icon: Gavel },
-  { id: "admin",       label: "Facilitator", Icon: Settings2 },
 ];
 
 /** Fictional news outlets we cycle through to give the news feed a real-world feel.
