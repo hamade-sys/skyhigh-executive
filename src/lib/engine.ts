@@ -896,9 +896,17 @@ export function loyaltyRetentionFactor(loyaltyPct: number): number {
 
 // ─── Apply an option effect ────────────────────────────────
 export function applyOptionEffect(team: Team, effect: OptionEffect): Team {
+  // Variable staff-cost savings (e.g. S15 Recession Gamble). Scales with
+  // the team's actual quarterly staff bill rather than a hardcoded $.
+  // Two quarters' worth × the percentage gets credited as cash.
+  let extraCash = 0;
+  if (effect.staffSavingsPct !== undefined && effect.staffSavingsPct > 0) {
+    const quarterlyStaff = quarterlyStaffCost(team);
+    extraCash += quarterlyStaff * 2 * effect.staffSavingsPct;
+  }
   const next: Team = {
     ...team,
-    cashUsd: team.cashUsd + (effect.cash ?? 0),
+    cashUsd: team.cashUsd + (effect.cash ?? 0) + extraCash,
     brandPts: Math.max(0, team.brandPts + (effect.brandPts ?? 0)),
     opsPts: Math.max(0, team.opsPts + (effect.opsPts ?? 0)),
     customerLoyaltyPct: clamp(
@@ -912,6 +920,18 @@ export function applyOptionEffect(team: Team, effect: OptionEffect): Team {
     for (const f of effect.setFlags) next.flags.add(f);
   }
   return next;
+}
+
+/**
+ * Estimate the team's CURRENT quarterly staff cost — used to scale
+ * staffSavingsPct effects without re-running the full quarter close.
+ * Mirrors the formula used at quarter-close (baselineStaffCostUsd ×
+ * STAFF_MULTIPLIER[slider.staff]).
+ */
+export function quarterlyStaffCost(team: Team): number {
+  const base = baselineStaffCostUsd(team);
+  const mult = STAFF_MULTIPLIER[team.sliders.staff] ?? 1.0;
+  return base * mult;
 }
 
 /** Serialize an effect for queue persistence. */

@@ -58,6 +58,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   // Inline slot-bid prices, keyed by airport code. Player sets these
   // when there's a shortfall; on Open route we submit them as auto-bids.
   const [bidPrices, setBidPrices] = useState<Record<string, number>>({});
+  // Per-airport slot counts. Default = exact deficit; player can raise
+  // above to grab headroom for future routes (e.g. need 7 today, bid
+  // for 14 because they plan to add a second plane next quarter).
+  const [bidSlots, setBidSlots] = useState<Record<string, number>>({});
 
   const isOpen = open && !!(origin && dest);
 
@@ -89,6 +93,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     // airport-specific, and showing them carried over from a prior
     // route attempt is misleading.
     setBidPrices({});
+    setBidSlots({});
   }, [isOpen, origin, dest, forceCargo, player]);
 
   // Cap frequency to the engine-computed max as soon as aircraft selection
@@ -267,13 +272,27 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     // Build inline bid attachment per-airport when there's a shortfall.
     // The Open button is disabled until allBidsSet, so each shortfall
     // airport is guaranteed to have an explicit, user-set price here.
-    const slotBids: Array<{ airportCode: string; pricePerSlot: number }> = [];
+    // Slot count defaults to the strict deficit but the player can
+    // over-bid for headroom (e.g. need 7, bid for 14).
+    const slotBids: Array<{
+      airportCode: string;
+      pricePerSlot: number;
+      slots?: number;
+    }> = [];
     if (hasShortfall) {
       if (shortfall.atOrigin > 0 && bidPrices[origin] !== undefined) {
-        slotBids.push({ airportCode: origin, pricePerSlot: bidPrices[origin]! });
+        slotBids.push({
+          airportCode: origin,
+          pricePerSlot: bidPrices[origin]!,
+          slots: bidSlots[origin] ?? shortfall.atOrigin,
+        });
       }
       if (shortfall.atDest > 0 && bidPrices[dest] !== undefined) {
-        slotBids.push({ airportCode: dest, pricePerSlot: bidPrices[dest]! });
+        slotBids.push({
+          airportCode: dest,
+          pricePerSlot: bidPrices[dest]!,
+          slots: bidSlots[dest] ?? shortfall.atDest,
+        });
       }
     }
     const r = openRoute({
@@ -529,6 +548,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                 slotsNeeded={shortfall.atOrigin}
                 tier={(CITIES_BY_CODE[origin]?.tier ?? 1) as CityTier}
                 price={bidPrices[origin]}
+                slots={bidSlots[origin] ?? shortfall.atOrigin}
+                onSlotsChange={(n) =>
+                  setBidSlots((prev) => ({ ...prev, [origin]: n }))
+                }
                 onChange={(p) => setBidPrices((prev) => {
                   if (Number.isNaN(p)) {
                     const next = { ...prev };
@@ -545,6 +568,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                 slotsNeeded={shortfall.atDest}
                 tier={(CITIES_BY_CODE[dest]?.tier ?? 1) as CityTier}
                 price={bidPrices[dest]}
+                slots={bidSlots[dest] ?? shortfall.atDest}
+                onSlotsChange={(n) =>
+                  setBidSlots((prev) => ({ ...prev, [dest]: n }))
+                }
                 onChange={(p) => setBidPrices((prev) => {
                   if (Number.isNaN(p)) {
                     const next = { ...prev };
@@ -611,17 +638,26 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
 }
 
 function BidRow({
-  airportCode, slotsNeeded, tier, price, onChange,
+  airportCode, slotsNeeded, tier, price, slots, onChange, onSlotsChange,
 }: {
   airportCode: string;
+  /** Slots strictly required to fly this route schedule. The default
+   *  bid count, but the player can request more for future use. */
   slotsNeeded: number;
   tier: CityTier;
   /** undefined when player hasn't set a bid yet — render an empty/CTA state. */
   price: number | undefined;
+  /** Slots the player wants to bid for. Defaults to slotsNeeded; can be
+   *  raised so they have headroom for future routes. */
+  slots: number;
   onChange: (n: number) => void;
+  onSlotsChange: (n: number) => void;
 }) {
   const basePrice = BASE_SLOT_PRICE_BY_TIER[tier];
-  const minPrice = Math.round(basePrice * 0.5);
+  // Engine enforces basePrice as the floor (Lvl 3 = $40K, Lvl 1 = $120K
+  // etc.). Bidding below the floor is rejected. So the slider must
+  // start AT basePrice, not below it.
+  const minPrice = basePrice;
   const maxPrice = Math.round(basePrice * 3);
   const city = CITIES_BY_CODE[airportCode];
   const isSet = price !== undefined;
@@ -629,8 +665,10 @@ function BidRow({
   // commits — but the price is NOT applied to bidPrices state until
   // they actually move/click the slider.
   const displayPrice = price ?? basePrice;
-  const weeklyCost = displayPrice * slotsNeeded;
+  const weeklyCost = displayPrice * slots;
   const quarterlyCost = weeklyCost * 13;
+  // Player can over-bid for headroom but never below the route's strict need.
+  const maxSlots = Math.max(slotsNeeded * 4, slotsNeeded + 14);
 
   return (
     <div
@@ -650,9 +688,41 @@ function BidRow({
         </div>
         <Badge tone={isSet ? "positive" : "warning"}>
           {isSet
-            ? `Bid set · ${slotsNeeded} slot${slotsNeeded === 1 ? "" : "s"}`
+            ? `Bid set · ${slots} slot${slots === 1 ? "" : "s"}`
             : `${slotsNeeded} slot${slotsNeeded === 1 ? "" : "s"} needed`}
         </Badge>
+      </div>
+
+      {/* Slot count selector — default is what this route needs; player
+          can request more so they have headroom for future routes. */}
+      <div className="flex items-center justify-between gap-2 mb-2 rounded-md bg-surface-2/50 px-2 py-1.5">
+        <div className="text-[0.75rem] text-ink-2">
+          Slots to bid for
+          <span className="text-ink-muted ml-1.5 text-[0.6875rem]">
+            (need {slotsNeeded} for this route)
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onSlotsChange(Math.max(slotsNeeded, slots - 1))}
+            disabled={slots <= slotsNeeded}
+            aria-label="Decrease slots"
+            className="w-6 h-6 rounded border border-line text-ink-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed text-[0.875rem]"
+          >
+            −
+          </button>
+          <span className="font-mono text-ink font-semibold tabular w-8 text-center text-[0.875rem]">
+            {slots}
+          </span>
+          <button
+            onClick={() => onSlotsChange(Math.min(maxSlots, slots + 1))}
+            disabled={slots >= maxSlots}
+            aria-label="Increase slots"
+            className="w-6 h-6 rounded border border-line text-ink-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed text-[0.875rem]"
+          >
+            +
+          </button>
+        </div>
       </div>
 
       {!isSet && (
@@ -681,8 +751,7 @@ function BidRow({
         className="w-full accent-primary"
       />
       <div className="flex justify-between text-[0.6875rem] text-ink-muted tabular mb-2">
-        <span>${minPrice.toLocaleString()}</span>
-        <span>base ${basePrice.toLocaleString()}</span>
+        <span>min ${minPrice.toLocaleString()}</span>
         <span>${maxPrice.toLocaleString()}</span>
       </div>
 

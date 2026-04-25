@@ -127,7 +127,7 @@ export interface GameStore extends GameState {
      *  modal. The route is created in "pending" status and activates at
      *  next quarter-close with effective frequency = min(intended,
      *  slots_won_at_each_endpoint). */
-    slotBids?: Array<{ airportCode: string; pricePerSlot: number }>;
+    slotBids?: Array<{ airportCode: string; pricePerSlot: number; slots?: number }>;
   }): { ok: boolean; error?: string };
 
   closeRoute(routeId: string): void;
@@ -1010,13 +1010,21 @@ export const useGame = create<GameStore>()(
         // Submit any inline bids the player attached (one per shortfall airport).
         // The route is created as PENDING so it doesn't fly until the auction
         // resolves at next quarter close.
+        // The player can ask for more than the strict need — e.g. need 7
+        // for this route but bid for 14 to grab headroom for future routes.
+        // We honor bid.slots when set; otherwise fall back to the strict need.
         const willBePending = hasShortfall && wantsAutoBid;
         if (wantsAutoBid) {
           for (const bid of slotBids ?? []) {
             const need = bid.airportCode === originCode ? shortAtOrigin :
               bid.airportCode === destCode ? shortAtDest : 0;
             if (need <= 0) continue;
-            const r = get().submitSlotBid(bid.airportCode, need, bid.pricePerSlot);
+            const slotsToBid = Math.max(need, bid.slots ?? need);
+            const r = get().submitSlotBid(
+              bid.airportCode,
+              slotsToBid,
+              bid.pricePerSlot,
+            );
             if (!r.ok) {
               return { ok: false, error: `Bid at ${bid.airportCode} failed: ${r.error}` };
             }
@@ -1702,6 +1710,10 @@ export const useGame = create<GameStore>()(
         let playerActivations = 0;
         let playerCancellations = 0;
         const cancelledRouteIds = new Set<string>();
+        // Diagnostic: collect human-readable reasons each pending route
+        // failed to activate so we can surface a useful message instead
+        // of a generic "outbid".
+        const cancelDiagnostics: string[] = [];
         const teamsWithPendingResolved = delayedTeams.map((t) => {
           if (!t.routes.some((r) => r.status === "pending")) return t;
           const newRoutes: typeof t.routes = [];
@@ -1712,23 +1724,38 @@ export const useGame = create<GameStore>()(
             }
             const slotsO = t.airportLeases?.[r.originCode]?.slots ?? 0;
             const slotsD = t.airportLeases?.[r.destCode]?.slots ?? 0;
+            // usedO/usedD: count weekly schedules at each endpoint from
+            // OTHER routes (active OR pending — pending also reserve slots
+            // once they activate, so we shouldn't double-allocate them).
             const usedO = t.routes
-              .filter((rt) => rt.id !== r.id && rt.status === "active" &&
-                (rt.originCode === r.originCode || rt.destCode === r.originCode))
+              .filter((rt) =>
+                rt.id !== r.id &&
+                (rt.status === "active" || rt.status === "suspended") &&
+                (rt.originCode === r.originCode || rt.destCode === r.originCode),
+              )
               .reduce((sum, rt) => sum + rt.dailyFrequency * 7, 0);
             const usedD = t.routes
-              .filter((rt) => rt.id !== r.id && rt.status === "active" &&
-                (rt.originCode === r.destCode || rt.destCode === r.destCode))
+              .filter((rt) =>
+                rt.id !== r.id &&
+                (rt.status === "active" || rt.status === "suspended") &&
+                (rt.originCode === r.destCode || rt.destCode === r.destCode),
+              )
               .reduce((sum, rt) => sum + rt.dailyFrequency * 7, 0);
             const availO = Math.max(0, slotsO - usedO);
             const availD = Math.max(0, slotsD - usedD);
             const intendedWeekly = r.dailyFrequency * 7;
             const effectiveWeekly = Math.min(intendedWeekly, availO, availD);
             if (effectiveWeekly < 1) {
-              // OUTBID — cancel the pending route entirely. Aircraft go back
-              // to idle pool. The player did not pay anything (failed bids
-              // refund).
-              if (t.id === s.playerTeamId) playerCancellations += 1;
+              // The bid lost OR insufficient slots remained after wins.
+              // Distinguish between "bid was rejected" and "bid won but
+              // slots went elsewhere" with a more specific message.
+              if (t.id === s.playerTeamId) {
+                playerCancellations += 1;
+                cancelDiagnostics.push(
+                  `${r.originCode}→${r.destCode}: held ${slotsO}@${r.originCode}/${slotsD}@${r.destCode}, ` +
+                  `used ${usedO}/${usedD}, avail ${availO}/${availD} for ${intendedWeekly}/wk needed`,
+                );
+              }
               cancelledRouteIds.add(r.id);
               continue; // drop the route
             }
@@ -1754,9 +1781,14 @@ export const useGame = create<GameStore>()(
           );
         }
         if (playerCancellations > 0) {
+          // Surface diagnostic detail so the player can see WHY the route
+          // didn't activate — rivals outbidding, insufficient slots even
+          // after winning, etc.
           toast.warning(
-            `${playerCancellations} pending route${playerCancellations > 1 ? "s" : ""} cancelled — outbid`,
-            "You were outbid for the slots you needed. Aircraft are back in the idle pool. Try a higher bid next quarter.",
+            `${playerCancellations} pending route${playerCancellations > 1 ? "s" : ""} cancelled`,
+            cancelDiagnostics.join(" · ") +
+            ". Aircraft are back in the idle pool. Slot bids may have been outbid, " +
+            "or other active routes consumed the slots before this one could activate.",
           );
         }
 

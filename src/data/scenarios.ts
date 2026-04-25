@@ -11,6 +11,14 @@ export interface OptionEffect {
   opsPts?: number;
   loyaltyDelta?: number;      // percentage points
   setFlags?: string[];
+  /**
+   * Variable cash bump computed at submission time as
+   *   `staffSavingsPct × (current quarterly staff cost) × 2 quarters`.
+   * Used by S15 Recession Gamble so that "mass redundancy" savings
+   * scale with each airline's actual headcount instead of a hardcoded
+   * dollar amount. 0..1 (e.g. 0.5 = save 50% of two quarters of staff).
+   */
+  staffSavingsPct?: number;
   // simplified — real engine should schedule these at targetQuarter:
   deferred?: {
     quarter: number;
@@ -430,28 +438,28 @@ export const SCENARIOS: Scenario[] = [
     id: "S15", title: "The Recession Gamble", quarter: 14, severity: "HIGH", timeLimitMinutes: 30,
     teaser: "Recession deepening. Cut deep, cut light, hold, or invest counter-cyclical?",
     context:
-      "Demand is collapsing. Every airline is cutting. Your options range from mass redundancy to counter-cyclical investment.",
+      "Demand is collapsing. Every airline is cutting. The choice is how deep to cut payroll — your headcount runs at quarterly staff cost, and savings here scale with the size of your operation.",
     options: [
       { id: "A", label: "Mass redundancy",
-        description: "Annual savings $120M. Loyalty and brand take major hits.",
-        effect: { brandPts: -20, loyaltyDelta: -10 },
-        effectTags: ["Savings $120M/yr", "Brand -20", "Loyalty -10%"],
+        description: "Cut deep — release ~50% of payroll for two quarters. Brand and loyalty take major hits.",
+        effect: { staffSavingsPct: 0.5, brandPts: -20, loyaltyDelta: -10 },
+        effectTags: ["Savings ≈ 50% of 2Q staff cost"],
         blockedByFlags: ["gov_board_card", "redundancy_freeze"] },
       { id: "B", label: "Temporary measures",
-        description: "Furloughs, freezes. Full recovery at Q16.",
-        effect: { brandPts: -5, loyaltyDelta: -3 },
-        effectTags: ["Savings $60M/yr", "Brand -5", "Loyalty -3%"] },
+        description: "Furloughs, hiring freeze, OT cuts — release ~25% of payroll for two quarters. Full recovery at Q16.",
+        effect: { staffSavingsPct: 0.25, brandPts: -5, loyaltyDelta: -3 },
+        effectTags: ["Savings ≈ 25% of 2Q staff cost"] },
       { id: "C", label: "Hold the team",
-        description: "Save elsewhere. Trusted employer flag.",
+        description: "Don't cut anyone. No payroll savings — you're paying the full bill — but earn the trusted-employer flag for hiring upside later.",
         effect: { brandPts: 10, loyaltyDelta: 5, setFlags: ["trusted_employer"] },
-        effectTags: ["Savings $40M/yr", "Brand +10", "Loyalty +5%"] },
+        effectTags: [] },
       { id: "D", label: "Counter-cyclical",
         description: "Invest while rivals retreat. $120M advantage at Q16.",
         effect: { cash: -30 * M, brandPts: 15, loyaltyDelta: 8 },
-        effectTags: ["-$30M", "Brand +15", "Loyalty +8%", "$120M advantage Q16"] },
+        effectTags: ["−$30M", "$120M advantage Q16"] },
     ],
     autoSubmitOptionId: "A",
-    notes: "Option A blocked if gov_board_card flag (redundancy freeze) is active.",
+    notes: "Option A blocked if gov_board_card flag (redundancy freeze) is active. Savings on A/B are computed as staffSavingsPct × current quarterly staff cost × 2.",
   },
   {
     id: "S16", title: "The Moscow Signal", quarter: 5, severity: "HIGH", timeLimitMinutes: 30,
