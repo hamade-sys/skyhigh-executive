@@ -30,6 +30,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useGame, selectPlayer, selectRivals } from "@/store/game";
 import type { City } from "@/types/game";
 import { Button } from "@/components/ui";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const PANEL_META: Record<
   PanelId,
@@ -231,9 +232,11 @@ function CanvasInner() {
 
 export function GameCanvas() {
   return (
-    <Suspense fallback={<main className="flex-1" />}>
-      <CanvasInner />
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={<main className="flex-1" />}>
+        <CanvasInner />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
