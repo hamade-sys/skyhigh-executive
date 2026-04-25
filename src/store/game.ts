@@ -179,6 +179,24 @@ export interface GameStore extends GameState {
     hubCode: string;
   }): { ok: boolean; error?: string };
 
+  /** Facilitator: apply a live-simulation outcome to a team. Used for
+   *  L0 Brand Building, L1 Strike, L2 Talent Heist, L3 Whistleblower,
+   *  L4 Podium, L5 Project Aurora, L6 FIFA Elevator, L7 Crisis Ops.
+   *  Each delta is applied directly; mvp points credit per role; flags
+   *  are set/cleared as named. */
+  applyLiveSimOutcome(args: {
+    teamId: string;
+    simId: "L0" | "L1" | "L2" | "L3" | "L4" | "L5" | "L6" | "L7";
+    cashDelta?: number;
+    brandPtsDelta?: number;
+    opsPtsDelta?: number;
+    loyaltyDelta?: number;
+    mvpByRole?: Partial<Record<"CEO" | "CFO" | "CMO" | "CHRO", number>>;
+    setFlags?: string[];
+    clearFlags?: string[];
+    notes?: string;
+  }): { ok: boolean; error?: string };
+
   addSecondaryHub(cityCode: string): { ok: boolean; error?: string };
   removeSecondaryHub(cityCode: string): void;
   claimFlashDeal(count: number): { ok: boolean; error?: string };
@@ -2161,6 +2179,18 @@ export const useGame = create<GameStore>()(
         if (!CITIES_BY_CODE[hubCode]) {
           return { ok: false, error: "Pick a valid hub airport." };
         }
+        // Hub collision check (PRD §7.1): no two teams may share a hub.
+        // The PRD spec calls for a blind-bid resolution; in this single-
+        // facilitator flow we surface the conflict and let the player
+        // pick another city instead. The facilitator can override later
+        // via the admin console if they want to allow it for testing.
+        const hubTaken = s.teams.find((t) => t.hubCode === hubCode);
+        if (hubTaken) {
+          return {
+            ok: false,
+            error: `${hubCode} is already ${hubTaken.name}'s hub. Pick another city — no two teams may share a hub.`,
+          };
+        }
         // Claim the seat: create a team for this company and bind it.
         // We re-use the existing initial-team setup (cash, slots, fleet
         // etc.) by piggybacking on the startGame action's spec so the
@@ -2244,6 +2274,51 @@ export const useGame = create<GameStore>()(
         toast.success(
           `Welcome, ${newTeam.name}`,
           `You're in seat ${s.sessionSlots.findIndex((x) => x.id === seat.id) + 1} of ${s.sessionSlots.length}. Hub ${hubCode}.`,
+        );
+        return { ok: true };
+      },
+
+      applyLiveSimOutcome: (args) => {
+        const s = get();
+        const team = s.teams.find((t) => t.id === args.teamId);
+        if (!team) return { ok: false, error: "Team not found" };
+
+        set({
+          teams: s.teams.map((t) => {
+            if (t.id !== args.teamId) return t;
+            const updated: Team = {
+              ...t,
+              cashUsd: t.cashUsd + (args.cashDelta ?? 0),
+              brandPts: Math.max(0, t.brandPts + (args.brandPtsDelta ?? 0)),
+              opsPts: Math.max(0, t.opsPts + (args.opsPtsDelta ?? 0)),
+              customerLoyaltyPct: Math.max(0, Math.min(100,
+                t.customerLoyaltyPct + (args.loyaltyDelta ?? 0))),
+              flags: new Set(t.flags),
+            };
+            // Set/clear flags
+            for (const f of args.setFlags ?? []) updated.flags.add(f);
+            for (const f of args.clearFlags ?? []) updated.flags.delete(f);
+            // MVP points per role
+            if (args.mvpByRole) {
+              updated.members = t.members.map((m) => {
+                const delta = args.mvpByRole?.[m.role as keyof typeof args.mvpByRole];
+                if (!delta) return m;
+                return { ...m, mvpPts: m.mvpPts + delta };
+              });
+            }
+            return updated;
+          }),
+        });
+
+        toast.accent(
+          `${args.simId} outcome applied — ${team.name}`,
+          [
+            args.cashDelta ? `Cash ${args.cashDelta >= 0 ? "+" : ""}${(args.cashDelta / 1_000_000).toFixed(1)}M` : null,
+            args.brandPtsDelta ? `Brand ${args.brandPtsDelta >= 0 ? "+" : ""}${args.brandPtsDelta}` : null,
+            args.opsPtsDelta ? `Ops ${args.opsPtsDelta >= 0 ? "+" : ""}${args.opsPtsDelta}` : null,
+            args.loyaltyDelta ? `Loyalty ${args.loyaltyDelta >= 0 ? "+" : ""}${args.loyaltyDelta}%` : null,
+            args.notes,
+          ].filter(Boolean).join(" · "),
         );
         return { ok: true };
       },

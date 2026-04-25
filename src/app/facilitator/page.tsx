@@ -8,7 +8,8 @@ import { AdminPanel } from "@/components/panels/AdminPanel";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { computeAirlineValue, brandRating, fleetCount } from "@/lib/engine";
 import { cn } from "@/lib/cn";
-import { ArrowLeft, Plane, Users, Settings2, Trophy, Key } from "lucide-react";
+import { ArrowLeft, Plane, Users, Settings2, Trophy, Key, Mic } from "lucide-react";
+import { LiveSimForm } from "@/components/game/LiveSimForm";
 import type { Team } from "@/types/game";
 
 /**
@@ -27,7 +28,7 @@ export default function FacilitatorPage() {
   const player = selectPlayer(s);
   const setActiveTeam = useGame((g) => g.setActiveTeam);
 
-  const [section, setSection] = useState<"teams" | "admin" | "leaderboard" | "session">("session");
+  const [section, setSection] = useState<"teams" | "admin" | "leaderboard" | "session" | "livesims">("session");
 
   return (
     <main className="flex-1 flex flex-col bg-surface-2/30">
@@ -81,6 +82,13 @@ export default function FacilitatorPage() {
             sub="Live rankings"
           />
           <NavItem
+            active={section === "livesims"}
+            onClick={() => setSection("livesims")}
+            Icon={Mic}
+            label="Live sims"
+            sub="L0–L7 outcomes"
+          />
+          <NavItem
             active={section === "admin"}
             onClick={() => setSection("admin")}
             Icon={Settings2}
@@ -110,6 +118,22 @@ export default function FacilitatorPage() {
           )}
           {section === "leaderboard" && (
             <LeaderboardView teams={s.teams} />
+          )}
+          {section === "livesims" && s.teams.length > 0 && (
+            <Card>
+              <CardBody>
+                <LiveSimForm teams={s.teams} />
+              </CardBody>
+            </Card>
+          )}
+          {section === "livesims" && s.teams.length === 0 && (
+            <Card>
+              <CardBody>
+                <p className="text-ink-2 text-[0.875rem]">
+                  Live-sim outcomes apply to existing teams. Start a session first.
+                </p>
+              </CardBody>
+            </Card>
           )}
           {section === "admin" && s.teams.length > 0 && (
             <Card>

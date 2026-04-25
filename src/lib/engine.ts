@@ -1300,19 +1300,32 @@ export function runQuarterClose(
   const passengerTax = totalPassengers * 16;
   // Fuel excise: 8% of fuel cost
   const fuelExcise = fuelCost * 0.08;
-  // Carbon levy: from Q17 onwards (PRD S17), $45/tonne CO2 at ~0.12 kg CO2 / L fuel
+  // Carbon levy (PRD S17): activated by the player's S17 decision
+  // outcome, NOT by quarter alone. The engine only applies the levy
+  // when the team holds the carbon_levy_active flag — this flag is set
+  // when:
+  //   - Player picks S17 option A (comply) at Q17, OR
+  //   - Player picks S17 option D (legal challenge) and the deferred
+  //     event fails (70% chance)
+  // S17 option C (lead green transition) earns green_leader → 40%
+  //   reduced rate from Q19.
+  // S17 option B (absorb) earns sustainability_signal → 5% reduction.
+  // Without the flag (e.g. challenge-success or scenario not yet
+  // resolved), no levy is charged.
   let carbonLevy = 0;
-  if (ctx.quarter >= 17) {
-    // Approximate fuel liters total = fuelCost / (fuelIndex/100 * 0.18)
+  const levyActive =
+    next.flags.has("carbon_levy_active") ||
+    next.flags.has("green_leader") ||
+    next.flags.has("sustainability_signal");
+  if (ctx.quarter >= 17 && levyActive) {
     const pricePerL = (ctx.fuelIndex / 100) * 0.18;
     const totalLiters = pricePerL > 0 ? fuelCost / pricePerL : 0;
-    const tonnesCO2 = (totalLiters * 0.12) / 1000; // kg → tonnes
+    const tonnesCO2 = (totalLiters * 0.12) / 1000;
     carbonLevy = tonnesCO2 * 45;
     if (next.flags.has("green_leader") && ctx.quarter >= 19) {
-      carbonLevy *= 0.6; // PRD S17-C: levy drops 40% from Q19
+      carbonLevy *= 0.6;
     }
     if (next.flags.has("sustainability_signal")) {
-      // Mild reduction for absorbing/committing at Q17
       carbonLevy *= 0.95;
     }
   }
@@ -1363,7 +1376,8 @@ export function runQuarterClose(
   if (newCashUsd < 0) {
     const draw = -newCashUsd;
     const airlineValue = computeAirlineValue(next);
-    const rcfCeiling = Math.max(0, airlineValue * 0.15);
+    // PRD §5.10: ECL ceiling = 20% of current Airline Value
+    const rcfCeiling = Math.max(0, airlineValue * 0.20);
     const roomLeft = Math.max(0, rcfCeiling - newRcfBalance);
     const drawAmount = Math.min(draw, roomLeft);
     newCashUsd += drawAmount;
