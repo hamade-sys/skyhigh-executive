@@ -100,11 +100,26 @@ function MapEventBridge({
   const map = useMap();
   useEffect(() => {
     function onClick(e: L.LeafletMouseEvent) {
-      // Click on empty map (not on a marker) — clear selection
+      // Click on empty map (not on a marker) — clear selection.
+      // Leaflet adds `.leaflet-interactive` to every clickable SVG path/circle
+      // (CircleMarkers, Polylines), so checking that catches all marker clicks.
+      // Also keep the legacy class checks as belt-and-braces.
       const target = e.originalEvent.target as HTMLElement;
-      if (!target.closest(".leaflet-marker-icon") && !target.closest(".sf-city")) {
-        onClickEmpty();
+      const tagName = target.tagName?.toLowerCase();
+      const isInteractiveSvg =
+        target.classList?.contains("leaflet-interactive") ||
+        !!target.closest(".leaflet-interactive") ||
+        tagName === "path" ||
+        tagName === "circle";
+      if (
+        isInteractiveSvg ||
+        target.closest(".leaflet-marker-icon") ||
+        target.closest(".sf-city") ||
+        target.closest(".sf-city-dot")
+      ) {
+        return;
       }
+      onClickEmpty();
     }
     map.on("click", onClick);
     return () => { map.off("click", onClick); };
