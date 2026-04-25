@@ -96,7 +96,6 @@ export function DashboardPanel() {
             <TrajectoryRow label="Net profit" series={series.map((q) => q.netProfit)} color={(series.at(-1)?.netProfit ?? 0) >= 0 ? "var(--positive)" : "var(--negative)"} fmt={fmtMoney} />
             <TrajectoryRow label="Cash position" series={series.map((q) => q.cash)} color="var(--primary)" fmt={fmtMoney} />
             <TrajectoryRow label="Brand value" series={series.map((q) => q.brandValue)} color="var(--accent)" fmt={(n) => n.toFixed(1)} />
-            <TrajectoryRow label="Loyalty %" series={series.map((q) => q.loyalty)} color="var(--info)" fmt={(n) => `${n.toFixed(0)}%`} />
           </div>
         </section>
       )}
@@ -244,7 +243,7 @@ export function DashboardPanel() {
         <div className="grid grid-cols-3 gap-3">
           <SnapCard label="Fuel index" value={fuelIndex.toFixed(0)} sub="100 = baseline" />
           <SnapCard label="Base rate" value={`${baseInterestRatePct.toFixed(1)}%`} sub="commercial debt" />
-          <SnapCard label="Loyalty" value={fmtPct(player.customerLoyaltyPct, 0)} sub={`Brand ${player.brandPts.toFixed(0)}/100 · Ops ${player.opsPts.toFixed(0)}/100`} />
+          <SnapCard label="Brand grade" value={grade.grade} sub={`Brand ${player.brandPts.toFixed(0)}/100 · Ops ${player.opsPts.toFixed(0)}/100`} color={grade.color} />
         </div>
       </section>
     </div>

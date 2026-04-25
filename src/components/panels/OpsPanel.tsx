@@ -100,7 +100,6 @@ export function OpsPanel() {
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.6875rem] text-ink-2">
               <span>Brand <span className={e.brandPts >= 0 ? "text-positive" : "text-negative"}>{e.brandPts >= 0 ? "+" : ""}{e.brandPts}/Q</span></span>
-              <span>Loyalty <span className={e.loyalty >= 0 ? "text-positive" : "text-negative"}>{e.loyalty >= 0 ? "+" : ""}{e.loyalty}%/Q</span></span>
               {e.opsPts !== undefined && <span>Ops <span className={e.opsPts >= 0 ? "text-positive" : "text-negative"}>{e.opsPts >= 0 ? "+" : ""}{e.opsPts}/Q</span></span>}
               {streak.level === level && streak.quarters > 0 && (
                 <span className="text-accent">Streak {streak.quarters}Q → {streak.quarters >= 6 ? "1.5×" : streak.quarters >= 3 ? "1.2×" : "1.0×"}</span>

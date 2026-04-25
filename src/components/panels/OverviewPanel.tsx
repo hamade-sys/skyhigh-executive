@@ -35,7 +35,7 @@ export function OverviewPanel() {
   const bvSeries = history.map((q) => q.brandValue);
   const cashSeries = history.map((q) => q.cash);
   const revenueSeries = history.map((q) => q.revenue);
-  const loyaltySeries = history.map((q) => q.loyalty);
+  // loyaltySeries removed — loyalty is internal-only per PRD update.
 
   const pendingDecisions = (SCENARIOS_BY_QUARTER[s.currentQuarter] ?? []).filter(
     (sc) =>
@@ -106,12 +106,6 @@ export function OverviewPanel() {
             color="var(--accent)"
           />
           <Metric label="Brand pts" value={player.brandPts.toFixed(0)} />
-          <MetricWithSpark
-            label="Loyalty"
-            value={fmtPct(player.customerLoyaltyPct, 0)}
-            series={loyaltySeries}
-            color="var(--info)"
-          />
           <Metric label="Ops pts" value={player.opsPts.toFixed(0)} />
         </div>
         <BrandValueBreakdown player={player} />
@@ -555,14 +549,8 @@ function StrategicInsights({
     });
   }
 
-  // 7. Strong loyalty — milestone close
-  if (player.customerLoyaltyPct >= 75 && !player.milestones.includes("Loyal Following")) {
-    insights.push({
-      tone: "accent",
-      title: "Loyal Following milestone close",
-      detail: "Push loyalty to 80%+ this quarter to unlock the milestone (+5 brand).",
-    });
-  }
+  // 7. (Loyalty-driven milestone hint suppressed per player-facing rules —
+  //    loyalty is internal. The milestone still triggers when crossed.)
 
   // 8. Q3+ and no secondary hub yet
   if (currentQuarter >= 5 && player.secondaryHubCodes.length === 0 && activeRoutes.length >= 6) {
@@ -645,7 +633,9 @@ function BrandValueBreakdown({ player }: { player: Parameters<typeof computeBran
           composite={b.brandHealth}
           rows={[
             { label: "Brand pts score", value: b.brandPtsScore, weight: 40 },
-            { label: "Customer loyalty", value: b.customerLoyalty, weight: 35 },
+            // Customer loyalty (35%) is computed internally and rolls
+            // straight into the brand-health composite. Hidden from the
+            // surface — the brand grade is the player-facing summary.
             { label: "Reputation events", value: b.reputationEvents, weight: 25 },
           ]}
         />

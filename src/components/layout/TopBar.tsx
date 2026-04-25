@@ -66,8 +66,7 @@ export function TopBar() {
         <Kpi label="Airline value" value={fmtMoney(airlineValue)} emphasize />
         <Divider />
         <Kpi label="Brand rating" value={brandRating(player).grade} />
-        <Divider />
-        <Kpi label="Loyalty" value={fmtPct(player.customerLoyaltyPct, 0)} />
+        {/* Loyalty is internal; brand rating is the player-facing summary. */}
         {player.rcfBalanceUsd > 0 && (
           <>
             <Divider />

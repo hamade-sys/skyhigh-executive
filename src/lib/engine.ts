@@ -1039,13 +1039,20 @@ export function runQuarterClose(
         r.consecutiveLosingQuarters = 0;
       }
     } else if (r.status === "suspended") {
-      // PRD E8.5/G11 — 20% of normal slot fee as holding cost
-      const dest = CITIES_BY_CODE[r.destCode];
-      if (dest) {
-        const holdingCost = slotFeeUsd(dest.tier) * r.dailyFrequency * QUARTER_DAYS * 0.2;
-        slotCost += holdingCost;
-      }
+      // Suspended routes — slots remain leased (you keep paying), but no
+      // route-specific holding cost is added; the recurring lease fee
+      // below covers it.
     }
+  }
+
+  // PRD update — Model B recurring slot fees. Sum across all leased
+  // airports: totalWeeklyCost × 13 weeks per quarter. Player who wants
+  // to stop paying for slots they don't use must explicitly release them
+  // via releaseSlots(), which returns the slots to the airport pool.
+  for (const code of Object.keys(next.airportLeases ?? {})) {
+    const lease = next.airportLeases?.[code];
+    if (!lease || lease.slots === 0) continue;
+    slotCost += lease.totalWeeklyCost * 13;
   }
 
   // ─ Cargo contracts (PRD E8.6) — guaranteed revenue on matching routes

@@ -140,17 +140,11 @@ export function QuarterCloseModal() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <Mini
                 label="Brand pts"
                 value={result.newBrandPts.toFixed(0)}
                 delta={result.newBrandPts - result.prevBrandPts}
-              />
-              <Mini
-                label="Loyalty"
-                value={fmtPct(result.newLoyalty, 0)}
-                delta={result.newLoyalty - result.prevLoyalty}
-                deltaSuffix="%"
               />
               <Mini
                 label="Ops pts"
@@ -324,13 +318,6 @@ export function QuarterCloseModal() {
               fmt={(n) => n.toFixed(0)}
             />
             <PersonRow
-              label="Customer loyalty"
-              prev={result.prevLoyalty}
-              next={result.newLoyalty}
-              max={100}
-              fmt={(n) => `${n.toFixed(0)}%`}
-            />
-            <PersonRow
               label="Operational excellence"
               prev={result.prevOpsPts}
               next={result.newOpsPts}
@@ -345,7 +332,7 @@ export function QuarterCloseModal() {
               fmt={(n) => n.toFixed(0)}
             />
             <div className="text-[0.75rem] text-ink-muted leading-relaxed">
-              Brand, Loyalty and Ops drive your <strong>Brand multiplier</strong> on top of net equity.
+              Brand and Ops drive your <strong>Brand multiplier</strong> on top of net equity.
               The current grade is <strong style={{ color: grade.color }}>{grade.grade}</strong>.
             </div>
           </div>

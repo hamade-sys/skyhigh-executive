@@ -198,11 +198,7 @@ function ConsequenceCard({ option }: { option: ScenarioOption }) {
                 Brand {e.brandPts >= 0 ? "+" : ""}{e.brandPts}
               </Pill>
             )}
-            {e.loyaltyDelta !== undefined && e.loyaltyDelta !== 0 && (
-              <Pill tone={e.loyaltyDelta >= 0 ? "positive" : "negative"}>
-                Loyalty {e.loyaltyDelta >= 0 ? "+" : ""}{e.loyaltyDelta}%
-              </Pill>
-            )}
+            {/* Loyalty delta is internal — not surfaced to the player. */}
             {e.opsPts !== undefined && e.opsPts !== 0 && (
               <Pill tone={e.opsPts >= 0 ? "positive" : "negative"}>
                 Ops {e.opsPts >= 0 ? "+" : ""}{e.opsPts}
@@ -252,13 +248,7 @@ function DeferredEffectSummary({ effect }: { effect: OptionEffect }) {
       </Pill>,
     );
   }
-  if (effect.loyaltyDelta) {
-    parts.push(
-      <Pill key="loyalty" tone={effect.loyaltyDelta >= 0 ? "positive" : "negative"}>
-        Loyalty {effect.loyaltyDelta >= 0 ? "+" : ""}{effect.loyaltyDelta}%
-      </Pill>,
-    );
-  }
+  // Loyalty delta is internal — kept silent in deferred summary too.
   if (effect.opsPts) {
     parts.push(
       <Pill key="ops" tone={effect.opsPts >= 0 ? "positive" : "negative"}>

@@ -22,21 +22,21 @@ export function fmtDelta(n: number, decimals = 1): string {
   return n > 0 ? `+${n.toFixed(decimals)}` : `−${Math.abs(n).toFixed(decimals)}`;
 }
 
-/** In-game date — each quarter advances ~4 real-world months from a 2025
- *  baseline. Returns "Mar 2026" style. */
+/** In-game date — each round advances 4 real-world months from a Jan 2026
+ *  baseline. Returns "Q3 Sep 2026" style (round number + month/year). */
 export function fmtQuarter(q: number): string {
   const monthsSinceStart = (q - 1) * 4;
-  const baseYear = 2025;
-  const baseMonth = 0; // January
+  const baseYear = 2026;
+  const baseMonth = 0; // January 2026
   const totalMonth = baseMonth + monthsSinceStart;
   const year = baseYear + Math.floor(totalMonth / 12);
   const monthIdx = totalMonth % 12;
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${months[monthIdx]} ${year}`;
+  return `Q${q} ${months[monthIdx]} ${year}`;
 }
 
-/** Short tag — "Round X of 20" replaces the prior "Q5 of 20". */
+/** Short tag — "Round X of 20". */
 export function fmtQuarterShort(q: number): string {
   return `Round ${q} of 20`;
 }

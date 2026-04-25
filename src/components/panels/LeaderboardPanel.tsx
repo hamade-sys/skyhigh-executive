@@ -51,7 +51,7 @@ export function LeaderboardPanel() {
                 </div>
                 <div className="text-[0.6875rem] text-ink-muted mt-0.5">
                   {isPlayer
-                    ? `Brand ${brandRating(t).grade} · ${t.routes.filter((r) => r.status === "active").length} routes · ${fleetCount(t.fleet)} ✈ · ${fmtPct(t.customerLoyaltyPct, 0)}`
+                    ? `Brand ${brandRating(t).grade} · ${t.routes.filter((r) => r.status === "active").length} routes · ${fleetCount(t.fleet)} ✈`
                     : `Brand ${brandRating(t).grade} · ${fleetCount(t.fleet)} ✈`}
                 </div>
               </div>
