@@ -2,7 +2,12 @@
 
 import { useEffect, useState, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
-import { WorldMap } from "@/components/game/WorldMap";
+import dynamic from "next/dynamic";
+// Leaflet hits `window` on import, so the map can't render on the server.
+const WorldMap = dynamic(
+  () => import("@/components/game/WorldMap").then((m) => m.WorldMap),
+  { ssr: false, loading: () => <div className="w-full h-full bg-[var(--map-ocean-deep)]" /> },
+);
 import { NavRail } from "@/components/game/NavRail";
 import { useUi, type PanelId } from "@/store/ui";
 import { Panel } from "@/components/game/Panel";
