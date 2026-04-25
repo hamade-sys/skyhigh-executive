@@ -11,8 +11,9 @@ import {
   maxRouteDailyFrequency,
   routeDemandPerDay,
 } from "@/lib/engine";
+import { BASE_SLOT_PRICE_BY_TIER } from "@/lib/slots";
 import { CITIES_BY_CODE } from "@/data/cities";
-import type { PricingTier } from "@/types/game";
+import type { CityTier, PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
 
 export interface RouteSetupModalProps {
@@ -64,7 +65,12 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     const dist = distanceBetween(origin, dest);
     const cargo = forceCargo ?? false;
     const idle = player.fleet.find((f) => {
-      if (f.status !== "active" || f.routeId) return false;
+      if (f.status !== "active") return false;
+      // Stale routeId tolerance — same logic as idlePlanes filter
+      if (f.routeId) {
+        const r = player.routes.find((rt) => rt.id === f.routeId);
+        if (r && r.status !== "closed") return false;
+      }
       const spec = AIRCRAFT_BY_ID[f.specId];
       if (!spec) return false;
       if (spec.rangeKm < dist) return false;
@@ -139,7 +145,17 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
 
   if (!player) return null;
 
-  const idlePlanes = player.fleet.filter((f) => f.status === "active" && !f.routeId);
+  // Idle = active AND not currently flying a non-closed route. Defensively
+  // treat aircraft whose routeId points to a missing/closed route as idle —
+  // older saves can have stale routeIds after route closures.
+  const idlePlanes = player.fleet.filter((f) => {
+    if (f.status !== "active") return false;
+    if (!f.routeId) return true;
+    const r = player.routes.find((rt) => rt.id === f.routeId);
+    if (!r) return true;            // route deleted
+    if (r.status === "closed") return true;
+    return false;
+  });
   const originCity = origin ? CITIES_BY_CODE[origin] : null;
   const destCity = dest ? CITIES_BY_CODE[dest] : null;
 

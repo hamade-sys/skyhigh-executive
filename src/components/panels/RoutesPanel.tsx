@@ -333,9 +333,15 @@ function RouteDetailModal({
     return spec && spec.seats.first > 0;
   });
 
-  const idleOrOnRoute = player.fleet.filter(
-    (f) => f.status === "active" && (!f.routeId || f.routeId === route.id),
-  );
+  // Show every active aircraft that is either: idle, on THIS route, or
+  // has a stale routeId pointing to a deleted/closed route (treated as idle).
+  const idleOrOnRoute = player.fleet.filter((f) => {
+    if (f.status !== "active") return false;
+    if (!f.routeId) return true;
+    if (f.routeId === route.id) return true;
+    const stale = player.routes.find((rt) => rt.id === f.routeId);
+    return !stale || stale.status === "closed";
+  });
 
   function save() {
     const r = updateRoute(route.id, {

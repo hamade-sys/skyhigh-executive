@@ -127,7 +127,7 @@ export function FleetPanel() {
       <div className="rounded-md border border-line bg-surface p-3">
         <div className="flex items-baseline justify-between mb-2">
           <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-            Aircraft insurance · PRD §E5
+            Aircraft insurance
           </div>
           <div className="flex items-center gap-2 text-[0.6875rem] tabular text-ink-muted">
             <span>Premium {insMeta.premium}</span>
@@ -174,11 +174,11 @@ export function FleetPanel() {
           <table className="w-full text-[0.8125rem]">
             <thead>
               <tr className="bg-surface-2 border-b border-line">
-                <Th className="w-[34%]">Model</Th>
-                <Th className="text-right">Total</Th>
-                <Th className="text-right">Used</Th>
-                <Th className="text-right">Unused</Th>
-                <Th className="text-right">Order</Th>
+                <Th className="w-[40%]">Model</Th>
+                <Th className="text-right w-[70px]">Total</Th>
+                <Th className="text-right w-[70px]">Used</Th>
+                <Th className="text-right w-[80px]">Unused</Th>
+                <Th className="text-right w-[70px]">Order</Th>
                 <Th className="text-right">Q profit</Th>
               </tr>
             </thead>

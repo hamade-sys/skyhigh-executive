@@ -33,7 +33,12 @@ export function Panel({
         "rounded-xl border border-line bg-surface/95 backdrop-blur-md",
         "shadow-[0_24px_60px_-16px_rgba(16,37,63,0.25),0_8px_20px_-8px_rgba(16,37,63,0.12)]",
         "animate-[panel-in_220ms_var(--ease-out-quart)]",
-        width === "narrow" ? "w-[min(480px,calc(100vw-5.5rem))]" : "w-[min(780px,calc(100vw-5.5rem))]",
+        // Wide panels stretch up to ~960px so dense tables (Fleet,
+        // Slot Market, Routes) don't truncate columns. Narrow panels
+        // stay compact for read-mostly content.
+        width === "narrow"
+          ? "w-[min(520px,calc(100vw-5.5rem))]"
+          : "w-[min(960px,calc(100vw-5.5rem))]",
       )}
     >
       <header className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-line">

@@ -2340,12 +2340,21 @@ export const useGame = create<GameStore>()(
             { role: "CMO",  name: "Your CMO",  mvpPts: 0, cards: [] },
             { role: "CHRO", name: "Your CHRO", mvpPts: 0, cards: [] },
           ],
-          fleet: t.fleet.map((f) => ({
-            ...f,
-            retirementQuarter: f.retirementQuarter ?? f.purchaseQuarter + 16,
-            maintenanceDeficit: f.maintenanceDeficit ?? 0,
-            satisfactionPct: f.satisfactionPct ?? 75,
-          })),
+          fleet: t.fleet.map((f) => {
+            // Sweep stale routeIds — if the aircraft is pointed at a route
+            // that no longer exists (or is closed), treat it as idle so it
+            // shows up in the route-setup picker again.
+            const stale = f.routeId
+              ? !((t.routes ?? []).some((r) => r.id === f.routeId && r.status !== "closed"))
+              : false;
+            return {
+              ...f,
+              retirementQuarter: f.retirementQuarter ?? f.purchaseQuarter + 16,
+              maintenanceDeficit: f.maintenanceDeficit ?? 0,
+              satisfactionPct: f.satisfactionPct ?? 75,
+              routeId: stale ? null : f.routeId,
+            };
+          }),
           insurancePolicy: t.insurancePolicy ?? "none",
           tagline: t.tagline ?? "",
           marketFocus: t.marketFocus ?? "balanced",

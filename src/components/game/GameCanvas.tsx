@@ -40,7 +40,7 @@ const PANEL_META: Record<
 > = {
   overview:    { title: "Overview",    width: "narrow", render: () => <OverviewPanel /> },
   dashboard:   { title: "Management report", subtitle: "Snapshot, trajectory, P&L by period, ops breakdown", width: "wide", render: () => <DashboardPanel /> },
-  fleet:       { title: "Fleet",       subtitle: "Aircraft owned, leased, and on order", width: "narrow", render: () => <FleetPanel /> },
+  fleet:       { title: "Fleet",       subtitle: "Aircraft owned, leased, and on order", width: "wide", render: () => <FleetPanel /> },
   routes:      { title: "Routes",      subtitle: "Active network and profitability", width: "narrow", render: () => <RoutesPanel /> },
   financials:  { title: "Financials",  subtitle: "Balance sheet, debt, quarterly history", width: "wide", render: () => <FinancialsPanel /> },
   ops:         { title: "Quarterly ops", subtitle: "Set spend levels and close the quarter", width: "narrow", render: () => <OpsPanel /> },
