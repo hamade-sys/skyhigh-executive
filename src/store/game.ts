@@ -1768,21 +1768,28 @@ export const useGame = create<GameStore>()(
         });
         const finalFleet = updatedFleetWithSat;
 
-        // Fleet flag detection (PRD §7.2)
+        // Fleet flag detection (PRD §7.2). After the 40-round restructure
+        // with 2:1 EIS compression, the "modern" threshold needed
+        // recalibration — under the old 20-round game, unlockQuarter≥8
+        // meant "post-2003" which was genuinely modern. In the 40-round
+        // game, unlockQuarter≥21 lines up with 787-8/A350-era and later
+        // (true new-gen widebodies + neo/MAX narrowbodies).
         const activeModern = updatedFleet.filter(
-          (f) => f.status === "active" && AIRCRAFT_BY_ID[f.specId]?.unlockQuarter >= 8,
+          (f) => f.status === "active" && AIRCRAFT_BY_ID[f.specId]?.unlockQuarter >= 21,
         ).length;
         const newFlags = new Set(player.flags);
         if (activeModern >= 10) newFlags.add("modern_fleet");
         else newFlags.delete("modern_fleet");
-        // Aging fleet: 0 planes ordered in current quarter + average fleet age high
+        // Aging fleet: no planes ordered this quarter AND average fleet
+        // age exceeds 12Q (60% of the 20Q lifespan). Was 10Q which fired
+        // too aggressively in the back half of the 40-round game.
         const ordersThisQuarter = updatedFleet.filter(
           (f) => f.purchaseQuarter === s.currentQuarter,
         ).length;
         const averageAge = updatedFleet.length > 0
           ? updatedFleet.reduce((sum, f) => sum + (s.currentQuarter - f.purchaseQuarter), 0) / updatedFleet.length
           : 0;
-        if (ordersThisQuarter === 0 && averageAge >= 10) {
+        if (ordersThisQuarter === 0 && averageAge >= 12) {
           newFlags.add("aging_fleet");
         }
         const teamReadyPre: Team = {
