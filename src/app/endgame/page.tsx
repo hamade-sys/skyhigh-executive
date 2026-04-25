@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge, Button, Card, CardBody } from "@/components/ui";
+import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
-import { computeAirlineValue, fleetCount, resolveEndgameAwards, finalBrandValueWithAwards } from "@/lib/engine";
+import { computeAirlineValue, fleetCount, resolveEndgameAwards, brandRating } from "@/lib/engine";
+import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
+import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
+import { Award, TrendingUp, TrendingDown, Trophy } from "lucide-react";
 
 /** Legacy titles by final Brand Value band. */
 function legacyTitle(bv: number): { title: string; sub: string } {
@@ -109,6 +112,110 @@ export default function Endgame() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Career arc — brand value trajectory across all 20 quarters */}
+        {player.financialsByQuarter.length >= 2 && (
+          <Card className="mb-6">
+            <CardBody>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="font-display text-[1.5rem] text-ink">Career arc</h2>
+                <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                  Q1 → Q20 brand value
+                </span>
+              </div>
+              {(() => {
+                const series = player.financialsByQuarter.map((q) => q.brandValue);
+                const profitSeries = player.financialsByQuarter.map((q) => q.netProfit);
+                const cashSeries = player.financialsByQuarter.map((q) => q.cash);
+                const peakBV = Math.max(...series);
+                const peakBVQ = player.financialsByQuarter.find((q) => q.brandValue === peakBV)?.quarter ?? 1;
+                const trough = Math.min(...profitSeries);
+                const peak = Math.max(...profitSeries);
+                const bestQ = player.financialsByQuarter.find((q) => q.netProfit === peak);
+                const worstQ = player.financialsByQuarter.find((q) => q.netProfit === trough);
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <ArcStat label="Brand peak" value={`${peakBV.toFixed(1)} (Q${peakBVQ})`} icon={<TrendingUp size={14} />} />
+                      <ArcStat label="Best quarter" value={bestQ ? `${fmtMoney(peak)} (Q${bestQ.quarter})` : "—"} icon={<Trophy size={14} />} tone="positive" />
+                      <ArcStat label="Worst quarter" value={worstQ ? `${fmtMoney(trough)} (Q${worstQ.quarter})` : "—"} icon={<TrendingDown size={14} />} tone={trough < 0 ? "negative" : "default"} />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      <ArcSpark label="Brand value" values={series} color="var(--accent)" />
+                      <ArcSpark label="Cash position" values={cashSeries} color="var(--primary)" />
+                      <ArcSpark label="Quarterly profit" values={profitSeries} color={trough < 0 ? "var(--negative)" : "var(--positive)"} />
+                    </div>
+                  </>
+                );
+              })()}
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Decisions retrospective — every board call this team made */}
+        {player.decisions.length > 0 && (
+          <Card className="mb-6">
+            <CardBody>
+              <h2 className="font-display text-[1.5rem] text-ink mb-3">
+                Boardroom decisions · {player.decisions.length}
+              </h2>
+              <div className="space-y-1.5">
+                {[...player.decisions]
+                  .sort((a, b) => a.quarter - b.quarter)
+                  .map((d) => {
+                    const scenario = (SCENARIOS_BY_QUARTER[d.quarter] ?? [])
+                      .find((sc) => sc.id === d.scenarioId);
+                    const opt = scenario?.options.find((o) => o.id === d.optionId);
+                    return (
+                      <div key={`${d.scenarioId}-${d.quarter}`} className="flex items-baseline justify-between gap-3 py-1.5 border-b border-line last:border-0 text-[0.875rem]">
+                        <div className="flex items-baseline gap-2 min-w-0">
+                          <span className="font-mono text-[0.6875rem] text-primary tabular w-12 shrink-0">Q{d.quarter}</span>
+                          <span className="font-mono text-[0.6875rem] text-ink-muted shrink-0">{d.scenarioId}</span>
+                          <span className="text-ink-2 truncate">{scenario?.title ?? "Unknown"}</span>
+                        </div>
+                        <span className="text-accent font-mono text-[0.75rem] shrink-0">
+                          {d.optionId} · {opt?.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Milestones unlocked across the 20 quarters */}
+        {player.milestones.length > 0 && (
+          <Card className="mb-6">
+            <CardBody>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="font-display text-[1.5rem] text-ink flex items-center gap-2">
+                  <Award size={20} /> Milestones unlocked
+                </h2>
+                <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                  {player.milestones.length} of {MILESTONES.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {player.milestones.map((id) => {
+                  const m = MILESTONES_BY_ID[id];
+                  if (!m) return null;
+                  return (
+                    <div key={id} className="rounded-md border border-line bg-[var(--positive-soft)]/40 px-3 py-2">
+                      <div className="flex items-baseline justify-between mb-0.5">
+                        <span className="text-[0.875rem] font-semibold text-ink">{m.title}</span>
+                        <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted">
+                          {m.category}
+                        </span>
+                      </div>
+                      <div className="text-[0.75rem] text-ink-muted leading-relaxed">{m.description}</div>
+                    </div>
+                  );
+                })}
               </div>
             </CardBody>
           </Card>
@@ -239,6 +346,40 @@ function Stat({ label, value, tone = "default" }: {
       <div className={`tabular font-display text-[1.75rem] leading-none mt-1 ${colorClass}`}>
         {value}
       </div>
+    </div>
+  );
+}
+
+function ArcStat({
+  label, value, icon, tone = "default",
+}: {
+  label: string; value: string; icon: React.ReactNode; tone?: "default" | "positive" | "negative";
+}) {
+  const colorClass = tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
+  return (
+    <div className="rounded-md border border-line bg-surface-2/40 p-3">
+      <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1">
+        {icon} {label}
+      </div>
+      <div className={`tabular font-mono text-[0.9375rem] font-semibold ${colorClass}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function ArcSpark({ label, values, color }: { label: string; values: number[]; color: string }) {
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <span className="text-[0.75rem] text-ink-muted w-32 shrink-0">{label}</span>
+      <Sparkline values={values} color={color} width={400} height={24} />
+      <span className="tabular font-mono text-[0.75rem] text-ink ml-auto shrink-0 w-24 text-right">
+        {values[values.length - 1] !== undefined
+          ? (Math.abs(values[values.length - 1]) > 1_000_000
+              ? `${(values[values.length - 1] / 1_000_000).toFixed(1)}M`
+              : values[values.length - 1].toFixed(1))
+          : "—"}
+      </span>
     </div>
   );
 }

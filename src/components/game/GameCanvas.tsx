@@ -99,7 +99,7 @@ function CanvasInner() {
     // PRD §13.1 pre-game lobby
     return (
       <main className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="max-w-xl text-center">
+        <div className="max-w-2xl text-center">
           <div className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent mb-4">
             SkyForce · Executive Simulation
           </div>
@@ -116,24 +116,38 @@ function CanvasInner() {
             L0 cash injection (up to +$80M) and brand foundation before Q2
             operations open.
           </p>
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-3 flex-wrap">
             <Button variant="primary" size="lg" onClick={() => router.push("/onboarding")}>
               Begin Q1 Brand Building →
             </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => useGame.getState().startDemo()}
+            >
+              Play demo round
+            </Button>
           </div>
-          <div className="mt-10 grid grid-cols-3 gap-4 text-left max-w-md mx-auto">
-            <div className="border-t border-line pt-3">
-              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Quarters</div>
-              <div className="font-display text-[1.5rem] text-ink tabular leading-tight">20</div>
+          <div className="text-[0.75rem] text-ink-muted mt-3">
+            Demo seeds a sample airline so you can explore mechanics without setup.
+          </div>
+          <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4 text-left max-w-2xl mx-auto">
+            <PreGameStat label="Quarters" value="20" sub="Five years of strategy" />
+            <PreGameStat label="Cities" value="100" sub="Tier 1 hubs to T4 outposts" />
+            <PreGameStat label="Aircraft" value="21" sub="A220 to A380, freighters" />
+            <PreGameStat label="Scenarios" value="18" sub="Board-level decisions" />
+          </div>
+          <div className="mt-8 text-left max-w-2xl mx-auto rounded-md border border-line bg-surface-2/40 p-4">
+            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+              How a quarter plays
             </div>
-            <div className="border-t border-line pt-3">
-              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Cities</div>
-              <div className="font-display text-[1.5rem] text-ink tabular leading-tight">100</div>
-            </div>
-            <div className="border-t border-line pt-3">
-              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Scenarios</div>
-              <div className="font-display text-[1.5rem] text-ink tabular leading-tight">18</div>
-            </div>
+            <ol className="list-decimal list-inside text-[0.8125rem] text-ink-2 leading-relaxed space-y-1">
+              <li>Open and price routes from your hub on the world map</li>
+              <li>Set the six operational sliders (staff, marketing, service…)</li>
+              <li>Resolve any board scenarios that came up this quarter</li>
+              <li>Click <span className="font-semibold text-ink">Next Quarter</span> — engine settles fuel, fares, costs, and brand</li>
+              <li>Read the digest, adapt strategy, then walk into the next quarter</li>
+            </ol>
           </div>
         </div>
       </main>
@@ -213,5 +227,15 @@ export function GameCanvas() {
     <Suspense fallback={<main className="flex-1" />}>
       <CanvasInner />
     </Suspense>
+  );
+}
+
+function PreGameStat({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="border-t border-line pt-3">
+      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">{label}</div>
+      <div className="font-display text-[1.5rem] text-ink tabular leading-tight">{value}</div>
+      <div className="text-[0.6875rem] text-ink-muted leading-tight mt-0.5">{sub}</div>
+    </div>
   );
 }
