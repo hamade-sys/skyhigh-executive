@@ -1041,20 +1041,38 @@ export const useGame = create<GameStore>()(
         // Submit any inline bids the player attached (one per shortfall airport).
         // The route is created as PENDING so it doesn't fly until the auction
         // resolves at next quarter close.
-        // The player can ask for more than the strict need — e.g. need 7
-        // for this route but bid for 14 to grab headroom for future routes.
-        // We honor bid.slots when set; otherwise fall back to the strict need.
+        // CRITICAL: bids MUST CUMULATE across multiple pending routes
+        // touching the same airport. submitSlotBid replaces the bid by
+        // airport, so opening two pending routes that share an airport
+        // would silently drop the first route's slot demand. We compute
+        // the cumulative need from the player's other still-pending
+        // routes and submit the total.
         const willBePending = hasShortfall && wantsAutoBid;
         if (wantsAutoBid) {
+          const player = get().teams.find((t) => t.id === get().playerTeamId);
           for (const bid of slotBids ?? []) {
             const need = bid.airportCode === originCode ? shortAtOrigin :
               bid.airportCode === destCode ? shortAtDest : 0;
             if (need <= 0) continue;
-            const slotsToBid = Math.max(need, bid.slots ?? need);
+            const requested = Math.max(need, bid.slots ?? need);
+            // Cumulate with any pending bid already queued at this
+            // airport (from a sibling pending route the player just
+            // opened in the same quarter).
+            const existingBid = (player?.pendingSlotBids ?? []).find(
+              (b) => b.airportCode === bid.airportCode,
+            );
+            // If the player previously bid at this airport at a
+            // DIFFERENT price, take the higher to avoid reducing the
+            // earlier route's chances.
+            const cumulativeSlots = (existingBid?.slots ?? 0) + requested;
+            const finalPrice = Math.max(
+              existingBid?.pricePerSlot ?? 0,
+              bid.pricePerSlot,
+            );
             const r = get().submitSlotBid(
               bid.airportCode,
-              slotsToBid,
-              bid.pricePerSlot,
+              cumulativeSlots,
+              finalPrice,
             );
             if (!r.ok) {
               return { ok: false, error: `Bid at ${bid.airportCode} failed: ${r.error}` };
