@@ -11,6 +11,7 @@ export type PanelId =
   | "decisions"
   | "news"
   | "leaderboard"
+  | "slots"
   | "admin";
 
 interface UiStore {

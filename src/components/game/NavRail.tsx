@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Hexagon,
   Trophy,
+  Gavel,
   Settings2,
   ChevronLeft,
   ChevronRight,
@@ -32,6 +33,7 @@ const NAV: Array<{ id: PanelId; label: string; Icon: LucideIcon }> = [
   { id: "ops",         label: "Ops form",    Icon: SlidersHorizontal },
   { id: "decisions",   label: "Decisions",   Icon: Hexagon },
   { id: "leaderboard", label: "Leaderboard", Icon: Trophy },
+  { id: "slots",       label: "Slot market", Icon: Gavel },
   { id: "admin",       label: "Facilitator", Icon: Settings2 },
 ];
 

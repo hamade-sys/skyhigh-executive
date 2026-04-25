@@ -21,6 +21,7 @@ import { OpsPanel } from "@/components/panels/OpsPanel";
 import { DecisionsPanel } from "@/components/panels/DecisionsPanel";
 import { NewsPanel } from "@/components/panels/NewsPanel";
 import { LeaderboardPanel } from "@/components/panels/LeaderboardPanel";
+import { SlotMarketPanel } from "@/components/panels/SlotMarketPanel";
 import { AdminPanel } from "@/components/panels/AdminPanel";
 import { RouteSetupModal } from "@/components/game/RouteSetupModal";
 import { RouteLaunchBar } from "@/components/game/RouteLaunchBar";
@@ -44,6 +45,7 @@ const PANEL_META: Record<
   decisions:   { title: "Board decisions", subtitle: "Scenarios — final once submitted", width: "wide", render: () => <DecisionsPanel /> },
   news:        { title: "World news",  subtitle: "Headlines this quarter + forecast", width: "narrow", render: () => <NewsPanel /> },
   leaderboard: { title: "Leaderboard", subtitle: "Ranked by Brand Value", width: "narrow", render: () => <LeaderboardPanel /> },
+  slots:       { title: "Slot market",  subtitle: "Bid for airport runway slots — resolves at quarter close", width: "wide", render: () => <SlotMarketPanel /> },
   admin:       { title: "Facilitator", subtitle: "Admin controls for this simulation", width: "narrow", render: () => <AdminPanel /> },
 };
 
