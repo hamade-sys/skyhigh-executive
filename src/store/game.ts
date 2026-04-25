@@ -968,6 +968,7 @@ export const useGame = create<GameStore>()(
           baseInterestRatePct: s.baseInterestRatePct,
           fuelIndex: s.fuelIndex,
           quarter: s.currentQuarter,
+          rivals: s.teams.filter((t) => t.id !== player.id),
           cargoContracts: s.cargoContracts ?? [],
         });
 

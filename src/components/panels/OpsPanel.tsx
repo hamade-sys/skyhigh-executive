@@ -248,7 +248,7 @@ export function OpsPanel() {
       </details>
 
       <Button variant="primary" className="w-full" onClick={commit}>
-        Close quarter →
+        Submit ops &amp; advance to next quarter →
       </Button>
     </div>
   );

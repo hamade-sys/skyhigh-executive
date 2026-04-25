@@ -310,9 +310,21 @@ export function attractivenessScore(args: {
   );
 }
 
-// Simple service score from sliders (avg of service + gifts-proxy + rewards)
+// Service score from sliders. PRD §5.3 — when staff ↔ service gap is large
+// (≥3 levels), the customer-perceived score caps at 60 because passengers
+// notice the dissonance: great food + dreadful crew, or the inverse.
 export function serviceScoreFromSliders(s: Sliders): number {
-  return ((s.service + s.rewards) / 2 / 5) * 100;
+  const raw = ((s.service + s.rewards) / 2 / 5) * 100;
+  const gap = Math.abs(s.staff - s.service);
+  if (gap >= 3) return Math.min(60, raw);
+  return raw;
+}
+
+/** Customer Service slider → occupancy multiplier (PRD E1).
+ *  Higher CS retains more passengers, lower causes leakage even at low fares. */
+export function customerServiceOccupancyMultiplier(s: Sliders): number {
+  const cs = s.customerService ?? 2;
+  return [0.92, 0.96, 1.0, 1.03, 1.06, 1.10][cs] ?? 1.0;
 }
 
 // ─── Route quarterly economics ─────────────────────────────
@@ -350,6 +362,7 @@ export function computeRouteEconomics(
   route: Route,
   quarter: number,
   fuelIndex: number,
+  rivals?: Team[],
 ): RouteEconomics {
   const origin = CITIES_BY_CODE[route.originCode];
   const dest = CITIES_BY_CODE[route.destCode];
@@ -359,9 +372,31 @@ export function computeRouteEconomics(
   const distanceKm = route.distanceKm || haversineKm(origin, dest);
   const rawDemand = routeDemandPerDay(route.originCode, route.destCode, quarter);
   const loyaltyFactor = loyaltyRetentionFactor(team.customerLoyaltyPct);
+
+  // PRD §5.4 — competitor pressure on shared markets.
+  // When rivals have hubs at our route endpoints, they capture some of the
+  // demand pool. Player's own brand strength resists this pressure.
+  let competitorPressure = 1.0;
+  if (rivals && rivals.length > 0) {
+    let pressure = 0;
+    for (const rv of rivals) {
+      const rvHubs = new Set([rv.hubCode, ...(rv.secondaryHubCodes ?? [])]);
+      // Direct-hub rival at either endpoint = strongest pressure
+      if (rvHubs.has(origin.code) || rvHubs.has(dest.code)) {
+        // Brand-weighted: a stronger rival takes a bigger bite
+        const rvAttractiveness = (rv.brandPts / 100) * 0.5 + (rv.customerLoyaltyPct / 100) * 0.5;
+        pressure += rvAttractiveness * 0.12;
+      }
+    }
+    // Player's own attractiveness mitigates the pressure
+    const ownAttractiveness =
+      (team.brandPts / 100) * 0.5 + (team.customerLoyaltyPct / 100) * 0.5;
+    competitorPressure = Math.max(0.55, 1 - pressure + ownAttractiveness * 0.15);
+  }
+
   const demand = {
     ...rawDemand,
-    total: rawDemand.total * loyaltyFactor,
+    total: rawDemand.total * loyaltyFactor * competitorPressure,
   };
 
   const planes = route.aircraftIds
@@ -375,11 +410,13 @@ export function computeRouteEconomics(
       return sum + (spec?.cargoTonnes ?? 0);
     }, 0);
     const dailyCapacityT = tonnesPerFlight * route.dailyFrequency;
-    // Cargo demand = min of the two cities' business demand (A4)
+    // Cargo demand = min of the two cities' business demand (A4).
+    // Cargo-focused doctrine adds 15% on top.
+    const cargoFocusBonus = team.marketFocus === "cargo" ? 1.15 : 1.0;
     const cargoDemandT = Math.min(
       cityBusinessAtQuarter(origin, quarter),
       cityBusinessAtQuarter(dest, quarter),
-    );
+    ) * cargoFocusBonus;
     const dailyTonnes = Math.min(dailyCapacityT, cargoDemandT);
     const occupancy = dailyCapacityT > 0 ? Math.min(0.98, dailyTonnes / dailyCapacityT) : 0;
     const pricePerTonne = distanceKm < 3000 ? 3.5 : 5.5;
@@ -431,7 +468,29 @@ export function computeRouteEconomics(
 
   // Hub attractiveness bonus (PRD E7): home carrier captures more demand
   const hubBonus = hubAttractivenessBonus(team, route.originCode, route.destCode);
-  const effectiveDemand = demand.total * hubBonus;
+  // Customer service slider amplifies retained demand (PRD E1)
+  const csMultiplier = customerServiceOccupancyMultiplier(team.sliders);
+  // Premium lounge at hub: small business/first-class demand uplift
+  const hubInv = team.hubInvestments;
+  const hasLounge =
+    hubInv?.premiumLoungeHubs?.includes(route.originCode) ||
+    hubInv?.premiumLoungeHubs?.includes(route.destCode);
+  const loungeBonus = hasLounge ? 1.04 : 1.0;
+
+  // PRD §13.2 — onboarding choices propagate as gentle demand multipliers.
+  // Match-rewarded ("focus matches the route"), but never punitive.
+  let onboardingBonus = 1.0;
+  if (team.marketFocus === "passenger" && !route.isCargo) onboardingBonus *= 1.05;
+  // Geographic priority — both endpoints in the priority region get the bump
+  const geoMatch =
+    team.geographicPriority === "global" ||
+    (team.geographicPriority === "north-america" && origin.region === "na" && dest.region === "na") ||
+    (team.geographicPriority === "europe" && origin.region === "eu" && dest.region === "eu") ||
+    (team.geographicPriority === "asia-pacific" && (origin.region === "as" || origin.region === "oc") && (dest.region === "as" || dest.region === "oc")) ||
+    (team.geographicPriority === "middle-east" && (origin.region === "me" || origin.region === "mea") && (dest.region === "me" || dest.region === "mea"));
+  if (geoMatch && team.geographicPriority !== "global") onboardingBonus *= 1.08;
+
+  const effectiveDemand = demand.total * hubBonus * csMultiplier * loungeBonus * onboardingBonus;
 
   const dailyPax = Math.min(dailyCapacity, effectiveDemand);
   const occupancy =
@@ -480,9 +539,14 @@ export function computeRouteEconomics(
       : team.flags.has("hedged_50_50")
         ? (100 / fuelIndex + 1) / 2
         : 1;
+  // Fuel reserve tank at the origin hub: 5% fuel discount on routes from there
+  const hasFuelTank =
+    team.hubInvestments?.fuelReserveTankHubs?.includes(route.originCode);
+  const fuelTankDiscount = hasFuelTank ? 0.95 : 1.0;
+
   const quarterlyFuelCost =
     totalFuelBurnPerFlight * fuelPricePerL *
-    route.dailyFrequency * QUARTER_DAYS * hedge;
+    route.dailyFrequency * QUARTER_DAYS * hedge * fuelTankDiscount;
 
   // Slot fee
   const fee = slotFeeUsd(dest.tier);
@@ -835,6 +899,8 @@ export interface QuarterCloseContext {
   baseInterestRatePct: number;
   fuelIndex: number;
   quarter: number;
+  /** Other teams (rivals) — used by route economics for competitor pressure. */
+  rivals?: Team[];
   /** Global cargo contracts active this quarter for this team (PRD E8.6). */
   cargoContracts?: Array<{
     id: string;
@@ -880,7 +946,7 @@ export function runQuarterClose(
       // First-Mover Bonus (PRD E8.8) — +20% for first 2 quarters (simplified: opening quarter + 1)
       const firstMoverBonus = ctx.quarter - r.openQuarter < 2 ? 1.20 : 1.0;
 
-      const econ = computeRouteEconomics(next, r, ctx.quarter, ctx.fuelIndex);
+      const econ = computeRouteEconomics(next, r, ctx.quarter, ctx.fuelIndex, ctx.rivals);
       const boostedRevenue = econ.quarterlyRevenue * legacyBonus * firstMoverBonus;
       revenue += boostedRevenue;
       fuelCost += econ.quarterlyFuelCost;
