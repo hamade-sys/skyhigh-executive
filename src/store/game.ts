@@ -3590,30 +3590,12 @@ export const useGame = create<GameStore>()(
         }
         state.teams = state.teams.map((t) => {
           const flags = new Set(Array.isArray(t.flags) ? t.flags : Array.from(t.flags ?? []));
-          // One-time testing grant: give Meridian Air $900M cash so the
-          // owner (Hamade) can validate aircraft purchases. Guarded by a
-          // flag so it only fires once per team — re-rehydrating doesn't
-          // double-grant. Remove this block once testing is complete.
-          let cashUsd = t.cashUsd;
-          if (
-            t.isPlayer &&
-            (t.name?.toLowerCase().includes("meridian") || t.id === "team-player") &&
-            !flags.has("testing-cash-grant-900M-applied")
-          ) {
-            cashUsd += 900_000_000;
-            flags.add("testing-cash-grant-900M-applied");
-            // Defer the toast to the next tick so the store has fully
-            // rehydrated before we touch the UI layer.
-            setTimeout(() => {
-              toast.accent(
-                "Testing cash grant: +$900M",
-                "Granted to Meridian Air for aircraft-purchase validation.",
-              );
-            }, 600);
-          }
+          // (Removed: the debug "+$900M Meridian Air cash grant" used during
+          // initial purchase-flow validation. It would otherwise fire on
+          // every fresh rehydrate of a save without that flag set.)
           return ({
           ...t,
-          cashUsd,
+          cashUsd: t.cashUsd,
           flags,
           deferredEvents: t.deferredEvents ?? [],
           rcfBalanceUsd: t.rcfBalanceUsd ?? 0,

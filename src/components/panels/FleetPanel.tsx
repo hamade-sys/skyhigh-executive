@@ -6,6 +6,7 @@ import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { AircraftMarketModal } from "@/components/game/AircraftMarketModal";
 import { PurchaseOrderModal } from "@/components/game/PurchaseOrderModal";
 import { useGame, selectPlayer } from "@/store/game";
+import { toast } from "@/store/toasts";
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -110,9 +111,10 @@ export function FleetPanel() {
   }) {
     const r = s.orderAircraft(args);
     if (!r.ok) {
-      // Surface the error inline AND keep the order modal open so the
-      // player can adjust quantity/upgrades and retry.
-      alert(r.error ?? "Order failed");
+      // Surface the error via toast (replaces blocking native alert)
+      // and keep the order modal open so the player can adjust
+      // quantity/upgrades and retry without losing their config.
+      toast.negative("Order failed", r.error ?? "Could not place this order. Adjust quantity or upgrades and try again.");
       return;
     }
     setOrdering(null);
@@ -288,7 +290,7 @@ export function FleetPanel() {
                       variant="primary"
                       onClick={() => {
                         const r = s.buySecondHand(l.id);
-                        if (!r.ok) alert(r.error);
+                        if (!r.ok) toast.negative("Purchase failed", r.error ?? "Couldn't acquire this listing.");
                       }}
                     >
                       Buy {fmtMoney(l.askingPriceUsd)}
@@ -425,7 +427,7 @@ export function FleetPanel() {
                                   try {
                                     const cost = expanded.ecoUpgradeUsd ?? 0;
                                     if (cost <= 0) {
-                                      alert("This aircraft cannot be eco-retrofitted (no upgrade cost configured).");
+                                      toast.warning("Eco retrofit unavailable", "This aircraft has no upgrade cost configured.");
                                       return;
                                     }
                                     const ok = confirm(
@@ -436,10 +438,10 @@ export function FleetPanel() {
                                     );
                                     if (!ok) return;
                                     const r = s.addEcoUpgrade(f.id);
-                                    if (!r.ok) alert(r.error ?? "Upgrade failed");
+                                    if (!r.ok) toast.negative("Upgrade failed", r.error ?? "Could not apply eco retrofit.");
                                   } catch (err) {
                                     console.error("Eco upgrade failed:", err);
-                                    alert("Eco upgrade failed: " + (err instanceof Error ? err.message : String(err)));
+                                    toast.negative("Eco upgrade failed", err instanceof Error ? err.message : String(err));
                                   }
                                 }}
                               >
@@ -462,11 +464,11 @@ export function FleetPanel() {
                                   if (!choice) return;
                                   const k = choice.trim().toLowerCase();
                                   if (k !== "fuel" && k !== "power" && k !== "super") {
-                                    alert(`Unknown engine type "${k}". Use fuel, power, or super.`);
+                                    toast.warning("Unknown engine type", `"${k}" — use fuel, power, or super.`);
                                     return;
                                   }
                                   const r = s.retrofitEngine(f.id, k);
-                                  if (!r.ok) alert(r.error ?? "Retrofit failed");
+                                  if (!r.ok) toast.negative("Retrofit failed", r.error ?? "Could not apply engine retrofit.");
                                 }}
                               >
                                 Engine
@@ -484,7 +486,7 @@ export function FleetPanel() {
                                   );
                                   if (!ok) return;
                                   const r = s.retrofitFuselage(f.id);
-                                  if (!r.ok) alert(r.error ?? "Retrofit failed");
+                                  if (!r.ok) toast.negative("Retrofit failed", r.error ?? "Could not apply fuselage coating.");
                                 }}
                               >
                                 Fuselage
@@ -511,7 +513,7 @@ export function FleetPanel() {
                                     `Effect: per-plane satisfaction restored.`,
                                   )) return;
                                   const r = s.quickServiceAircraft(f.id);
-                                  if (!r.ok) alert(r.error ?? "Quick Service failed");
+                                  if (!r.ok) toast.negative("Quick Service failed", r.error ?? "Could not service this aircraft.");
                                 }}
                               >
                                 Quick svc
@@ -537,7 +539,7 @@ export function FleetPanel() {
                                     `Effect: +8Q lifespan, satisfaction reset, cabin reconfigurable.`,
                                   )) return;
                                   const r = s.renovateAircraft(f.id, f.cabinConfig);
-                                  if (!r.ok) alert(r.error ?? "Renovation failed");
+                                  if (!r.ok) toast.negative("Renovation failed", r.error ?? "Could not renovate this aircraft.");
                                 }}
                               >
                                 Full reno
@@ -555,7 +557,7 @@ export function FleetPanel() {
                                   const price = parseInt(ps, 10);
                                   if (!Number.isFinite(price)) return;
                                   const r = s.listSecondHand(f.id, price);
-                                  if (!r.ok) alert(r.error);
+                                  if (!r.ok) toast.negative("Listing failed", r.error ?? "Could not list this aircraft for sale.");
                                 }}
                               >
                                 Sell
