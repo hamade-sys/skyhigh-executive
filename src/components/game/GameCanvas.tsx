@@ -70,15 +70,22 @@ function CanvasInner() {
   const [launchOpen, setLaunchOpen] = useState(false);
 
   function handleCityClick(c: City) {
-    // No origin yet: select it
+    // No origin yet: select it (highlighted yellow on the map).
     if (!origin) return setOrigin(c.code);
-    // Clicked the same origin: deselect
+    // Clicked the same origin: deselect.
     if (c.code === origin) { setOrigin(null); setDest(null); return; }
-    // Origin set and new city picked: set as destination (modal opens)
-    if (!dest) return setDest(c.code);
-    // Otherwise restart with new origin
+    // Origin set, new city clicked: set as destination AND auto-open the
+    // route setup modal so the player goes straight from the second click
+    // into managing the new route.
+    if (!dest) {
+      setDest(c.code);
+      setLaunchOpen(true);
+      return;
+    }
+    // Otherwise restart with the new origin.
     setOrigin(c.code);
     setDest(null);
+    setLaunchOpen(false);
   }
 
   useEffect(() => {

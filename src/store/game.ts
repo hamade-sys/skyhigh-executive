@@ -1925,6 +1925,13 @@ export const useGame = create<GameStore>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+        // If we crashed mid-close last session, the phase will be "quarter-closing"
+        // but lastCloseResult isn't persisted — surface no-op modal won't open and
+        // the user thinks the UI is frozen. Force back to "playing" so buttons work.
+        if (state.phase === "quarter-closing") {
+          state.phase = "playing";
+          state.lastCloseResult = null;
+        }
         if (!state.cargoContracts) state.cargoContracts = [];
         state.teams = state.teams.map((t) => ({
           ...t,

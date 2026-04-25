@@ -263,15 +263,26 @@ export function WorldMap({
 
           // Cool warm-white for unconnected cities so they're clearly visible
           // on top of the satellite imagery without competing with the team
-          // colour for hubs/network.
-          const fillColor = isHub || isSecondaryHub || inNetwork ? team.color : "#fef9ec";
+          // colour for hubs/network. Selected cities flash YELLOW so the
+          // origin pick is obvious before the route detail modal opens.
+          const fillColor = isSelected
+            ? "#fde047"  // amber-300 — high-contrast selection state
+            : isHub || isSecondaryHub || inNetwork
+              ? team.color
+              : "#fef9ec";
           const fillOpacity = 1.0;
-          const strokeColor = isHub || isSecondaryHub
-            ? "#ffffff"
-            : inNetwork
+          const strokeColor = isSelected
+            ? "#ca8a04"  // amber-600 — ring around the yellow fill
+            : isHub || isSecondaryHub
               ? "#ffffff"
-              : "#1a1a1a";
-          const strokeWeight = isHub ? 2.5 : isSecondaryHub ? 2 : inNetwork ? 1.8 : 1.4;
+              : inNetwork
+                ? "#ffffff"
+                : "#1a1a1a";
+          const strokeWeight = isSelected
+            ? 3
+            : isHub ? 2.5 : isSecondaryHub ? 2 : inNetwork ? 1.8 : 1.4;
+          // Bump the radius on selection so it really pops on the map
+          const finalRadius = isSelected ? Math.max(radius + 3, 9) : radius;
 
           // Every city shows its name; size + emphasis scales by tier and network status.
           const isNetworkAirport = isHub || isSecondaryHub || inNetwork;
@@ -280,13 +291,13 @@ export function WorldMap({
             <CircleMarker
               key={c.code}
               center={[c.lat, c.lon]}
-              radius={radius}
+              radius={finalRadius}
               pathOptions={{
                 color: strokeColor,
                 fillColor,
                 fillOpacity,
                 weight: strokeWeight,
-                className: "sf-city-dot",
+                className: cn("sf-city-dot", isSelected && "sf-city-selected"),
               }}
               eventHandlers={{
                 click: () => onCityClick?.(c),
