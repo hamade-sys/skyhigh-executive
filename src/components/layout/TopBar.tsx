@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { computeAirlineValue, brandRating } from "@/lib/engine";
 import { QuarterTimerChip } from "@/components/game/QuarterTimer";
 import { HelpModal } from "@/components/game/HelpModal";
+import { NotificationCenter } from "@/components/game/NotificationCenter";
 import { Button } from "@/components/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { HelpCircle } from "lucide-react";
@@ -91,6 +92,7 @@ export function TopBar() {
           </span>
         </div>
         <QuarterTimerChip />
+        <NotificationCenter />
         <button
           onClick={() => setHelpOpen(true)}
           aria-label="Help &amp; reference"
