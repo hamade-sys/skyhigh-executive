@@ -351,6 +351,8 @@ function RouteDetailModal({
         {/* Why this performance — multipliers breakdown */}
         <DemandBreakdown route={route} player={player} />
 
+        {/* Competitors on this OD pair */}
+        <CompetitorsTable route={route} />
 
         {/* Pricing tier */}
         <div>
@@ -500,6 +502,126 @@ function RouteDetailModal({
         </div>
       </ModalFooter>
     </Modal>
+  );
+}
+
+function CompetitorsTable({
+  route,
+}: {
+  route: NonNullable<ReturnType<typeof selectPlayer>>["routes"][number];
+}) {
+  const teams = useGame((state) => state.teams);
+  const player = useGame(selectPlayer);
+  if (!player) return null;
+  // Find rivals flying the same OD pair (either direction)
+  const rivals = teams
+    .filter((t) => !t.isPlayer)
+    .map((rv) => {
+      const matchingRoute = rv.routes.find(
+        (r) =>
+          r.status === "active" &&
+          ((r.originCode === route.originCode && r.destCode === route.destCode) ||
+            (r.originCode === route.destCode && r.destCode === route.originCode)),
+      );
+      return matchingRoute ? { team: rv, route: matchingRoute } : null;
+    })
+    .filter((x): x is { team: typeof teams[0]; route: typeof route } => !!x);
+
+  return (
+    <details className="rounded-md border border-line">
+      <summary className="px-3 py-2 cursor-pointer text-[0.625rem] uppercase tracking-wider font-semibold text-ink-2 hover:bg-surface-hover flex items-center justify-between">
+        <span>Competitors on this route</span>
+        <span className="tabular text-ink-muted">
+          {rivals.length === 0 ? "Uncontested" : `${rivals.length} airline${rivals.length > 1 ? "s" : ""}`}
+        </span>
+      </summary>
+      {rivals.length === 0 ? (
+        <div className="p-3 text-[0.75rem] text-ink-muted leading-relaxed border-t border-line">
+          No other airlines fly this OD pair right now. You have first-mover
+          advantage on demand capture.
+        </div>
+      ) : (
+        <table className="w-full text-[0.75rem] border-t border-line">
+          <thead>
+            <tr className="bg-surface-2">
+              <th className="text-left px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Airline</th>
+              <th className="text-left px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Aircraft</th>
+              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Sch/wk</th>
+              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Tier</th>
+              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Load</th>
+              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Q profit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Always include the player's own row at the top for comparison */}
+            <tr className="border-t border-line bg-[var(--accent-soft)]/30">
+              <td className="px-2 py-1.5">
+                <span
+                  className="inline-block w-4 h-4 rounded-sm align-middle mr-1.5"
+                  style={{ background: player.color }}
+                />
+                <span className="font-semibold text-ink">{player.name}</span>
+                <span className="ml-1 text-[0.6875rem] text-accent uppercase tracking-wider font-bold">YOU</span>
+              </td>
+              <td className="px-2 py-1.5 font-mono text-ink-2">
+                {(() => {
+                  const planeId = route.aircraftIds[0];
+                  const plane = planeId ? player.fleet.find((f) => f.id === planeId) : undefined;
+                  return plane ? plane.specId : "—";
+                })()}
+              </td>
+              <td className="px-2 py-1.5 text-right tabular font-mono text-ink">{route.dailyFrequency * 7}</td>
+              <td className="px-2 py-1.5 text-right text-[0.6875rem] capitalize">{route.pricingTier}</td>
+              <td className={cn(
+                "px-2 py-1.5 text-right tabular font-mono",
+                route.avgOccupancy > 0.7 ? "text-positive" :
+                route.avgOccupancy > 0 && route.avgOccupancy < 0.5 ? "text-negative" : "text-ink",
+              )}>
+                {fmtPct(route.avgOccupancy * 100, 0)}
+              </td>
+              <td className={cn(
+                "px-2 py-1.5 text-right tabular font-mono font-medium",
+                (route.quarterlyRevenue - route.quarterlyFuelCost - route.quarterlySlotCost) >= 0 ? "text-positive" : "text-negative",
+              )}>
+                {fmtMoney(route.quarterlyRevenue - route.quarterlyFuelCost - route.quarterlySlotCost)}
+              </td>
+            </tr>
+            {rivals.map(({ team, route: r }) => {
+              const planeId = r.aircraftIds[0];
+              const plane = planeId ? team.fleet.find((f) => f.id === planeId) : undefined;
+              const profit = r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost;
+              return (
+                <tr key={team.id} className="border-t border-line">
+                  <td className="px-2 py-1.5">
+                    <span
+                      className="inline-block w-4 h-4 rounded-sm align-middle mr-1.5"
+                      style={{ background: team.color }}
+                    />
+                    <span className="text-ink-2 truncate">{team.name}</span>
+                  </td>
+                  <td className="px-2 py-1.5 font-mono text-ink-muted">{plane?.specId ?? "—"}</td>
+                  <td className="px-2 py-1.5 text-right tabular font-mono text-ink-2">{r.dailyFrequency * 7}</td>
+                  <td className="px-2 py-1.5 text-right text-[0.6875rem] capitalize text-ink-muted">{r.pricingTier}</td>
+                  <td className={cn(
+                    "px-2 py-1.5 text-right tabular font-mono",
+                    r.avgOccupancy > 0.7 ? "text-positive" :
+                    r.avgOccupancy > 0 && r.avgOccupancy < 0.5 ? "text-negative" : "text-ink-2",
+                  )}>
+                    {fmtPct(r.avgOccupancy * 100, 0)}
+                  </td>
+                  <td className={cn(
+                    "px-2 py-1.5 text-right tabular font-mono",
+                    profit >= 0 ? "text-positive" : "text-negative",
+                  )}>
+                    {fmtMoney(profit)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </details>
   );
 }
 

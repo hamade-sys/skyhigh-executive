@@ -453,6 +453,73 @@ export const useGame = create<GameStore>()(
             loyalty: r.customerLoyaltyPct,
             brandValue: r.brandValue,
           }];
+
+          // Plausible rival route network — 4-6 destinations from their hub
+          // to other major cities. Used for per-route competitor display
+          // and for the engine's competitor-pressure factor.
+          const RIVAL_DESTINATIONS: Record<string, string[]> = {
+            SIN: ["HKG", "BKK", "KUL", "BOM", "SYD", "NRT"],
+            LHR: ["JFK", "DXB", "CDG", "FRA", "HKG", "LAX"],
+            DXB: ["LHR", "JFK", "NRT", "BOM", "CDG", "JNB"],
+            NRT: ["HKG", "SIN", "LAX", "SFO", "ICN", "PVG"],
+            CPH: ["ARN", "OSL", "LHR", "JFK", "FRA"],
+            JNB: ["LHR", "DXB", "NBO", "CDG"],
+            GRU: ["EZE", "MIA", "LIM", "JFK", "CDG"],
+            HKG: ["NRT", "SIN", "BKK", "PVG", "SYD", "LAX"],
+            ORD: ["JFK", "LAX", "SFO", "LHR", "CDG", "FRA"],
+          };
+          const dests = (RIVAL_DESTINATIONS[hub] ?? ["JFK", "LHR", "SIN", "DXB"]).slice(0, 4 + (i % 3));
+          // Assign a single workhorse aircraft per rival route
+          const rivalSpec = doctrine === "premium-service" ? "B777-200ER"
+            : doctrine === "cargo-dominance" ? "B767-300F"
+            : doctrine === "budget-expansion" ? "A320"
+            : "A330-200";
+          const rivalSpecPrice = AIRCRAFT_BY_ID[rivalSpec]?.buyPriceUsd ?? 30_000_000;
+          for (const destCode of dests) {
+            const destCity = CITIES_BY_CODE[destCode];
+            if (!destCity) continue;
+            const dist = distanceBetween(hub, destCode);
+            const planeId = mkId("ac");
+            r.fleet.push({
+              id: planeId, specId: rivalSpec, status: "active",
+              acquisitionType: "buy", purchaseQuarter: 1,
+              purchasePrice: rivalSpecPrice, bookValue: rivalSpecPrice * 0.9,
+              leaseQuarterly: null, ecoUpgrade: false,
+              ecoUpgradeQuarter: null, ecoUpgradeCost: 0,
+              cabinConfig: "default", routeId: null,
+              retirementQuarter: 1 + 16,
+              maintenanceDeficit: 0, satisfactionPct: 70,
+            });
+            const dailyFreq = doctrine === "budget-expansion" ? 4
+              : doctrine === "premium-service" ? 2 : 3;
+            const tier = doctrine === "premium-service" ? "premium" as const
+              : doctrine === "budget-expansion" ? "budget" as const
+              : "standard" as const;
+            const isCargo = doctrine === "cargo-dominance";
+            const route = {
+              id: mkId("route"),
+              originCode: hub,
+              destCode,
+              distanceKm: dist,
+              aircraftIds: [planeId],
+              dailyFrequency: dailyFreq,
+              pricingTier: tier,
+              econFare: null, busFare: null, firstFare: null,
+              status: "active" as const,
+              openQuarter: 1,
+              avgOccupancy: 0.55 + Math.random() * 0.25,
+              quarterlyRevenue: dailyFreq * 7 * (isCargo ? 100_000 : 250_000),
+              quarterlyFuelCost: dailyFreq * 7 * 30_000,
+              quarterlySlotCost: dailyFreq * 7 * 12_000,
+              isCargo,
+              consecutiveQuartersActive: 1,
+              consecutiveLosingQuarters: 0,
+            };
+            r.routes.push(route);
+            // Link aircraft to route
+            const planeIdx = r.fleet.findIndex((f) => f.id === planeId);
+            if (planeIdx >= 0) r.fleet[planeIdx].routeId = route.id;
+          }
           rivals.push(r);
         }
 
