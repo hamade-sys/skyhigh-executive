@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Plane,
   Route as RouteIcon,
@@ -71,6 +71,21 @@ export function NavRail() {
   const expanded = useUi((s) => s.railExpanded);
   const toggleRail = useUi((s) => s.toggleRail);
   const [newsExpanded, setNewsExpanded] = useState(false);
+  // Rotating ticker — cycles through current quarter's news every 60s so
+  // a player who isn't reading the panel still passively sees what's
+  // happening this quarter. Resets when the quarter changes.
+  const [tickerIndex, setTickerIndex] = useState(0);
+  useEffect(() => {
+    setTickerIndex(0);
+  }, [currentQuarter]);
+  useEffect(() => {
+    const items = NEWS_BY_QUARTER[currentQuarter] ?? [];
+    if (items.length <= 1) return;
+    const id = setInterval(() => {
+      setTickerIndex((i) => (i + 1) % items.length);
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [currentQuarter]);
 
   const pendingDecisions =
     (SCENARIOS_BY_QUARTER[currentQuarter] ?? []).filter(
@@ -203,6 +218,34 @@ export function NavRail() {
           </>
         )}
       </div>
+
+      {/* Rotating ticker — always shows ONE current-quarter headline at
+          a time, cycling every 60s. Helps a passive player see what's
+          happening this quarter without opening the panel. */}
+      {expanded && (() => {
+        const currentItems = NEWS_BY_QUARTER[currentQuarter] ?? [];
+        if (currentItems.length === 0) return null;
+        const item = currentItems[tickerIndex % currentItems.length];
+        return (
+          <button
+            onClick={() => useUi.getState().openPanel("news")}
+            className="border-t border-line bg-[var(--accent-soft)]/40 hover:bg-[var(--accent-soft)] px-3 py-2 text-left transition-colors"
+            title="Click to read this quarter's full news"
+          >
+            <div className="flex items-baseline justify-between mb-0.5">
+              <span className="text-[0.5625rem] uppercase tracking-[0.18em] font-bold text-accent">
+                {outletFor(item)} · live
+              </span>
+              <span className="text-[0.5625rem] tabular font-mono text-ink-muted">
+                {tickerIndex + 1}/{currentItems.length}
+              </span>
+            </div>
+            <h3 className="text-[0.6875rem] font-medium text-ink leading-snug line-clamp-2">
+              {item.headline}
+            </h3>
+          </button>
+        );
+      })()}
 
       {/* World news ticker — at the BOTTOM, past + current only,
           fake-outlet labels, headline only (no mechanics detail).

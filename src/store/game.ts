@@ -165,6 +165,18 @@ export interface GameStore extends GameState {
    *  switch. Pure UI helper — does not modify any team's data. */
   setActiveTeam(teamId: string): void;
 
+  /** Facilitator: generate a 4-digit join code and reserve N seats for
+   *  players. Each seat is unclaimed until a player visits /join. Wipes
+   *  any previous session. */
+  startFacilitatedSession(seatCount: number): { code: string };
+  /** Player: join an active session with code + company name. Claims an
+   *  unbound seat, creates a team for them, and pivots playerTeamId. */
+  joinSessionWithCode(args: {
+    code: string;
+    companyName: string;
+    hubCode: string;
+  }): { ok: boolean; error?: string };
+
   addSecondaryHub(cityCode: string): { ok: boolean; error?: string };
   removeSecondaryHub(cityCode: string): void;
   claimFlashDeal(count: number): { ok: boolean; error?: string };
@@ -388,6 +400,8 @@ export const useGame = create<GameStore>()(
       secondHandListings: [],
       cargoContracts: [],
       airportSlots: {},
+      sessionCode: null,
+      sessionSlots: [],
 
       startNewGame: (args) => {
         const {
@@ -2020,6 +2034,128 @@ export const useGame = create<GameStore>()(
         set({ playerTeamId: teamId });
       },
 
+      startFacilitatedSession: (seatCount) => {
+        // 4-digit code, leading zeros allowed (e.g. "0421")
+        const code = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+        const safeSeatCount = Math.max(2, Math.min(10, Math.floor(seatCount)));
+        set({
+          sessionCode: code,
+          sessionSlots: Array.from({ length: safeSeatCount }, () => ({
+            id: mkId("seat"),
+            claimed: false,
+            teamId: null,
+            companyName: null,
+          })),
+        });
+        toast.accent(
+          `Session code: ${code}`,
+          `Share with ${safeSeatCount} player${safeSeatCount === 1 ? "" : "s"}. They join via /join.`,
+        );
+        return { code };
+      },
+
+      joinSessionWithCode: ({ code, companyName, hubCode }) => {
+        const s = get();
+        if (!s.sessionCode || s.sessionCode !== code.trim()) {
+          return { ok: false, error: "Code doesn't match the active session." };
+        }
+        if (!companyName.trim()) {
+          return { ok: false, error: "Pick a company name." };
+        }
+        const seat = s.sessionSlots.find((x) => !x.claimed);
+        if (!seat) {
+          return { ok: false, error: "All seats already claimed for this session." };
+        }
+        if (!CITIES_BY_CODE[hubCode]) {
+          return { ok: false, error: "Pick a valid hub airport." };
+        }
+        // Claim the seat: create a team for this company and bind it.
+        // We re-use the existing initial-team setup (cash, slots, fleet
+        // etc.) by piggybacking on the startGame action's spec so the
+        // joining player gets the same starting position as a solo run.
+        const teamId = mkId("team");
+        const code2 = companyName.trim().slice(0, 3).toUpperCase().padEnd(3, "X");
+        const newTeam: Team = {
+          id: teamId,
+          name: companyName.trim(),
+          code: code2,
+          color: ["#1E6B5C", "#2B6B88", "#7A4B2E", "#C38A1E", "#4A6480", "#9A7D3D", "#C23B1F", "#6B5F88", "#4B7A2E", "#2E5C7A"][s.teams.length % 10],
+          isPlayer: true,
+          hubCode,
+          secondaryHubCodes: [],
+          doctrine: "premium-service",
+          tagline: "",
+          marketFocus: "balanced",
+          geographicPriority: "global",
+          pricingPhilosophy: "standard",
+          salaryPhilosophy: "at",
+          marketingLevel: "medium",
+          csrTheme: "none",
+          cashUsd: 150_000_000,
+          totalDebtUsd: 0,
+          rcfBalanceUsd: 0,
+          loans: [],
+          taxLossCarryForward: [],
+          insurancePolicy: "none",
+          fleet: [],
+          routes: [],
+          decisions: [],
+          deferredEvents: [],
+          flags: new Set(),
+          financialsByQuarter: [],
+          brandPts: 50,
+          opsPts: 50,
+          customerLoyaltyPct: 50,
+          brandValue: 50,
+          fuelTanks: { small: 0, medium: 0, large: 0 },
+          fuelStorageLevelL: 0,
+          fuelStorageAvgCostPerL: 0,
+          slotsByAirport: { [hubCode]: 50 },
+          airportLeases: { [hubCode]: { slots: 50, totalWeeklyCost: 0 } },
+          pendingSlotBids: [],
+          cargoStorageActivations: [hubCode],
+          hubInvestments: {
+            fuelReserveTankHubs: [],
+            maintenanceDepotHubs: [],
+            premiumLoungeHubs: [],
+            opsExpansionSlots: 0,
+          },
+          labourRelationsScore: 50,
+          milestones: [],
+          consecutiveProfitableQuarters: 0,
+          sliders: {
+            staff: 2, marketing: 2, service: 2, rewards: 2, operations: 2, customerService: 2,
+          },
+          sliderStreaks: {
+            staff:           { level: 2, quarters: 0 },
+            marketing:       { level: 2, quarters: 0 },
+            service:         { level: 2, quarters: 0 },
+            rewards:         { level: 2, quarters: 0 },
+            operations:      { level: 2, quarters: 0 },
+            customerService: { level: 2, quarters: 0 },
+          },
+          members: [
+            { role: "CEO", name: "CEO", mvpPts: 0, cards: [] },
+            { role: "CFO", name: "CFO", mvpPts: 0, cards: [] },
+            { role: "CMO", name: "CMO", mvpPts: 0, cards: [] },
+            { role: "CHRO", name: "CHRO", mvpPts: 0, cards: [] },
+          ],
+        };
+        set({
+          teams: [...s.teams, newTeam],
+          playerTeamId: teamId,
+          sessionSlots: s.sessionSlots.map((x) =>
+            x.id === seat.id ? { ...x, claimed: true, teamId, companyName: companyName.trim() } : x,
+          ),
+          phase: s.phase === "idle" ? "playing" : s.phase,
+        });
+        toast.success(
+          `Welcome, ${newTeam.name}`,
+          `You're in seat ${s.sessionSlots.findIndex((x) => x.id === seat.id) + 1} of ${s.sessionSlots.length}. Hub ${hubCode}.`,
+        );
+        return { ok: true };
+      },
+
       resetGame: () => {
         set({
           phase: "idle",
@@ -2840,6 +2976,8 @@ export const useGame = create<GameStore>()(
         secondHandListings: s.secondHandListings,
         cargoContracts: s.cargoContracts,
         airportSlots: s.airportSlots,
+        sessionCode: s.sessionCode,
+        sessionSlots: s.sessionSlots,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;

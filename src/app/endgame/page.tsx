@@ -170,6 +170,154 @@ export default function Endgame() {
           </Card>
         )}
 
+        {/* Multi-airline trajectory chart — every team's airline value
+            quarter by quarter so the room can see how the field
+            converged or diverged across the 20-quarter window. */}
+        {ranked.length > 0 && (
+          <Card className="mb-6">
+            <CardBody>
+              <div className="flex items-baseline justify-between mb-3">
+                <h2 className="font-display text-[1.5rem] text-ink">
+                  Airline value · Q1 → Q20
+                </h2>
+                <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                  All teams
+                </span>
+              </div>
+              <MultiAirlineChart teams={ranked} />
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Final standings — every team ranked by final airline value */}
+        {ranked.length > 1 && (
+          <Card className="mb-6">
+            <CardBody>
+              <h2 className="font-display text-[1.5rem] text-ink mb-3">
+                Final standings
+              </h2>
+              <div className="space-y-1.5">
+                {ranked.map((t, i) => (
+                  <div
+                    key={t.id}
+                    className={`flex items-center gap-3 rounded-md border p-2.5 ${
+                      t.id === player.id
+                        ? "border-primary bg-[rgba(20,53,94,0.04)]"
+                        : "border-line bg-surface"
+                    }`}
+                  >
+                    <span className="font-mono text-[0.875rem] text-ink-muted w-6 tabular text-center">
+                      #{i + 1}
+                    </span>
+                    <span
+                      className="inline-block w-7 h-7 rounded flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg shrink-0"
+                      style={{ background: t.color }}
+                    >
+                      {t.code}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[0.9375rem] truncate ${t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}`}>
+                          {t.name}
+                        </span>
+                        {t.id === player.id && <Badge tone="primary">You</Badge>}
+                        {i === 0 && <Badge tone="accent">Winner</Badge>}
+                      </div>
+                      <div className="text-[0.6875rem] text-ink-muted font-mono">
+                        Hub {t.hubCode} · {t.routes.filter((r) => r.status === "active").length} routes · {t.fleet.filter((f) => f.status === "active").length} aircraft
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-display text-[1.125rem] text-ink leading-none tabular">
+                        {fmtMoney(t.finalAirlineValue)}
+                      </div>
+                      <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                        Brand {brandRating(t).grade}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Fun facts — quirky stats from the player's 20 quarters */}
+        {(() => {
+          const facts: Array<{ label: string; value: string }> = [];
+          // Most-flown route
+          const routesByRev = [...player.routes].sort(
+            (a, b) => b.quarterlyRevenue - a.quarterlyRevenue,
+          );
+          if (routesByRev.length > 0 && routesByRev[0].quarterlyRevenue > 0) {
+            facts.push({
+              label: "Top revenue route at endgame",
+              value: `${routesByRev[0].originCode} → ${routesByRev[0].destCode} · ${fmtMoney(routesByRev[0].quarterlyRevenue)}/Q`,
+            });
+          }
+          // Total quarters played
+          facts.push({
+            label: "Quarters operated",
+            value: `${player.financialsByQuarter.length} of 20`,
+          });
+          // Total decisions
+          if (player.decisions.length > 0) {
+            facts.push({
+              label: "Boardroom decisions submitted",
+              value: `${player.decisions.length}`,
+            });
+          }
+          // Best brand value peak
+          const peakBV = Math.max(...player.financialsByQuarter.map((q) => q.brandValue));
+          const peakBVRow = player.financialsByQuarter.find((q) => q.brandValue === peakBV);
+          if (peakBVRow) {
+            facts.push({
+              label: "Peak Brand Rating quarter",
+              value: `${brandRating({ ...player, brandPts: peakBVRow.brandPts ?? player.brandPts }).grade} at Q${peakBVRow.quarter}`,
+            });
+          }
+          // Total revenue
+          const totalRev = player.financialsByQuarter.reduce((s, q) => s + q.revenue, 0);
+          facts.push({
+            label: "Lifetime revenue",
+            value: fmtMoney(totalRev),
+          });
+          // Aircraft acquired
+          facts.push({
+            label: "Aircraft in fleet at endgame",
+            value: `${player.fleet.filter((f) => f.status !== "retired").length} active · ${player.fleet.filter((f) => f.status === "retired").length} retired`,
+          });
+          // Network reach
+          const uniqueCities = new Set<string>();
+          for (const r of player.routes) {
+            if (r.status !== "closed") {
+              uniqueCities.add(r.originCode);
+              uniqueCities.add(r.destCode);
+            }
+          }
+          facts.push({
+            label: "Cities served",
+            value: `${uniqueCities.size}`,
+          });
+          return (
+            <Card className="mb-6">
+              <CardBody>
+                <h2 className="font-display text-[1.5rem] text-ink mb-3">
+                  Fun facts
+                </h2>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  {facts.map((f) => (
+                    <div key={f.label} className="flex items-baseline justify-between border-b border-line py-1.5">
+                      <span className="text-[0.8125rem] text-ink-muted">{f.label}</span>
+                      <span className="text-[0.875rem] tabular font-mono text-ink font-medium">{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardBody>
+            </Card>
+          );
+        })()}
+
         {/* Career arc — brand value trajectory across all 20 quarters */}
         {player.financialsByQuarter.length >= 2 && (
           <Card className="mb-6">
@@ -433,6 +581,99 @@ function ArcSpark({ label, values, color }: { label: string; values: number[]; c
               : values[values.length - 1].toFixed(1))
           : "—"}
       </span>
+    </div>
+  );
+}
+
+function MultiAirlineChart({ teams }: { teams: Array<{ id: string; name: string; code: string; color: string; financialsByQuarter: Array<{ quarter: number; cash: number; debt: number; brandValue: number }> }> }) {
+  const W = 720;
+  const H = 240;
+  const padL = 60;
+  const padR = 12;
+  const padT = 10;
+  const padB = 30;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+
+  // Compute series — airline value approximated as cash - debt + 100 * brandValue
+  // (matches computeAirlineValue ordering without recomputing here).
+  const series = teams.map((t) => {
+    const points: Array<{ q: number; v: number }> = [];
+    for (const f of t.financialsByQuarter) {
+      points.push({ q: f.quarter, v: f.cash - f.debt + f.brandValue * 1_000_000 });
+    }
+    return { team: t, points };
+  });
+
+  const allValues = series.flatMap((s) => s.points.map((p) => p.v));
+  const yMin = allValues.length > 0 ? Math.min(0, ...allValues) : 0;
+  const yMax = allValues.length > 0 ? Math.max(1, ...allValues) : 1;
+  const yRange = yMax - yMin || 1;
+
+  const x = (q: number) => padL + ((q - 1) / 19) * innerW;
+  const y = (v: number) => padT + innerH - ((v - yMin) / yRange) * innerH;
+
+  // Y-axis ticks
+  const yTicks = [yMin, yMin + yRange * 0.25, yMin + yRange * 0.5, yMin + yRange * 0.75, yMax];
+
+  return (
+    <div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block">
+        {/* Y gridlines */}
+        {yTicks.map((tickVal, i) => {
+          const ty = y(tickVal);
+          return (
+            <g key={i}>
+              <line x1={padL} y1={ty} x2={W - padR} y2={ty} stroke="var(--line)" strokeWidth="0.5" />
+              <text x={padL - 6} y={ty + 3} textAnchor="end" fontSize="9" fill="var(--ink-muted)" className="font-mono tabular">
+                {Math.abs(tickVal) >= 1_000_000_000
+                  ? `$${(tickVal / 1_000_000_000).toFixed(1)}B`
+                  : Math.abs(tickVal) >= 1_000_000
+                    ? `$${(tickVal / 1_000_000).toFixed(0)}M`
+                    : `$${tickVal.toFixed(0)}`}
+              </text>
+            </g>
+          );
+        })}
+        {/* X-axis labels (Q1, Q5, Q10, Q15, Q20) */}
+        {[1, 5, 10, 15, 20].map((q) => (
+          <text key={q} x={x(q)} y={H - padB + 14} textAnchor="middle" fontSize="9" fill="var(--ink-muted)" className="font-mono tabular">
+            Q{q}
+          </text>
+        ))}
+        {/* X-axis baseline */}
+        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="var(--line)" strokeWidth="1" />
+
+        {/* One polyline per team */}
+        {series.map(({ team, points }) => {
+          if (points.length < 2) return null;
+          const d = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.q).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
+          return (
+            <g key={team.id}>
+              <path d={d} stroke={team.color} strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+              {/* End-point marker */}
+              {points.length > 0 && (() => {
+                const last = points[points.length - 1];
+                return <circle cx={x(last.q)} cy={y(last.v)} r="3" fill={team.color} />;
+              })()}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 px-2">
+        {teams.map((t) => (
+          <div key={t.id} className="flex items-center gap-1.5 text-[0.75rem]">
+            <span
+              className="inline-block w-3 h-3 rounded-sm"
+              style={{ background: t.color }}
+            />
+            <span className="font-mono text-ink-muted">{t.code}</span>
+            <span className="text-ink-2">{t.name}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

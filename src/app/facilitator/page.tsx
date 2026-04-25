@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Badge, Button, Card, CardBody } from "@/components/ui";
+import { Badge, Button, Card, CardBody, Input } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
 import { AdminPanel } from "@/components/panels/AdminPanel";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { computeAirlineValue, brandRating, fleetCount } from "@/lib/engine";
 import { cn } from "@/lib/cn";
-import { ArrowLeft, Plane, Users, Settings2, Trophy } from "lucide-react";
+import { ArrowLeft, Plane, Users, Settings2, Trophy, Key } from "lucide-react";
 import type { Team } from "@/types/game";
 
 /**
@@ -27,26 +27,7 @@ export default function FacilitatorPage() {
   const player = selectPlayer(s);
   const setActiveTeam = useGame((g) => g.setActiveTeam);
 
-  const [section, setSection] = useState<"teams" | "admin" | "leaderboard">("teams");
-
-  if (s.teams.length === 0) {
-    return (
-      <main className="flex-1 flex items-center justify-center px-8 py-16">
-        <Card className="max-w-md">
-          <CardBody>
-            <h1 className="font-display text-[1.5rem] text-ink mb-2">No active simulation</h1>
-            <p className="text-ink-2 text-[0.875rem] leading-relaxed mb-4">
-              The facilitator console manages a running simulation. Set up
-              the players first via onboarding.
-            </p>
-            <Link href="/onboarding" className="inline-block">
-              <Button variant="primary">Start a new simulation →</Button>
-            </Link>
-          </CardBody>
-        </Card>
-      </main>
-    );
-  }
+  const [section, setSection] = useState<"teams" | "admin" | "leaderboard" | "session">("session");
 
   return (
     <main className="flex-1 flex flex-col bg-surface-2/30">
@@ -79,6 +60,13 @@ export default function FacilitatorPage() {
         {/* Sidebar nav */}
         <nav className="w-52 border-r border-line bg-surface flex flex-col py-4 gap-1 px-2 shrink-0">
           <NavItem
+            active={section === "session"}
+            onClick={() => setSection("session")}
+            Icon={Key}
+            label="Session"
+            sub="Code & seats"
+          />
+          <NavItem
             active={section === "teams"}
             onClick={() => setSection("teams")}
             Icon={Users}
@@ -103,26 +91,166 @@ export default function FacilitatorPage() {
 
         {/* Main */}
         <div className="flex-1 overflow-auto px-8 py-6">
-          {section === "teams" && (
+          {section === "session" && <SessionView />}
+          {section === "teams" && s.teams.length > 0 && (
             <TeamsView
               teams={s.teams}
               activeId={s.playerTeamId}
               onSelectTeam={(id) => setActiveTeam(id)}
             />
           )}
+          {section === "teams" && s.teams.length === 0 && (
+            <Card>
+              <CardBody>
+                <p className="text-ink-2 text-[0.875rem]">
+                  No teams yet. Start a session in the Session tab to invite players.
+                </p>
+              </CardBody>
+            </Card>
+          )}
           {section === "leaderboard" && (
             <LeaderboardView teams={s.teams} />
           )}
-          {section === "admin" && (
+          {section === "admin" && s.teams.length > 0 && (
             <Card>
               <CardBody>
                 <AdminPanel />
               </CardBody>
             </Card>
           )}
+          {section === "admin" && s.teams.length === 0 && (
+            <Card>
+              <CardBody>
+                <p className="text-ink-2 text-[0.875rem]">
+                  Game-state admin requires an active simulation. Start a session first.
+                </p>
+              </CardBody>
+            </Card>
+          )}
         </div>
       </div>
     </main>
+  );
+}
+
+function SessionView() {
+  const sessionCode = useGame((s) => s.sessionCode);
+  const sessionSlots = useGame((s) => s.sessionSlots);
+  const startSession = useGame((s) => s.startFacilitatedSession);
+  const [seatCount, setSeatCount] = useState(5);
+
+  const claimed = sessionSlots.filter((x) => x.claimed).length;
+  const total = sessionSlots.length;
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <header>
+        <h1 className="font-display text-[1.75rem] text-ink mb-1">Facilitated session</h1>
+        <p className="text-ink-2 text-[0.9375rem] leading-relaxed">
+          Generate a 4-digit join code, share it with the players in the
+          room, and watch them claim seats as they enter the simulation
+          on their own devices via <span className="font-mono">/join</span>.
+        </p>
+      </header>
+
+      {!sessionCode ? (
+        <Card>
+          <CardBody>
+            <h2 className="font-display text-[1.25rem] text-ink mb-3">Start a new session</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+                  Number of teams
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSeatCount(Math.max(2, seatCount - 1))}
+                    className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-[1.125rem] font-semibold disabled:opacity-40"
+                    disabled={seatCount <= 2}
+                  >
+                    −
+                  </button>
+                  <span className="tabular font-mono text-[1.5rem] text-ink font-bold w-14 text-center">
+                    {seatCount}
+                  </span>
+                  <button
+                    onClick={() => setSeatCount(Math.min(10, seatCount + 1))}
+                    className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-[1.125rem] font-semibold disabled:opacity-40"
+                    disabled={seatCount >= 10}
+                  >
+                    +
+                  </button>
+                  <span className="text-[0.75rem] text-ink-muted ml-2">
+                    Between 2 and 10 players
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => startSession(seatCount)}
+                >
+                  Generate session code →
+                </Button>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      ) : (
+        <Card>
+          <CardBody>
+            <div className="flex items-baseline justify-between mb-4">
+              <h2 className="font-display text-[1.25rem] text-ink">Session active</h2>
+              <Badge tone="positive">{claimed}/{total} seats claimed</Badge>
+            </div>
+
+            <div className="rounded-lg border-2 border-primary bg-[rgba(20,53,94,0.04)] p-6 text-center mb-4">
+              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+                Share this code
+              </div>
+              <div className="font-mono tabular text-[3.5rem] text-ink leading-none font-bold tracking-[0.4em] mb-2">
+                {sessionCode}
+              </div>
+              <div className="text-[0.8125rem] text-ink-muted">
+                Players visit{" "}
+                <span className="font-mono text-ink">/join</span>{" "}
+                and enter this code along with their company name and hub.
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+                Seats
+              </div>
+              {sessionSlots.map((seat, i) => (
+                <div
+                  key={seat.id}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md border px-3 py-2 text-[0.875rem]",
+                    seat.claimed
+                      ? "border-positive/40 bg-[var(--positive-soft)]/40"
+                      : "border-dashed border-line",
+                  )}
+                >
+                  <span className="font-mono text-ink-muted w-8 tabular text-center text-[0.75rem]">
+                    #{i + 1}
+                  </span>
+                  {seat.claimed ? (
+                    <span className="text-ink font-medium flex-1">
+                      {seat.companyName}
+                    </span>
+                  ) : (
+                    <span className="text-ink-muted italic flex-1">Awaiting player…</span>
+                  )}
+                  {seat.claimed && <Badge tone="positive">Joined</Badge>}
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      )}
+    </div>
   );
 }
 
