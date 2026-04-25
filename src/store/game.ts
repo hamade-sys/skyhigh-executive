@@ -930,7 +930,7 @@ export const useGame = create<GameStore>()(
           return { ok: false, error: "Daily frequency 1–24" };
 
         // If aircraft reassigned, validate range + availability
-        let newAircraftIds = patch.aircraftIds ?? route.aircraftIds;
+        const newAircraftIds = patch.aircraftIds ?? route.aircraftIds;
         if (patch.aircraftIds) {
           const planes = newAircraftIds
             .map((id) => player.fleet.find((f) => f.id === id));
@@ -946,12 +946,30 @@ export const useGame = create<GameStore>()(
           }
         }
 
+        // PRD update — clamp dailyFrequency to the new aircraft set's
+        // physics cap. Removing a plane from the assignment must drop
+        // the route's max frequency automatically.
+        const finalDaily = patch.dailyFrequency ?? route.dailyFrequency;
+        const newSpecIds = newAircraftIds
+          .map((id) => player.fleet.find((f) => f.id === id)?.specId)
+          .filter((x): x is string => !!x);
+        const physicsCap = newSpecIds.length > 0
+          ? newSpecIds.reduce((sum, sid) => {
+              const oneWayHrs = route.distanceKm / (
+                /^A319|^A320|^A321|^B737/.test(sid) ? 840 :
+                /^B757|^B767|^A330/.test(sid) ? 870 : 900);
+              return sum + Math.max(1, Math.floor(24 / (oneWayHrs * 2 + 4)));
+            }, 0)
+          : 0;
+        const clampedDaily =
+          physicsCap > 0 ? Math.min(finalDaily, physicsCap) : 1;
+
         set({
           teams: s.teams.map((t) => t.id !== player.id ? t : {
             ...t,
             routes: t.routes.map((r) => r.id !== routeId ? r : {
               ...r,
-              dailyFrequency: patch.dailyFrequency ?? r.dailyFrequency,
+              dailyFrequency: clampedDaily,
               pricingTier: patch.pricingTier ?? r.pricingTier,
               econFare: patch.econFare !== undefined ? patch.econFare : r.econFare,
               busFare: patch.busFare !== undefined ? patch.busFare : r.busFare,

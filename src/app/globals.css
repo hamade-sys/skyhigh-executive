@@ -3,7 +3,8 @@
    Warm off-white, deep navy, terracotta. 1985 airline boardroom.
    ──────────────────────────────────────────────────────────────── */
 
-@import url("https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700&f[]=gambarino@400&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700,800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap");
 
 @import "tailwindcss";
@@ -75,9 +76,11 @@
   --shadow-3: 0 8px 24px rgba(16, 37, 63, 0.08), 0 2px 4px rgba(16, 37, 63, 0.04);
   --shadow-4: 0 16px 40px rgba(16, 37, 63, 0.12), 0 4px 8px rgba(16, 37, 63, 0.06);
 
-  /* Typography */
-  --font-display: "Gambarino", "Times New Roman", Georgia, serif;
-  --font-sans: "Switzer", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Typography — modernised. Switzer for body + display headings, Inter
+   *  fallback. No serif anywhere; the prior Gambarino look read as
+   *  Times-New-Roman-style and felt dated. */
+  --font-display: "Switzer", "Inter", system-ui, -apple-system, "Segoe UI", "Calibri", sans-serif;
+  --font-sans: "Switzer", "Inter", system-ui, -apple-system, "Segoe UI", "Calibri", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Motion */
@@ -159,12 +162,14 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Headings — Gambarino for hero display, Switzer for product UI titles */
+  /* Headings — Switzer/Inter sans throughout for a cleaner modern feel.
+     Tight tracking on display headings + heavier weight does the work
+     a serif used to do for hierarchy. */
   h1,
   h2 {
     font-family: var(--font-display);
-    font-weight: 400;
-    letter-spacing: -0.01em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     color: var(--ink);
   }
 
@@ -174,7 +179,7 @@
   h6 {
     font-family: var(--font-sans);
     font-weight: 600;
-    letter-spacing: -0.005em;
+    letter-spacing: -0.01em;
     color: var(--ink);
   }
 
@@ -224,6 +229,14 @@
 .tabular {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
+}
+
+/* Display text utility — used by KPI numbers and modal headers.
+   Tighter tracking and heavier weight to differentiate from body. */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  font-weight: 700;
 }
 
 /* Hairline — subtle 1px rule that respects device pixel ratio */

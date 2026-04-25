@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader, Input } from "@/components/ui";
+import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
+import { AircraftMarketModal } from "@/components/game/AircraftMarketModal";
 import { useGame, selectPlayer } from "@/store/game";
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -445,47 +446,19 @@ export function FleetPanel() {
       )}
 
       {/* ── Aircraft market modal ─────────────────────────────────── */}
-      <Modal open={buyOpen} onClose={() => { setBuyOpen(false); setError(null); }} className="w-[min(820px,calc(100vw-3rem))]">
-        <ModalHeader>
-          <h2 className="font-display text-[1.5rem] text-ink">Aircraft market</h2>
-          <p className="text-ink-muted text-[0.8125rem] mt-1">
-            {available.length} types available at Q{s.currentQuarter}
-          </p>
-          <Input
-            placeholder="Search by name, family…"
-            value={marketQuery}
-            onChange={(e) => setMarketQuery(e.target.value)}
-            className="mt-3"
-          />
-        </ModalHeader>
-        <ModalBody className="max-h-[28rem] overflow-auto space-y-2">
-          {available.map((a) => (
-            <div key={a.id} className="rounded-md border border-line p-3 flex items-start gap-3 hover:bg-surface-hover">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-ink text-[0.9375rem]">{a.name}</span>
-                  <Badge tone={a.family === "cargo" ? "warning" : "neutral"}>{a.family}</Badge>
-                </div>
-                <div className="text-[0.75rem] text-ink-muted mt-0.5 font-mono tabular">
-                  {a.family === "passenger"
-                    ? `${a.seats.first + a.seats.business + a.seats.economy} seats (${a.seats.first}F/${a.seats.business}C/${a.seats.economy}Y)`
-                    : `${a.cargoTonnes ?? 0}T cargo`}
-                  {" · "}{a.rangeKm.toLocaleString()} km · {a.fuelBurnPerKm} L/km
-                </div>
-                {a.note && <p className="text-[0.8125rem] text-ink-2 mt-1 italic">{a.note}</p>}
-              </div>
-              <div className="flex flex-col gap-1.5 shrink-0">
-                <Button size="sm" variant="primary" onClick={() => setOrdering({ specId: a.id, type: "buy" })}>
-                  Buy {fmtMoney(a.buyPriceUsd)}
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => setOrdering({ specId: a.id, type: "lease" })}>
-                  Lease {fmtMoney(a.leasePerQuarterUsd)}/Q
-                </Button>
-              </div>
-            </div>
-          ))}
-        </ModalBody>
-      </Modal>
+      <AircraftMarketModal
+        open={buyOpen}
+        onClose={() => { setBuyOpen(false); setError(null); }}
+        currentQuarter={s.currentQuarter}
+        marketQuery={marketQuery}
+        setMarketQuery={setMarketQuery}
+        secondHandListings={listings}
+        onOrder={(specId, type) => setOrdering({ specId, type })}
+        onBuySecondHand={(listingId) => {
+          const r = s.buySecondHand(listingId);
+          if (!r.ok) setError(r.error ?? "Purchase failed");
+        }}
+      />
 
       <Modal open={!!ordering} onClose={() => { setOrdering(null); setError(null); }}>
         <ModalHeader>

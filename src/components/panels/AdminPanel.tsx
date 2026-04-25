@@ -55,7 +55,7 @@ export function AdminPanel() {
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
           Adjust player state
         </div>
-        <div className="flex gap-2 mb-3">
+        <div className="flex gap-2 mb-2">
           <Input
             type="number"
             value={cashAdjust}
@@ -76,6 +76,35 @@ export function AdminPanel() {
             }}
           >
             +/− cash
+          </Button>
+        </div>
+        {/* Quick test-cash button */}
+        <div className="flex gap-2 mb-3">
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              useGame.setState({
+                teams: s.teams.map((t) =>
+                  t.id === s.playerTeamId ? { ...t, cashUsd: t.cashUsd + 900_000_000 } : t,
+                ),
+              });
+            }}
+          >
+            +$900M (test)
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              useGame.setState({
+                teams: s.teams.map((t) =>
+                  t.id === s.playerTeamId ? { ...t, cashUsd: t.cashUsd + 100_000_000 } : t,
+                ),
+              });
+            }}
+          >
+            +$100M
           </Button>
         </div>
 

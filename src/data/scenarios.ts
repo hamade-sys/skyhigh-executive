@@ -27,6 +27,9 @@ export interface ScenarioOption {
   effectTags?: string[];      // ["-$3.0M", "Crew +12", "Board +3"]
   /** Flag name(s) that must NOT be set on the team for this option to be available. */
   blockedByFlags?: string[];
+  /** When set, the option is only available if the team currently meets
+   *  the named requirement. Engine + UI grey it out otherwise. */
+  requires?: "cargo-fleet";
 }
 
 export interface Scenario {
@@ -175,9 +178,10 @@ export const SCENARIOS: Scenario[] = [
         effect: { cash: -8 * M },
         effectTags: ["+$200M in 2Q", "-$8M bridge"] },
       { id: "D", label: "Sell cargo division",
-        description: "$180M this quarter. Cargo revenue gone permanently.",
+        description: "$180M this quarter. Cargo aircraft sold for proceeds; cargo revenue stops until you re-buy cargo aircraft on the market.",
         effect: { cash: 180 * M, opsPts: -10, setFlags: ["cargo_division_sold"] },
-        effectTags: ["+$180M", "Cargo rev -$30M/yr", "Ops -10"] },
+        effectTags: ["+$180M", "All cargo aircraft sold", "Ops -10"],
+        requires: "cargo-fleet" },
     ],
     autoSubmitOptionId: "C",
   },

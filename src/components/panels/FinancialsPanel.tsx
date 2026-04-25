@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button, Input, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
-import { fmtMoney } from "@/lib/format";
+import { fmtMoney, fmtQuarter } from "@/lib/format";
 import {
   computeAirlineValue,
   effectiveBorrowingRate,
@@ -55,7 +55,14 @@ export function FinancialsPanel() {
   return (
     <div className="space-y-4">
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">Balance sheet</div>
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+            Balance sheet
+          </div>
+          <div className="text-[0.6875rem] tabular text-ink-muted">
+            as of <strong className="text-ink">{fmtQuarter(s.currentQuarter)}</strong>
+          </div>
+        </div>
         <div className="space-y-1.5 text-[0.8125rem]">
           <Row k="Cash" v={fmtMoney(player.cashUsd)} />
           <Row k="Fleet book value" v={fmtMoney(player.fleet.reduce((s, f) => s + f.bookValue, 0))} />
@@ -220,7 +227,7 @@ export function FinancialsPanel() {
               <tbody>
                 {player.financialsByQuarter.map((q) => (
                   <tr key={q.quarter} className="border-b border-line last:border-0">
-                    <Td className="font-mono">Q{q.quarter}</Td>
+                    <Td className="font-mono">{fmtQuarter(q.quarter)}</Td>
                     <Td className="text-right tabular font-mono">{fmtMoney(q.revenue)}</Td>
                     <Td className={`text-right tabular font-mono ${q.netProfit >= 0 ? "text-positive" : "text-negative"}`}>
                       {fmtMoney(q.netProfit)}

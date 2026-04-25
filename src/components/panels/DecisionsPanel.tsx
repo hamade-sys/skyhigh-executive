@@ -7,6 +7,7 @@ import { useGame, selectPlayer } from "@/store/game";
 import { cn } from "@/lib/cn";
 import type { Team } from "@/types/game";
 import { fmtMoney } from "@/lib/format";
+import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 
 export function DecisionsPanel() {
@@ -33,6 +34,10 @@ export function DecisionsPanel() {
               scenario={sc}
               submittedOptionId={submitted?.optionId ?? null}
               flags={player.flags}
+              cargoFleetCount={player.fleet.filter((f) => {
+                const spec = AIRCRAFT_BY_ID[f.specId];
+                return spec?.family === "cargo" && f.status !== "retired";
+              }).length}
               onSubmit={(optionId) => submit({ scenarioId: sc.id, optionId: optionId as "A" | "B" | "C" | "D" | "E" })}
             />
           );
@@ -67,20 +72,26 @@ export function DecisionsPanel() {
 }
 
 function ScenarioCard({
-  scenario, submittedOptionId, onSubmit, flags,
+  scenario, submittedOptionId, onSubmit, flags, cargoFleetCount,
 }: {
   scenario: (typeof SCENARIOS)[number];
   submittedOptionId: string | null;
   flags: Team["flags"];
+  cargoFleetCount: number;
   onSubmit: (optionId: string) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const locked = !!submittedOptionId;
 
   function isBlocked(opt: (typeof scenario.options)[number]): string | null {
-    if (!opt.blockedByFlags) return null;
-    for (const f of opt.blockedByFlags) {
-      if (flags.has(f)) return f;
+    if (opt.blockedByFlags) {
+      for (const f of opt.blockedByFlags) {
+        if (flags.has(f)) return f;
+      }
+    }
+    // Capability requirement (PRD update — option D of S5 needs cargo fleet)
+    if (opt.requires === "cargo-fleet" && cargoFleetCount === 0) {
+      return "no cargo fleet";
     }
     return null;
   }

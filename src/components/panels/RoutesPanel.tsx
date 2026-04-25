@@ -291,6 +291,30 @@ function RouteDetailModal({
 
   if (!player) return null;
 
+  // Auto-clamp weeklyFreq when aircraft selection changes — fewer planes
+  // means a lower physics cap, and the slider/value MUST drop to match.
+  // PRD update: removing an aircraft from a route should automatically
+  // reduce capacity.
+  const clampSpecIds = selectedPlaneIds
+    .map((id) => player.fleet.find((f) => f.id === id)?.specId)
+    .filter((x): x is string => !!x);
+  const clampMaxDaily = clampSpecIds.length > 0
+    ? Math.max(1, Math.floor(clampSpecIds.reduce((sum, id) => {
+        const oneWayHrs = route.distanceKm / (
+          /^A319|^A320|^A321|^B737/.test(id) ? 840 :
+          /^B757|^B767|^A330/.test(id) ? 870 : 900);
+        return sum + Math.max(1, Math.floor(24 / (oneWayHrs * 2 + 4))) * 7;
+      }, 0) / 7))
+    : 0;
+  const clampMaxWeekly = clampMaxDaily * 7;
+  useEffect(() => {
+    if (clampMaxWeekly === 0 && weeklyFreq !== 0) {
+      setWeeklyFreq(0);
+    } else if (clampMaxWeekly > 0 && weeklyFreq > clampMaxWeekly) {
+      setWeeklyFreq(clampMaxWeekly);
+    }
+  }, [clampMaxWeekly, weeklyFreq]);
+
   const origin = CITIES_BY_CODE[route.originCode];
   const dest = CITIES_BY_CODE[route.destCode];
   const profit = route.quarterlyRevenue - route.quarterlyFuelCost - route.quarterlySlotCost;
@@ -366,24 +390,39 @@ function RouteDetailModal({
         {/* Competitors on this OD pair */}
         <CompetitorsTable route={route} />
 
-        {/* Pricing tier */}
+        {/* Pricing tier — quick preset that scales every per-class fare. */}
         <div>
           <Label>Pricing tier</Label>
           <div className="grid grid-cols-4 gap-2">
-            {(["budget", "standard", "premium", "ultra"] as PricingTier[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTier(t)}
-                className={cn(
-                  "rounded-md border px-3 py-2 text-[0.8125rem] capitalize transition-colors",
-                  tier === t
-                    ? "border-primary bg-[rgba(20,53,94,0.06)] text-ink font-medium"
-                    : "border-line text-ink-2 hover:bg-surface-hover",
-                )}
-              >
-                {t}
-              </button>
-            ))}
+            {(["budget", "standard", "premium", "ultra"] as PricingTier[]).map((t) => {
+              const mult = t === "budget" ? "0.7×"
+                : t === "standard" ? "1.0×"
+                : t === "premium" ? "1.3×" : "1.6×";
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTier(t)}
+                  className={cn(
+                    "rounded-md border px-3 py-2 capitalize transition-colors flex flex-col items-center gap-0.5",
+                    tier === t
+                      ? "border-primary bg-[rgba(20,53,94,0.06)] text-ink font-semibold"
+                      : "border-line text-ink-2 hover:bg-surface-hover",
+                  )}
+                >
+                  <span className="text-[0.8125rem]">{t}</span>
+                  <span className="text-[0.625rem] tabular font-mono text-ink-muted">
+                    {mult} base
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-1.5">
+            Quick preset that multiplies every per-class fare against a tier
+            multiplier. Budget is 30% under base for high-volume capture;
+            Ultra is 60% above for premium positioning. Per-class sliders
+            below override individual cabin fares; the tier just sets the
+            starting point.
           </div>
         </div>
 

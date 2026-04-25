@@ -22,18 +22,12 @@ export function fmtDelta(n: number, decimals = 1): string {
   return n > 0 ? `+${n.toFixed(decimals)}` : `−${Math.abs(n).toFixed(decimals)}`;
 }
 
-/** In-game date — each round advances 4 real-world months from a Jan 2026
- *  baseline. Returns "Q3 Sep 2026" style (round number + month/year). */
+/** In-game calendar quarter — Round 1 = Q1 2026, Round 4 = Q4 2026,
+ *  Round 5 = Q1 2027, … Round 20 = Q4 2030 (5-year simulation). */
 export function fmtQuarter(q: number): string {
-  const monthsSinceStart = (q - 1) * 4;
-  const baseYear = 2026;
-  const baseMonth = 0; // January 2026
-  const totalMonth = baseMonth + monthsSinceStart;
-  const year = baseYear + Math.floor(totalMonth / 12);
-  const monthIdx = totalMonth % 12;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `Q${q} ${months[monthIdx]} ${year}`;
+  const year = 2026 + Math.floor((q - 1) / 4);
+  const quarterOfYear = ((q - 1) % 4) + 1;
+  return `Q${quarterOfYear} ${year}`;
 }
 
 /** Short tag — "Round X of 20". */
