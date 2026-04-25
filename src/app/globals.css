@@ -263,7 +263,11 @@
   mix-blend-mode: multiply;
 }
 
-/* Override Leaflet's default tooltip styling for our city labels */
+/* Override Leaflet's default tooltip styling for our city labels.
+   Map-label craft note: instead of a heavy text-shadow halo (which reads
+   as glowing/"blinding"), we use a thin paint-order stroke so the outline
+   is sharp and only one pixel wide. Color is a calm warm cream that reads
+   on both bright deserts and dark ocean without screaming. */
 .leaflet-tooltip.sf-city-tt {
   background: transparent;
   border: none;
@@ -271,7 +275,7 @@
   padding: 0;
   margin: 0;
   white-space: nowrap;
-  text-shadow: 0 1px 0 rgba(255,255,255,0.9), 0 0 4px rgba(255,255,255,0.7);
+  text-shadow: none;
 }
 .leaflet-tooltip.sf-city-tt::before {
   display: none; /* kill the arrow */
@@ -294,54 +298,49 @@
   border-radius: 3px;
   margin-bottom: 1px;
   text-shadow: none;
+  -webkit-text-stroke: 0;
 }
+/* All city labels: same size, same color (white), thin sharp outline.
+   No tier-aware sizing — every city is a peer on the map. */
 .sf-city-name {
   font-family: var(--font-sans);
-  font-weight: 700;
-  color: var(--ink);
-}
-/* Tier-aware sizing so all 100 cities can be labelled without crowding the
-   network markers. Network airports always get the strongest treatment. */
-.sf-city-tt-network .sf-city-name {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-}
-.sf-city-tt-tier-1 .sf-city-name {
   font-size: 11px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.sf-city-tt-tier-2 .sf-city-name {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--ink);
-  opacity: 0.95;
-}
-.sf-city-tt-tier-3 .sf-city-name {
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--ink);
-  opacity: 0.85;
-}
-.sf-city-tt-tier-4 .sf-city-name {
-  font-size: 8.5px;
   font-weight: 500;
-  color: var(--ink-2);
-  opacity: 0.85;
+  color: #ffffff;
+  letter-spacing: 0;
+  /* Thin sharp outline rather than a fuzzy halo — same trick Google/Apple
+     Maps use for satellite labels. paint-order keeps the fill on top. */
+  -webkit-text-stroke: 0.6px rgba(12, 22, 36, 0.7);
+  paint-order: stroke fill;
+}
+/* Tier classes still applied by the component for future tweaks, but
+   today every tier uses the exact same size + weight per user request. */
+.sf-city-tt-network .sf-city-name,
+.sf-city-tt-tier-1 .sf-city-name,
+.sf-city-tt-tier-2 .sf-city-name,
+.sf-city-tt-tier-3 .sf-city-name,
+.sf-city-tt-tier-4 .sf-city-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: #ffffff;
+  opacity: 1;
 }
 .sf-flights {
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
+  color: #ffffff;
+  -webkit-text-stroke: 0.5px rgba(12, 22, 36, 0.7);
+  paint-order: stroke fill;
 }
 .sf-city-code-only {
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 500;
-  color: var(--ink-muted);
-  opacity: 0.85;
+  color: #ffffff;
+  -webkit-text-stroke: 0.5px rgba(12, 22, 36, 0.65);
+  paint-order: stroke fill;
 }
 .sf-selected-dot {
   display: inline-block;

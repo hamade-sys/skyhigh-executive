@@ -337,20 +337,9 @@ export function WorldMap({
                       HUB·2
                     </span>
                   )}
-                  <span
-                    className={cn("sf-city-name")}
-                    style={
-                      isHub || isSecondaryHub
-                        ? { color: team.color }
-                        : inNetwork
-                          ? { color: team.color }
-                          : undefined
-                    }
-                  >
-                    {c.name}
-                  </span>
+                  <span className="sf-city-name">{c.name}</span>
                   {flights > 0 && (
-                    <span className="sf-flights" style={{ color: team.color }}>
+                    <span className="sf-flights">
                       {flights}/day
                     </span>
                   )}
