@@ -30,11 +30,16 @@ const SPEC_TO_IMAGE: Record<string, string> = {
   "B767-300F":    "B767-300F/B767-300F_3view.png",
   "B747-400F":    "B747-400F/B747-400F_3view.png",
 
-  // Unlocks
+  // Unlocks (real EIS dates 2007-2026 mapped to game quarters)
   "A380-800":     "A380-800/A380-800_3view.png",
+  "B787-8":       "B787-8/B787-8_3view.png",
   "B787-9":       "B787-9/B787-9_3view.png",
+  "B787-10":      "B787-10/B787-10_3view.png",
   "A350-900":     "A350-900/A350-900_3view.png",
+  "A350-1000":    "A350-1000/A350-1000_3view.png",
   "A320neo":      "A320neo/A320neo_3view.png",
+  "A321neo":      "A321neo/A321neo_3view.png",
+  "A330-900neo":  "A330-900neo/A330-900neo_3view.png",
   "A220-300":     "A220-300/A220-300_3view.png",
   "B737-MAX-8":   "B737 MAX 8/B737 MAX 8_3view.png",
   "B777X-9":      "B777X-9/B777X-9_3view.png",

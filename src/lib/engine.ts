@@ -537,8 +537,21 @@ export function computeRouteEconomics(
   const effectiveDemand = demand.total * hubBonus * csMultiplier * loungeBonus * onboardingBonus * cabinPenalty;
 
   const dailyPax = Math.min(dailyCapacity, effectiveDemand);
-  const occupancy =
+  let occupancy =
     dailyCapacity > 0 ? Math.min(0.98, dailyPax / dailyCapacity) : 0;
+
+  // World Cup load factor override (PRD §10.3 / S10 winner):
+  //   - global_brand flag set when team won S10 sealed bid + L6 pitch
+  //   - Q10 + Q11: 100% load factor on all routes
+  //   - Q12: +50% demand uplift over baseline (additive bonus capped at 0.98)
+  // Without the flag, no effect.
+  if (team.flags?.has("global_brand")) {
+    if (quarter === 10 || quarter === 11) {
+      occupancy = 0.98;
+    } else if (quarter === 12) {
+      occupancy = Math.min(0.98, occupancy * 1.5);
+    }
+  }
 
   // ─ Per-class fares (A7 + A11) ──────────────────────────
   const tier = PRICE_TIER[route.pricingTier];

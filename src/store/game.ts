@@ -21,6 +21,7 @@ import {
 } from "@/lib/slots";
 import { toast } from "./toasts";
 import { fmtQuarter } from "@/lib/format";
+import { planBotAircraftOrder, planBotRoutes } from "@/lib/ai-bots";
 import type {
   AirportLease,
   CabinConfig,
@@ -31,6 +32,7 @@ import type {
   GameState,
   LoanInstrument,
   PricingTier,
+  Route,
   ScenarioDecision,
   SecondHandListing,
   SliderLevel,
@@ -522,6 +524,10 @@ export const useGame = create<GameStore>()(
             airlineName: meta.name, code: meta.code, doctrine,
             hubCode: hub, isPlayer: false, color: meta.color,
           });
+          // All AI rivals run as Medium-difficulty bots by default — they
+          // open routes, order aircraft, and bid for slots each quarter.
+          // Facilitator can override per-team via the admin console.
+          r.botDifficulty = "medium";
           // Give rivals some routes/fleet to make leaderboard plausible
           r.brandPts = 40 + Math.floor(Math.random() * 30);
           r.customerLoyaltyPct = 45 + Math.floor(Math.random() * 20);
@@ -1634,6 +1640,92 @@ export const useGame = create<GameStore>()(
             brandValue: result.newBrandValue,
           }],
         };
+
+        // ── AI bot turns ──────────────────────────────────────
+        // Before the procedural rival simulation, give every bot-flagged
+        // team a chance to make REAL decisions: open routes, order
+        // aircraft, bid for slots. The procedural revenue logic that
+        // follows still drives the leaderboard, but bots now build a
+        // visible network the player sees on the map and competes
+        // against on shared routes.
+        const teamsAfterBotTurns = s.teams.map((t) => {
+          if (!t.botDifficulty) return t;
+          let updated = { ...t };
+
+          // Aircraft order — bot may add a fresh purchase
+          const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter);
+          if (order) {
+            const spec = AIRCRAFT_BY_ID[order.specId];
+            if (spec) {
+              const totalCost = spec.buyPriceUsd * order.quantity;
+              if (updated.cashUsd >= totalCost) {
+                const newPlanes: FleetAircraft[] = Array.from({ length: order.quantity }, () => ({
+                  id: mkId("ac"),
+                  specId: order.specId,
+                  status: "ordered",
+                  acquisitionType: "buy",
+                  purchaseQuarter: s.currentQuarter,
+                  purchasePrice: spec.buyPriceUsd,
+                  bookValue: spec.buyPriceUsd,
+                  leaseQuarterly: null,
+                  ecoUpgrade: false,
+                  ecoUpgradeQuarter: null,
+                  ecoUpgradeCost: 0,
+                  cabinConfig: "default",
+                  routeId: null,
+                  retirementQuarter: s.currentQuarter + 16,
+                  maintenanceDeficit: 0,
+                  satisfactionPct: 75,
+                }));
+                updated = {
+                  ...updated,
+                  cashUsd: updated.cashUsd - totalCost,
+                  fleet: [...updated.fleet, ...newPlanes],
+                };
+              }
+            }
+          }
+
+          // Route openings — bot may start a few new routes from idle planes
+          const routePlans = planBotRoutes(updated, t.botDifficulty, s.currentQuarter);
+          for (const rp of routePlans) {
+            const dist = distanceBetween(rp.origin, rp.dest);
+            const dailyFreq = Math.max(1, Math.round(rp.weeklyFreq / 7));
+            const route: Route = {
+              id: mkId("route"),
+              originCode: rp.origin,
+              destCode: rp.dest,
+              distanceKm: dist,
+              aircraftIds: [rp.aircraftId],
+              dailyFrequency: dailyFreq,
+              pricingTier: rp.pricingTier,
+              econFare: null,
+              busFare: null,
+              firstFare: null,
+              status: "active",
+              openQuarter: s.currentQuarter,
+              avgOccupancy: 0,
+              quarterlyRevenue: 0,
+              quarterlyFuelCost: 0,
+              quarterlySlotCost: 0,
+              isCargo: false,
+              consecutiveQuartersActive: 0,
+              consecutiveLosingQuarters: 0,
+            };
+            updated = {
+              ...updated,
+              routes: [...updated.routes, route],
+              fleet: updated.fleet.map((f) =>
+                f.id === rp.aircraftId
+                  ? { ...f, status: "active" as const, routeId: route.id }
+                  : f,
+              ),
+            };
+          }
+          return updated;
+        });
+        // Replace s.teams reference for downstream rival processing
+        Object.assign(s, { teams: teamsAfterBotTurns });
 
         // Strategy-driven rival quarter-close.
         // Each rival has a doctrine that shapes their revenue model:

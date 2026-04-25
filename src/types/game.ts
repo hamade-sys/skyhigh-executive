@@ -226,6 +226,11 @@ export interface Team {
   secondaryHubCodes: string[];   // additional hubs added after Q3 at 2× fee
   doctrine: DoctrineId;
   isPlayer: boolean;             // player (single-team demo) vs mocked rival
+  /** When set, this team is run by an AI bot at the configured
+   *  difficulty. Drives quarterly route opening, fleet ordering, slot
+   *  bidding, and scenario decisions in the engine. Player teams have
+   *  this null/undefined. */
+  botDifficulty?: "easy" | "medium" | "hard";
   members: TeamMember[];         // CEO/CFO/CMO/CHRO with MVP tally
 
   // Q1 Brand Building profile (PRD §13.2) — saved for reference + flavour
