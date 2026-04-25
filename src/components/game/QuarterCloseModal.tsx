@@ -6,6 +6,7 @@ import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
 import { brandRating, computeAirlineValue } from "@/lib/engine";
+import { MILESTONES_BY_ID } from "@/data/milestones";
 import { TrendingUp, TrendingDown, Newspaper, Plane, Award, Users, FileBarChart, NotebookPen } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -164,7 +165,9 @@ export function QuarterCloseModal() {
                   <Award size={13} /> Milestones earned this quarter
                 </div>
                 <div className="mt-1 text-[0.8125rem] text-ink">
-                  {result.milestonesEarnedThisQuarter.join(" · ")}
+                  {result.milestonesEarnedThisQuarter
+                    .map((id) => MILESTONES_BY_ID[id]?.title ?? id)
+                    .join(" · ")}
                 </div>
               </div>
             )}

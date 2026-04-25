@@ -1369,10 +1369,50 @@ export function runQuarterClose(
   if (continents.size >= 3)
     earn("International Network", 0, 8, 0);
 
+  // Eco Pioneer: at least half the active fleet on eco engines
+  const ecoCount = activeFleet.filter((f) => f.ecoUpgrade).length;
+  if (activeFleet.length >= 4 && ecoCount * 2 >= activeFleet.length)
+    earn("Eco Pioneer", 0, 3, 2);
+
+  // Profitability streak (uses the running counter we update right below)
+  const willCount = (next.consecutiveProfitableQuarters ?? 0) + (netProfit > 0 ? 1 : 0);
+  if (netProfit > 0 && willCount >= 4)
+    earn("Profit Streak", 0, 5, 3);
+
+  // Network Builder: 25+ active routes
+  if (activeRoutes.length >= 25)
+    earn("Network Builder", 0, 5, 5);
+
+  // Premium Pioneer: 5+ routes at ultra tier
+  if (activeRoutes.filter((r) => r.pricingTier === "ultra").length >= 5)
+    earn("Premium Pioneer", 0, 8, 3);
+
+  // Loyal Following: 80%+ loyalty (check post-deltas)
+  if (next.customerLoyaltyPct >= 80)
+    earn("Loyal Following", 0, 5, 0);
+
+  // Hub & Spoke: 3+ secondary hubs
+  if ((next.secondaryHubCodes?.length ?? 0) >= 3)
+    earn("Hub & Spoke", 10, 5, 0);
+
   next.milestones = Array.from(milestonesEarned);
   next.brandPts = Math.max(0, next.brandPts + milestoneBrand);
   next.opsPts = Math.max(0, next.opsPts + milestoneOps);
   next.customerLoyaltyPct = clamp(0, 100, next.customerLoyaltyPct + milestoneLoyalty);
+
+  // Now that brand/ops/loyalty are settled, check the brand-rating milestone
+  // (it depends on the post-milestone-bonus values).
+  if (brandRating(next).grade === "A+" && !next.milestones.includes("Brand A+")) {
+    next.milestones = [...next.milestones, "Brand A+"];
+    next.opsPts += 5;
+    next.customerLoyaltyPct = clamp(0, 100, next.customerLoyaltyPct + 5);
+    notes.push("Milestone: Brand A+");
+  }
+
+  // Update profitability streak counter for next quarter's check
+  next.consecutiveProfitableQuarters = netProfit > 0
+    ? (next.consecutiveProfitableQuarters ?? 0) + 1
+    : 0;
 
   // Fleet uniformity ops bonus (PRD E8.2)
   if (next.flags.has("fleet_uniformity")) {

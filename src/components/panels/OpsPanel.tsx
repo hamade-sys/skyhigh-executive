@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Badge, Button } from "@/components/ui";
 import { SLIDER_LABELS, SLIDER_PCT_REVENUE, SLIDER_EFFECTS } from "@/lib/engine";
 import { useGame, selectPlayer } from "@/store/game";
@@ -7,6 +8,9 @@ import type { SliderLevel, Sliders } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { useUi } from "@/store/ui";
+import { CITIES, CITIES_BY_CODE } from "@/data/cities";
+import { toast } from "@/store/toasts";
+import { fmtMoney } from "@/lib/format";
 
 const SLIDER_LIST: Array<{ key: keyof Sliders; label: string; sub: string }> = [
   { key: "staff", label: "Staff & Training", sub: "Cabin, pilots, ground, training" },
@@ -22,6 +26,11 @@ export function OpsPanel() {
   const player = selectPlayer(s);
   const setSliders = useGame((g) => g.setSliders);
   const closePanel = useUi((u) => u.closePanel);
+
+  // Slot bidding form state
+  const [slotAirport, setSlotAirport] = useState<string>("");
+  const [slotCount, setSlotCount] = useState<number>(2);
+  const [slotPrice, setSlotPrice] = useState<number>(120_000);
 
   if (!player) return null;
 
@@ -122,6 +131,121 @@ export function OpsPanel() {
           </ul>
         </div>
       )}
+
+      {/* Slot auction bidding (PRD §10.7) */}
+      <details className="rounded-md border border-line">
+        <summary className="px-3 py-2 cursor-pointer text-[0.75rem] font-semibold uppercase tracking-wider text-ink-2 hover:bg-surface-hover">
+          Slot auctions · bid for runway access
+        </summary>
+        <div className="p-3 space-y-3 border-t border-line">
+          {/* Current holdings */}
+          {Object.keys(player.slotsByAirport ?? {}).length > 0 && (
+            <div>
+              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1">
+                Slots you hold
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(player.slotsByAirport ?? {})
+                  .filter(([, n]) => n > 0)
+                  .map(([code, n]) => (
+                    <span key={code} className="text-[0.6875rem] tabular font-mono px-1.5 py-0.5 rounded bg-[var(--positive-soft)] text-positive">
+                      {code} × {n}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pending bids */}
+          {(player.pendingSlotBids ?? []).length > 0 && (
+            <div>
+              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1">
+                Pending bids
+              </div>
+              <div className="space-y-1">
+                {(player.pendingSlotBids ?? []).map((b) => (
+                  <div key={b.airportCode} className="flex items-center justify-between text-[0.75rem]">
+                    <span className="font-mono text-ink">
+                      {b.airportCode} · {b.slots}× ${(b.pricePerSlot / 1000).toFixed(0)}K
+                    </span>
+                    <button
+                      className="text-[0.6875rem] text-negative hover:underline"
+                      onClick={() => s.cancelSlotBid(b.airportCode)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* New bid form */}
+          <div>
+            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+              Submit a bid
+            </div>
+            <div className="grid grid-cols-12 gap-1.5">
+              <select
+                value={slotAirport}
+                onChange={(e) => {
+                  const code = e.target.value;
+                  setSlotAirport(code);
+                  const city = code ? CITIES_BY_CODE[code] : null;
+                  if (city) {
+                    const min = city.tier === 1 ? 120_000 : city.tier === 2 ? 80_000 : city.tier === 3 ? 40_000 : 20_000;
+                    setSlotPrice(min);
+                  }
+                }}
+                className="col-span-5 h-8 px-2 rounded-md border border-line bg-surface text-[0.75rem] text-ink"
+              >
+                <option value="">Pick airport…</option>
+                {CITIES.filter((c) => c.tier <= 2)
+                  .sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name))
+                  .map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} · {c.name} · T{c.tier}
+                    </option>
+                  ))}
+              </select>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={slotCount}
+                onChange={(e) => setSlotCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="col-span-3 h-8 px-2 rounded-md border border-line bg-surface text-[0.75rem] text-ink text-right tabular"
+                placeholder="Slots"
+              />
+              <input
+                type="number"
+                min={1000}
+                step={5000}
+                value={slotPrice}
+                onChange={(e) => setSlotPrice(Math.max(1000, parseInt(e.target.value, 10) || 0))}
+                className="col-span-4 h-8 px-2 rounded-md border border-line bg-surface text-[0.75rem] text-ink text-right tabular"
+                placeholder="$/slot"
+              />
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[0.6875rem] text-ink-muted tabular">
+                Max commit: {fmtMoney(slotCount * slotPrice)}
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!slotAirport}
+                onClick={() => {
+                  const r = s.submitSlotBid(slotAirport, slotCount, slotPrice);
+                  if (!r.ok) toast.negative(r.error ?? "Bid failed");
+                }}
+              >
+                Submit bid
+              </Button>
+            </div>
+          </div>
+        </div>
+      </details>
 
       <Button variant="primary" className="w-full" onClick={commit}>
         Close quarter →

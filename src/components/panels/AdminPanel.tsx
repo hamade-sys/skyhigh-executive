@@ -523,6 +523,75 @@ export function AdminPanel() {
         </div>
       </section>
 
+      {/* Slot auction resolver (PRD §10.7) */}
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          Slot auctions · resolve pending bids
+        </div>
+        {(() => {
+          // Group bids by airport across all teams
+          const byAirport: Record<string, Array<{ teamCode: string; teamName: string; slots: number; pricePerSlot: number }>> = {};
+          for (const t of s.teams) {
+            for (const b of (t.pendingSlotBids ?? [])) {
+              (byAirport[b.airportCode] ??= []).push({
+                teamCode: t.code,
+                teamName: t.name,
+                slots: b.slots,
+                pricePerSlot: b.pricePerSlot,
+              });
+            }
+          }
+          const airports = Object.keys(byAirport).sort();
+          if (airports.length === 0) {
+            return (
+              <div className="text-[0.75rem] text-ink-muted italic">
+                No pending bids. Players bid via Ops form.
+              </div>
+            );
+          }
+          return (
+            <div className="space-y-2">
+              {airports.map((code) => {
+                const bids = byAirport[code].sort((a, b) => b.pricePerSlot - a.pricePerSlot);
+                const totalSlots = bids.reduce((sum, b) => sum + b.slots, 0);
+                return (
+                  <div key={code} className="rounded-md border border-line p-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[0.8125rem] font-mono text-ink font-semibold">{code}</span>
+                      <span className="text-[0.6875rem] tabular text-ink-muted">
+                        {bids.length} bid{bids.length === 1 ? "" : "s"} · {totalSlots} slots wanted
+                      </span>
+                    </div>
+                    <div className="space-y-0.5 mb-2 text-[0.6875rem]">
+                      {bids.map((b, i) => (
+                        <div key={i} className="flex items-center justify-between font-mono">
+                          <span className="text-ink-2 truncate">
+                            <span className="text-ink">{b.teamCode}</span> · {b.slots}×
+                          </span>
+                          <span className="tabular text-ink">${(b.pricePerSlot / 1000).toFixed(0)}K</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[2, 4, 8].map((n) => (
+                        <Button
+                          key={n}
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => s.adminReleaseSlots(code, n)}
+                        >
+                          Release {n}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </section>
+
       {/* Second-hand market admin (A13) */}
       <section>
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">

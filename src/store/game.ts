@@ -288,6 +288,7 @@ function makeStartingTeam(args: {
     },
     labourRelationsScore: 50,
     milestones: [],
+    consecutiveProfitableQuarters: 0,
     financialsByQuarter: [],
   };
 }
@@ -364,8 +365,10 @@ export const useGame = create<GameStore>()(
           : 4;
         player.brandPts = 50 + brandBonus;
 
-        // Seed: give player 2× A320 to start (PRD says seed planes post-Q1, but
-        // single-team demo launches directly into ops — gives them something to fly).
+        // Seed: give player 2× A320 to start. Onboarding *is* the PRD's Q1
+        // brand-building phase — the player commits to doctrine, market focus,
+        // pricing, salary, marketing and CSR there, then walks into Q2 with
+        // the resulting cash injection and brand bonus already baked in.
         const starter1: FleetAircraft = {
           id: mkId("ac"), specId: "A320", status: "active",
           acquisitionType: "buy", purchaseQuarter: 1,
@@ -378,6 +381,22 @@ export const useGame = create<GameStore>()(
         const starter2: FleetAircraft = { ...starter1, id: mkId("ac") };
         player.fleet = [starter1, starter2];
 
+        // Backfill a Q1 "brand-building" snapshot so charts/sparklines have
+        // an honest starting point. Costs/revenue are 0 — Q1 was about
+        // identity, not operations.
+        player.financialsByQuarter = [{
+          quarter: 1,
+          cash: player.cashUsd,
+          debt: 0,
+          revenue: 0,
+          costs: 0,
+          netProfit: 0,
+          brandPts: player.brandPts,
+          opsPts: player.opsPts,
+          loyalty: player.customerLoyaltyPct,
+          brandValue: player.brandValue,
+        }];
+
         // Mock competitors
         const rivals: Team[] = [];
         const rivalCount = Math.max(0, Math.min(9, teamCount - 1));
@@ -388,14 +407,35 @@ export const useGame = create<GameStore>()(
           const hub = meta.hub === hubCode
             ? MOCK_COMPETITOR_NAMES[(i + 5) % MOCK_COMPETITOR_NAMES.length].hub
             : meta.hub;
+          // Spread rival doctrines so the leaderboard has visible diversity
+          // of strategies competing on revenue/margin/fuel sensitivity.
+          const rivalDoctrines: ("budget-expansion" | "premium-service" | "cargo-dominance" | "safety-first")[] = [
+            "premium-service", "budget-expansion", "cargo-dominance",
+            "safety-first", "premium-service", "budget-expansion",
+            "cargo-dominance", "safety-first", "premium-service",
+          ];
+          const doctrine = rivalDoctrines[i % rivalDoctrines.length];
           const r = makeStartingTeam({
-            airlineName: meta.name, code: meta.code, doctrine: "budget-expansion",
+            airlineName: meta.name, code: meta.code, doctrine,
             hubCode: hub, isPlayer: false, color: meta.color,
           });
           // Give rivals some routes/fleet to make leaderboard plausible
           r.brandPts = 40 + Math.floor(Math.random() * 30);
           r.customerLoyaltyPct = 45 + Math.floor(Math.random() * 20);
           r.cashUsd = 120_000_000 + Math.floor(Math.random() * 80_000_000);
+          // Same Q1 backfill as the player so leaderboard charts align
+          r.financialsByQuarter = [{
+            quarter: 1,
+            cash: r.cashUsd,
+            debt: 0,
+            revenue: 0,
+            costs: 0,
+            netProfit: 0,
+            brandPts: r.brandPts,
+            opsPts: r.opsPts,
+            loyalty: r.customerLoyaltyPct,
+            brandValue: r.brandValue,
+          }];
           rivals.push(r);
         }
 
@@ -898,17 +938,84 @@ export const useGame = create<GameStore>()(
           }],
         };
 
-        // Update rivals with plausible drift
+        // Strategy-driven rival quarter-close.
+        // Each rival has a doctrine that shapes their revenue model:
+        //   budget-expansion → high-volume low-margin
+        //   premium-service  → low-volume high-margin (bigger fuel sensitivity)
+        //   cargo-focus      → steady cargo revenue, low fuel sensitivity
+        //   hub-spoke        → balanced
+        //   alliance         → +10% revenue from network
+        // Revenue/profit are generated procedurally so the leaderboard moves
+        // believably without us simulating their full network.
+        const fuelStress = Math.max(0, (s.fuelIndex - 100) / 100);  // 0 at index 100, 0.5 at 150
+        const quarterMaturity = Math.min(1, (s.currentQuarter - 1) / 12);  // ramps up over Y1-Y3
         const rivals = s.teams.filter((t) => !t.isPlayer).map((r) => {
-          const driftBrand = (Math.random() - 0.5) * 6;
-          const driftLoyalty = (Math.random() - 0.5) * 4;
-          const updated = {
+          // Stable per-team noise so the rival has a "personality" curve
+          const seed = (r.id.charCodeAt(0) * 31 + s.currentQuarter * 7) % 100;
+          const personalityNoise = (seed / 100 - 0.5) * 0.18;  // ±9%
+
+          // Doctrine-shaped revenue model
+          let baseRevenue = 35_000_000;
+          let marginPct = 0.07;
+          let fuelSensitivity = 1.0;
+          switch (r.doctrine) {
+            case "premium-service":
+              baseRevenue = 28_000_000; marginPct = 0.13; fuelSensitivity = 1.3; break;
+            case "budget-expansion":
+              baseRevenue = 42_000_000; marginPct = 0.05; fuelSensitivity = 1.1; break;
+            case "cargo-dominance":
+              baseRevenue = 32_000_000; marginPct = 0.10; fuelSensitivity = 0.6; break;
+            case "safety-first":
+              baseRevenue = 33_000_000; marginPct = 0.09; fuelSensitivity = 0.95; break;
+            default:
+              baseRevenue = 34_000_000; marginPct = 0.08; fuelSensitivity = 1.0; break;
+          }
+
+          // Brand pts amplify revenue (50 brand = 1.0x, 80 = 1.15x, 100 = 1.25x)
+          const brandMul = 0.85 + (r.brandPts / 100) * 0.4;
+          const maturityMul = 1 + quarterMaturity * 0.45;
+          const revenue = baseRevenue * brandMul * maturityMul * (1 + personalityNoise);
+          const fuelDrag = fuelStress * fuelSensitivity * revenue * 0.18;
+          const adjustedMargin = marginPct - fuelStress * 0.04;
+          const netProfit = revenue * adjustedMargin - fuelDrag;
+
+          // Brand drift — successful rivals build brand, losing rivals erode it
+          const driftBrand = netProfit > 0 ? 1 + Math.random() * 1.5 : -1 - Math.random();
+          const driftLoyalty = netProfit > 0 ? 0.5 + Math.random() : -0.5 - Math.random() * 0.8;
+
+          const newBrand = Math.max(0, Math.min(100, r.brandPts + driftBrand));
+          const newLoyalty = Math.max(0, Math.min(100, r.customerLoyaltyPct + driftLoyalty));
+          const newCash = Math.max(0, r.cashUsd + netProfit);
+
+          const updated: Team = {
             ...r,
-            brandPts: Math.max(0, r.brandPts + driftBrand),
-            customerLoyaltyPct: Math.max(0, Math.min(100, r.customerLoyaltyPct + driftLoyalty)),
-            cashUsd: Math.max(0, r.cashUsd + (Math.random() - 0.45) * 20_000_000),
+            brandPts: newBrand,
+            customerLoyaltyPct: newLoyalty,
+            cashUsd: newCash,
+            financialsByQuarter: [
+              ...r.financialsByQuarter,
+              {
+                quarter: s.currentQuarter,
+                cash: newCash,
+                debt: r.totalDebtUsd,
+                revenue,
+                costs: revenue - netProfit,
+                netProfit,
+                brandPts: newBrand,
+                opsPts: r.opsPts,
+                loyalty: newLoyalty,
+                brandValue: 0,  // computed below
+              },
+            ],
           };
-          return { ...updated, brandValue: computeBrandValue(updated) };
+          updated.brandValue = computeBrandValue(updated);
+          // patch the just-pushed financials row's brandValue
+          const lastIdx = updated.financialsByQuarter.length - 1;
+          updated.financialsByQuarter[lastIdx] = {
+            ...updated.financialsByQuarter[lastIdx],
+            brandValue: updated.brandValue,
+          };
+          return updated;
         });
 
         set({
@@ -1750,6 +1857,7 @@ export const useGame = create<GameStore>()(
           },
           labourRelationsScore: t.labourRelationsScore ?? 50,
           milestones: t.milestones ?? [],
+          consecutiveProfitableQuarters: t.consecutiveProfitableQuarters ?? 0,
           routes: (t.routes ?? []).map((r) => ({
             ...r,
             econFare: r.econFare ?? null,

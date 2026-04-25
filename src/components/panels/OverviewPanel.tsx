@@ -9,7 +9,9 @@ import { computeAirlineValue, fleetCount, brandRating } from "@/lib/engine";
 import { DOCTRINE_BY_ID } from "@/data/doctrines";
 import { useUi, type PanelId } from "@/store/ui";
 import { SecondaryHubModal } from "@/components/game/SecondaryHubModal";
-import { Plus, MapPin } from "lucide-react";
+import { Plus, MapPin, Award, Lock } from "lucide-react";
+import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
+import { cn } from "@/lib/cn";
 
 export function OverviewPanel() {
   const s = useGame();
@@ -238,17 +240,71 @@ export function OverviewPanel() {
         </div>
       )}
 
-      {/* Milestones */}
-      {player.milestones && player.milestones.length > 0 && (
-        <div>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
-            Milestones earned
+      {/* Milestones — earned + remaining (PRD E8.9) */}
+      <div>
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+            <Award size={11} /> Milestones
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {player.milestones.map((m) => (
-              <Badge key={m} tone="accent">{m}</Badge>
-            ))}
-          </div>
+          <span className="text-[0.6875rem] tabular font-mono text-ink-muted">
+            {player.milestones.length} / {MILESTONES.length}
+          </span>
+        </div>
+        <div className="rounded-md border border-line bg-surface overflow-hidden">
+          {[...MILESTONES]
+            .sort((a, b) => {
+              const ae = player.milestones.includes(a.id) ? 1 : 0;
+              const be = player.milestones.includes(b.id) ? 1 : 0;
+              if (ae !== be) return be - ae;       // earned first
+              return a.difficulty - b.difficulty;
+            })
+            .map((m) => {
+              const earned = player.milestones.includes(m.id);
+              return (
+                <div
+                  key={m.id}
+                  className={cn(
+                    "flex items-start gap-2.5 px-3 py-2 border-b border-line last:border-0",
+                    earned ? "bg-[var(--positive-soft)]/40" : "",
+                  )}
+                >
+                  <span className={cn(
+                    "shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5",
+                    earned ? "bg-positive text-primary-fg" : "bg-surface-2 text-ink-muted border border-line",
+                  )}>
+                    {earned ? <Award size={11} /> : <Lock size={10} />}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className={cn(
+                        "text-[0.8125rem] font-semibold",
+                        earned ? "text-ink" : "text-ink-2",
+                      )}>
+                        {m.title}
+                      </span>
+                      <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted shrink-0">
+                        {m.category}
+                      </span>
+                    </div>
+                    <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-0.5">
+                      {earned ? m.description : m.hint}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+
+      {/* Profit-streak counter (visible if you've ever turned a profit) */}
+      {player.consecutiveProfitableQuarters > 0 && (
+        <div className="rounded-md border border-line bg-[var(--positive-soft)]/30 px-3 py-2 flex items-baseline justify-between">
+          <span className="text-[0.6875rem] uppercase tracking-wider text-positive font-semibold">
+            Profitability streak
+          </span>
+          <span className="text-[0.875rem] tabular font-mono text-positive font-bold">
+            {player.consecutiveProfitableQuarters} Q
+          </span>
         </div>
       )}
 

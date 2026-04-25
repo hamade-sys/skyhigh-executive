@@ -254,6 +254,9 @@ export interface Team {
 
   // Milestones earned (PRD E8.9)
   milestones: string[];
+  /** Running count of consecutive profitable quarters; resets on a loss.
+   *  Used by the "Profit Streak" milestone and the boardroom narrative. */
+  consecutiveProfitableQuarters: number;
 
   // Sealed auction bids queued for the next slot release (admin-auctioned per quarter)
   pendingSlotBids: Array<{
