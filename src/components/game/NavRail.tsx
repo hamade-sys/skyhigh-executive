@@ -16,7 +16,8 @@ import {
 import { useGame, selectPlayer } from "@/store/game";
 import { useUi, type PanelId } from "@/store/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
-import { NEWS_BY_QUARTER } from "@/data/world-news";
+import { NEWS_BY_QUARTER, dynamicHostNews } from "@/data/world-news";
+import { CITIES_BY_CODE } from "@/data/cities";
 import type { NewsItem } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { fmtQuarter } from "@/lib/format";
@@ -66,6 +67,17 @@ export function NavRail() {
   const togglePanel = useUi((s) => s.togglePanel);
   const player = useGame(selectPlayer);
   const currentQuarter = useGame((state) => state.currentQuarter);
+  const worldCupHostCode = useGame((state) => state.worldCupHostCode);
+  const olympicHostCode = useGame((state) => state.olympicHostCode);
+
+  /** Combine static WORLD_NEWS for a round with the dynamic host-city
+   *  announcements (World Cup / Olympics) that depend on the per-game
+   *  randomized host codes. */
+  const itemsForQuarter = (q: number): NewsItem[] => {
+    const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
+      (code) => CITIES_BY_CODE[code]?.name);
+    return [...dynamic, ...(NEWS_BY_QUARTER[q] ?? [])];
+  };
   const fuelIndex = useGame((state) => state.fuelIndex);
   const baseInterestRatePct = useGame((state) => state.baseInterestRatePct);
 
@@ -80,7 +92,7 @@ export function NavRail() {
     setTickerIndex(0);
   }, [currentQuarter]);
   useEffect(() => {
-    const items = NEWS_BY_QUARTER[currentQuarter] ?? [];
+    const items = itemsForQuarter(currentQuarter);
     if (items.length <= 1) return;
     const id = setInterval(() => {
       setTickerIndex((i) => (i + 1) % items.length);
@@ -99,8 +111,7 @@ export function NavRail() {
   // World news = current + past quarters only (most recent first)
   const newsItems: NewsItem[] = [];
   for (let q = currentQuarter; q >= 1; q--) {
-    const items = NEWS_BY_QUARTER[q] ?? [];
-    for (const item of items) newsItems.push(item);
+    for (const item of itemsForQuarter(q)) newsItems.push(item);
   }
 
   const railWidth = expanded ? "w-56" : "w-14";
@@ -224,7 +235,7 @@ export function NavRail() {
           a time, cycling every 60s. Helps a passive player see what's
           happening this quarter without opening the panel. */}
       {expanded && (() => {
-        const currentItems = NEWS_BY_QUARTER[currentQuarter] ?? [];
+        const currentItems = itemsForQuarter(currentQuarter);
         if (currentItems.length === 0) return null;
         const item = currentItems[tickerIndex % currentItems.length];
         return (

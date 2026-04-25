@@ -1502,9 +1502,14 @@ export function runQuarterClose(
   }
 
   // ─ Pre-tax profit ───────────────────────────────────────
+  // BUG FIX: insurancePremium was shown in financials but never
+  // subtracted from pretax — net profit was overstated by the premium
+  // amount every quarter (small-but-real, $9M+ on a $1.5B revenue team
+  // with medium policy). Now part of the formula.
   const pretax =
     revenue - fuelCost - slotCost - staffCost - otherSliderCost -
-    maintenanceCost - depreciation - interest - rcfInterest -
+    maintenanceCost - insurancePremium - depreciation -
+    interest - rcfInterest -
     passengerTax - fuelExcise - carbonLevy;
 
   // ─ Tax loss carry-forward (PRD B5): 5-quarter expiry ───

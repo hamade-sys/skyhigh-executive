@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { NEWS_BY_QUARTER } from "@/data/world-news";
+import { NEWS_BY_QUARTER, dynamicHostNews } from "@/data/world-news";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { cityEventImpact } from "@/lib/city-events";
 import { useGame, selectPlayer } from "@/store/game";
@@ -24,6 +24,8 @@ function outletFor(id: string): string {
 
 export function NewsPanel() {
   const currentQuarter = useGame((s) => s.currentQuarter);
+  const worldCupHostCode = useGame((s) => s.worldCupHostCode);
+  const olympicHostCode = useGame((s) => s.olympicHostCode);
   const player = useGame(selectPlayer);
 
   // Player's current network (hub + secondary hubs + every endpoint of their routes)
@@ -60,7 +62,11 @@ export function NewsPanel() {
       </header>
 
       {quartersToShow.map((q) => {
-        const items = NEWS_BY_QUARTER[q] ?? [];
+        // Mix in dynamic host-city announcements (World Cup / Olympics)
+        // alongside the static WORLD_NEWS entries for this round.
+        const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
+          (code) => CITIES_BY_CODE[code]?.name);
+        const items = [...dynamic, ...(NEWS_BY_QUARTER[q] ?? [])];
         if (items.length === 0) return null;
         return (
           <section key={q}>

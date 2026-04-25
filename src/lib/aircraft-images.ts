@@ -28,6 +28,12 @@ const SPEC_TO_IMAGE: Record<string, string> = {
   // Q1 turboprop / regional starters
   "Dash-8-400":   "Dash 8-400/Dash 8-400_3view.png",
 
+  // Q1 early-1990s holdover narrow-bodies
+  "B737-300":     "B737-300/B737-300_3view.png",
+  "B737-400":     "B737-400/B737-400_3view.png",
+  "B737-500":     "B737-500/B737-500_3view.png",
+  "B777-200":     "B777-200/B777-200_3view.png",
+
   // Q1 cargo (cargo variants reuse the passenger silhouette where available)
   "B737-300F":    "B737-300/B737-300_3view.png",
   "B757-200F":    "B757-200/B757-200_3view.png",

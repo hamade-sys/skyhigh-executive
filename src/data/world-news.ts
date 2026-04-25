@@ -165,3 +165,86 @@ export const NEWS_BY_QUARTER: Record<number, NewsItem[]> = WORLD_NEWS.reduce(
   },
   {} as Record<number, NewsItem[]>,
 );
+
+/**
+ * Dynamic host-city headlines. The World Cup and Olympic host cities
+ * are randomized per-game (tier 1-2, never a player or rival hub), so
+ * they can't live in the static WORLD_NEWS array. This helper returns
+ * any host-related headline that should fire for the given quarter.
+ *
+ * Schedule:
+ *   - World Cup host announcement: round 3 (S10 round)
+ *   - World Cup tournament window: rounds 19-22 main, 23-24 tail
+ *   - Olympic host announcement: round 13 (S11 round)
+ *   - Olympic tournament window: rounds 29-32
+ */
+export function dynamicHostNews(
+  quarter: number,
+  worldCupHostCode: string | null | undefined,
+  olympicHostCode: string | null | undefined,
+  cityNameLookup: (code: string) => string | undefined,
+): NewsItem[] {
+  const out: NewsItem[] = [];
+
+  // World Cup
+  if (worldCupHostCode) {
+    const wcCity = cityNameLookup(worldCupHostCode) ?? worldCupHostCode;
+    if (quarter === 3) {
+      out.push({
+        id: `Q${quarter}-WC-HOST-ANNOUNCED`,
+        quarter,
+        icon: "⚽",
+        impact: "tourism",
+        headline: `FIFA names ${wcCity} as official World Cup host city`,
+        detail: `Routes touching ${wcCity} (${worldCupHostCode}) will see heavy demand surges in rounds 19-24. S10 sealed-bid carrier auction opens this quarter.`,
+      });
+    }
+    if (quarter === 19) {
+      out.push({
+        id: `Q${quarter}-WC-OPENING`,
+        quarter,
+        icon: "⚽",
+        impact: "tourism",
+        headline: `World Cup opening week — ${wcCity} airports overwhelmed`,
+        detail: `Demand on routes touching ${wcCity} (${worldCupHostCode}) is locked at near-full loads through Q4 of this year. Slot leases at the host city are at premium prices.`,
+      });
+    }
+    if (quarter === 23) {
+      out.push({
+        id: `Q${quarter}-WC-FINALS`,
+        quarter,
+        icon: "⚽",
+        impact: "tourism",
+        headline: `World Cup quarterfinals → final stretch in ${wcCity}`,
+        detail: `Tail-end uplift on ${wcCity} (${worldCupHostCode}) routes — +50% above your pre-tournament baseline if you held capacity through the group stage.`,
+      });
+    }
+  }
+
+  // Olympics
+  if (olympicHostCode) {
+    const olCity = cityNameLookup(olympicHostCode) ?? olympicHostCode;
+    if (quarter === 13) {
+      out.push({
+        id: `Q${quarter}-OL-HOST-ANNOUNCED`,
+        quarter,
+        icon: "🏅",
+        impact: "tourism",
+        headline: `IOC confirms ${olCity} for the upcoming Summer Olympics`,
+        detail: `Demand surge expected on ${olCity} (${olympicHostCode}) routes through the rounds 29-32 window. S11 Olympic Play sponsorship slots open this quarter.`,
+      });
+    }
+    if (quarter === 29) {
+      out.push({
+        id: `Q${quarter}-OL-OPENING`,
+        quarter,
+        icon: "🏅",
+        impact: "tourism",
+        headline: `Olympic torch lit in ${olCity}`,
+        detail: `Routes touching ${olCity} (${olympicHostCode}) ride the surge through the Games. Official airline partners get a 95% sealed load floor.`,
+      });
+    }
+  }
+
+  return out;
+}

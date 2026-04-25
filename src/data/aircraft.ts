@@ -53,6 +53,27 @@ export const AIRCRAFT: AircraftSpec[] = [
     seats: { first: 0, business: 0, economy: 78 }, rangeKm: 2040,
     fuelBurnPerKm: 1.5, buyPriceUsd: 18_000_000, leasePerQuarterUsd: 150_000,
     ecoUpgradeUsd: 1_800_000, note: "Turboprop regional (real EIS 2000). Best on thin short-haul routes." },
+  // ─── Early-1990s holdover narrow-bodies (still flying in fleets at game start) ──
+  // 737-300 EIS 1984 → R1 (pre-2000)
+  { id: "B737-300", name: "Boeing 737-300", family: "passenger", unlockQuarter: 1,
+    seats: { first: 0, business: 12, economy: 116 }, rangeKm: 4400,
+    fuelBurnPerKm: 3.0, buyPriceUsd: 18_000_000, leasePerQuarterUsd: 148_000,
+    ecoUpgradeUsd: 1_800_000, note: "Classic 737 (real EIS 1984). Cheap entry narrow-body, ageing fast." },
+  // 737-400 EIS 1988 → R1
+  { id: "B737-400", name: "Boeing 737-400", family: "passenger", unlockQuarter: 1,
+    seats: { first: 0, business: 16, economy: 130 }, rangeKm: 5000,
+    fuelBurnPerKm: 3.2, buyPriceUsd: 21_000_000, leasePerQuarterUsd: 170_000,
+    ecoUpgradeUsd: 2_100_000, note: "Stretched Classic 737 (real EIS 1988). Workhorse for European low-cost routes." },
+  // 737-500 EIS 1990 → R1
+  { id: "B737-500", name: "Boeing 737-500", family: "passenger", unlockQuarter: 1,
+    seats: { first: 0, business: 8, economy: 100 }, rangeKm: 4400,
+    fuelBurnPerKm: 2.9, buyPriceUsd: 17_000_000, leasePerQuarterUsd: 140_000,
+    ecoUpgradeUsd: 1_700_000, note: "Shortest Classic 737 (real EIS 1990). Best for thin short-haul." },
+  // 777-200 EIS 1995 → R1 (base 777, pre-ER)
+  { id: "B777-200", name: "Boeing 777-200", family: "passenger", unlockQuarter: 1,
+    seats: { first: 14, business: 42, economy: 245 }, rangeKm: 9700,
+    fuelBurnPerKm: 5.0, buyPriceUsd: 78_000_000, leasePerQuarterUsd: 640_000,
+    ecoUpgradeUsd: 7_800_000, note: "Original 777 (real EIS 1995). Twin-engine widebody, shorter range than the ER." },
 
   // ─── Q1 cargo ───────────────────────────────────────────────
   { id: "B737-300F", name: "Boeing 737-300F", family: "cargo", unlockQuarter: 1,
