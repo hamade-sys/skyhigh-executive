@@ -53,6 +53,14 @@ interface PurchaseOrderArgs {
 interface Props {
   spec: AircraftSpec | null;
   acquisitionType: "buy" | "lease";
+  /** Optional initial values from the AircraftMarketModal expanded card.
+   *  When provided, the modal jumps the player straight to seat-config
+   *  review instead of asking them to re-enter quantity/engine/fuselage. */
+  prefill?: {
+    quantity?: number;
+    engineUpgrade?: "fuel" | "power" | "super" | null;
+    fuselageUpgrade?: boolean;
+  };
   onConfirm: (args: PurchaseOrderArgs) => void;
   onClose: () => void;
 }
@@ -66,7 +74,7 @@ export function PurchaseOrderModal(props: Props) {
 }
 
 function PurchaseOrderBody({
-  spec, acquisitionType, onConfirm, onClose,
+  spec, acquisitionType, prefill, onConfirm, onClose,
 }: Omit<Props, "spec"> & { spec: NonNullable<Props["spec"]> }) {
   const isPassenger = spec.family === "passenger";
 
@@ -89,9 +97,11 @@ function PurchaseOrderBody({
     return { first: Math.round(f), business: Math.round(b), economy: Math.round(y) };
   }, [spec, isPassenger, defaultEquivalents]);
 
-  const [quantity, setQuantity] = useState(1);
-  const [engine, setEngine] = useState<EngineKind>("none");
-  const [fuselage, setFuselage] = useState(false);
+  const [quantity, setQuantity] = useState(prefill?.quantity ?? 1);
+  const [engine, setEngine] = useState<EngineKind>(
+    prefill?.engineUpgrade ?? "none",
+  );
+  const [fuselage, setFuselage] = useState(prefill?.fuselageUpgrade ?? false);
   const [firstPct, setFirstPct] = useState(defaultRatios.first);
   const [businessPct, setBusinessPct] = useState(defaultRatios.business);
   // Economy is the remainder so it always balances.

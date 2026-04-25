@@ -66,7 +66,15 @@ export function FleetPanel() {
   const s = useGame();
   const player = selectPlayer(s);
   const [buyOpen, setBuyOpen] = useState(false);
-  const [ordering, setOrdering] = useState<{ specId: string; type: "buy" | "lease" } | null>(null);
+  const [ordering, setOrdering] = useState<{
+    specId: string;
+    type: "buy" | "lease";
+    prefill?: {
+      quantity?: number;
+      engineUpgrade?: "fuel" | "power" | "super" | null;
+      fuselageUpgrade?: boolean;
+    };
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedSpecId, setExpandedSpecId] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
@@ -596,7 +604,7 @@ export function FleetPanel() {
         marketQuery={marketQuery}
         setMarketQuery={setMarketQuery}
         secondHandListings={listings}
-        onOrder={(specId, type) => setOrdering({ specId, type })}
+        onOrder={(specId, type, prefill) => setOrdering({ specId, type, prefill })}
         onBuySecondHand={(listingId) => {
           const r = s.buySecondHand(listingId);
           if (!r.ok) setError(r.error ?? "Purchase failed");
@@ -608,6 +616,7 @@ export function FleetPanel() {
       <PurchaseOrderModal
         spec={ordering ? AIRCRAFT_BY_ID[ordering.specId] ?? null : null}
         acquisitionType={ordering?.type ?? "buy"}
+        prefill={ordering?.prefill}
         onClose={() => { setOrdering(null); setError(null); }}
         onConfirm={handlePurchaseConfirm}
       />
