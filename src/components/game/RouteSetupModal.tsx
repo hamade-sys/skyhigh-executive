@@ -117,13 +117,19 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     if (weeklyFreq < 1) setWeeklyFreq(Math.min(7, maxWeeklyFreq));
   }, [maxWeeklyFreq]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cabin availability from selected planes
+  // Cabin availability from selected planes — must honor per-instance
+  // customSeats (set at purchase via the Purchase Order modal), not just
+  // the spec default. A B787-9 spec defaults to 0F/48C/248Y, but if the
+  // player allocated first-class seats during purchase, customSeats.first
+  // > 0 and the First fare slider must appear.
   const hasFirst = useMemo(
     () =>
       selectedPlaneIds.some((id) => {
         const p = player?.fleet.find((f) => f.id === id);
-        const spec = p && AIRCRAFT_BY_ID[p.specId];
-        return spec && spec.seats.first > 0;
+        if (!p) return false;
+        const spec = AIRCRAFT_BY_ID[p.specId];
+        const seats = p.customSeats ?? spec?.seats;
+        return !!seats && seats.first > 0;
       }),
     [selectedPlaneIds, player],
   );
@@ -131,8 +137,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     () =>
       selectedPlaneIds.some((id) => {
         const p = player?.fleet.find((f) => f.id === id);
-        const spec = p && AIRCRAFT_BY_ID[p.specId];
-        return spec && spec.seats.business > 0;
+        if (!p) return false;
+        const spec = AIRCRAFT_BY_ID[p.specId];
+        const seats = p.customSeats ?? spec?.seats;
+        return !!seats && seats.business > 0;
       }),
     [selectedPlaneIds, player],
   );
@@ -206,9 +214,12 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     const demand = routeDemandPerDay(origin!, dest!, s.currentQuarter).total;
     const totalSeats = selectedPlaneIds.reduce((sum, id) => {
       const p = player.fleet.find((f) => f.id === id);
-      const spec = p && AIRCRAFT_BY_ID[p.specId];
-      if (!spec) return sum;
-      return sum + spec.seats.first + spec.seats.business + spec.seats.economy;
+      if (!p) return sum;
+      const spec = AIRCRAFT_BY_ID[p.specId];
+      // Use customSeats when set at purchase time; fall back to spec defaults.
+      const seats = p.customSeats ?? spec?.seats;
+      if (!seats) return sum;
+      return sum + seats.first + seats.business + seats.economy;
     }, 0);
     const dailyCapacity = totalSeats * dailyFreq;
     if (dailyCapacity === 0) return null;
@@ -378,9 +389,17 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                       className="accent-primary"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-ink text-[0.875rem]">{spec.name}</div>
+                      <div className="text-ink text-[0.875rem]">
+                        {spec.name}
+                        {p.customSeats && (
+                          <span className="ml-1.5 text-[0.6875rem] text-accent">· custom cabin</span>
+                        )}
+                      </div>
                       <div className="text-[0.6875rem] text-ink-muted font-mono">
-                        Range {spec.rangeKm.toLocaleString()} km · {spec.seats.first + spec.seats.business + spec.seats.economy} seats · {cruiseSpeedKmh(p.specId)} km/h cruise
+                        Range {spec.rangeKm.toLocaleString()} km · {(() => {
+                          const s = p.customSeats ?? spec.seats;
+                          return `${s.first + s.business + s.economy} seats (${s.first}F/${s.business}C/${s.economy}Y)`;
+                        })()} · {cruiseSpeedKmh(p.specId)} km/h cruise
                       </div>
                     </div>
                     {!canReach ? (

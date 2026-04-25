@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
-import { computeAirlineValue, fleetCount, resolveEndgameAwards, brandRating } from "@/lib/engine";
+import { computeAirlineValue, fleetCount, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { Award, TrendingUp, TrendingDown, Trophy } from "lucide-react";
@@ -85,6 +85,59 @@ export default function Endgame() {
           <Stat label="Customer loyalty" value={fmtPct(player.customerLoyaltyPct, 0)} />
           <Stat label="Total net profit" value={fmtMoney(totalProfit)} tone={totalProfit >= 0 ? "positive" : "negative"} />
         </div>
+
+        {/* Brand Value composition — how the final number was constructed */}
+        {(() => {
+          const bv = computeBrandValueBreakdown(player);
+          return (
+            <Card className="mb-6">
+              <CardBody>
+                <div className="flex items-baseline justify-between mb-3">
+                  <h2 className="font-display text-[1.5rem] text-ink">
+                    Brand Value composition
+                  </h2>
+                  <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                    {bv.composite.toFixed(1)} composite
+                  </span>
+                </div>
+                <p className="text-[0.875rem] text-ink-2 leading-relaxed mb-4">
+                  Three weighted health scores combine into the final Brand
+                  Value: financial discipline, brand stewardship, and operational
+                  rigor.
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <BVPillar
+                    label="Financial health · 35%"
+                    score={bv.financialHealth}
+                    rows={[
+                      { k: "Cash ratio",     v: `${bv.cashRatio.toFixed(0)}` },
+                      { k: "Debt discipline", v: `${bv.debtRatioScore.toFixed(0)}` },
+                      { k: "Revenue growth",  v: `${bv.revGrowth.toFixed(0)}` },
+                    ]}
+                  />
+                  <BVPillar
+                    label="Brand health · 50%"
+                    score={bv.brandHealth}
+                    rows={[
+                      { k: "Brand pts",         v: `${bv.brandPtsScore.toFixed(0)}` },
+                      { k: "Customer loyalty",  v: `${bv.customerLoyalty.toFixed(0)}` },
+                      { k: "Reputation events", v: `${bv.reputationEvents.toFixed(0)}` },
+                    ]}
+                  />
+                  <BVPillar
+                    label="Operations health · 15%"
+                    score={bv.operationsHealth}
+                    rows={[
+                      { k: "Ops pts",          v: `${bv.opsPtsScore.toFixed(0)}` },
+                      { k: "Fleet modernity",  v: `${bv.fleetEfficiency.toFixed(0)}` },
+                      { k: "Staff commitment", v: `${bv.staffCommitment.toFixed(0)}` },
+                    ]}
+                  />
+                </div>
+              </CardBody>
+            </Card>
+          );
+        })()}
 
         {/* End-game awards (PRD G9) */}
         {awards.length > 0 && (
@@ -380,6 +433,33 @@ function ArcSpark({ label, values, color }: { label: string; values: number[]; c
               : values[values.length - 1].toFixed(1))
           : "—"}
       </span>
+    </div>
+  );
+}
+
+function BVPillar({
+  label, score, rows,
+}: {
+  label: string;
+  score: number;
+  rows: Array<{ k: string; v: string }>;
+}) {
+  return (
+    <div className="rounded-md border border-line bg-surface-2/40 p-3">
+      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-1">
+        {label}
+      </div>
+      <div className="font-display text-[1.625rem] text-ink leading-none mb-2 tabular">
+        {score.toFixed(1)}
+      </div>
+      <div className="space-y-0.5 text-[0.75rem] tabular">
+        {rows.map((r) => (
+          <div key={r.k} className="flex items-baseline justify-between">
+            <span className="text-ink-muted">{r.k}</span>
+            <span className="text-ink font-mono">{r.v}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

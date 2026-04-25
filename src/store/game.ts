@@ -160,6 +160,11 @@ export interface GameStore extends GameState {
   advanceToNext(): void;
   resetGame(): void;
 
+  /** Facilitator-only: switch which team the main UI views as. Pivots
+   *  `playerTeamId` so all selectors that derive from it follow the
+   *  switch. Pure UI helper — does not modify any team's data. */
+  setActiveTeam(teamId: string): void;
+
   addSecondaryHub(cityCode: string): { ok: boolean; error?: string };
   removeSecondaryHub(cityCode: string): void;
   claimFlashDeal(count: number): { ok: boolean; error?: string };
@@ -1141,12 +1146,14 @@ export const useGame = create<GameStore>()(
           toast.warning(
             `Route pending: ${originCode} → ${destCode}`,
             `Bid submitted — auction resolves at end of quarter. Route activates ` +
-            `at min(intended freq, slots won) if your bid wins.`,
+            `at min(intended freq, slots won) if your bid wins. First revenue ` +
+            `appears at the quarter close AFTER activation.`,
           );
         } else {
           toast.success(
             `Route opened: ${originCode} → ${destCode}`,
-            `${Math.round(dist).toLocaleString()} km · ${dailyFrequency}/day · ${pricingTier}`,
+            `${Math.round(dist).toLocaleString()} km · ${dailyFrequency}/day · ${pricingTier}. ` +
+            `Flights start running this quarter; first revenue shows at quarter close.`,
           );
         }
         return { ok: true };
@@ -1289,6 +1296,84 @@ export const useGame = create<GameStore>()(
 
         const updated = applyOptionEffect(player, option.effect);
         updated.decisions = [...updated.decisions, decision];
+
+        // Debt assumption (e.g. S7 Full Acquisition's $180M of inherited
+        // liabilities). Materializes as a real LoanInstrument at the
+        // current base rate so the player decides when to repay — we do
+        // NOT silently deduct from cash. The player sees +$180M in
+        // totalDebtUsd and a new entry in their loans list.
+        if (option.effect.debtAssumed && option.effect.debtAssumed > 0) {
+          const principal = option.effect.debtAssumed;
+          const loan: LoanInstrument = {
+            id: mkId("loan"),
+            principalUsd: principal,
+            ratePct: s.baseInterestRatePct,
+            originQuarter: s.currentQuarter,
+            remainingPrincipal: principal,
+            govBacked: false,
+          };
+          updated.loans = [...updated.loans, loan];
+          updated.totalDebtUsd = updated.totalDebtUsd + principal;
+          toast.warning(
+            `+${fmtMoneyPlain(principal)} debt assumed`,
+            `Inherited from ${scenario.title}. Loan at ${s.baseInterestRatePct.toFixed(1)}% — ` +
+            `repay anytime via Financials or just service the interest each quarter.`,
+          );
+        }
+
+        // S7 Hungry Neighbour — fleet acquisition presets. Materialize
+        // aircraft into the player's fleet at favourable terms (already
+        // depreciated, ~8 quarters of useful life remaining). Routes are
+        // NOT auto-created — the player picks how to deploy these planes.
+        if (option.effect.acquireFleet) {
+          const preset = option.effect.acquireFleet;
+          const acquiredSpecs =
+            preset === "S7_FULL"
+              ? [
+                  // 4 narrow-body + 4 wide-body
+                  "A320", "A320", "B737-800", "B737-800",
+                  "A330-200", "A330-200", "B767-300ER", "B767-300ER",
+                ]
+              : preset === "S7_PARTIAL"
+                ? ["A320", "A320", "B737-800", "B737-800"]
+                : [];
+          if (acquiredSpecs.length > 0) {
+            const acquiredPlanes: FleetAircraft[] = acquiredSpecs.map((specId) => {
+              const spec = AIRCRAFT_BY_ID[specId];
+              const bookValue = spec ? spec.buyPriceUsd * 0.4 : 0;
+              return {
+                id: mkId("ac"),
+                specId,
+                // Arrive grounded for repaint — back online next quarter.
+                status: "grounded" as const,
+                acquisitionType: "buy" as const,
+                purchaseQuarter: s.currentQuarter,
+                purchasePrice: bookValue,
+                bookValue,
+                leaseQuarterly: null,
+                ecoUpgrade: false,
+                ecoUpgradeQuarter: null,
+                ecoUpgradeCost: 0,
+                cabinConfig: "default" as const,
+                routeId: null,
+                // 8Q life remaining (used aircraft from a failed carrier).
+                retirementQuarter: s.currentQuarter + 8,
+                maintenanceDeficit: 0,
+                satisfactionPct: 65,
+                // Auto-reactivate at next close (1Q downtime for repaint).
+                renovationCompleteQuarter: s.currentQuarter + 1,
+              };
+            });
+            updated.fleet = [...updated.fleet, ...acquiredPlanes];
+            toast.accent(
+              `${acquiredPlanes.length} aircraft transferred from administrator`,
+              `${acquiredPlanes.length} planes added to fleet · grounded for ` +
+              `repaint, available next quarter. Book value ` +
+              `${fmtMoneyPlain(acquiredPlanes.reduce((sum, p) => sum + p.bookValue, 0))} ` +
+              `(40% of new). Open routes for them in the Routes panel.`,
+            );
+          }
+        }
 
         toast.success(
           `Decision submitted: ${scenarioId} · ${optionId}`,
@@ -1614,8 +1699,19 @@ export const useGame = create<GameStore>()(
             });
           }
         }
+        // Backstop: if any airport in the bidsByAirport set is MISSING
+        // from airportSlots (old save migration gap), seed it with a
+        // fresh tier-default pool so the bid actually resolves instead
+        // of being silently skipped by resolveSlotAuctions.
+        const slotsForAuction = { ...(s.airportSlots ?? {}) };
+        const fresh = makeInitialAirportSlots();
+        for (const code of Object.keys(bidsByAirport)) {
+          if (!slotsForAuction[code] && fresh[code]) {
+            slotsForAuction[code] = fresh[code];
+          }
+        }
         const { slots: slotsAfterAuction, awards } = resolveSlotAuctions(
-          s.airportSlots ?? {},
+          slotsForAuction,
           bidsByAirport,
         );
         // Apply awards to teams (Model B — recurring fees, no upfront pay).
@@ -1757,12 +1853,11 @@ export const useGame = create<GameStore>()(
         //   - Won zero / insufficient slots → CANCELLED; aircraft freed
         //   - Pending route's outbid info shown to the player.
         let playerActivations = 0;
-        let playerCancellations = 0;
-        const cancelledRouteIds = new Set<string>();
-        // Diagnostic: collect human-readable reasons each pending route
-        // failed to activate so we can surface a useful message instead
-        // of a generic "outbid".
-        const cancelDiagnostics: string[] = [];
+        let playerStillPending = 0;
+        // Diagnostic per route: the player needs to know WHY it didn't
+        // activate (slots held, used, available, needed) so they can
+        // re-bid intelligently next quarter.
+        const stillPendingDiagnostics: string[] = [];
         const teamsWithPendingResolved = delayedTeams.map((t) => {
           if (!t.routes.some((r) => r.status === "pending")) return t;
           const newRoutes: typeof t.routes = [];
@@ -1773,9 +1868,6 @@ export const useGame = create<GameStore>()(
             }
             const slotsO = t.airportLeases?.[r.originCode]?.slots ?? 0;
             const slotsD = t.airportLeases?.[r.destCode]?.slots ?? 0;
-            // usedO/usedD: count weekly schedules at each endpoint from
-            // OTHER routes (active OR pending — pending also reserve slots
-            // once they activate, so we shouldn't double-allocate them).
             const usedO = t.routes
               .filter((rt) =>
                 rt.id !== r.id &&
@@ -1795,18 +1887,20 @@ export const useGame = create<GameStore>()(
             const intendedWeekly = r.dailyFrequency * 7;
             const effectiveWeekly = Math.min(intendedWeekly, availO, availD);
             if (effectiveWeekly < 1) {
-              // The bid lost OR insufficient slots remained after wins.
-              // Distinguish between "bid was rejected" and "bid won but
-              // slots went elsewhere" with a more specific message.
+              // PRD update: do NOT auto-delete pending routes that fail to
+              // activate. Keep them as "pending" so the player can either
+              // re-bid for the missing slots next quarter, or cancel them
+              // manually via the Routes detail. Auto-deletion was wiping
+              // out 3+ routes with no recourse — destructive UX.
               if (t.id === s.playerTeamId) {
-                playerCancellations += 1;
-                cancelDiagnostics.push(
+                playerStillPending += 1;
+                stillPendingDiagnostics.push(
                   `${r.originCode}→${r.destCode}: held ${slotsO}@${r.originCode}/${slotsD}@${r.destCode}, ` +
-                  `used ${usedO}/${usedD}, avail ${availO}/${availD} for ${intendedWeekly}/wk needed`,
+                  `${usedO}/${usedD} used, ${availO}/${availD} free, need ${intendedWeekly}/wk`,
                 );
               }
-              cancelledRouteIds.add(r.id);
-              continue; // drop the route
+              newRoutes.push(r); // keep pending
+              continue;
             }
             if (t.id === s.playerTeamId) playerActivations += 1;
             newRoutes.push({
@@ -1815,13 +1909,10 @@ export const useGame = create<GameStore>()(
               dailyFrequency: Math.max(1, Math.round(effectiveWeekly / 7)),
             });
           }
-          // Free aircraft assigned to cancelled pending routes
-          const newFleet = t.fleet.map((f) =>
-            f.routeId && cancelledRouteIds.has(f.routeId)
-              ? { ...f, status: "active" as const, routeId: null }
-              : f,
-          );
-          return { ...t, routes: newRoutes, fleet: newFleet };
+          // No automatic fleet release — pending routes still hold their
+          // aircraft. Player can free them by manually cancelling the
+          // pending route via the Routes detail modal.
+          return { ...t, routes: newRoutes };
         });
         if (playerActivations > 0) {
           toast.success(
@@ -1829,15 +1920,11 @@ export const useGame = create<GameStore>()(
             "Bid won at quarter close — flying at the highest frequency the slots allow.",
           );
         }
-        if (playerCancellations > 0) {
-          // Surface diagnostic detail so the player can see WHY the route
-          // didn't activate — rivals outbidding, insufficient slots even
-          // after winning, etc.
+        if (playerStillPending > 0) {
           toast.warning(
-            `${playerCancellations} pending route${playerCancellations > 1 ? "s" : ""} cancelled`,
-            cancelDiagnostics.join(" · ") +
-            ". Aircraft are back in the idle pool. Slot bids may have been outbid, " +
-            "or other active routes consumed the slots before this one could activate.",
+            `${playerStillPending} route${playerStillPending > 1 ? "s" : ""} still pending`,
+            stillPendingDiagnostics.join(" · ") +
+            ". Re-bid in the Slot Market for the missing slots, or cancel the route manually in Routes.",
           );
         }
 
@@ -1858,6 +1945,12 @@ export const useGame = create<GameStore>()(
           `Round ${nextQ}/20`,
           fmtQuarter(nextQ),
         );
+      },
+
+      setActiveTeam: (teamId) => {
+        const s = get();
+        if (!s.teams.some((t) => t.id === teamId)) return;
+        set({ playerTeamId: teamId });
       },
 
       resetGame: () => {
@@ -2696,6 +2789,19 @@ export const useGame = create<GameStore>()(
         // their existing in-game allocation in slotsByAirport).
         if (!state.airportSlots || Object.keys(state.airportSlots).length === 0) {
           state.airportSlots = makeInitialAirportSlots();
+        } else {
+          // CRITICAL: ensure every CITY has an airportSlots entry. Older
+          // saves had a partial map (only the cities that existed in the
+          // first city list). When we expanded to ~380 cities, bids at
+          // newly-added airports silently failed because the auction
+          // resolver skips airports with no `state` entry. Backfill any
+          // missing cities with fresh tier-default pools.
+          const fresh = makeInitialAirportSlots();
+          for (const code of Object.keys(fresh)) {
+            if (!state.airportSlots[code]) {
+              state.airportSlots[code] = fresh[code];
+            }
+          }
         }
         state.teams = state.teams.map((t) => {
           const flags = new Set(Array.isArray(t.flags) ? t.flags : Array.from(t.flags ?? []));

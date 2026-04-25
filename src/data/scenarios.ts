@@ -19,6 +19,21 @@ export interface OptionEffect {
    * dollar amount. 0..1 (e.g. 0.5 = save 50% of two quarters of staff).
    */
   staffSavingsPct?: number;
+  /**
+   * Acquisition presets that materialize aircraft + route credits when
+   * a player picks an M&A option. The preset string is interpreted in
+   * the engine (see applyOptionEffect → acquirePreset). Used by S7
+   * Hungry Neighbour. Keep the IDs stable since they're persisted in
+   * decisions[].
+   */
+  acquireFleet?: "S7_FULL" | "S7_PARTIAL";
+  /**
+   * Debt the player ASSUMES from a decision (e.g. S7 Full Acquisition's
+   * $180M debt). Materialized as a real LoanInstrument at the current
+   * base interest rate, repayable via the standard repayLoan action
+   * whenever the player decides — not deducted from cash automatically.
+   */
+  debtAssumed?: number;
   // simplified — real engine should schedule these at targetQuarter:
   deferred?: {
     quarter: number;
@@ -225,24 +240,26 @@ export const SCENARIOS: Scenario[] = [
     id: "S7", title: "The Hungry Neighbour", quarter: 9, severity: "HIGH", timeLimitMinutes: 30,
     teaser: "A competing airline is collapsing. Buy, pick at the assets, or let it die?",
     context:
-      "Regional competitor is entering administration. 12 routes, 8 aircraft, $180M debt. Your acquisitions team wants full purchase; your CFO wants codeshare.",
+      "A regional competitor is entering administration with 12 active routes, 8 aircraft (mix of narrow- and wide-body), and $180M of outstanding debt. The administrator is accepting bids in three lots: full operation, route rights only, or a codeshare alliance. If you walk away, rivals get first pick.",
     options: [
       { id: "A", label: "Full acquisition",
-        description: "Buy the whole airline. $350M cash + $180M debt assumed.",
-        effect: { cash: -350 * M, opsPts: -15, brandPts: 10 },
-        effectTags: ["-$350M", "+$180M debt", "Ops -15", "Brand +10"] },
+        description:
+          "Buy the whole airline. $350M cash + $180M debt assumed (you can repay on your own timeline). Eight aircraft transfer into your fleet (4 narrow + 4 wide) — they arrive grounded for repaint, then become idle in the fleet panel.",
+        effect: { cash: -350 * M, debtAssumed: 180 * M, opsPts: -15, brandPts: 10, acquireFleet: "S7_FULL" },
+        effectTags: ["−$350M", "+$180M debt"] },
       { id: "B", label: "Routes only",
-        description: "Cherry-pick profitable routes.",
-        effect: { cash: -120 * M, brandPts: 5 },
-        effectTags: ["-$120M", "Brand +5"] },
+        description:
+          "Cherry-pick the profitable routes — you get 12 high-yield route rights and 4 narrow-body aircraft to fly them. The rest of the operation goes to rivals.",
+        effect: { cash: -120 * M, brandPts: 5, acquireFleet: "S7_PARTIAL" },
+        effectTags: ["−$120M"] },
       { id: "C", label: "Let them collapse",
-        description: "Move in after bankruptcy. 60% chance routes go to rivals.",
+        description: "Walk away. 60% chance the routes go to your rivals at quarter close.",
         effect: { brandPts: -5,
           deferred: { quarter: 10, probability: 0.6, effect: { setFlags: ["routes_lost_to_rivals"] } } },
-        effectTags: ["Brand -5", "60% risk"] },
+        effectTags: [] },
       { id: "D", label: "Codeshare",
-        description: "Preserve the airline as an alliance partner.",
-        effect: { opsPts: 5 }, effectTags: ["Ops +5", "Codeshare revenue"] },
+        description: "Preserve the airline as an alliance partner. Annual codeshare revenue, no fleet transfer.",
+        effect: { opsPts: 5 }, effectTags: ["Codeshare revenue"] },
     ],
     autoSubmitOptionId: "C",
   },

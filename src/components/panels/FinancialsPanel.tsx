@@ -228,7 +228,7 @@ export function FinancialsPanel() {
                   <Th className="text-right">Revenue</Th>
                   <Th className="text-right">Profit</Th>
                   <Th className="text-right">Cash</Th>
-                  <Th className="text-right">BV</Th>
+                  <Th className="text-right">Debt</Th>
                 </tr>
               </thead>
               <tbody>
@@ -240,7 +240,7 @@ export function FinancialsPanel() {
                       {fmtMoney(q.netProfit)}
                     </Td>
                     <Td className="text-right tabular font-mono">{fmtMoney(q.cash)}</Td>
-                    <Td className="text-right tabular font-mono">{q.brandValue.toFixed(1)}</Td>
+                    <Td className="text-right tabular font-mono">{q.debt > 0 ? fmtMoney(q.debt) : <span className="text-ink-muted">—</span>}</Td>
                   </tr>
                 ))}
               </tbody>

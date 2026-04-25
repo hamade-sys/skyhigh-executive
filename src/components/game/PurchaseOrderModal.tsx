@@ -27,10 +27,17 @@ import type { AircraftSpec } from "@/types/game";
  *   5. Live total price + Order button
  */
 
-const ENGINE_FUEL_COST = 24_900_000;
-const ENGINE_POWER_COST = 24_900_000;
-const ENGINE_SUPER_COST = 49_800_000;
-const FUSELAGE_COST = 24_900_000;
+// Upgrade pricing scales with the airframe value — a 10% premium per
+// upgrade so an A380 costs proportionally more to retrofit than a small
+// narrow-body. Base flat fee guards against absurdly cheap upgrades on
+// cheap aircraft.
+function engineCost(specPrice: number, kind: "fuel" | "power" | "super"): number {
+  const pct = kind === "super" ? 0.20 : 0.10;
+  return Math.max(2_000_000, Math.round(specPrice * pct));
+}
+function fuselageCost(specPrice: number): number {
+  return Math.max(2_000_000, Math.round(specPrice * 0.10));
+}
 
 type EngineKind = "none" | "fuel" | "power" | "super";
 
@@ -116,11 +123,18 @@ function PurchaseOrderBody({
       Math.abs(businessPct - defaultRatios.business) > 0
     );
 
-  const engineCost =
-    engine === "fuel" ? ENGINE_FUEL_COST :
-    engine === "power" ? ENGINE_POWER_COST :
-    engine === "super" ? ENGINE_SUPER_COST : 0;
-  const upgradeCostPerPlane = engineCost + (fuselage ? FUSELAGE_COST : 0);
+  // Pricing scales with the airframe (10% per upgrade, 20% for super).
+  // The buy price is the airframe value regardless of buy-vs-lease since
+  // upgrades belong to the aircraft, not the lease.
+  const fuelUpgradeCost = engineCost(spec.buyPriceUsd, "fuel");
+  const powerUpgradeCost = engineCost(spec.buyPriceUsd, "power");
+  const superUpgradeCost = engineCost(spec.buyPriceUsd, "super");
+  const fuselageUpgradeCost = fuselageCost(spec.buyPriceUsd);
+  const selectedEngineCost =
+    engine === "fuel" ? fuelUpgradeCost :
+    engine === "power" ? powerUpgradeCost :
+    engine === "super" ? superUpgradeCost : 0;
+  const upgradeCostPerPlane = selectedEngineCost + (fuselage ? fuselageUpgradeCost : 0);
 
   const basePrice =
     acquisitionType === "buy" ? spec.buyPriceUsd : spec.leasePerQuarterUsd;
@@ -220,7 +234,7 @@ function PurchaseOrderBody({
               active={engine === "fuel"}
               label="Fuel-efficient"
               detail="+10% range, −10% fuel burn"
-              cost={ENGINE_FUEL_COST}
+              cost={fuelUpgradeCost}
               onClick={() => setEngine("fuel")}
             />
             <EngineOption
@@ -228,7 +242,7 @@ function PurchaseOrderBody({
               active={engine === "power"}
               label="Power-up"
               detail="+10% speed → tighter schedule"
-              cost={ENGINE_POWER_COST}
+              cost={powerUpgradeCost}
               onClick={() => setEngine("power")}
             />
             <EngineOption
@@ -236,7 +250,7 @@ function PurchaseOrderBody({
               active={engine === "super"}
               label="Super (fuel + power)"
               detail="Both effects combined"
-              cost={ENGINE_SUPER_COST}
+              cost={superUpgradeCost}
               onClick={() => setEngine("super")}
             />
           </div>
@@ -267,7 +281,7 @@ function PurchaseOrderBody({
               </div>
             </div>
             <span className="tabular font-mono text-ink-2 text-[0.875rem]">
-              +{fmtMoney(FUSELAGE_COST)}
+              +{fmtMoney(fuselageUpgradeCost)}
             </span>
           </label>
         </Section>
@@ -354,18 +368,18 @@ function PurchaseOrderBody({
             value={`${fmtMoney(basePrice)} × ${quantity}`}
             total={fmtMoney(basePrice * quantity)}
           />
-          {engineCost > 0 && (
+          {selectedEngineCost > 0 && (
             <SummaryRow
               label={`Engine retrofit (${engine})`}
-              value={`${fmtMoney(engineCost)} × ${quantity}`}
-              total={fmtMoney(engineCost * quantity)}
+              value={`${fmtMoney(selectedEngineCost)} × ${quantity}`}
+              total={fmtMoney(selectedEngineCost * quantity)}
             />
           )}
           {fuselage && (
             <SummaryRow
               label="Fuselage coating"
-              value={`${fmtMoney(FUSELAGE_COST)} × ${quantity}`}
-              total={fmtMoney(FUSELAGE_COST * quantity)}
+              value={`${fmtMoney(fuselageUpgradeCost)} × ${quantity}`}
+              total={fmtMoney(fuselageUpgradeCost * quantity)}
             />
           )}
           <div className="flex items-baseline justify-between border-t border-line pt-2 mt-2">
