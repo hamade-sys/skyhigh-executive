@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Input, Sparkline } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
-import { fmtMoney, TOTAL_GAME_ROUNDS } from "@/lib/format";
+import { fmtMoney, fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
 import { CITIES } from "@/data/cities";
 import { runQuarterClose } from "@/lib/engine";
 
@@ -357,7 +357,7 @@ export function AdminPanel() {
       {s.currentQuarter === 13 && !player.flags.has("flash_deal_claimed") && (
         <section className="rounded-md border border-accent bg-[var(--accent-soft)] p-3">
           <div className="font-semibold text-ink text-[0.875rem] mb-1">
-            Flash Deal available at Q13
+            Flash Deal available — {fmtQuarter(13)}
           </div>
           <p className="text-[0.8125rem] text-ink-2 mb-2">
             Eco-engine A320neo order. $4M deposit per plane, eco upgrade included.

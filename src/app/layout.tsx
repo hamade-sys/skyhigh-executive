@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "SkyForce — Airline Strategy Simulation",
   description:
-    "20-quarter airline strategy simulation. Build an airline, survive crises, outmaneuver rivals.",
+    "40-round airline strategy simulation across 2015–2024. Build an airline, survive crises, outmaneuver rivals.",
 };
 
 export default function RootLayout({

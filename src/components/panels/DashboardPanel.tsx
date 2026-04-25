@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Sparkline } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
-import { fmtMoney, fmtPct } from "@/lib/format";
+import { fmtMoney, fmtPct, fmtQuarter } from "@/lib/format";
 import {
   brandRating,
   computeAirlineValue,
@@ -89,7 +89,7 @@ export function DashboardPanel() {
       {series.length >= 2 && (
         <section>
           <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
-            Trajectory · Q1 → Q{currentQuarter - 1}
+            Trajectory · {fmtQuarter(1)} → {fmtQuarter(Math.max(1, currentQuarter - 1))}
           </div>
           <div className="rounded-md border border-line bg-surface p-3 space-y-2.5">
             <TrajectoryRow label="Revenue" series={series.map((q) => q.revenue)} color="var(--info)" fmt={fmtMoney} />
@@ -128,8 +128,9 @@ export function DashboardPanel() {
             </table>
           </div>
           <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
-            Year breakpoints at Q1 / Q5 / Q9 / Q13 / Q17. YTD aggregates the
-            current 4-quarter cycle. All-time covers Q1 through last close.
+            Year breakpoints every 4 rounds (R1 / R5 / R9 / R13 / R17 / R21
+            / R25 / R29 / R33 / R37 = calendar 2015–2024). YTD aggregates
+            the current 4-round cycle. All-time covers R1 through last close.
           </div>
         </section>
       )}

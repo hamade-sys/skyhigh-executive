@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
-import { fmtMoney, fmtPct, TOTAL_GAME_ROUNDS } from "@/lib/format";
+import { fmtMoney, fmtPct, fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
 import { computeAirlineValue, fleetCount, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
@@ -183,13 +183,13 @@ export default function Endgame() {
 
         {/* Multi-airline trajectory chart — every team's airline value
             quarter by quarter so the room can see how the field
-            converged or diverged across the 20-quarter window. */}
+            converged or diverged across the 40-round campaign. */}
         {ranked.length > 0 && (
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="font-display text-[1.5rem] text-ink">
-                  Airline value · Q1 → Q20
+                  Airline value · {fmtQuarter(1)} → {fmtQuarter(40)}
                 </h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
                   All teams
@@ -253,7 +253,7 @@ export default function Endgame() {
           </Card>
         )}
 
-        {/* Fun facts — quirky stats from the player's 20 quarters */}
+        {/* Fun facts — quirky stats from the player's 40-round campaign */}
         {(() => {
           const facts: Array<{ label: string; value: string }> = [];
           // Most-flown route
@@ -329,14 +329,14 @@ export default function Endgame() {
           );
         })()}
 
-        {/* Career arc — brand value trajectory across all 20 quarters */}
+        {/* Career arc — brand value trajectory across all 40 rounds */}
         {player.financialsByQuarter.length >= 2 && (
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="font-display text-[1.5rem] text-ink">Career arc</h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-                  Q1 → Q20 brand value
+                  {fmtQuarter(1)} → {fmtQuarter(40)} brand value
                 </span>
               </div>
               {(() => {
@@ -400,7 +400,7 @@ export default function Endgame() {
           </Card>
         )}
 
-        {/* Milestones unlocked across the 20 quarters */}
+        {/* Milestones unlocked across the 40-round campaign */}
         {player.milestones.length > 0 && (
           <Card className="mb-6">
             <CardBody>
@@ -666,10 +666,11 @@ function MultiAirlineChart({ teams }: { teams: Array<{ id: string; name: string;
             </g>
           );
         })}
-        {/* X-axis labels (Q1, Q5, Q10, Q15, Q20) */}
-        {[1, 5, 10, 15, 20].map((q) => (
+        {/* X-axis labels — yearly ticks across the 40-round campaign so the
+            calendar year ladder reads cleanly (every 4 rounds = one year). */}
+        {[1, 5, 13, 21, 29, 37, 40].map((q) => (
           <text key={q} x={x(q)} y={H - padB + 14} textAnchor="middle" fontSize="9" fill="var(--ink-muted)" className="font-mono tabular">
-            Q{q}
+            {fmtQuarter(q)}
           </text>
         ))}
         {/* X-axis baseline */}
