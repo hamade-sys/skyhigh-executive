@@ -338,7 +338,43 @@ export const STAFF_MULTIPLIER: Record<SliderLevel, number> = {
   0: 0.5, 1: 0.75, 2: 1.0, 3: 1.1, 4: 1.2, 5: 1.5,
 };
 
-// ─── Attractiveness + market share (PRD §5.3-5.4) ──────────
+// ─── Attractiveness + market share (PRD §6.7) ──────────
+/**
+ * Cabin-class-specific attractiveness weights:
+ *   Economy (price-sensitive):   price 0.55 / brand 0.20 / loyalty 0.15 / service 0.10
+ *   Business (brand-balanced):   price 0.35 / brand 0.35 / loyalty 0.20 / service 0.10
+ *   First (brand-heavy):         price 0.25 / brand 0.45 / loyalty 0.20 / service 0.10
+ * Cargo (price + ops + age):     priceScore 0.55 / opsScore 0.35 / ageFactor 0.10
+ */
+export type CabinClass = "econ" | "bus" | "first";
+
+export function attractivenessByClass(
+  cabinClass: CabinClass,
+  args: {
+    priceScore: number;
+    brandPts: number;
+    loyaltyPct: number;
+    serviceScore: number; // 0..100
+  },
+): number {
+  const brandScore = Math.min(100, args.brandPts / 2);
+  const w =
+    cabinClass === "econ"  ? { p: 0.55, b: 0.20, l: 0.15, s: 0.10 } :
+    cabinClass === "bus"   ? { p: 0.35, b: 0.35, l: 0.20, s: 0.10 } :
+                             { p: 0.25, b: 0.45, l: 0.20, s: 0.10 };
+  return (
+    args.priceScore * w.p +
+    brandScore * w.b +
+    args.loyaltyPct * w.l +
+    args.serviceScore * w.s
+  );
+}
+
+/**
+ * Legacy blended attractiveness score (mid-weighting). Kept for places
+ * that don't yet break out per-class economics. New code should prefer
+ * attractivenessByClass for cabin-class-specific demand splits.
+ */
 export function attractivenessScore(args: {
   priceScore: number;
   brandPts: number;
@@ -1228,16 +1264,23 @@ export function runQuarterClose(
     // PRD E1 Customer Service slider (distinct % of revenue ladder)
     + revenue * CS_PCT_REVENUE[next.sliders.customerService];
 
-  // ─ Maintenance (PRD E4 age-scaled + Ops-discount) ──────
+  // ─ Maintenance (PRD §5.3 age bands, scaled to 20-round lifespan) ──
+  // PRD bands assume an 80Q lifespan with bands at 0-5/5-10/10-15/15-20
+  // calendar years. Our 20Q in-game lifespan compresses this proportionally
+  // — each PRD year ≈ one game-quarter of life. Bands per game quarter:
+  //   age 0–5Q  (newest 25%): 0.8% of original purchase price
+  //   age 5–10Q (mid):        1.2%
+  //   age 10–15Q (older):     1.8%
+  //   age 15–20Q (end of life): 2.5%
   const opsPtsDiscount = Math.min(0.40, next.opsPts / 250);
   let maintenanceCost = 0;
   for (const f of next.fleet) {
     if (f.status !== "active") continue;
     const ageQ = Math.max(0, ctx.quarter - f.purchaseQuarter);
     const basePct =
-      ageQ < 20 ? 0.008 :
-      ageQ < 40 ? 0.012 :
-      ageQ < 60 ? 0.018 : 0.025;
+      ageQ < 5 ? 0.008 :
+      ageQ < 10 ? 0.012 :
+      ageQ < 15 ? 0.018 : 0.025;
     const effectivePct = basePct * (1 - opsPtsDiscount);
     maintenanceCost += f.purchasePrice * effectivePct;
   }

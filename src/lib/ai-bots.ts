@@ -233,27 +233,41 @@ export function planBotAircraftOrder(
   const availableSpecs = AIRCRAFT.filter((a) => a.unlockQuarter <= currentQuarter);
   if (availableSpecs.length === 0) return null;
 
-  // Pick a spec the bot can afford (cash > buyPrice * ratio)
-  // Prefer narrow-body if fleet is empty, wide if fleet has 3+ narrows
+  // Pick a spec the bot can afford. Strategy:
+  //  - Empty fleet: start with a narrow-body passenger (steady cashflow).
+  //  - 4+ pax narrows and no wides: add a wide-body for long-haul.
+  //  - 6+ planes total and zero cargo: add a cargo aircraft (yield diversification).
+  //  - HARD bots prefer modern airframes (highest unlockQuarter).
+  //  - Cash-constrained bots LEASE instead of buy.
   const fleetCount = team.fleet.filter((f) => f.status !== "retired").length;
   const wideCount = team.fleet.filter((f) => {
     const s = AIRCRAFT_BY_ID[f.specId];
-    return f.status !== "retired" && s &&
+    return f.status !== "retired" && s && s.family === "passenger" &&
       (s.seats.first + s.seats.business + s.seats.economy > 250);
   }).length;
+  const cargoCount = team.fleet.filter((f) => {
+    const s = AIRCRAFT_BY_ID[f.specId];
+    return f.status !== "retired" && s && s.family === "cargo";
+  }).length;
   const wantsWide = fleetCount >= 4 && wideCount < fleetCount * 0.4;
+  // Cargo diversification: medium+ from fleet 6, hard from fleet 4
+  const cargoThreshold = difficulty === "hard" ? 4 : 6;
+  const wantsCargo = fleetCount >= cargoThreshold && cargoCount === 0;
 
   const candidates = availableSpecs.filter((spec) => {
-    if (spec.family !== "passenger") return false; // bots focus on pax for now
-    const isWide =
-      spec.seats.first + spec.seats.business + spec.seats.economy > 250;
-    if (wantsWide !== isWide && fleetCount > 0) return false;
+    if (wantsCargo && spec.family !== "cargo") return false;
+    if (!wantsCargo && spec.family !== "passenger") return false;
+    if (spec.family === "passenger") {
+      const isWide =
+        spec.seats.first + spec.seats.business + spec.seats.economy > 250;
+      if (wantsWide !== isWide && fleetCount > 0) return false;
+    }
     return team.cashUsd >= spec.buyPriceUsd * profile.orderAircraftCashRatio;
   });
   if (candidates.length === 0) return null;
 
-  // Pick the cheapest plane that meets the criteria (steady expansion)
-  // Hard difficulty picks the most modern available (highest unlock quarter)
+  // Pick the cheapest plane that meets the criteria (steady expansion).
+  // HARD picks the most modern available. MEDIUM prefers eco upgrades.
   let pick: typeof candidates[number];
   if (difficulty === "hard") {
     pick = candidates.sort((a, b) => b.unlockQuarter - a.unlockQuarter)[0];
@@ -261,17 +275,27 @@ export function planBotAircraftOrder(
     pick = candidates.sort((a, b) => a.buyPriceUsd - b.buyPriceUsd)[0];
   }
 
-  // Quantity: 1 for easy, 1-2 for medium, 1-3 for hard
-  const maxQ = difficulty === "hard" ? 3 : difficulty === "medium" ? 2 : 1;
+  // Quantity: 1 for easy, 1-2 for medium, 1-3 for hard. Cargo orders
+  // are usually solo (one big freighter at a time).
+  const maxQ = wantsCargo
+    ? 1
+    : difficulty === "hard" ? 3 : difficulty === "medium" ? 2 : 1;
   const affordableQty = Math.min(
     maxQ,
     Math.floor(team.cashUsd / (pick.buyPriceUsd * profile.orderAircraftCashRatio)),
   );
 
+  // Lease vs buy: HARD bots lease aggressively early (better cash position
+  // for slot bidding); EASY always buys; MEDIUM mixes by cash situation.
+  const cashRatio = team.cashUsd / Math.max(1, pick.buyPriceUsd);
+  const acquisitionType: "buy" | "lease" =
+    difficulty === "hard" && cashRatio < 4 ? "lease" :
+    difficulty === "medium" && cashRatio < 2 ? "lease" : "buy";
+
   return {
     specId: pick.id,
     quantity: Math.max(1, affordableQty),
-    acquisitionType: "buy",
+    acquisitionType,
   };
 }
 

@@ -115,6 +115,10 @@ export interface GameStore extends GameState {
   renovateAircraft(aircraftId: string, newCabin: CabinConfig):
     { ok: boolean; error?: string };
 
+  /** PRD §5.5 Quick Service: 5% of book value, no downtime, satisfaction
+   *  restored to 80% of new-aircraft rating. Owned aircraft only. */
+  quickServiceAircraft(aircraftId: string): { ok: boolean; error?: string };
+
   openRoute(args: {
     originCode: string;
     destCode: string;
@@ -867,6 +871,43 @@ export const useGame = create<GameStore>()(
         toast.success(
           `Fuselage coating applied`,
           `${AIRCRAFT_BY_ID[plane.specId]?.name} · −10% fuel burn · −${fmtMoneyPlain(cost)}`,
+        );
+        return { ok: true };
+      },
+
+      quickServiceAircraft: (aircraftId) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const plane = player.fleet.find((f) => f.id === aircraftId);
+        if (!plane) return { ok: false, error: "Aircraft not found" };
+        if (plane.acquisitionType !== "buy")
+          return { ok: false, error: "Only owned aircraft can be serviced" };
+        if (plane.status !== "active")
+          return { ok: false, error: `Cannot service ${plane.status} aircraft` };
+        // PRD §5.5: 5% of current book value, no downtime, satisfaction
+        // restored to 80% of new (a fresh plane is at 75% baseline +
+        // satisfaction modifiers; we lift to 80 cleanly).
+        const cost = plane.bookValue * 0.05;
+        if (player.cashUsd < cost)
+          return { ok: false, error: `Need ${fmtMoneyPlain(cost)} cash` };
+        set({
+          teams: s.teams.map((t) =>
+            t.id !== player.id ? t : {
+              ...t,
+              cashUsd: t.cashUsd - cost,
+              fleet: t.fleet.map((f) =>
+                f.id === aircraftId
+                  ? { ...f, satisfactionPct: 80 }
+                  : f,
+              ),
+            },
+          ),
+        });
+        toast.success(
+          `Quick Service complete`,
+          `${AIRCRAFT_BY_ID[plane.specId]?.name ?? "Aircraft"} · ` +
+          `−${fmtMoneyPlain(cost)} · cabin satisfaction restored to 80%`,
         );
         return { ok: true };
       },
@@ -1658,6 +1699,26 @@ export const useGame = create<GameStore>()(
           toast.info(`Aircraft insurance proceeds`,
             `${retiredCount} retirement${retiredCount === 1 ? "" : "s"} · +${fmtMoneyPlain(insuranceProceeds)} at ${(coveragePct * 100).toFixed(0)}% coverage`);
         }
+
+        // PRD §5.2 — notify the player 2 rounds before mandatory
+        // retirement so they can plan replacement orders.
+        const approachingRetirement = updatedFleet.filter((f) =>
+          f.status === "active" &&
+          f.retirementQuarter !== undefined &&
+          f.retirementQuarter - s.currentQuarter === 2,
+        );
+        if (approachingRetirement.length > 0) {
+          const lines = approachingRetirement.slice(0, 5).map((f) => {
+            const spec = AIRCRAFT_BY_ID[f.specId];
+            return `${spec?.name ?? f.specId} (${f.id.slice(-6).toUpperCase()})`;
+          });
+          toast.warning(
+            `${approachingRetirement.length} aircraft retiring in 2 rounds`,
+            lines.join(" · ") +
+              (approachingRetirement.length > 5 ? ` · +${approachingRetirement.length - 5} more` : "") +
+              ". Order replacements now — they take 1 round to arrive.",
+          );
+        }
         // PRD update — Per-plane satisfaction drift each quarter.
         // Mean-reverts toward 60. Modified by ops slider, eco upgrade,
         // recent renovation, and aircraft age.
@@ -1800,11 +1861,16 @@ export const useGame = create<GameStore>()(
             }
           }
 
-          // Route openings — bot may start a few new routes from idle planes
+          // Route openings — bot may start a few new routes from idle planes.
+          // Each route's cargo/passenger flag is derived from the aircraft
+          // family so cargo-only fleets create cargo routes automatically.
           const routePlans = planBotRoutes(updated, t.botDifficulty, s.currentQuarter);
           for (const rp of routePlans) {
             const dist = distanceBetween(rp.origin, rp.dest);
             const dailyFreq = Math.max(1, Math.round(rp.weeklyFreq / 7));
+            const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
+            const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
+            const isCargo = acSpec?.family === "cargo";
             const route: Route = {
               id: mkId("route"),
               originCode: rp.origin,
@@ -1822,7 +1888,7 @@ export const useGame = create<GameStore>()(
               quarterlyRevenue: 0,
               quarterlyFuelCost: 0,
               quarterlySlotCost: 0,
-              isCargo: false,
+              isCargo,
               consecutiveQuartersActive: 0,
               consecutiveLosingQuarters: 0,
             };

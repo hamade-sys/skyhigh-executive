@@ -482,6 +482,59 @@ export function FleetPanel() {
                                 Fuselage
                               </button>
                             )}
+                            {/* Renovation — Quick Service: 5% of book,
+                                no downtime, satisfaction restored.
+                                Full Renovation: 20% of book (min 5% of
+                                original price), 1Q downtime, +8Q
+                                lifespan. Owned only. */}
+                            {f.acquisitionType === "buy" && f.status === "active" && (
+                              <button
+                                className="text-ink-2 hover:text-positive underline"
+                                title={
+                                  `Quick Service: ${fmtMoney(f.bookValue * 0.05)}, no downtime, ` +
+                                  `satisfaction restored to 80% of new.`
+                                }
+                                onClick={() => {
+                                  const cost = f.bookValue * 0.05;
+                                  if (!confirm(
+                                    `Quick Service ${expanded.name} (${f.id.slice(-6).toUpperCase()})?\n\n` +
+                                    `Cost: ${fmtMoney(cost)} (5% of book value)\n` +
+                                    `Downtime: none — aircraft keeps flying.\n` +
+                                    `Effect: per-plane satisfaction restored.`,
+                                  )) return;
+                                  const r = s.quickServiceAircraft(f.id);
+                                  if (!r.ok) alert(r.error ?? "Quick Service failed");
+                                }}
+                              >
+                                Quick svc
+                              </button>
+                            )}
+                            {f.acquisitionType === "buy" && f.status === "active" && (
+                              <button
+                                className="text-ink-2 hover:text-info underline"
+                                title={
+                                  `Full Renovation: 20% of book value (min 5% of original ` +
+                                  `purchase price). 1 round downtime. +8Q lifespan, ` +
+                                  `cabin reconfigurable.`
+                                }
+                                onClick={() => {
+                                  const cost = Math.max(
+                                    f.bookValue * 0.20,
+                                    f.purchasePrice * 0.05,
+                                  );
+                                  if (!confirm(
+                                    `Full Renovation ${expanded.name} (${f.id.slice(-6).toUpperCase()})?\n\n` +
+                                    `Cost: ${fmtMoney(cost)} (20% of book value, min 5% of original)\n` +
+                                    `Downtime: 1 round\n` +
+                                    `Effect: +8Q lifespan, satisfaction reset, cabin reconfigurable.`,
+                                  )) return;
+                                  const r = s.renovateAircraft(f.id, f.cabinConfig);
+                                  if (!r.ok) alert(r.error ?? "Renovation failed");
+                                }}
+                              >
+                                Full reno
+                              </button>
+                            )}
                             {f.acquisitionType === "buy" && f.status === "active" && (
                               <button
                                 className="text-ink-2 hover:text-ink underline"
