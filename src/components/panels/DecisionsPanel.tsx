@@ -152,7 +152,12 @@ function ScenarioCard({
       <p className="text-ink-2 text-[0.875rem] leading-relaxed mb-3">{scenario.context}</p>
       <HostCityCallout scenarioId={scenario.id} />
 
-      <div className="space-y-2">
+      <div
+        role="radiogroup"
+        aria-label={`Options for ${scenario.title}`}
+        aria-readonly={locked}
+        className="space-y-2"
+      >
         {scenario.options.map((opt) => {
           const blocker = isBlocked(opt);
           const isSelected = locked ? opt.id === submittedOptionId : opt.id === selected;
@@ -166,11 +171,16 @@ function ScenarioCard({
           return (
             <button
               key={opt.id}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              aria-label={`Option ${opt.id}: ${opt.label}${blocker ? ` (blocked: ${blocker.replace(/_/g, " ")})` : ""}${headline ? `. ${headline}` : ""}`}
               onClick={() => !disabled && setSelected(opt.id)}
               disabled={disabled}
               className={cn(
                 "w-full text-left rounded-lg border transition-all",
                 "px-4 py-3",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
                 isSelected ? "border-primary bg-[rgba(20,53,94,0.05)] shadow-[var(--shadow-1)]" : "border-line hover:bg-surface-hover hover:border-line",
                 disabled && !isSelected && "opacity-50 cursor-not-allowed",
               )}

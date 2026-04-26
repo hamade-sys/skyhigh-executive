@@ -8,7 +8,7 @@ import { fmtMoney, fmtPct } from "@/lib/format";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { classFareRange, distanceBetween, effectiveRangeKm } from "@/lib/engine";
-import type { City, PricingTier } from "@/types/game";
+import type { PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { AlertTriangle, Pause, Play, Plus, X } from "lucide-react";
 import { RouteSetupModal } from "@/components/game/RouteSetupModal";
@@ -264,9 +264,22 @@ export function RoutesPanel() {
                   <tr
                     key={r.id}
                     onClick={() => setActiveRouteId(r.id)}
+                    onKeyDown={(e) => {
+                      // Enter or Space opens the route detail modal —
+                      // matches the click handler so keyboard users
+                      // aren't shut out of editing routes.
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setActiveRouteId(r.id);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open route ${r.originCode} to ${r.destCode}, ${Math.round(r.avgOccupancy * 100)}% load, ${Math.round(r.dailyFrequency * 7)} weekly flights, ${r.status}`}
                     className={cn(
                       "border-b border-line last:border-0 cursor-pointer",
                       "hover:bg-surface-hover transition-colors",
+                      "focus-visible:outline-none focus-visible:bg-surface-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
                       suspended && "opacity-60",
                       pending && "bg-[var(--warning-soft)]/20",
                     )}
