@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -269,6 +269,101 @@ function phaseFromId(id: string): number {
   return Math.abs(h % 1000) / 1000;
 }
 
+/** One active route arc — wrapped in React.memo + useMemo for the
+ *  positions array so the parent's frequent re-renders (city hover,
+ *  fuel/brand state ticks, news ticker, etc.) don't tear down the
+ *  Polyline + FlyingPlane instances on this route. The custom equality
+ *  function compares only the fields that affect this route's render,
+ *  so unrelated route changes don't bubble in. */
+const ActiveRouteArc = memo(function ActiveRouteArc({
+  route, teamColor, isNew,
+}: {
+  route: Route;
+  teamColor: string;
+  isNew: boolean;
+}) {
+  const a = CITIES_BY_CODE[route.originCode];
+  const b = CITIES_BY_CODE[route.destCode];
+  const positions = useMemo<[number, number][]>(() => {
+    if (!a || !b) return [];
+    return greatCirclePath(a.lon, a.lat, b.lon, b.lat, 64);
+  }, [a, b]);
+  if (!a || !b || positions.length === 0) return null;
+  const profitable = route.avgOccupancy > 0.7;
+  const losing = route.avgOccupancy > 0 && route.avgOccupancy < 0.5;
+  const passengerColor = profitable
+    ? "#1E6B5C"
+    : losing
+      ? "#C23B1F"
+      : teamColor;
+  const cargoColor = profitable
+    ? "#E0A93B"
+    : losing
+      ? "#C23B1F"
+      : "#F2C063";
+  const color = route.isCargo ? cargoColor : passengerColor;
+  const dur = flightDurationMs(route.distanceKm, route.dailyFrequency);
+  const phase = phaseFromId(route.id);
+  const showSecondPlane = route.dailyFrequency >= 3;
+  return (
+    <Fragment>
+      <Polyline
+        positions={positions}
+        pathOptions={{
+          color, weight: 4, opacity: 0.14, lineCap: "round", interactive: false,
+        }}
+      />
+      {isNew && (
+        <Polyline
+          positions={positions}
+          pathOptions={{
+            color: "#FFB94D", weight: 6, opacity: 0.35,
+            lineCap: "round", interactive: false,
+          }}
+        />
+      )}
+      <Polyline
+        positions={positions}
+        pathOptions={{
+          color,
+          weight: route.isCargo ? 1.1 : 1.5,
+          opacity: route.isCargo ? 0.7 : 0.9,
+          lineCap: "round",
+          dashArray: route.isCargo ? "1 5" : undefined,
+        }}
+      />
+      <FlyingPlane
+        positions={positions}
+        durationMs={dur}
+        phase={phase}
+        cargo={!!route.isCargo}
+      />
+      {showSecondPlane && (
+        <FlyingPlane
+          positions={positions}
+          durationMs={dur}
+          phase={(phase + 0.5) % 1}
+          cargo={!!route.isCargo}
+        />
+      )}
+    </Fragment>
+  );
+}, (prev, next) => {
+  // Only re-render when something this route actually depends on changes.
+  if (prev.isNew !== next.isNew) return false;
+  if (prev.teamColor !== next.teamColor) return false;
+  const a = prev.route;
+  const b = next.route;
+  return (
+    a.id === b.id &&
+    a.originCode === b.originCode &&
+    a.destCode === b.destCode &&
+    a.dailyFrequency === b.dailyFrequency &&
+    a.isCargo === b.isCargo &&
+    a.avgOccupancy === b.avgOccupancy
+  );
+});
+
 function MapEventBridge({
   onClickEmpty,
 }: {
@@ -362,7 +457,10 @@ export function WorldMap({
 
         <MapEventBridge onClickEmpty={() => onClearSelection?.()} />
 
-        {/* Rival routes (muted dashed) */}
+        {/* Rival routes (muted dashed) — opacity dropped to 0.28 so a
+            cluster of overlapping rival lanes (e.g. Pacific Crest's
+            Tokyo→US west-coast trio) reads as a soft hint of competition
+            rather than a brown sheaf. */}
         {(rivals ?? []).flatMap((rv) => {
           const dests = RIVAL_ROUTES[rv.hubCode] ?? [];
           const hub = CITIES_BY_CODE[rv.hubCode];
@@ -379,7 +477,7 @@ export function WorldMap({
                   pathOptions={{
                     color: rv.color,
                     weight: 0.8,
-                    opacity: 0.4,
+                    opacity: 0.28,
                     dashArray: "2 4",
                   }}
                 />
@@ -388,101 +486,21 @@ export function WorldMap({
             .filter(Boolean) as React.ReactElement[];
         })}
 
-        {/* Player route arcs — single clean line + an animated plane
-            glyph traversing the great circle. Cargo routes get a
-            slightly desaturated colour so they're distinguishable from
-            passenger routes at a glance. */}
-        {activeRoutes.map((r) => {
-          const a = CITIES_BY_CODE[r.originCode];
-          const b = CITIES_BY_CODE[r.destCode];
-          if (!a || !b) return null;
-          const profitable = r.avgOccupancy > 0.7;
-          const losing = r.avgOccupancy > 0 && r.avgOccupancy < 0.5;
-          // Cargo lanes get a distinct amber/yellow palette so the
-          // network visibly distinguishes pax (team color / health
-          // shaded) from freight at any zoom level.
-          const passengerColor = profitable
-            ? "#1E6B5C"  // healthy emerald
-            : losing
-              ? "#C23B1F"  // warning rose
-              : team.color;
-          const cargoColor = profitable
-            ? "#E0A93B"  // amber/gold (also matches the pending-bid line)
-            : losing
-              ? "#C23B1F"
-              : "#F2C063"; // softer yellow for at-baseline cargo
-          const color = r.isCargo ? cargoColor : passengerColor;
-          const positions = greatCirclePath(a.lon, a.lat, b.lon, b.lat, 64);
-          const dur = flightDurationMs(r.distanceKm, r.dailyFrequency);
-          const phase = phaseFromId(r.id);
-          // High-frequency routes earn a second plane offset 180° in
-          // phase so heavy corridors visibly carry more traffic.
-          const showSecondPlane = r.dailyFrequency >= 3;
-          const isNew = r.openQuarter === currentQuarter;
-          return (
-            <Fragment key={r.id}>
-              {/* Soft halo — wider, very translucent line under the
-                  main stroke. Gives long-haul routes a subtle bloom
-                  without committing to a bright colour. */}
-              <Polyline
-                positions={positions}
-                pathOptions={{
-                  color,
-                  weight: 4,
-                  opacity: 0.14,
-                  lineCap: "round",
-                  interactive: false,
-                }}
-              />
-              {/* "Just launched" halo — only renders this round. A
-                  bright accent stroke + chunky cap so the player can
-                  spot brand-new lanes against an existing dense network
-                  at a glance. The classroom moment after Next Quarter. */}
-              {isNew && (
-                <Polyline
-                  positions={positions}
-                  pathOptions={{
-                    color: "#FFB94D",
-                    weight: 6,
-                    opacity: 0.35,
-                    lineCap: "round",
-                    interactive: false,
-                  }}
-                />
-              )}
-              {/* Main stroke — thinner per user feedback. Cargo dashes
-                  more sparsely so the line reads "freight schedule"
-                  rather than a solid passenger corridor. */}
-              <Polyline
-                positions={positions}
-                pathOptions={{
-                  color,
-                  weight: r.isCargo ? 1.1 : 1.5,
-                  opacity: r.isCargo ? 0.7 : 0.9,
-                  lineCap: "round",
-                  dashArray: r.isCargo ? "1 5" : undefined,
-                }}
-              />
-              {/* Animated flying plane(s) along the path. Cargo planes
-                  get a yellow tint via className so they read as a
-                  different traffic category at a glance. */}
-              <FlyingPlane
-                positions={positions}
-                durationMs={dur}
-                phase={phase}
-                cargo={!!r.isCargo}
-              />
-              {showSecondPlane && (
-                <FlyingPlane
-                  positions={positions}
-                  durationMs={dur}
-                  phase={(phase + 0.5) % 1}
-                  cargo={!!r.isCargo}
-                />
-              )}
-            </Fragment>
-          );
-        })}
+        {/* Player route arcs — rendered via memoized child so each
+            route's `positions` (an array reference) stays stable
+            across parent re-renders. Without this, every parent
+            re-render created new positions arrays, forcing every
+            FlyingPlane's animation useEffect to tear down and restart
+            and forcing Leaflet to redraw every Polyline — the visible
+            "flicker every once in a while" the user reported. */}
+        {activeRoutes.map((r) => (
+          <ActiveRouteArc
+            key={r.id}
+            route={r}
+            teamColor={team.color}
+            isNew={r.openQuarter === currentQuarter}
+          />
+        ))}
 
         {/* Pending route arcs — dashed amber to signal "awaiting auction" */}
         {pendingRoutes.map((r) => {
@@ -768,6 +786,14 @@ export function WorldMap({
               <line x1="0" y1="3" x2="20" y2="3" stroke="#FFB94D" strokeWidth="5" opacity="0.5" />
             </svg>
             <span className="text-ink-2">New this round</span>
+          </span>
+        )}
+        {(rivals?.length ?? 0) > 0 && (
+          <span className="flex items-center gap-1.5 border-l border-line pl-3">
+            <svg width="20" height="6" aria-hidden>
+              <line x1="0" y1="3" x2="20" y2="3" stroke="#9C8757" strokeWidth="1" strokeDasharray="2 4" opacity="0.6" />
+            </svg>
+            <span className="text-ink-2">Rivals</span>
           </span>
         )}
         <span className="hidden lg:inline text-ink-muted border-l border-line pl-3">

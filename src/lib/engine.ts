@@ -140,11 +140,32 @@ export function maxWeeklyRotations(
   return daily * 7;
 }
 
-/** Helper: max daily frequency across all planes on a route. */
+/** Helper: max daily frequency across all planes on a route. Returns a
+ *  whole number (the physical cap, e.g. you can't fly 1.5 round-trips
+ *  per day — each plane completes either 1 or 2 sorties). The slider
+ *  in the UI is in WEEKLY units and accepts any integer up to
+ *  maxDailyFrequency × 7, so the player can pick e.g. 10/wk even
+ *  though that maps to ~1.43 daily — the engine handles the fractional
+ *  daily frequency in revenue / fuel / capacity math. Engine upgrades
+ *  flow through via the optional aircraft list.
+ *
+ *  When `aircraft` is provided, each plane's individual engine upgrade
+ *  is honoured (the +10% speed bump from `power` / `super` upgrades
+ *  shortens the one-way time and therefore raises the daily cap). The
+ *  bare-spec fallback is kept for the AI-bot path which only knows
+ *  the spec id. */
 export function maxRouteDailyFrequency(
   specIds: string[],
   routeDistanceKm: number,
+  aircraft?: Array<{ specId: string; engineUpgrade?: "fuel" | "power" | "super" | null }>,
 ): number {
+  if (aircraft && aircraft.length > 0) {
+    const weeklyTotal = aircraft.reduce(
+      (sum, a) => sum + maxWeeklyRotations(a.specId, routeDistanceKm, a.engineUpgrade),
+      0,
+    );
+    return Math.floor(weeklyTotal / 7);
+  }
   const weeklyTotal = specIds.reduce(
     (sum, id) => sum + maxWeeklyRotations(id, routeDistanceKm), 0,
   );

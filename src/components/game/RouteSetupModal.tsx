@@ -107,7 +107,22 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
         .filter((x): x is string => !!x),
     [selectedPlaneIds, player],
   );
-  const maxDailyFreq = specIds.length > 0 ? maxRouteDailyFrequency(specIds, dist) : 0;
+  // Pass per-aircraft engine upgrades so power/super (+10% speed) raise
+  // the rotation cap. Without this, upgraded planes still maxed out at
+  // their stock-engine weekly rotations.
+  const aircraftWithUpgrades = useMemo(() =>
+    selectedPlaneIds
+      .map((id) => {
+        const p = player?.fleet.find((f) => f.id === id);
+        if (!p) return null;
+        return { specId: p.specId, engineUpgrade: p.engineUpgrade ?? null };
+      })
+      .filter((x): x is { specId: string; engineUpgrade: "fuel" | "power" | "super" | null } => !!x),
+    [selectedPlaneIds, player],
+  );
+  const maxDailyFreq = specIds.length > 0
+    ? maxRouteDailyFrequency(specIds, dist, aircraftWithUpgrades)
+    : 0;
   const maxWeeklyFreq = maxDailyFreq * 7;
   useEffect(() => {
     if (maxWeeklyFreq === 0) {
@@ -230,7 +245,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   // Projected occupancy preview
   const projection = (() => {
     if (specIds.length === 0 || weeklyFreq === 0) return null;
-    const dailyFreq = Math.max(1, Math.round(weeklyFreq / 7));
+    // Keep fractional daily frequency so 10/wk really means 10/wk
+    // (~1.43 daily) rather than snapping to 14/wk. The cruise-time
+    // physics cap is integer-daily; player intent below that cap can
+    // be any whole-week value.
+    const dailyFreq = Math.max(1 / 7, weeklyFreq / 7);
     const demand = routeDemandPerDay(origin!, dest!, s.currentQuarter).total;
     const totalSeats = selectedPlaneIds.reduce((sum, id) => {
       const p = player.fleet.find((f) => f.id === id);
@@ -331,7 +350,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
       destCode: dest,
       aircraftIds: selectedPlaneIds,
       // Engine still tracks daily; convert. Min 1 so route is always operating.
-      dailyFrequency: Math.max(1, Math.round(weeklyFreq / 7)),
+      dailyFrequency: Math.max(1 / 7, weeklyFreq / 7),
       pricingTier: tier,
       econFare,
       busFare,
