@@ -182,13 +182,13 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 3, id: "FUEL", icon: "$", impact: "fuel",
     headline: "Crude dips below $45/barrel on Chinese demand fears — multi-year low",
-    detail: "Best moment to lock in storage for the next 4 rounds.",
+    detail: "Best moment to lock in storage for the next 4 quarters.",
     fuelIndexAtBaseline: 75,
   }),
   n({
     quarter: 3, id: "ANNOUNCE-R5", icon: "✈︎", impact: "ops",
     headline: "Boeing 777-300ER and Embraer E190 enter commercial availability — Q1 2016",
-    detail: "777-300ER (354Y, 13,650km) substantial long-haul upgrade. E190 (98 seats) ideal for thin regional routes. Pre-orders open this round.",
+    detail: "777-300ER (354Y, 13,650km) substantial long-haul upgrade. E190 (98 seats) ideal for thin regional routes. Pre-orders open this quarter.",
   }),
   n({
     quarter: 3, id: "CARGO-CN", icon: "📦", impact: "cargo",
@@ -331,7 +331,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 7, id: "RIO", icon: "🥇", impact: "tourism",
     headline: "Rio 2016 Summer Olympics opens — 10,500 athletes, 206 nations. Perfect Games",
-    detail: "South America at absolute peak. GRU + GIG flights at 98%+ occupancy. One of the highest-demand rounds in the simulation.",
+    detail: "South America at absolute peak. GRU + GIG flights at 98%+ occupancy. One of the highest-demand quarters in the simulation.",
     modifiers: [
       { city: "GRU", category: "tourism", pct: 130, rounds: 2 },
       { city: "GIG", category: "tourism", pct: 120, rounds: 2 },
@@ -393,7 +393,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 8, id: "XMAS", icon: "📦", impact: "cargo",
     headline: "Christmas e-commerce breaks records — 5.7B packages globally",
-    detail: "Cargo demand surge on all T1-T2 routes. Cargo teams above-average this round.",
+    detail: "Cargo demand surge on all T1-T2 routes. Cargo teams above-average this quarter.",
     modifiers: spread(["JFK", "LHR", "DXB", "SIN", "HKG", "FRA", "AMS", "MIA", "MEX"], "cargo", 25, 1),
   }),
   n({
@@ -445,7 +445,7 @@ export const WORLD_NEWS: NewsItem[] = [
   }),
   n({
     quarter: 10, id: "ANNOUNCE-R12", icon: "✈︎", impact: "ops",
-    headline: "Boeing 787-8, ATR-72-600 and A330-300P2F all available from Q4 2017 (R12)",
+    headline: "Boeing 787-8, ATR-72-600 and A330-300P2F all available from Q4 2017",
     detail: "787-8: 242 seats, 13,620km. ATR-72-600: turboprop regional. A330-300P2F: 61T cargo conversion. Note: 787-8 supply chain pressure.",
   }),
   n({
@@ -520,7 +520,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 12, id: "AVAIL-R12", icon: "✈︎", impact: "ops",
     headline: "B787-8, ATR-72-600 and A330-300P2F now available for purchase",
-    detail: "B787-8: $80M. ATR-72-600: $12M. A330-300P2F: $55M. Note: monitor R13 for 787-8 delivery news.",
+    detail: "B787-8: $80M. ATR-72-600: $12M. A330-300P2F: $55M. Note: monitor Q1 2018 for 787-8 delivery news.",
   }),
   n({
     quarter: 12, id: "WC-RUSSIA-PRE", icon: "⚽", impact: "tourism",
@@ -566,7 +566,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 13, id: "TRADE-WAR", icon: "⚠", impact: "business",
     headline: "US imposes $60B in tariffs on Chinese goods — trade war officially begins",
-    detail: "Trans-Pacific business travel freezes. Cargo affected. 4 round impact.",
+    detail: "Trans-Pacific business travel freezes. Cargo affected. 4 quarters impact.",
     modifiers: [
       { city: "JFK", category: "business", pct: -15, rounds: 4 },
       { city: "LAX", category: "business", pct: -15, rounds: 4 },
@@ -576,8 +576,8 @@ export const WORLD_NEWS: NewsItem[] = [
   }),
   n({
     quarter: 13, id: "787-DELAY", icon: "⚠", impact: "ops",
-    headline: "Boeing confirms 787-8 Dreamliner delivery delays — all R12 orders pushed to R15",
-    detail: "Manufacturing inspection backlog. R12 orders now arrive R15 (3-round push). R13+ orders normal.",
+    headline: "Boeing confirms 787-8 Dreamliner delivery delays — all Q4 2017 orders pushed to Q3 2018",
+    detail: "Manufacturing inspection backlog. Q4 2017 orders now arrive Q3 2018 (3-quarter push). Q1 2018+ orders normal.",
   }),
   n({
     quarter: 13, id: "FUEL", icon: "$", impact: "fuel",
@@ -605,7 +605,7 @@ export const WORLD_NEWS: NewsItem[] = [
   }),
   n({
     quarter: 14, id: "ANNOUNCE-R16", icon: "✈︎", impact: "ops",
-    headline: "B747-8 + B747-8F + B737-800BCF all available from Q4 2018 (R16)",
+    headline: "B747-8 + B747-8F + B737-800BCF all available from Q4 2018",
     detail: "B747-8: 467 seats, $180M. B747-8F: 134T cargo, $385M. B737-800BCF: 23T narrowbody freighter, $28M.",
   }),
   n({
@@ -634,7 +634,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 15, id: "WC-FINAL", icon: "🏆", impact: "tourism",
     headline: "France wins World Cup 2018 — 4-2 vs Croatia in Moscow. Greatest TV audience since 1966",
-    detail: "World Cup Official Carrier (S10 winner): 100% load floor this round. SVO routes premium. French celebration.",
+    detail: "World Cup Official Carrier (S10 winner): 100% load floor this quarter. SVO routes premium. French celebration.",
     modifiers: [
       { city: "SVO", category: "tourism", pct: 110, rounds: 1 },
       { city: "CDG", category: "tourism", pct: 45, rounds: 1 },
@@ -644,7 +644,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 15, id: "787-DELIVERY", icon: "✈︎", impact: "ops",
     headline: "Boeing 787-8 Dreamliner — first delayed deliveries finally arrive",
-    detail: "Airlines who placed R12 orders receive their aircraft this round (3-round push). Quality inspections complete.",
+    detail: "Airlines who placed Q4 2017 orders receive their aircraft this quarter (3-quarter push). Quality inspections complete.",
   }),
   n({
     quarter: 15, id: "COMMONWEALTH", icon: "🏅", impact: "tourism",
@@ -774,7 +774,7 @@ export const WORLD_NEWS: NewsItem[] = [
   }),
   n({
     quarter: 18, id: "ANNOUNCE-R20", icon: "✈︎", impact: "ops",
-    headline: "Boeing 787-9 and Airbus A350-900 XWB available from Q4 2019 (R20)",
+    headline: "Boeing 787-9 and Airbus A350-900 XWB available from Q4 2019",
     detail: "787-9: 296 seats, 14,140km, 3.1 L/km. A350-900: 315 seats, 15,000km, 3.4 L/km. Ultra-long-haul revolution.",
   }),
   n({
@@ -791,7 +791,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 18, id: "FUEL", icon: "$", impact: "fuel",
     headline: "Saudi Aramco facility attacked by drones — 5.7M barrels/day halted for 2 weeks",
-    detail: "Emergency fuel price spike this round only. Index 122.",
+    detail: "Emergency fuel price spike this quarter only. Index 122.",
     fuelIndexAtBaseline: 122,
   }),
   n({
@@ -817,7 +817,7 @@ export const WORLD_NEWS: NewsItem[] = [
   }),
   n({
     quarter: 19, id: "ANNOUNCE-R21", icon: "✈︎", impact: "ops",
-    headline: "Largest narrowbody refresh ever — A220, A319neo, A320neo, A321neo, B737 MAX 8/9 from R21",
+    headline: "Largest narrowbody refresh ever — A220, A319neo, A320neo, A321neo, B737 MAX 8/9 from Q1 2020",
     detail: "A220-300: $22M. A319neo: $24M. A320neo: $28M. A321neo: $32M. MAX-8: $26M. MAX-9: $30M. 14-18% fuel saving.",
   }),
   n({
@@ -977,7 +977,7 @@ export const WORLD_NEWS: NewsItem[] = [
   }),
   n({
     quarter: 23, id: "ANNOUNCE-R25", icon: "✈︎", impact: "ops",
-    headline: "Five aircraft from Q1 2021 (R25): A350-1000, A330-900neo, B787-10, E195-E2 + A321P2F cargo",
+    headline: "Five aircraft from Q1 2021: A350-1000, A330-900neo, B787-10, E195-E2 + A321P2F cargo",
     detail: "A350-1000: 369 seats, longest range. A330-900neo: 287 seats. B787-10: 323 seats. E195-E2: 146 seats. A321P2F: 28T cargo.",
   }),
   n({
@@ -1063,7 +1063,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 25, id: "SUEZ", icon: "📦", impact: "cargo",
     headline: "Suez Canal blocked by Ever Given for 6 days — $9.6B/day diverted to air freight",
-    detail: "Single-round emergency premium.",
+    detail: "Single-quarter emergency premium.",
     modifiers: spread([
       "JFK", "LHR", "DXB", "SIN", "HKG", "FRA", "AMS", "CDG",
       "NRT", "KIX", "ICN", "BOM", "DEL", "MAA", "BLR",
@@ -1092,8 +1092,8 @@ export const WORLD_NEWS: NewsItem[] = [
   }),
   n({
     quarter: 26, id: "ANNOUNCE-R28", icon: "✈︎", impact: "ops",
-    headline: "Endgame aircraft announced for Q4 2021 (R28): A321XLR, B777X-9, C919 + 7 freighters",
-    detail: "A321XLR: $35M, transatlantic narrowbody. B777X-9: $180M. C919: $24M. Plus all 7 cargo freighter unlocks consolidate at R28.",
+    headline: "Endgame aircraft announced for Q4 2021: A321XLR, B777X-9, C919 + 7 freighters",
+    detail: "A321XLR: $35M, transatlantic narrowbody. B777X-9: $180M. C919: $24M. Plus all 7 cargo freighter unlocks consolidate at Q4 2021.",
   }),
   n({
     quarter: 26, id: "DELTA-VARIANT", icon: "⚠", impact: "tourism",
@@ -1310,7 +1310,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 31, id: "WC-2026", icon: "📅", impact: "none",
     headline: "FIFA confirms World Cup 2026 — USA, Canada, Mexico. 48 teams, 104 matches",
-    detail: "Beyond simulation timeline. No demand impact this round.",
+    detail: "Beyond simulation timeline. No demand impact this quarter.",
   }),
 
   // ═══ R32 — Q4 2022 — Qatar World Cup ═══
@@ -1329,7 +1329,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 32, id: "S10-WINNER", icon: "🏆", impact: "brand",
     headline: "World Cup Official Carrier reports record revenue — Gulf routes premium for 8 weeks",
-    detail: "S10 winner: 100% load factor all routes this round and next.",
+    detail: "S10 winner: 100% load factor all routes this quarter and next.",
   }),
   n({
     quarter: 32, id: "FUEL", icon: "$", impact: "fuel",
@@ -1453,7 +1453,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 35, id: "ME-CONFLICT", icon: "⚠", impact: "tourism",
     headline: "Regional escalation in the Levant — airlines suspend Beirut routes industry-wide",
-    detail: "Beirut routes suspended industry-wide on regional anxiety. Effect 6 rounds.",
+    detail: "Beirut routes suspended industry-wide on regional anxiety. Effect 6 quarters.",
     modifiers: [
       { city: "BEY", category: "tourism", pct: -85, rounds: 6 },
       { city: "AMM", category: "tourism", pct: -20, rounds: 3 },  // FLAG-AMMAN: regional spillover
@@ -1534,7 +1534,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 37, id: "PARIS-PRE", icon: "🥇", impact: "tourism",
     headline: "Paris 2024 Summer Olympics — 4 months out. All Paris hotels sold out through September",
-    detail: "Final approach to highest-demand round of simulation.",
+    detail: "Final approach to highest-demand quarters of simulation.",
     modifiers: [{ city: "CDG", category: "tourism", pct: 75, rounds: 3 }],  // CDG + ORY + LYS + NCE collapsed
     travelIndex: 115,
   }),
@@ -1578,7 +1578,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 38, id: "EURO-24", icon: "⚽", impact: "tourism",
     headline: "UEFA Euro 2024 Germany — Spain wins record 4th Euros, 2.7M attendance",
-    detail: "German cities at record demand. Highest European demand round since 2006 World Cup Germany.",
+    detail: "German cities at record demand. Highest European demand quarter since 2006 World Cup Germany.",
     modifiers: [
       { city: "FRA", category: "tourism", pct: 95, rounds: 2 },
       { city: "MUC", category: "tourism", pct: 90, rounds: 2 },
@@ -1638,7 +1638,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 39, id: "S11-WINNER", icon: "🏆", impact: "brand",
     headline: "Olympic Official Carrier reports 99% occupancy — record revenue",
-    detail: "S11 winner: 100% load floor this round and next. Highest brand value round in simulation.",
+    detail: "S11 winner: 100% load floor this quarter and next. Highest brand value round in simulation.",
   }),
   n({
     quarter: 39, id: "FUEL", icon: "$", impact: "fuel",
@@ -1675,7 +1675,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 40, id: "OSAKA-FINAL", icon: "🏛", impact: "tourism",
     headline: "Expo 2025 Osaka opens April 2025 — 161 nations, 28M visitors expected",
-    detail: "From the next hypothetical round, KIX tourism would be at peak. Teams with KIX routes positioned optimally.",
+    detail: "From the next hypothetical quarter, KIX tourism would be at peak. Teams with KIX routes positioned optimally.",
     modifiers: [{ city: "KIX", category: "tourism", pct: 80, rounds: 1 }],
   }),
   n({
@@ -1709,83 +1709,83 @@ export const WORLD_NEWS: NewsItem[] = [
   // ═══════════════════════════════════════════════════════════════
   n({
     quarter: 10, id: "CUTOFF-737-CLASSIC", icon: "🛬", impact: "ops",
-    headline: "Boeing closes the 737 Classic line — last orders for -300, -400, -500, -600 next round",
-    detail: "After three decades, the original 737 family ends new production. Next-Generation variants assume the narrowbody role. Existing Classics remain airworthy. Last round to order: B737-300 / -400 / -500 / -600 — cutoff R11.",
+    headline: "Boeing closes the 737 Classic line — last orders for -300, -400, -500, -600 next quarter",
+    detail: "After three decades, the original 737 family ends new production. Next-Generation variants assume the narrowbody role. Existing Classics remain airworthy. Last quarter to order: B737-300 / -400 / -500 / -600 — cutoff Q3 2017.",
   }),
   n({
     quarter: 11, id: "CUTOFF-757-LR-E195", icon: "🛬", impact: "ops",
     headline: "Boeing 757 family + 777-200LR retire from production · E195 superseded by E195-E2",
-    detail: "Three simultaneous closures: the 757 (1,050 built), the 777-200LR (longest range of its day) and the original E195 (the E195-E2 takes over). Last round to order: B757-200, B757-200F, B777-200LR, E195 — cutoff R12.",
+    detail: "Three simultaneous closures: the 757 (1,050 built), the 777-200LR (longest range of its day) and the original E195 (the E195-E2 takes over). Last quarter to order: B757-200, B757-200F, B777-200LR, E195 — cutoff Q4 2017.",
   }),
   n({
     quarter: 12, id: "CUTOFF-747-400-ATR500", icon: "🛬", impact: "ops",
     headline: "Boeing 747-400 Jumbo Jet retires from production · ATR 72-500 closes for the -600",
-    detail: "The 747-400, most iconic widebody in history at 694 deliveries, ends new production. Both the passenger and -400F cargo variants close. Last round to order: B747-400, B747-400F, ATR 72-500 — cutoff R13.",
+    detail: "The 747-400, most iconic widebody in history at 694 deliveries, ends new production. Both the passenger and -400F cargo variants close. Last quarter to order: B747-400, B747-400F, ATR 72-500 — cutoff Q1 2018.",
   }),
   n({
     quarter: 13, id: "CUTOFF-A300-600F", icon: "🛬", impact: "ops",
     headline: "Airbus A300-600F production ends — classic widebody freighter era closes after 35 years",
-    detail: "The A300-600F takes its final order. A330-200F and B777F absorb its routes. Last round to order: A300-600F — cutoff R14.",
+    detail: "The A300-600F takes its final order. A330-200F and B777F absorb its routes. Last quarter to order: A300-600F — cutoff Q2 2018.",
   }),
   n({
     quarter: 14, id: "CUTOFF-737-300F", icon: "🛬", impact: "ops",
     headline: "Boeing 737-300F closes · the 737-800BCF converted freighter is your replacement",
-    detail: "The classic narrowbody freighter ends. The 737-800BCF (available now) offers better fuel economics on the same routes. Last round to order: B737-300F — cutoff R15. B737-800BCF now available.",
+    detail: "The classic narrowbody freighter ends. The 737-800BCF (available now) offers better fuel economics on the same routes. Last quarter to order: B737-300F — cutoff Q3 2018. B737-800BCF now available.",
   }),
   n({
     quarter: 15, id: "CUTOFF-E170-767-E190", icon: "🛬", impact: "ops",
     headline: "Embraer E170, Boeing 767-300ER and original E190 all closing next quarter — E190-E2 ready",
-    detail: "Three aircraft retire from new production. The E190-E2 unlocks the same round as the E190 cutoff — direct upgrade available immediately. Last round to order: E170, B767-300ER, E190 — cutoff R16.",
+    detail: "Three aircraft retire from new production. The E190-E2 unlocks the same round as the E190 cutoff — direct upgrade available immediately. Last quarter to order: E170, B767-300ER, E190 — cutoff Q4 2018.",
   }),
   n({
     quarter: 16, id: "CUTOFF-777-200", icon: "🛬", impact: "ops",
     headline: "Boeing 777-200 original ends production — first ETOPS twin retires from manufacturing",
-    detail: "The 777-200, the aircraft that proved long-haul twin-engine operations, ends production after 88 deliveries. 777-200ER and 777-300ER continue. Last round to order: B777-200 — cutoff R17.",
+    detail: "The 777-200, the aircraft that proved long-haul twin-engine operations, ends production after 88 deliveries. 777-200ER and 777-300ER continue. Last quarter to order: B777-200 — cutoff Q1 2019.",
   }),
   n({
     quarter: 17, id: "CUTOFF-A330-300-777-200ER", icon: "🛬", impact: "ops",
     headline: "Airbus A330-300 + Boeing 777-200ER closing next quarter — neo / 300ER take over",
-    detail: "The A330-300 and 777-200ER close simultaneously. A330-900neo and 777-300ER cover all capacity requirements going forward. Last round to order: A330-300, B777-200ER — cutoff R18.",
+    detail: "The A330-300 and 777-200ER close simultaneously. A330-900neo and 777-300ER cover all capacity requirements going forward. Last quarter to order: A330-300, B777-200ER — cutoff Q2 2019.",
   }),
   n({
     quarter: 19, id: "CUTOFF-737-900", icon: "🛬", impact: "ops",
     headline: "Boeing 737-900 closes · MAX 9 now certified and delivering",
-    detail: "737-900 superseded by the 737 MAX 9. Final orders accepted this round. Last round to order: B737-900 — cutoff R20.",
+    detail: "737-900 superseded by the 737 MAX 9. Final orders accepted this quarter. Last quarter to order: B737-900 — cutoff Q4 2019.",
   }),
   n({
     quarter: 23, id: "CUTOFF-CRJ-A330-200", icon: "🛬", impact: "ops",
     headline: "Bombardier exits commercial aviation — CRJ-700, CRJ-900 close · A330-200 also retires",
-    detail: "Bombardier sells the CRJ programme; no new CRJ aircraft will ever be manufactured. The A330-200 is superseded by the A330-900neo. Last round to order: CRJ-700, CRJ-900, A330-200 — cutoff R24.",
+    detail: "Bombardier sells the CRJ programme; no new CRJ aircraft will ever be manufactured. The A330-200 is superseded by the A330-900neo. Last quarter to order: CRJ-700, CRJ-900, A330-200 — cutoff Q4 2020.",
   }),
   n({
     quarter: 26, id: "CUTOFF-A380", icon: "🛬", impact: "ops",
     headline: "Airbus officially announces A380 end of production — superjumbo era closes",
-    detail: "Airbus confirms the last A380-800 will be delivered next quarter. The A380F cargo variant closes simultaneously. Both remain in service globally for years to come. Last round to order: A380-800 passenger, A380F cargo — cutoff R27.",
+    detail: "Airbus confirms the last A380-800 will be delivered next quarter. The A380F cargo variant closes simultaneously. Both remain in service globally for years to come. Last quarter to order: A380-800 passenger, A380F cargo — cutoff Q3 2021.",
   }),
   n({
     quarter: 27, id: "CUTOFF-737NG", icon: "🛬", impact: "ops",
     headline: "Boeing 737-700 + 737-800 close — MAX family takes full narrowbody leadership",
-    detail: "NG variants retire as MAX 7 and MAX 8 ramp deliveries. ~7,000 NGs remain airworthy. Last round to order: B737-700, B737-800 — cutoff R28.",
+    detail: "NG variants retire as MAX 7 and MAX 8 ramp deliveries. ~7,000 NGs remain airworthy. Last quarter to order: B737-700, B737-800 — cutoff Q4 2021.",
   }),
   n({
     quarter: 29, id: "CUTOFF-777-300ER", icon: "🛬", impact: "ops",
     headline: "Boeing 777-300ER ends production — 777X-9 fully certified as replacement",
-    detail: "The 777-300ER, the most profitable widebody Boeing ever built, closes after 22 years and 800+ deliveries. Last round to order: B777-300ER — cutoff R30.",
+    detail: "The 777-300ER, the most profitable widebody Boeing ever built, closes after 22 years and 800+ deliveries. Last quarter to order: B777-300ER — cutoff Q2 2022.",
   }),
   n({
     quarter: 32, id: "CUTOFF-747-8", icon: "🛬", impact: "ops",
     headline: "Boeing delivers final 747 — end of the jumbo jet era after 54 years",
-    detail: "The 747 programme began in 1968. More than 1,500 747s remain in service globally. The 747-8F cargo variant closes simultaneously. Aviation will never see another four-engine commercial giant. Last round to order: B747-8, B747-8F — cutoff R33.",
+    detail: "The 747 programme began in 1968. More than 1,500 747s remain in service globally. The 747-8F cargo variant closes simultaneously. Aviation will never see another four-engine commercial giant. Last quarter to order: B747-8, B747-8F — cutoff Q1 2023.",
   }),
   n({
     quarter: 34, id: "CUTOFF-E175-E2", icon: "🛬", impact: "ops",
     headline: "Embraer E175-E2 final production slot allocated — programme closure complete",
-    detail: "The last committed E175-E2 order is fulfilled. No further new orders possible after next round. E195-E2 and E190-E2 carry the E2 family forward. Last round to order: E175-E2 — cutoff R35 (10-round minimum from R25 fulfilled).",
+    detail: "The last committed E175-E2 order is fulfilled. No further new orders possible after next quarter. E195-E2 and E190-E2 carry the E2 family forward. Last quarter to order: E175-E2 — cutoff Q3 2023 (10-quarter minimum from Q1 2021 fulfilled).",
   }),
   n({
     quarter: 35, id: "CUTOFF-A320-FAMILY", icon: "🛬", impact: "ops",
-    headline: "Airbus A319 / A320 / A321 originals close — neo family takes over from next round",
-    detail: "The original A320 family, backbone of short/medium-haul aviation for 35 years and 8,000+ deliveries, closes for new orders. A319neo, A320neo and A321neo are the only Airbus narrowbody options going forward. Last round to order: A319, A320, A321 — cutoff R36.",
+    headline: "Airbus A319 / A320 / A321 originals close — neo family takes over from next quarter",
+    detail: "The original A320 family, backbone of short/medium-haul aviation for 35 years and 8,000+ deliveries, closes for new orders. A319neo, A320neo and A321neo are the only Airbus narrowbody options going forward. Last quarter to order: A319, A320, A321 — cutoff Q4 2023.",
   }),
 ];
 

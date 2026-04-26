@@ -46,9 +46,12 @@ export function fmtQuarter(q: number): string {
   return `Q${quarterOfYear} ${year}`;
 }
 
-/** Short tag — "Round X of 40". */
+/** Short progress tag shown under the Q# YYYY headline. The user
+ *  asked us to stop calling time-units "rounds" in player-facing
+ *  copy — quarters carry the date label and the campaign progress
+ *  reads better as "Quarter N of 40". */
 export function fmtQuarterShort(q: number): string {
-  return `Round ${q} of ${TOTAL_GAME_ROUNDS}`;
+  return `Quarter ${q} of ${TOTAL_GAME_ROUNDS}`;
 }
 
 /** Format a span in quarters as "Y & Q" — e.g. 9 → "2Y 1Q", 4 → "1Y",
