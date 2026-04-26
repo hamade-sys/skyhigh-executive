@@ -889,15 +889,20 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 21, id: "COVID", icon: "🦠", impact: "tourism",
     headline: "COVID-19 declared global pandemic — 90% of global fleet grounded within 30 days",
-    detail: "Demand collapse begins immediately. All Asian routes severely impacted.",
+    detail: "Demand collapse begins THIS quarter. Asia-Pacific corridors most severe; entire industry effectively stops.",
     modifiers: [
-      { city: "PEK", category: "all", pct: -70, rounds: 4 },
-      { city: "PVG", category: "all", pct: -70, rounds: 4 },
-      { city: "HKG", category: "all", pct: -65, rounds: 4 },
-      { city: "SIN", category: "all", pct: -50, rounds: 4 },
-      { city: "ALL", category: "all", pct: -35, rounds: 4 },
+      { city: "PEK", category: "all", pct: -85, rounds: 4 },
+      { city: "PVG", category: "all", pct: -85, rounds: 4 },
+      { city: "HKG", category: "all", pct: -80, rounds: 4 },
+      { city: "SIN", category: "all", pct: -70, rounds: 4 },
+      // "ALL" is the engine wildcard for "every city in the network".
+      // Earlier this was treated as a literal city code that didn't
+      // exist anywhere, so the global -35% never fired. Combined with
+      // the new travelIndex drop below the user now feels the COVID
+      // impact same quarter, not next.
+      { city: "ALL", category: "all", pct: -55, rounds: 4 },
     ],
-    travelIndex: 65,
+    travelIndex: 25,
   }),
   n({
     quarter: 21, id: "AVAIL-R21", icon: "✈︎", impact: "ops",

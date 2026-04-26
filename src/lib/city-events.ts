@@ -82,7 +82,11 @@ export function cityEventImpact(
 
     if (news.modifiers && news.modifiers.length > 0) {
       for (const m of news.modifiers) {
-        if (m.city !== cityCode) continue;
+        // "ALL" is the engine wildcard for "every city in the network"
+        // — used by global shock events (COVID, recession, etc) so the
+        // headline doesn't have to enumerate every airport. Any other
+        // city value is matched exactly.
+        if (m.city !== cityCode && m.city !== "ALL") continue;
         if (!modifierActiveAt(news.quarter, m.rounds, quarter)) continue;
         touched = true;
         applyModifier(m, (delta, cat) => {

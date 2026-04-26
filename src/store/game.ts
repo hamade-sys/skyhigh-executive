@@ -29,7 +29,7 @@ import {
   loadSnapshot as snapLoad,
   deleteSnapshot as snapDelete,
 } from "@/lib/snapshots";
-import { FUEL_BASELINE_USD_PER_L, newsFuelIndexHint } from "@/lib/engine";
+import { FUEL_BASELINE_USD_PER_L, effectiveBaseRatePct, newsFuelIndexHint } from "@/lib/engine";
 import {
   PREORDER_DEPOSIT_PCT,
   PREORDER_CANCEL_PENALTY_PCT,
@@ -642,7 +642,7 @@ export const useGame = create<GameStore>()(
       phase: "idle",
       currentQuarter: 1,
       fuelIndex: 100,
-      baseInterestRatePct: 3.5,
+      baseInterestRatePct: 5.5, // Q1 2015 baseline (BASE_RATE_BY_QUARTER)
       teams: [],
       playerTeamId: null,
       lastCloseResult: null,
@@ -907,7 +907,7 @@ export const useGame = create<GameStore>()(
           phase: "playing",
           currentQuarter: 2, // skip Q1 brand-building for single-team demo
           fuelIndex: 108,
-          baseInterestRatePct: 3.5,
+          baseInterestRatePct: 5.5, // Q1 2015 baseline (BASE_RATE_BY_QUARTER)
           teams: [player, ...rivals],
           playerTeamId: player.id,
           lastCloseResult: null,
@@ -2746,7 +2746,15 @@ export const useGame = create<GameStore>()(
           opsPts: result.newOpsPts,
           customerLoyaltyPct: result.newLoyalty,
           brandValue: result.newBrandValue,
-          financialsByQuarter: [...teamReady.financialsByQuarter, {
+          // Dedupe-on-push: drop any existing row for this quarter
+          // before appending the fresh one. Earlier the array could
+          // accumulate duplicates if the player restored a snapshot
+          // and re-closed the same quarter — the Financials table
+          // would then show "Q1 2020" twice with slightly different
+          // numbers. The latest close always wins.
+          financialsByQuarter: [
+            ...teamReady.financialsByQuarter.filter((q) => q.quarter !== s.currentQuarter),
+            {
             quarter: s.currentQuarter,
             cash: result.newCashUsd,
             debt: teamReady.totalDebtUsd,
@@ -2784,7 +2792,8 @@ export const useGame = create<GameStore>()(
             opsPts: result.newOpsPts,
             loyalty: result.newLoyalty,
             brandValue: result.newBrandValue,
-          }],
+            },
+          ],
         };
 
         // ── AI bot turns ──────────────────────────────────────
@@ -2955,7 +2964,10 @@ export const useGame = create<GameStore>()(
             customerLoyaltyPct: newLoyalty,
             cashUsd: newCash,
             financialsByQuarter: [
-              ...r.financialsByQuarter,
+              // Dedupe rivals' financials too so snapshot-restore +
+              // re-close doesn't add a duplicate row on the rival
+              // leaderboard chart.
+              ...r.financialsByQuarter.filter((q) => q.quarter !== s.currentQuarter),
               {
                 quarter: s.currentQuarter,
                 cash: newCash,
@@ -3159,6 +3171,14 @@ export const useGame = create<GameStore>()(
           }
         }
 
+        // Base interest rate follows the BASE_RATE_BY_QUARTER macro
+        // schedule (mirrors TRAVEL_INDEX). Earlier the rate was
+        // hardcoded at 3.5% for the whole campaign so debt service
+        // never moved with world events. The schedule covers cheap
+        // 2015–17 debt, the 2022–23 hiking cycle, etc., so a heavily
+        // leveraged airline genuinely struggles when the cycle turns.
+        const newBaseRate = effectiveBaseRatePct(nextQ);
+
         set({
           teams: teamsAfterDelivery,
           cargoContracts: updatedCargoContracts,
@@ -3166,6 +3186,7 @@ export const useGame = create<GameStore>()(
           phase: "quarter-closing",
           airportSlots: slotsAfterAuction,
           fuelIndex: Math.max(50, Math.min(220, newFuel)),
+          baseInterestRatePct: newBaseRate,
           preOrders: preOrdersAfterDelivery,
         });
       },
@@ -3630,7 +3651,7 @@ export const useGame = create<GameStore>()(
           phase: "idle",
           currentQuarter: 1,
           fuelIndex: 100,
-          baseInterestRatePct: 3.5,
+          baseInterestRatePct: 5.5, // Q1 2015 baseline (BASE_RATE_BY_QUARTER)
           teams: [],
           playerTeamId: null,
           lastCloseResult: null,

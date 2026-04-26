@@ -138,26 +138,31 @@ export const TRAVEL_INDEX: Record<number, number> = {
  *    2024 plateau      → 7.0%
  */
 export const BASE_RATE_BY_QUARTER: Record<number, number> = {
-  1: 3.5,  2: 3.5,   // Q1–Q2 2015 — campaign baseline
-  3: 3.0,  4: 3.0,   // Q3–Q4 2015 — fuel-shock-driven dovish stance
-  5: 3.5,  6: 3.5,   // Q1–Q2 2016 — stabilising
-  7: 4.0,  8: 4.0,   // Q3–Q4 2016 — tech-driven optimism, normalisation begins
-  9: 4.0,  10: 4.5,  // Q1–Q2 2017 — geopolitical-risk premium
-  11: 4.5, 12: 4.5,  // Q3–Q4 2017 — central banks tightening
-  13: 5.0, 14: 5.0,  // Q1–Q2 2018 — hawkish turn (trade war risk-on)
-  15: 5.0, 16: 4.5,  // Q3–Q4 2018 — first signs of cooling
-  17: 4.0, 18: 4.0,  // Q1–Q2 2019 — S6 Rate Window dovish pivot
-  19: 4.0, 20: 4.0,  // Q3–Q4 2019 — last pre-pandemic months
-  21: 2.5, 22: 1.5,  // Q1–Q2 2020 — emergency COVID cuts
-  23: 1.5, 24: 1.5,  // Q3–Q4 2020 — sustained zero-bound
-  25: 2.0, 26: 2.5,  // Q1–Q2 2021 — early recovery
-  27: 3.0, 28: 3.5,  // Q3–Q4 2021 — recovery confirmed
-  29: 4.5, 30: 5.5,  // Q1–Q2 2022 — inflation surprise; rapid hikes
-  31: 6.0, 32: 6.5,  // Q3–Q4 2022 — aggressive tightening continues
-  33: 7.0, 34: 7.0,  // Q1–Q2 2023 — peak rates, recession fears
-  35: 7.5, 36: 7.5,  // Q3–Q4 2023 — held high
-  37: 7.0, 38: 7.0,  // Q1–Q2 2024 — early easing signals
-  39: 7.0, 40: 7.0,  // Q3–Q4 2024 — plateau into endgame
+  // Aviation-corporate spreads typically run +200–400bps over central
+  // bank rates. The schedule here is the BORROWING rate the player
+  // pays — already includes the airline-credit premium so debt
+  // genuinely bites. $180M debt × 7%/yr ÷ 4 = $3.15M/Q interest, vs
+  // the previous flat 3.5% which gave $1.575M/Q on the same debt.
+  1: 5.5,  2: 5.5,   // Q1–Q2 2015 — campaign baseline
+  3: 5.0,  4: 5.0,   // Q3–Q4 2015 — fuel-shock-driven easing
+  5: 5.5,  6: 5.5,   // Q1–Q2 2016 — stabilising
+  7: 6.0,  8: 6.0,   // Q3–Q4 2016 — tech-driven optimism, normalisation
+  9: 6.5,  10: 7.0,  // Q1–Q2 2017 — geopolitical-risk premium
+  11: 7.0, 12: 7.0,  // Q3–Q4 2017 — central banks tightening
+  13: 7.5, 14: 7.5,  // Q1–Q2 2018 — hawkish turn (trade war risk-on)
+  15: 7.5, 16: 7.0,  // Q3–Q4 2018 — first signs of cooling
+  17: 6.5, 18: 6.5,  // Q1–Q2 2019 — S6 Rate Window dovish pivot
+  19: 6.5, 20: 6.5,  // Q3–Q4 2019 — last pre-pandemic months
+  21: 4.5, 22: 3.5,  // Q1–Q2 2020 — emergency COVID cuts
+  23: 3.5, 24: 3.5,  // Q3–Q4 2020 — sustained low
+  25: 4.0, 26: 4.5,  // Q1–Q2 2021 — early recovery
+  27: 5.0, 28: 5.5,  // Q3–Q4 2021 — recovery confirmed
+  29: 7.0, 30: 8.0,  // Q1–Q2 2022 — inflation surprise; rapid hikes
+  31: 9.0, 32: 9.5,  // Q3–Q4 2022 — aggressive tightening
+  33: 10.0, 34: 10.0, // Q1–Q2 2023 — peak rates, recession fears
+  35: 10.5, 36: 10.5, // Q3–Q4 2023 — held high
+  37: 9.5,  38: 9.5,  // Q1–Q2 2024 — early easing signals
+  39: 9.0,  40: 9.0,  // Q3–Q4 2024 — plateau into endgame
 };
 
 /** Effective base rate at a given quarter — schedule lookup with a
