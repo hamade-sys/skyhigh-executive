@@ -778,10 +778,18 @@ function PreOrderQueue() {
   const overrides = useGame((s) => s.productionCapOverrides);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const cancelPreOrder = useGame((s) => s.cancelPreOrder);
+  // Branded cancel-pre-order confirm replaces the legacy native
+  // confirm() — these are real-money irreversible cancellations
+  // (15% deposit penalty), so the UX has to feel deliberate.
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
   const myQueued = preOrders.filter(
     (o) => o.teamId === playerTeamId && o.status === "queued",
   );
+  const cancelTarget = confirmCancelId
+    ? myQueued.find((o) => o.id === confirmCancelId)
+    : null;
+  const cancelTargetSpec = cancelTarget ? AIRCRAFT_BY_ID[cancelTarget.specId] : null;
   if (myQueued.length === 0) return null;
 
   const totalDeposit = myQueued.reduce((sum, o) => sum + o.depositUsd, 0);
@@ -807,8 +815,8 @@ function PreOrderQueue() {
           const pos = queuePosition(preOrders, order.id);
           const eta = estimatedDeliveryQuarter(order, spec, preOrders, currentQuarter, overrides);
           const cap = effectiveProductionCap(spec, overrides);
-          const refund = order.depositUsd * 0.85;
-          const penalty = order.depositUsd * 0.15;
+          // Refund / penalty math lives in the cancel-confirm modal —
+          // we don't surface them on the row itself anymore.
           return (
             <div key={order.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -824,13 +832,7 @@ function PreOrderQueue() {
                 <div>Balance {fmtMoney(order.totalPriceUsd - order.depositUsd)}</div>
               </div>
               <button
-                onClick={() => {
-                  if (!confirm(
-                    `Cancel pre-order for ${spec.name}?\n` +
-                    `Refund ${fmtMoney(refund)} (15% cancellation penalty: ${fmtMoney(penalty)} forfeited).`,
-                  )) return;
-                  cancelPreOrder(order.id);
-                }}
+                onClick={() => setConfirmCancelId(order.id)}
                 className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-line text-[0.6875rem] text-ink-2 hover:text-negative hover:border-negative"
                 title="Cancel pre-order (15% penalty on deposit)"
               >
@@ -840,6 +842,59 @@ function PreOrderQueue() {
           );
         })}
       </div>
+
+      {/* Branded cancel-pre-order confirm — irreversible 15% deposit
+          penalty, so the UX makes the trade-off explicit. */}
+      <Modal open={!!cancelTarget} onClose={() => setConfirmCancelId(null)}>
+        {cancelTarget && cancelTargetSpec && (() => {
+          const refund = cancelTarget.depositUsd * 0.85;
+          const penalty = cancelTarget.depositUsd * 0.15;
+          return (
+            <>
+              <ModalHeader>
+                <h2 className="font-display text-[1.5rem] text-ink">
+                  Cancel pre-order for {cancelTargetSpec.name}?
+                </h2>
+                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                  Pre-orders are real commitments — cancelling forfeits the
+                  cancellation penalty against your deposit. The refund is
+                  paid in cash next quarter close.
+                </p>
+              </ModalHeader>
+              <ModalBody className="space-y-2">
+                <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Deposit paid</span>
+                    <span className="tabular font-mono text-ink">{fmtMoney(cancelTarget.depositUsd)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Refund (85%)</span>
+                    <span className="tabular font-mono text-positive">{fmtMoney(refund)}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Penalty (15%)</span>
+                    <span className="tabular font-mono text-negative">−{fmtMoney(penalty)}</span>
+                  </div>
+                </div>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" onClick={() => setConfirmCancelId(null)}>
+                  Keep pre-order
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    cancelPreOrder(cancelTarget.id);
+                    setConfirmCancelId(null);
+                  }}
+                >
+                  Cancel · refund {fmtMoney(refund)}
+                </Button>
+              </ModalFooter>
+            </>
+          );
+        })()}
+      </Modal>
     </div>
   );
 }

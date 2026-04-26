@@ -10,8 +10,9 @@ import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { classFareRange, distanceBetween, effectiveRangeKm } from "@/lib/engine";
 import type { City, PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
-import { Pause, Play, Plus, X } from "lucide-react";
+import { AlertTriangle, Pause, Play, Plus, X } from "lucide-react";
 import { RouteSetupModal } from "@/components/game/RouteSetupModal";
+import { toast } from "@/store/toasts";
 
 /**
  * Table-style route list (click a row to open a full detail modal) —
@@ -30,6 +31,22 @@ export function RoutesPanel() {
   type FilterKey = "all" | "passenger" | "cargo" | "losing";
   const [sortKey, setSortKey] = useState<SortKey>("profit");
   const [filterKey, setFilterKey] = useState<FilterKey>("all");
+  // Branded close-route confirmation. Replaces the legacy native
+  // confirm() so the close flow stays on-brand and we can spell out
+  // the slot-forfeit consequence.
+  const [closeRouteConfirm, setCloseRouteConfirm] = useState<{
+    routeId: string;
+    originCode: string;
+    destCode: string;
+  } | null>(null);
+  // Pending-route cancel confirmation (replaces inline confirm() in
+  // RouteDetailModal). Uses a context object so the modal can show
+  // the full OD pair without coupling to RouteDetailModal state.
+  const [cancelPendingConfirm, setCancelPendingConfirm] = useState<{
+    routeId: string;
+    originCode: string;
+    destCode: string;
+  } | null>(null);
 
   // "New route" flow — opened via the panel's New-Route button so the
   // player doesn't have to use the world map to start a route.
@@ -330,13 +347,95 @@ export function RoutesPanel() {
             resumeRoute(activeRoute.id);
           }}
           onClose_close={() => {
-            if (confirm("Close this route permanently? Slots may be forfeited.")) {
-              closeRoute(activeRoute.id);
-              setActiveRouteId(null);
-            }
+            setCloseRouteConfirm({
+              routeId: activeRoute.id,
+              originCode: activeRoute.originCode,
+              destCode: activeRoute.destCode,
+            });
+          }}
+          onCancelPending={() => {
+            setCancelPendingConfirm({
+              routeId: activeRoute.id,
+              originCode: activeRoute.originCode,
+              destCode: activeRoute.destCode,
+            });
           }}
         />
       )}
+
+      {/* Close-route confirm — replaces legacy native confirm(). */}
+      <Modal open={!!closeRouteConfirm} onClose={() => setCloseRouteConfirm(null)}>
+        {closeRouteConfirm && (
+          <>
+            <ModalHeader>
+              <h2 className="font-display text-[1.5rem] text-ink flex items-center gap-2">
+                <AlertTriangle size={18} className="text-warning shrink-0" />
+                Close {closeRouteConfirm.originCode} → {closeRouteConfirm.destCode}?
+              </h2>
+              <p className="text-ink-muted text-[0.8125rem] mt-1">
+                Aircraft return to idle and become available for new routes.
+                The slots at both endpoints are released back to the auction
+                pool — you may need to re-bid (and pay) to use them again.
+              </p>
+            </ModalHeader>
+            <ModalFooter>
+              <Button variant="ghost" onClick={() => setCloseRouteConfirm(null)}>
+                Keep route
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  closeRoute(closeRouteConfirm.routeId);
+                  setCloseRouteConfirm(null);
+                  setActiveRouteId(null);
+                }}
+              >
+                Close route
+              </Button>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
+
+      {/* Cancel-pending-route confirm. Note: pending routes already
+          paid/queued slot bids; cancelling here only frees the aircraft.
+          The bid sits in the slot market until released there. */}
+      <Modal open={!!cancelPendingConfirm} onClose={() => setCancelPendingConfirm(null)}>
+        {cancelPendingConfirm && (
+          <>
+            <ModalHeader>
+              <h2 className="font-display text-[1.5rem] text-ink flex items-center gap-2">
+                <AlertTriangle size={18} className="text-warning shrink-0" />
+                Cancel pending route {cancelPendingConfirm.originCode} → {cancelPendingConfirm.destCode}?
+              </h2>
+              <p className="text-ink-muted text-[0.8125rem] mt-1">
+                Aircraft return to idle. Slot bids stay queued for the next
+                auction — release them in the Slot Market panel if you don&apos;t
+                want to spend.
+              </p>
+            </ModalHeader>
+            <ModalFooter>
+              <Button variant="ghost" onClick={() => setCancelPendingConfirm(null)}>
+                Keep pending
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const r = useGame.getState().cancelPendingRoute(cancelPendingConfirm.routeId);
+                  setCancelPendingConfirm(null);
+                  if (!r.ok) {
+                    toast.negative("Cancel failed", r.error ?? "Unable to cancel pending route.");
+                  } else {
+                    setActiveRouteId(null);
+                  }
+                }}
+              >
+                Cancel pending route
+              </Button>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
 
       {/* New-route picker — opened from the panel's "New route" button. */}
       <NewRoutePicker
@@ -663,7 +762,7 @@ function Th({
 // ─── Detail modal with edit ────────────────────────────────────────
 
 function RouteDetailModal({
-  open, route, onClose, onSuspend, onResume, onClose_close,
+  open, route, onClose, onSuspend, onResume, onClose_close, onCancelPending,
 }: {
   open: boolean;
   route: ReturnType<typeof selectPlayer> extends null ? never : NonNullable<ReturnType<typeof selectPlayer>>["routes"][number];
@@ -671,6 +770,10 @@ function RouteDetailModal({
   onSuspend: () => void;
   onResume: () => void;
   onClose_close: () => void;
+  /** Open the branded cancel-pending confirm modal at the panel level.
+   *  We bubble up rather than rendering inline so all destructive
+   *  confirms share the same UX in RoutesPanel. */
+  onCancelPending: () => void;
 }) {
   const s = useGame();
   const player = selectPlayer(s);
@@ -1099,18 +1202,8 @@ function RouteDetailModal({
             <Button
               variant="danger"
               size="sm"
-              onClick={() => {
-                if (
-                  confirm(
-                    `Cancel pending route ${route.originCode} → ${route.destCode}?\n\n` +
-                    `Aircraft return to idle. Slot bids stay queued — release in Slot Market if you don't want them.`,
-                  )
-                ) {
-                  const r = useGame.getState().cancelPendingRoute(route.id);
-                  if (!r.ok) alert(r.error ?? "Cancel failed");
-                  else onClose();
-                }
-              }}
+              onClick={onCancelPending}
+              title="Cancel this pending route. Aircraft return to idle; slot bids stay queued (release in Slot Market if you don't want to spend)."
             >
               <X size={13} className="mr-1.5" /> Cancel pending route
             </Button>

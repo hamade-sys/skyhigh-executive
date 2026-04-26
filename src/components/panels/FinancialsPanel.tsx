@@ -361,6 +361,9 @@ function ProjectedPLCard() {
     revenue: projected.revenue,
     passengerRevenue: projected.passengerRevenue,
     cargoRevenue: projected.cargoRevenue,
+    airportRevenue: projected.airportRevenueUsd,
+    subsidiaryRevenue: projected.subsidiaryRevenueUsd,
+    leaseFeesUsd: projected.leaseFeesUsd,
     costs: projected.revenue - projected.netProfit,
     fuelCost: projected.fuelCost,
     slotCost: projected.slotCost,
@@ -421,6 +424,12 @@ function PLCard({
       <SubHeader>Revenue</SubHeader>
       <Row k="Passenger" v={fmtOpt(pl.passengerRevenue)} tone="pos" />
       <Row k="Cargo" v={fmtOpt(pl.cargoRevenue)} tone="pos" />
+      {(pl.airportRevenue ?? 0) !== 0 && (
+        <Row k="Airport (owned)" v={fmtOpt(pl.airportRevenue)} tone="pos" />
+      )}
+      {(pl.subsidiaryRevenue ?? 0) !== 0 && (
+        <Row k="Subsidiaries" v={fmtOpt(pl.subsidiaryRevenue)} tone="pos" />
+      )}
       <div className="pt-1 border-t border-line/60">
         <Row k="Total revenue" v={fmtMoney(pl.revenue)} tone="pos" bold />
       </div>
@@ -429,6 +438,9 @@ function PLCard({
       <Row k="Fuel" v={fmtOpt(pl.fuelCost)} tone="neg" />
       <Row k="Slot fees" v={fmtOpt(pl.slotCost)} tone="neg" />
       <Row k="Staff" v={fmtOpt(pl.staffCost)} tone="neg" />
+      {(pl.leaseFeesUsd ?? 0) > 0 && (
+        <Row k="Lease fees" v={fmtOpt(pl.leaseFeesUsd)} tone="neg" />
+      )}
       <Row k="Maintenance + hub" v={fmtOpt(pl.maintenanceCost)} tone="neg" />
       <Row k="Aircraft insurance" v={fmtOpt(pl.insuranceCost)} tone="neg" />
       {hasOtherBreakdown ? (

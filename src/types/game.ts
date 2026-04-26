@@ -442,11 +442,22 @@ export interface Team {
     revenue: number;
     passengerRevenue?: number;
     cargoRevenue?: number;
+    /** Net airport-ownership revenue this quarter (slot fees collected
+     *  from operating airlines minus 30% opex minus own intra-company
+     *  fees). Surfaced as a separate P&L line. */
+    airportRevenue?: number;
+    /** Subsidiary revenue (hotel, limo, lounge, MRO, fuel storage,
+     *  catering, training academy) summed across all owned holdings. */
+    subsidiaryRevenue?: number;
     costs: number;
     /** Operating cost breakdown (optional — older saves may omit). */
     fuelCost?: number;
     slotCost?: number;
     staffCost?: number;
+    /** Quarterly lease fees on every active leased aircraft this round
+     *  (7.5% × spec buy price). Earlier rolled into "Other slider"; now
+     *  a distinct P&L line so the player sees the lease drag clearly. */
+    leaseFeesUsd?: number;
     otherSliderCost?: number;
     /** Operating cost split — Marketing / Service / Operations / Customer-Service
      *  sliders broken out so the Financials tab can show what's inside the

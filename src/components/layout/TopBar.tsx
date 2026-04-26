@@ -177,6 +177,12 @@ function CloseQuarterButton() {
   const closeQuarter = useGame((s) => s.closeQuarter);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const player = useGame(selectPlayer);
+  // Confirmation modal replaces the legacy native confirm() — keeps
+  // the close-quarter flow on-brand and lets us spell out exactly what
+  // happens to pending decisions (auto-submit with first-eligible
+  // fallback, see store.closeQuarter / store.submitDecision).
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
   if (!player) return null;
 
   const pending = (SCENARIOS_BY_QUARTER[currentQuarter] ?? []).filter(
@@ -185,23 +191,70 @@ function CloseQuarterButton() {
 
   function onClick() {
     if (pending.length > 0) {
-      const go = confirm(
-        `${pending.length} board decision${pending.length > 1 ? "s" : ""} still open this quarter. Close anyway?`,
-      );
-      if (!go) return;
+      setConfirmOpen(true);
+      return;
     }
     closeQuarter();
   }
 
   return (
-    <Button
-      variant="primary"
-      size="sm"
-      onClick={onClick}
-      title="Lock decisions + run quarter close. In multi-team play this signals 'I'm ready' — the round advances when all teams (or admin) confirm."
-    >
-      Next Quarter →
-    </Button>
+    <>
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={onClick}
+        title="Lock decisions + run quarter close. In multi-team play this signals 'I'm ready' — the round advances when all teams (or admin) confirm."
+      >
+        Next Quarter →
+      </Button>
+
+      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <ModalHeader>
+          <h2 className="font-display text-[1.5rem] text-ink">
+            Close {fmtQuarter(currentQuarter)} with {pending.length} decision
+            {pending.length === 1 ? "" : "s"} still open?
+          </h2>
+          <p className="text-ink-muted text-[0.8125rem] mt-1">
+            The board needs an answer on every scenario before the books
+            close. Anything you haven&apos;t answered will auto-resolve to a
+            sensible default — usually the first listed option, skipping
+            anything blocked by current cash, fleet or PR state.
+          </p>
+        </ModalHeader>
+        <ModalBody className="space-y-2">
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+            Pending decisions
+          </div>
+          <ul className="space-y-1.5">
+            {pending.map((sc) => (
+              <li
+                key={sc.id}
+                className="rounded-md border border-line bg-surface px-3 py-2 text-[0.8125rem]"
+              >
+                <div className="font-semibold text-ink">{sc.title}</div>
+                <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                  Will auto-submit at quarter close.
+                </div>
+              </li>
+            ))}
+          </ul>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+            Go back to decisions
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setConfirmOpen(false);
+              closeQuarter();
+            }}
+          >
+            Close quarter anyway
+          </Button>
+        </ModalFooter>
+      </Modal>
+    </>
   );
 }
 

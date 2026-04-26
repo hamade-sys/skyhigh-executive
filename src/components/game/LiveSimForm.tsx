@@ -5,6 +5,7 @@ import { Badge, Button, Input } from "@/components/ui";
 import { useGame } from "@/store/game";
 import { cn } from "@/lib/cn";
 import type { Team } from "@/types/game";
+import { toast } from "@/store/toasts";
 
 /**
  * Live Simulation outcome entry — used by the facilitator after each
@@ -129,7 +130,7 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
       notes: notes.trim() || undefined,
     });
     if (!r.ok) {
-      alert(r.error ?? "Failed to apply outcome");
+      toast.negative("Live sim outcome failed", r.error ?? "Could not apply outcome to team.");
       return;
     }
     // Reset deltas but keep team + sim selection for next entry

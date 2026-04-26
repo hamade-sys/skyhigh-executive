@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, Input, Sparkline } from "@/components/ui";
+import { Badge, Button, Input, Modal, ModalFooter, ModalHeader, Sparkline } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
 import { fmtMoney, fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
 import { CITIES } from "@/data/cities";
 import { runQuarterClose } from "@/lib/engine";
+import { toast } from "@/store/toasts";
 
 export function AdminPanel() {
   const s = useGame();
@@ -15,6 +16,15 @@ export function AdminPanel() {
   const [cashAdjust, setCashAdjust] = useState(0);
   const [secondaryHub, setSecondaryHub] = useState("");
   const [flashDealCount, setFlashDealCount] = useState(3);
+  // Branded confirm modals replace native confirm() — facilitator
+  // actions are powerful (reset, force-fire deferred events) so the UX
+  // stays on-brand and explicit about consequences.
+  const [confirmFireDeferred, setConfirmFireDeferred] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
+  const [confirmDemo, setConfirmDemo] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // Dry-run quarter close preview — useMemo MUST run unconditionally above
   // any early returns (rules of hooks).
@@ -286,7 +296,7 @@ export function AdminPanel() {
             onClick={() => {
               if (!secondaryHub) return;
               const r = s.addSecondaryHub(secondaryHub);
-              if (!r.ok) alert(r.error ?? "Failed");
+              if (!r.ok) toast.negative("Add secondary hub failed", r.error ?? "Could not add hub.");
               else setSecondaryHub("");
             }}
           >
@@ -379,7 +389,7 @@ export function AdminPanel() {
               variant="accent"
               onClick={() => {
                 const r = s.claimFlashDeal(flashDealCount);
-                if (!r.ok) alert(r.error ?? "Failed");
+                if (!r.ok) toast.negative("Claim failed", r.error ?? "Could not claim flash deal.");
               }}
             >
               Claim {fmtMoney(4_000_000 * flashDealCount)}
@@ -498,28 +508,28 @@ export function AdminPanel() {
           <Button size="sm" variant="secondary"
             onClick={() => {
               const r = s.buyHubInvestment("fuelReserveTank");
-              if (!r.ok) alert(r.error);
+              if (!r.ok) toast.negative("Purchase failed", r.error ?? "Could not buy fuel tank.");
             }}>
             Fuel Tank · $8M
           </Button>
           <Button size="sm" variant="secondary"
             onClick={() => {
               const r = s.buyHubInvestment("maintenanceDepot");
-              if (!r.ok) alert(r.error);
+              if (!r.ok) toast.negative("Purchase failed", r.error ?? "Could not buy maintenance depot.");
             }}>
             Maint Depot · $12M
           </Button>
           <Button size="sm" variant="secondary"
             onClick={() => {
               const r = s.buyHubInvestment("premiumLounge");
-              if (!r.ok) alert(r.error);
+              if (!r.ok) toast.negative("Purchase failed", r.error ?? "Could not buy premium lounge.");
             }}>
             Premium Lounge · $5M
           </Button>
           <Button size="sm" variant="secondary"
             onClick={() => {
               const r = s.buyHubInvestment("opsExpansion");
-              if (!r.ok) alert(r.error);
+              if (!r.ok) toast.negative("Purchase failed", r.error ?? "Could not expand operations.");
             }}>
             Ops Expansion · $5M
           </Button>
@@ -588,11 +598,10 @@ export function AdminPanel() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => {
-                      if (confirm(`Trigger ${e.sourceScenario}-${e.sourceOption} now? This applies its effect immediately.`)) {
-                        s.adminTriggerDeferred(e.id);
-                      }
-                    }}
+                    onClick={() => setConfirmFireDeferred({
+                      id: e.id,
+                      label: `${e.sourceScenario}-${e.sourceOption}`,
+                    })}
                   >
                     Fire
                   </Button>
@@ -728,23 +737,13 @@ export function AdminPanel() {
       <section className="pt-3 border-t border-line grid grid-cols-2 gap-2">
         <Button
           variant="secondary"
-          onClick={() => {
-            if (confirm("Start demo mode? This resets and seeds sample data.")) {
-              s.resetGame();
-              s.startDemo();
-            }
-          }}
+          onClick={() => setConfirmDemo(true)}
         >
           Demo mode
         </Button>
         <Button
           variant="danger"
-          onClick={() => {
-            if (confirm("Reset the simulation? All state is wiped.")) {
-              s.resetGame();
-              router.push("/");
-            }
-          }}
+          onClick={() => setConfirmReset(true)}
         >
           Reset simulation
         </Button>
@@ -756,6 +755,95 @@ export function AdminPanel() {
           pre-orders ahead of cap (e.g. to clear a backlog after a
           dispute). */}
       <ProductionCapAdmin />
+
+      {/* Branded admin confirms — replace legacy native confirm()s. */}
+      <Modal open={!!confirmFireDeferred} onClose={() => setConfirmFireDeferred(null)}>
+        {confirmFireDeferred && (
+          <>
+            <ModalHeader>
+              <h2 className="font-display text-[1.5rem] text-ink">
+                Trigger deferred event {confirmFireDeferred.label}?
+              </h2>
+              <p className="text-ink-muted text-[0.8125rem] mt-1">
+                The deferred effect will fire immediately, applying any
+                staged consequences (financial hit, fleet change, brand
+                shift) to the player team. Use this for facilitator
+                interventions only.
+              </p>
+            </ModalHeader>
+            <ModalFooter>
+              <Button variant="ghost" onClick={() => setConfirmFireDeferred(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  s.adminTriggerDeferred(confirmFireDeferred.id);
+                  setConfirmFireDeferred(null);
+                }}
+              >
+                Fire now
+              </Button>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
+
+      <Modal open={confirmDemo} onClose={() => setConfirmDemo(false)}>
+        <ModalHeader>
+          <h2 className="font-display text-[1.5rem] text-ink">
+            Start demo mode?
+          </h2>
+          <p className="text-ink-muted text-[0.8125rem] mt-1">
+            This wipes the current simulation and seeds a sample game with
+            pre-built fleet, routes, and rivals. Useful for screencasts and
+            walkthroughs but the running session will be lost.
+          </p>
+        </ModalHeader>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setConfirmDemo(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              s.resetGame();
+              s.startDemo();
+              setConfirmDemo(false);
+            }}
+          >
+            Reset and start demo
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal open={confirmReset} onClose={() => setConfirmReset(false)}>
+        <ModalHeader>
+          <h2 className="font-display text-[1.5rem] text-ink">
+            Reset the simulation?
+          </h2>
+          <p className="text-ink-muted text-[0.8125rem] mt-1">
+            All state is wiped — fleet, routes, finances, decisions, news,
+            rival progress. This cannot be undone. You&apos;ll be returned to
+            the home screen to start a fresh game.
+          </p>
+        </ModalHeader>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setConfirmReset(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              s.resetGame();
+              setConfirmReset(false);
+              router.push("/");
+            }}
+          >
+            Wipe and reset
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

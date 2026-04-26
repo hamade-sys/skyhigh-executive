@@ -169,6 +169,18 @@ export interface GameStore extends GameState {
    *  reason a hubInvestments entry existed, that entry is removed. */
   sellSubsidiary(subsidiaryId: string): { ok: boolean; error?: string; proceeds?: number };
 
+  /** Offer an owned subsidiary to a specific rival airline at a chosen
+   *  asking price. Rival auto-evaluates: accepts iff price ≤ 1.10 × the
+   *  subsidiary's current market value AND they have the cash. P2P
+   *  trades don't pay the 5% market broker fee — the seller pockets
+   *  the full asking price. Buyer takes ownership including any
+   *  hubInvestments operational bonuses. */
+  offerSubsidiaryToRival(
+    subsidiaryId: string,
+    rivalTeamId: string,
+    askingPriceUsd: number,
+  ): { ok: boolean; error?: string; accepted?: boolean; proceeds?: number };
+
   /** Convert a leased aircraft to owned by paying the 25% buy-out
    *  residual (against the spec buy price captured at order time).
    *  Aircraft becomes acquisitionType="buy", lease fields cleared,
@@ -1307,6 +1319,98 @@ export const useGame = create<GameStore>()(
             (entry?.operationalBonus ? `Operational bonus removed.` : ""),
         );
         return { ok: true, proceeds };
+      },
+
+      offerSubsidiaryToRival: (subsidiaryId, rivalTeamId, askingPriceUsd) => {
+        const s = get();
+        const seller = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!seller) return { ok: false, error: "No player team" };
+        const rival = s.teams.find((t) => t.id === rivalTeamId);
+        if (!rival || rival.id === seller.id) {
+          return { ok: false, error: "Pick a rival airline (not yourself)" };
+        }
+        const sub = (seller.subsidiaries ?? []).find((x) => x.id === subsidiaryId);
+        if (!sub) return { ok: false, error: "Subsidiary not found" };
+
+        // Rival evaluates the offer. Accept if asking price is at most
+        // 1.10× the subsidiary's current market value AND they have the
+        // cash. Otherwise the rival declines and the offer expires.
+        const fairCeiling = sub.marketValueUsd * 1.10;
+        const willingToPay = askingPriceUsd <= fairCeiling;
+        if (!willingToPay) {
+          toast.warning(
+            "Offer declined",
+            `${rival.name} declined the offer at ${fmtMoneyPlain(askingPriceUsd)} — they value the asset at ~${fmtMoneyPlain(sub.marketValueUsd)} and won't go above 110% of market.`,
+          );
+          return { ok: true, accepted: false };
+        }
+        if (rival.cashUsd < askingPriceUsd) {
+          toast.warning(
+            "Offer declined",
+            `${rival.name} can't afford ${fmtMoneyPlain(askingPriceUsd)} right now (cash ${fmtMoneyPlain(rival.cashUsd)}).`,
+          );
+          return { ok: true, accepted: false };
+        }
+
+        // Move ownership: subtract from seller's subsidiaries and
+        // hubInvestments side-table, add to rival's. Cash flows from
+        // rival to seller at full asking price (no broker fee on P2P).
+        const remainingSeller = (seller.subsidiaries ?? []).filter((x) => x.id !== subsidiaryId);
+        const transferredSub = { ...sub };
+        const subType = sub.type;
+        const subCity = sub.cityCode;
+
+        function flipInventory(team: Team, op: "add" | "remove"): Team["hubInvestments"] {
+          const inv = { ...team.hubInvestments };
+          function update(arr: string[], type: typeof subType): string[] {
+            if (op === "add") return arr.includes(subCity) ? arr : [...arr, subCity];
+            // Removal: only if no other subsidiary of same type at same city remains.
+            const stillHave = (op === "remove" ? remainingSeller : team.subsidiaries ?? [])
+              .some((x) => x.type === type && x.cityCode === subCity);
+            return stillHave ? arr : arr.filter((c) => c !== subCity);
+          }
+          if (subType === "maintenance-hub") inv.maintenanceDepotHubs = update(inv.maintenanceDepotHubs, "maintenance-hub");
+          if (subType === "fuel-storage")    inv.fuelReserveTankHubs   = update(inv.fuelReserveTankHubs, "fuel-storage");
+          if (subType === "lounge")          inv.premiumLoungeHubs     = update(inv.premiumLoungeHubs, "lounge");
+          return inv;
+        }
+
+        set({
+          teams: s.teams.map((t) => {
+            if (t.id === seller.id) {
+              return {
+                ...t,
+                cashUsd: t.cashUsd + askingPriceUsd,
+                subsidiaries: remainingSeller,
+                hubInvestments: flipInventory(t, "remove"),
+                retiredHistory: [
+                  ...(t.retiredHistory ?? []),
+                  {
+                    id: subsidiaryId, specId: subType, specName: SUBSIDIARY_BY_TYPE[subType]?.name ?? subType,
+                    acquiredAtQuarter: sub.acquiredAtQuarter, exitQuarter: s.currentQuarter,
+                    exitReason: "sold" as const, proceedsUsd: askingPriceUsd, acquisitionType: "buy" as const,
+                  },
+                ],
+              };
+            }
+            if (t.id === rival.id) {
+              return {
+                ...t,
+                cashUsd: t.cashUsd - askingPriceUsd,
+                subsidiaries: [...(t.subsidiaries ?? []), transferredSub],
+                hubInvestments: flipInventory(t, "add"),
+              };
+            }
+            return t;
+          }),
+        });
+
+        const entry = SUBSIDIARY_BY_TYPE[subType];
+        toast.success(
+          `${rival.name} accepted the offer`,
+          `Sold ${entry?.name ?? subType} @ ${subCity} for ${fmtMoneyPlain(askingPriceUsd)} (no broker fee on peer-to-peer).`,
+        );
+        return { ok: true, accepted: true, proceeds: askingPriceUsd };
       },
 
       buyOutLease: (aircraftId) => {
@@ -2914,6 +3018,8 @@ export const useGame = create<GameStore>()(
             revenue: result.revenue,
             passengerRevenue: result.passengerRevenue,
             cargoRevenue: result.cargoRevenue,
+            airportRevenue: result.airportRevenueUsd,
+            subsidiaryRevenue: result.subsidiaryRevenueUsd,
             costs: result.revenue - result.netProfit,
             // Per-line operating cost breakdown so the Financials tab
             // can render a real income statement (not just a single
@@ -2923,6 +3029,7 @@ export const useGame = create<GameStore>()(
             fuelCost: result.fuelCost,
             slotCost: result.slotCost,
             staffCost: result.staffCost,
+            leaseFeesUsd: result.leaseFeesUsd,
             otherSliderCost: result.otherSliderCost,
             marketingCost: result.marketingCost,
             serviceCost: result.serviceCost,

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Bell, Trash2, X, Info, CheckCircle2, AlertTriangle, CircleX, Sparkles } from "lucide-react";
 import { useToasts, type ToastKind } from "@/store/toasts";
 import { cn } from "@/lib/cn";
+import { Button, Modal, ModalFooter, ModalHeader } from "@/components/ui";
 
 const KIND_META: Record<ToastKind, { Icon: typeof Info; tint: string }> = {
   info:     { Icon: Info,          tint: "text-info" },
@@ -26,6 +27,7 @@ const KIND_META: Record<ToastKind, { Icon: typeof Info; tint: string }> = {
  */
 export function NotificationCenter() {
   const [open, setOpen] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
   const history = useToasts((s) => s.history);
   const lastReadAt = useToasts((s) => s.lastReadAt);
   const markAllRead = useToasts((s) => s.markAllRead);
@@ -125,11 +127,7 @@ export function NotificationCenter() {
               <div className="flex items-center gap-1">
                 {history.length > 0 && (
                   <button
-                    onClick={() => {
-                      if (confirm("Clear all notifications? This can't be undone.")) {
-                        clearHistory();
-                      }
-                    }}
+                    onClick={() => setConfirmClear(true)}
                     aria-label="Clear all"
                     title="Clear all"
                     className="w-8 h-8 rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center"
@@ -173,6 +171,36 @@ export function NotificationCenter() {
           </div>
         </>
       )}
+
+      {/* Branded clear-history confirm. Replaces the legacy native
+          confirm() — this is destructive (history is lost), so we
+          spell out the consequence and keep it on-brand. */}
+      <Modal open={confirmClear} onClose={() => setConfirmClear(false)}>
+        <ModalHeader>
+          <h2 className="font-display text-[1.5rem] text-ink">
+            Clear all notifications?
+          </h2>
+          <p className="text-ink-muted text-[0.8125rem] mt-1">
+            All {history.length} notification{history.length === 1 ? "" : "s"} in
+            your history will be removed permanently. New notifications will
+            still appear normally going forward.
+          </p>
+        </ModalHeader>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setConfirmClear(false)}>
+            Keep notifications
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              clearHistory();
+              setConfirmClear(false);
+            }}
+          >
+            Clear all
+          </Button>
+        </ModalFooter>
+      </Modal>
     </>
   );
 }

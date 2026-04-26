@@ -294,6 +294,10 @@ export function AirportDetailModal({
  *  Pricing follows the master-ref formula: base[tier] + 4 × current
  *  quarterly slot revenue at this airport. */
 function AirportOwnership({ cityCode }: { cityCode: string }) {
+  // Branded confirms replace the legacy native confirm() prompts.
+  // Buying and selling an airport are 7-figure decisions that
+  // permanently change slot dynamics for every airline at this hub —
+  // the confirmation UX has to feel proportional to that.
   const player = useGame(selectPlayer);
   const teams = useGame((s) => s.teams);
   const slotState = useGame((s) => s.airportSlots?.[cityCode]);
@@ -302,6 +306,8 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   const setAirportSlotRate = useGame((s) => s.setAirportSlotRate);
   const expandAirportCapacity = useGame((s) => s.expandAirportCapacity);
   const [pendingRate, setPendingRate] = useState<string>("");
+  const [confirmBuy, setConfirmBuy] = useState(false);
+  const [confirmSell, setConfirmSell] = useState(false);
 
   if (!player) return null;
   const city = CITIES_BY_CODE[cityCode];
@@ -316,6 +322,10 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   const maxCap = AIRPORT_MAX_CAPACITY_BY_TIER[tier];
   const expansionCost = AIRPORT_EXPANSION_COST_PER_LEVEL[tier];
 
+  // Sell modal — only relevant when ownedByMe; rendered inline in
+  // that branch's fragment.
+  const sellProceeds = Math.round(askingPrice * 0.95);
+
   if (ownedByMe) {
     const currentRate = slotState?.ownerSlotRatePerWeekUsd ?? 0;
     const opex = qRevenue * 0.30;
@@ -323,6 +333,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
     const ownSlotFees = ownLease ? ownLease.totalWeeklyCost * 13 : 0;
     const netOwnerProfit = qRevenue - opex - ownSlotFees;
     return (
+      <>
       <section>
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
           <Building size={12} className="text-accent" />
@@ -393,13 +404,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  if (!confirm(
-                    `Sell ${city.name} airport?\n` +
-                    `Proceeds ~${fmtMoney(askingPrice * 0.95)} (5% broker fee). Bidding will resume at this airport.`,
-                  )) return;
-                  sellAirport(cityCode);
-                }}
+                onClick={() => setConfirmSell(true)}
               >
                 Sell airport
               </Button>
@@ -407,6 +412,50 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           </div>
         </div>
       </section>
+
+      <Modal open={confirmSell} onClose={() => setConfirmSell(false)}>
+        <ModalHeader>
+          <h2 className="font-display text-[1.5rem] text-ink">
+            Sell {city.name} airport?
+          </h2>
+          <p className="text-ink-muted text-[0.8125rem] mt-1">
+            Bidding will resume here at the auction default. Tenant airlines
+            will revert to paying the cleared rate, not yours. Your
+            subsidiary revenue from this hub stops next quarter.
+          </p>
+        </ModalHeader>
+        <ModalBody className="space-y-2">
+          <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-ink-muted">Asking price (mark-to-market)</span>
+              <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-ink-muted">Broker fee (5%)</span>
+              <span className="tabular font-mono text-negative">−{fmtMoney(askingPrice - sellProceeds)}</span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 border-t border-line pt-1.5 mt-1.5">
+              <span className="text-ink font-semibold">Net proceeds</span>
+              <span className="tabular font-mono text-positive font-semibold">{fmtMoney(sellProceeds)}</span>
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setConfirmSell(false)}>
+            Keep airport
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              sellAirport(cityCode);
+              setConfirmSell(false);
+            }}
+          >
+            Sell · {fmtMoney(sellProceeds)}
+          </Button>
+        </ModalFooter>
+      </Modal>
+      </>
     );
   }
 
@@ -442,6 +491,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   // Unowned — show acquire CTA
   const canAfford = player.cashUsd >= askingPrice;
   return (
+    <>
     <section>
       <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
         <Building size={12} /> Airport ownership
@@ -456,14 +506,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           size="sm"
           variant="primary"
           disabled={!canAfford}
-          onClick={() => {
-            if (!confirm(
-              `Acquire ${city.name} airport for ${fmtMoney(askingPrice)}?\n\n` +
-              `You'll collect every airline's slot fees here as your own revenue. ` +
-              `Bidding for this airport will be disabled — you set the slot rate.`,
-            )) return;
-            buyAirport(cityCode);
-          }}
+          onClick={() => setConfirmBuy(true)}
         >
           {canAfford
             ? `Acquire airport · ${fmtMoney(askingPrice)}`
@@ -477,6 +520,51 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
         </p>
       </div>
     </section>
+
+    <Modal open={confirmBuy} onClose={() => setConfirmBuy(false)}>
+      <ModalHeader>
+        <h2 className="font-display text-[1.5rem] text-ink">
+          Acquire {city.name} airport?
+        </h2>
+        <p className="text-ink-muted text-[0.8125rem] mt-1">
+          You&apos;ll collect every airline&apos;s slot fees here as your own
+          revenue. Bidding for this airport will be disabled — you set the
+          weekly slot rate. Net (after 30% opex) surfaces in your P&amp;L as
+          Subsidiary revenue.
+        </p>
+      </ModalHeader>
+      <ModalBody className="space-y-2">
+        <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-ink-muted">Asking price</span>
+            <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-ink-muted">Quarterly slot revenue (current)</span>
+            <span className="tabular font-mono text-positive">{fmtMoney(qRevenue)}</span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-ink-muted">Capacity / max</span>
+            <span className="tabular font-mono text-ink">{capacity} / {maxCap}</span>
+          </div>
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="ghost" onClick={() => setConfirmBuy(false)}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          onClick={() => {
+            buyAirport(cityCode);
+            setConfirmBuy(false);
+          }}
+        >
+          Acquire · {fmtMoney(askingPrice)}
+        </Button>
+      </ModalFooter>
+    </Modal>
+    </>
   );
 }
 

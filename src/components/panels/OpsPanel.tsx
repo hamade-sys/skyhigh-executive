@@ -1,6 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui";
+import { useState } from "react";
+import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { SLIDER_LABELS, SLIDER_PCT_REVENUE, SLIDER_EFFECTS } from "@/lib/engine";
 import { useGame, selectPlayer } from "@/store/game";
 import type { SliderLevel, Sliders } from "@/types/game";
@@ -23,6 +24,9 @@ export function OpsPanel() {
   const player = selectPlayer(s);
   const setSliders = useGame((g) => g.setSliders);
   const closePanel = useUi((u) => u.closePanel);
+  // Branded close-quarter confirm replaces the legacy native confirm()
+  // when the player has unanswered scenarios.
+  const [confirmClose, setConfirmClose] = useState(false);
 
   if (!player) return null;
 
@@ -40,8 +44,15 @@ export function OpsPanel() {
 
   function commit() {
     if (pendingDecisions.length > 0) {
-      if (!confirm(`${pendingDecisions.length} board decision${pendingDecisions.length > 1 ? "s" : ""} still open. Close anyway?`)) return;
+      setConfirmClose(true);
+      return;
     }
+    s.closeQuarter();
+    closePanel();
+  }
+
+  function commitForce() {
+    setConfirmClose(false);
     s.closeQuarter();
     closePanel();
   }
@@ -117,6 +128,43 @@ export function OpsPanel() {
       <Button variant="primary" className="w-full" onClick={commit}>
         Submit ops &amp; advance to next quarter →
       </Button>
+
+      <Modal open={confirmClose} onClose={() => setConfirmClose(false)}>
+        <ModalHeader>
+          <h2 className="font-display text-[1.5rem] text-ink">
+            Close quarter with {pendingDecisions.length} decision
+            {pendingDecisions.length === 1 ? "" : "s"} still open?
+          </h2>
+          <p className="text-ink-muted text-[0.8125rem] mt-1">
+            Any pending scenario will auto-resolve to a sensible default
+            at close — usually the first listed option, skipping anything
+            blocked by current cash, fleet or PR state.
+          </p>
+        </ModalHeader>
+        <ModalBody className="space-y-2">
+          <ul className="space-y-1.5">
+            {pendingDecisions.map((sc) => (
+              <li
+                key={sc.id}
+                className="rounded-md border border-line bg-surface px-3 py-2 text-[0.8125rem]"
+              >
+                <div className="font-semibold text-ink">{sc.title}</div>
+                <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                  Will auto-submit at quarter close.
+                </div>
+              </li>
+            ))}
+          </ul>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setConfirmClose(false)}>
+            Go back to decisions
+          </Button>
+          <Button variant="primary" onClick={commitForce}>
+            Close quarter anyway
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   Plus,
   ArrowRight,
   TrendingUp,
+  Handshake,
 } from "lucide-react";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
@@ -58,12 +59,21 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
   // change — but the parent's early-return guarantees player exists
   // by the time this component mounts.
   const player = useGame(selectPlayer);
+  const teams = useGame((s) => s.teams);
   const buildSubsidiary = useGame((s) => s.buildSubsidiary);
   const sellSubsidiary = useGame((s) => s.sellSubsidiary);
+  const offerSubsidiaryToRival = useGame((s) => s.offerSubsidiaryToRival);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const [buildOpen, setBuildOpen] = useState<{ type: SubsidiaryType } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmSell, setConfirmSell] = useState<Subsidiary | null>(null);
+  // P2P offer state — sub being offered, who to offer it to, and
+  // the asking price the seller wants. The rival auto-evaluates;
+  // this modal collects the seller's offer terms only.
+  const [offerSub, setOfferSub] = useState<Subsidiary | null>(null);
+  const [offerRivalId, setOfferRivalId] = useState<string>("");
+  const [offerPriceUsd, setOfferPriceUsd] = useState<number>(0);
+  const [offerError, setOfferError] = useState<string | null>(null);
 
   const owned = player?.subsidiaries ?? [];
   const ownedByType = useMemo(() => {
@@ -176,14 +186,36 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                               {(((sub.marketValueUsd - sub.purchaseCostUsd) / sub.purchaseCostUsd) * 100).toFixed(0)}% vs cost
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setConfirmSell(sub)}
-                            title={`Sell to market for ~${fmtMoney(sellProceeds)} (5% broker fee)`}
-                          >
-                            Sell
-                          </Button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setOfferSub(sub);
+                                // Default the asking price to mark-to-market
+                                // so the seller can quickly accept "as-is".
+                                setOfferPriceUsd(Math.round(sub.marketValueUsd));
+                                // Default rival = first non-player team that
+                                // has cash; user can change.
+                                const firstRival = teams.find(
+                                  (t) => t.id !== player.id && t.cashUsd > 0,
+                                );
+                                setOfferRivalId(firstRival?.id ?? "");
+                                setOfferError(null);
+                              }}
+                              title="Offer this asset to a rival airline for a private peer-to-peer trade (no broker fee)"
+                            >
+                              <Handshake size={12} /> Offer
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setConfirmSell(sub)}
+                              title={`Sell to market for ~${fmtMoney(sellProceeds)} (5% broker fee)`}
+                            >
+                              Sell
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -362,6 +394,190 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                   }}
                 >
                   Sell for {fmtMoney(proceeds)}
+                </Button>
+              </ModalFooter>
+            </>
+          );
+        })()}
+      </Modal>
+
+      {/* Peer-to-peer offer — pick a rival + asking price.
+          The rival auto-evaluates: accepts iff price ≤ 110% of market
+          AND they have the cash. No broker fee on P2P trades, so the
+          seller pockets the full asking price. */}
+      <Modal open={!!offerSub} onClose={() => { setOfferSub(null); setOfferError(null); }}>
+        {offerSub && (() => {
+          const entry = SUBSIDIARY_BY_TYPE[offerSub.type];
+          const market = offerSub.marketValueUsd;
+          const ceiling = Math.round(market * 1.10);
+          const rivals = teams.filter((t) => t.id !== player.id);
+          const selectedRival = rivals.find((t) => t.id === offerRivalId);
+          const overCeiling = offerPriceUsd > ceiling;
+          const rivalCantAfford = selectedRival ? selectedRival.cashUsd < offerPriceUsd : false;
+          const willLikelyAccept = !overCeiling && !rivalCantAfford && offerPriceUsd > 0;
+          return (
+            <>
+              <ModalHeader>
+                <h2 className="font-display text-[1.5rem] text-ink">
+                  Offer {entry?.name} to a rival
+                </h2>
+                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                  Private peer-to-peer trade — no 5% broker fee. Rival accepts
+                  iff your price is at most 110% of mark-to-market AND they
+                  can afford it.
+                </p>
+              </ModalHeader>
+              <ModalBody className="space-y-4">
+                {/* Asset summary */}
+                <div className="rounded-md border border-line bg-surface-2/30 p-3 flex items-baseline justify-between gap-3">
+                  <div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-mono tabular text-ink text-[0.8125rem]">{offerSub.cityCode}</span>
+                      <span className="text-[0.8125rem] text-ink-2">
+                        {CITIES_BY_CODE[offerSub.cityCode]?.name ?? offerSub.cityCode}
+                      </span>
+                    </div>
+                    <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                      Mark-to-market {fmtMoney(market)} · 110% ceiling {fmtMoney(ceiling)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">If sold to market</div>
+                    <div className="font-mono tabular text-[0.75rem] text-ink-muted">
+                      {fmtMoney(Math.round(market * 0.95))} (5% fee)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rival picker */}
+                <div>
+                  <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+                    Pick a rival airline ({rivals.length})
+                  </div>
+                  {rivals.length === 0 ? (
+                    <div className="text-[0.8125rem] text-ink-muted italic">
+                      No rival airlines in this game session.
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-line divide-y divide-line max-h-56 overflow-auto">
+                      {rivals.map((t) => {
+                        const selected = t.id === offerRivalId;
+                        const canPay = t.cashUsd >= offerPriceUsd;
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => setOfferRivalId(t.id)}
+                            className={cn(
+                              "w-full flex items-center justify-between px-3 py-2 text-left text-[0.8125rem] hover:bg-surface-hover",
+                              selected && "bg-[var(--accent-soft)]",
+                            )}
+                          >
+                            <span className="flex items-baseline gap-2">
+                              <span
+                                className={cn(
+                                  "inline-block w-2.5 h-2.5 rounded-full shrink-0",
+                                  selected ? "bg-accent" : "bg-line",
+                                )}
+                              />
+                              <span className="font-semibold text-ink">{t.name}</span>
+                              <span className="text-[0.6875rem] text-ink-muted font-mono">{t.code}</span>
+                            </span>
+                            <span
+                              className={cn(
+                                "font-mono tabular text-[0.6875rem]",
+                                canPay ? "text-ink-muted" : "text-negative",
+                              )}
+                            >
+                              cash {fmtMoney(t.cashUsd)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Asking price */}
+                <div>
+                  <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5">
+                    Asking price (USD)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      step={100000}
+                      min={0}
+                      value={offerPriceUsd}
+                      onChange={(e) => setOfferPriceUsd(Math.max(0, Number(e.target.value) || 0))}
+                      className="flex-1 px-3 py-2 rounded-md border border-line bg-surface text-ink tabular font-mono text-[0.875rem] focus:outline-none focus:ring-2 focus:ring-accent/50"
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setOfferPriceUsd(Math.round(market))}
+                      title="Set price = current market value"
+                    >
+                      Market
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setOfferPriceUsd(ceiling)}
+                      title="Set price = 110% market ceiling (max likely accept)"
+                    >
+                      Max
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5 text-[0.6875rem]">
+                    <span className="text-ink-muted">
+                      vs market{" "}
+                      <span
+                        className={cn(
+                          "tabular font-mono",
+                          offerPriceUsd > market ? "text-positive" : offerPriceUsd < market ? "text-negative" : "text-ink-muted",
+                        )}
+                      >
+                        {offerPriceUsd > market ? "+" : ""}
+                        {market > 0 ? (((offerPriceUsd - market) / market) * 100).toFixed(1) : "0.0"}%
+                      </span>
+                    </span>
+                    {willLikelyAccept ? (
+                      <span className="text-positive font-semibold">Within rival&apos;s likely-accept range</span>
+                    ) : overCeiling ? (
+                      <span className="text-negative">Above 110% ceiling — rival will decline</span>
+                    ) : rivalCantAfford ? (
+                      <span className="text-negative">Selected rival can&apos;t afford this price</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {offerError && (
+                  <div className="text-negative text-[0.8125rem] rounded-md bg-[var(--negative-soft)] p-2.5">
+                    {offerError}
+                  </div>
+                )}
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" onClick={() => { setOfferSub(null); setOfferError(null); }}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={!offerRivalId || offerPriceUsd <= 0 || rivals.length === 0}
+                  onClick={() => {
+                    const r = offerSubsidiaryToRival(offerSub.id, offerRivalId, offerPriceUsd);
+                    if (!r.ok) {
+                      setOfferError(r.error ?? "Offer failed");
+                      return;
+                    }
+                    // Whether accepted or declined, the store has already
+                    // toasted the outcome — close the modal either way.
+                    setOfferSub(null);
+                    setOfferError(null);
+                  }}
+                >
+                  Send offer · {fmtMoney(offerPriceUsd)}
                 </Button>
               </ModalFooter>
             </>
