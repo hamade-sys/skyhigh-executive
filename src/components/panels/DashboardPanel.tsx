@@ -255,6 +255,9 @@ export function DashboardPanel() {
         </div>
       </section>
 
+      {/* ── 6b. Market vitals trajectory ── */}
+      <MarketHistorySection />
+
       {/* ── 7. Active demand modifiers (news in effect on YOUR network) ── */}
       <ActiveModifiersSection player={player} currentQuarter={currentQuarter} />
     </div>
@@ -497,6 +500,102 @@ function FleetStatusRow({
       <span className="text-ink-2">{label}</span>
       <span className={cn("tabular font-mono", cls, value > 0 && "font-semibold")}>
         {value}
+      </span>
+    </div>
+  );
+}
+
+/** Three-line trajectory chart of the macro indices. Reads
+ *  GameState.marketHistory which the engine appends to at every
+ *  quarter close. Hidden until at least 2 closes have happened so
+ *  the chart has a meaningful slope. */
+function MarketHistorySection() {
+  const history = useGame((s) => s.marketHistory ?? []);
+  if (history.length < 2) return null;
+  const sorted = [...history].sort((a, b) => a.quarter - b.quarter);
+  return (
+    <section>
+      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        Market vitals · {sorted[0].quarter === sorted[sorted.length - 1].quarter ? "this quarter" : `${fmtQuarter(sorted[0].quarter)} – ${fmtQuarter(sorted[sorted.length - 1].quarter)}`}
+      </div>
+      <div className="rounded-md border border-line bg-surface p-3 space-y-3">
+        <MarketHistoryLine
+          label="Fuel index"
+          color="#C46E27"
+          series={sorted.map((m) => ({ q: m.quarter, v: m.fuelIndex }))}
+          baseline={100}
+          fmt={(v) => v.toFixed(0)}
+        />
+        <MarketHistoryLine
+          label="Travel index"
+          color="#1E6B5C"
+          series={sorted.map((m) => ({ q: m.quarter, v: m.travelIndex }))}
+          baseline={100}
+          fmt={(v) => v.toFixed(0)}
+        />
+        <MarketHistoryLine
+          label="Base rate"
+          color="#0072B5"
+          series={sorted.map((m) => ({ q: m.quarter, v: m.baseRatePct }))}
+          fmt={(v) => `${v.toFixed(1)}%`}
+        />
+      </div>
+    </section>
+  );
+}
+
+/** Single index line with a baseline reference, current value, and a
+ *  delta vs the first sample. Compact enough to stack three deep. */
+function MarketHistoryLine({
+  label, color, series, baseline, fmt,
+}: {
+  label: string;
+  color: string;
+  series: Array<{ q: number; v: number }>;
+  baseline?: number;
+  fmt: (n: number) => string;
+}) {
+  const w = 280;
+  const h = 36;
+  const values = series.map((s) => s.v);
+  const lo = Math.min(...values, baseline ?? Infinity);
+  const hi = Math.max(...values, baseline ?? -Infinity);
+  const range = Math.max(0.001, hi - lo);
+  const px = (v: number, i: number) => ({
+    x: series.length === 1 ? 0 : (i / (series.length - 1)) * w,
+    y: h - ((v - lo) / range) * h,
+  });
+  const points = series.map((s, i) => px(s.v, i)).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const baselineY = baseline !== undefined ? h - ((baseline - lo) / range) * h : null;
+  const current = values[values.length - 1];
+  const start = values[0];
+  const delta = current - start;
+  const deltaTone = delta > 0 ? "text-positive" : delta < 0 ? "text-negative" : "text-ink-muted";
+  // X-axis ticks (quarter labels) — up to 5, evenly spaced.
+  const tickIdx: number[] = series.length <= 5
+    ? series.map((_, i) => i)
+    : [0, 1, 2, 3, 4].map((k) => Math.round((k * (series.length - 1)) / 4));
+  const tickPts = tickIdx.map((i) => px(series[i].v, i));
+  return (
+    <div className="flex items-start gap-3">
+      <span className="w-22 text-[0.75rem] text-ink-2 shrink-0 pt-1">{label}</span>
+      <div className="flex-1 min-w-0">
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-9">
+          {baselineY !== null && (
+            <line x1={0} y1={baselineY} x2={w} y2={baselineY} stroke="currentColor" className="text-ink-muted/40" strokeWidth={0.5} strokeDasharray="2 3" />
+          )}
+          <polyline points={points} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+          {tickPts.map((p, i) => (
+            <line key={i} x1={p.x} y1={h - 1} x2={p.x} y2={h - 4} stroke="currentColor" className="text-ink-muted" strokeWidth={1} />
+          ))}
+        </svg>
+        <div className="flex justify-between text-[0.5625rem] text-ink-muted tabular font-mono mt-0.5">
+          {tickIdx.map((i) => (<span key={i}>{fmtQuarter(series[i].q)}</span>))}
+        </div>
+      </div>
+      <span className="tabular font-mono text-[0.8125rem] text-ink shrink-0 w-14 text-right pt-1">{fmt(current)}</span>
+      <span className={cn("tabular font-mono text-[0.6875rem] w-16 text-right pt-1", deltaTone)}>
+        {delta >= 0 ? "+" : ""}{fmt(delta)}
       </span>
     </div>
   );

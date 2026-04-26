@@ -171,6 +171,11 @@ export function FleetPanel() {
       {/* Pre-order queue — pending FIFO orders awaiting production. */}
       <PreOrderQueue />
 
+      {/* Historical aircraft log — every airframe that has exited
+          the fleet (sold, retired/scrapped, lease-returned, crashed).
+          Collapsed by default so the active fleet stays the focus. */}
+      <RetiredHistory />
+
       {/* Insurance policy — directly editable from Fleet panel */}
       <div className="rounded-md border border-line bg-surface p-3">
         <div className="flex items-baseline justify-between mb-2">
@@ -835,6 +840,99 @@ function PreOrderQueue() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** History panel — every airframe that has exited the fleet. Sold,
+ *  retired (auto-scrapped at lifespan end), lease-returned, or
+ *  crashed. Collapsed by default. */
+function RetiredHistory() {
+  const player = useGame(selectPlayer);
+  const [open, setOpen] = useState(false);
+  if (!player) return null;
+  const history = player.retiredHistory ?? [];
+  if (history.length === 0) return null;
+
+  // Newest first.
+  const sorted = [...history].sort((a, b) => b.exitQuarter - a.exitQuarter);
+  const proceedsTotal = history.reduce((sum, h) => sum + h.proceedsUsd, 0);
+
+  const reasonLabel: Record<typeof history[number]["exitReason"], string> = {
+    retired: "Retired (scrap)",
+    sold: "Sold",
+    "lease-returned": "Lease returned",
+    crashed: "Crashed",
+  };
+  const reasonTone: Record<typeof history[number]["exitReason"], string> = {
+    retired: "text-ink-muted",
+    sold: "text-positive",
+    "lease-returned": "text-warning",
+    crashed: "text-negative",
+  };
+
+  return (
+    <div className="rounded-md border border-line bg-surface overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-surface-hover transition-colors"
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[0.8125rem] font-semibold text-ink">
+            Aircraft history · {history.length}
+          </span>
+          <span className="text-[0.6875rem] text-ink-muted">
+            sold / retired / returned / crashed
+          </span>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-[0.6875rem] text-ink-muted tabular font-mono">
+            {fmtMoney(proceedsTotal)} lifetime proceeds
+          </span>
+          <span className="text-ink-muted text-[0.6875rem]">{open ? "▾" : "▸"}</span>
+        </div>
+      </button>
+      {open && (
+        <div className="border-t border-line/40">
+          <table className="w-full text-[0.75rem]">
+            <thead>
+              <tr className="bg-surface-2 border-b border-line/40">
+                <th className="text-left px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Aircraft</th>
+                <th className="text-left px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">In-service</th>
+                <th className="text-left px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Exited</th>
+                <th className="text-left px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Reason</th>
+                <th className="text-right px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Proceeds</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((h) => (
+                <tr key={h.id} className="border-b border-line/30 last:border-0">
+                  <td className="px-3 py-1.5">
+                    <div className="text-ink">{h.specName}</div>
+                    <div className="text-[0.625rem] text-ink-muted font-mono">
+                      {h.acquisitionType} · {h.id.slice(-6)}
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 tabular font-mono text-ink-2">
+                    {fmtQuarter(h.acquiredAtQuarter)} – {fmtQuarter(h.exitQuarter)}
+                  </td>
+                  <td className="px-3 py-1.5 tabular font-mono text-ink-2">
+                    {fmtQuarter(h.exitQuarter)}
+                  </td>
+                  <td className={cn("px-3 py-1.5 text-[0.6875rem] font-semibold", reasonTone[h.exitReason])}>
+                    {reasonLabel[h.exitReason]}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular font-mono text-ink">
+                    {h.proceedsUsd > 0 ? fmtMoney(h.proceedsUsd) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

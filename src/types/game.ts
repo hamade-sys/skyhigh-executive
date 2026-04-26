@@ -335,6 +335,23 @@ export interface Team {
   flags: Set<string>;            // gov_board_card, trusted_operator, ...
   deferredEvents: DeferredEvent[];
 
+  /** Audit log of every aircraft that has exited the fleet — sold
+   *  on the secondary market, retired (auto-scrapped on lifespan
+   *  end), returned to a lessor at end of lease term, or crashed.
+   *  Surfaced in a History panel under Fleet so the player can
+   *  account for vanished tail numbers. Optional for back-compat
+   *  with persisted saves predating this field. */
+  retiredHistory?: Array<{
+    id: string;
+    specId: string;
+    specName: string;
+    acquiredAtQuarter: number;
+    exitQuarter: number;
+    exitReason: "retired" | "sold" | "lease-returned" | "crashed";
+    proceedsUsd: number;
+    acquisitionType: "buy" | "lease";
+  }>;
+
   /** Active route service obligations from accepted scenarios (e.g. S5
    *  "Government Lifeline" requires service to Lagos + Casablanca for 2
    *  years). The engine charges `finePerQuarterUsd` at quarter close

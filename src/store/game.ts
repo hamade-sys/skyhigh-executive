@@ -29,7 +29,7 @@ import {
   loadSnapshot as snapLoad,
   deleteSnapshot as snapDelete,
 } from "@/lib/snapshots";
-import { FUEL_BASELINE_USD_PER_L, effectiveBaseRatePct, effectiveRangeKm, newsFuelIndexHint } from "@/lib/engine";
+import { FUEL_BASELINE_USD_PER_L, effectiveBaseRatePct, effectiveRangeKm, effectiveTravelIndex, newsFuelIndexHint } from "@/lib/engine";
 import { totalUpgradeCostPerPlaneUsd } from "@/lib/aircraft-upgrades";
 import {
   PREORDER_DEPOSIT_PCT,
@@ -2515,11 +2515,14 @@ export const useGame = create<GameStore>()(
         const coveragePct = coverageByPolicy[player.insurancePolicy];
         let insuranceProceeds = 0;
 
-        // Transition ordered → active planes, and retire aircraft whose
-        // retirementQuarter has been reached (A13). Expired leases —
-        // 12-quarter term ended without a buy-out — are also returned
-        // to the lessor here (filtered out below the map).
+        // Transition ordered → active planes, retire aircraft whose
+        // retirementQuarter has been reached, AND auto-scrap any
+        // retired airframes immediately so they don't clutter the
+        // fleet table. Expired leases also return to the lessor here.
         let leaseReturnCount = 0;
+        let scrapProceedsUsd = 0;
+        type RetiredEntry = NonNullable<Team["retiredHistory"]>[number];
+        const retiredHistory: RetiredEntry[] = [];
         const updatedFleet = player.fleet.map((f) => {
           const retiring = f.retirementQuarter !== undefined && s.currentQuarter >= f.retirementQuarter;
           if (retiring) {
@@ -2527,22 +2530,59 @@ export const useGame = create<GameStore>()(
             const payoutBase = f.bookValue * 0.75;
             const payout = payoutBase * coveragePct;
             insuranceProceeds += payout;
-            return { ...f, status: "retired" as const, routeId: null };
+            // Auto-scrap on retirement — earlier retired aircraft sat
+            // forever in `team.fleet` cluttering the fleet table while
+            // showing in Total but not Used / Unused / Order columns.
+            // Now they're sold for scrap (10% of book value) at retirement
+            // and removed from the active list. The history record
+            // surfaces in a History panel so the player can audit.
+            const scrapValue = Math.round(f.bookValue * 0.10);
+            scrapProceedsUsd += scrapValue;
+            const spec = AIRCRAFT_BY_ID[f.specId];
+            retiredHistory.push({
+              id: f.id, specId: f.specId,
+              specName: spec?.name ?? f.specId,
+              acquiredAtQuarter: f.purchaseQuarter,
+              exitQuarter: s.currentQuarter,
+              exitReason: "retired" as const,
+              proceedsUsd: scrapValue + payout,
+              acquisitionType: f.acquisitionType,
+            });
+            return null; // signal removal
           }
-          // Expired lease: mark as retired so the lessor-return filter
-          // below removes the airframe from the fleet entirely.
+          // Expired lease: airframe goes back to the lessor — no scrap
+          // proceeds, no insurance payout. Logged in history.
           if (
             f.acquisitionType === "lease" &&
             typeof f.leaseTermEndsAtQuarter === "number" &&
             s.currentQuarter > f.leaseTermEndsAtQuarter
           ) {
             leaseReturnCount += 1;
-            return { ...f, status: "retired" as const, routeId: null };
+            const spec = AIRCRAFT_BY_ID[f.specId];
+            retiredHistory.push({
+              id: f.id, specId: f.specId,
+              specName: spec?.name ?? f.specId,
+              acquiredAtQuarter: f.purchaseQuarter,
+              exitQuarter: s.currentQuarter,
+              exitReason: "lease-returned" as const,
+              proceedsUsd: 0,
+              acquisitionType: "lease",
+            });
+            return null;
           }
           if (f.status === "ordered") return { ...f, status: "active" as const };
           if (f.status === "grounded") return { ...f, status: "active" as const };
           return f;
-        });
+        }).filter((f): f is NonNullable<typeof f> => f !== null);
+        // Surface scrap proceeds to the player and merge history.
+        if (scrapProceedsUsd > 0 || retiredHistory.length > 0) {
+          insuranceProceeds += scrapProceedsUsd;
+          // Use of `as any` here would be a code smell — instead the
+          // type field is added to Team in types/game.ts. Falls back
+          // to creating the array if it doesn't exist on the team yet.
+          (player as { retiredHistory?: typeof retiredHistory }).retiredHistory =
+            [...(player.retiredHistory ?? []), ...retiredHistory];
+        }
         if (leaseReturnCount > 0) {
           toast.info(
             `${leaseReturnCount} lease${leaseReturnCount === 1 ? "" : "s"} returned`,
@@ -3291,6 +3331,22 @@ export const useGame = create<GameStore>()(
         // 2015–17 debt, the 2022–23 hiking cycle, etc., so a heavily
         // leveraged airline genuinely struggles when the cycle turns.
         const newBaseRate = effectiveBaseRatePct(nextQ);
+        const clampedFuel = Math.max(50, Math.min(220, newFuel));
+
+        // Persist the closing-quarter snapshot of the three macro
+        // indices so the Reports tab can chart fuel / travel / base
+        // rate over the campaign. Append-once-per-quarter; on
+        // snapshot-restore the dedup-on-push pattern keeps the array
+        // monotonic.
+        const newMarketHistory = [
+          ...(s.marketHistory ?? []).filter((m) => m.quarter !== s.currentQuarter),
+          {
+            quarter: s.currentQuarter,
+            fuelIndex: s.fuelIndex,
+            travelIndex: effectiveTravelIndex(s.currentQuarter),
+            baseRatePct: s.baseInterestRatePct,
+          },
+        ];
 
         set({
           teams: teamsAfterDelivery,
@@ -3298,9 +3354,10 @@ export const useGame = create<GameStore>()(
           lastCloseResult: result,
           phase: "quarter-closing",
           airportSlots: slotsAfterAuction,
-          fuelIndex: Math.max(50, Math.min(220, newFuel)),
+          fuelIndex: clampedFuel,
           baseInterestRatePct: newBaseRate,
           preOrders: preOrdersAfterDelivery,
+          marketHistory: newMarketHistory,
         });
       },
 
@@ -4271,6 +4328,12 @@ export const useGame = create<GameStore>()(
           manufactureQuarter: plane.purchaseQuarter,
           retirementQuarter: plane.retirementQuarter,
         };
+        // Log the exit in retiredHistory so the History panel under
+        // Fleet shows when this airframe left the company. Proceeds
+        // are recorded once the buyer actually clears, not at listing
+        // time — but we book the listing event with the asking price
+        // for audit purposes (overwritten on actual sale clearance).
+        const specName = AIRCRAFT_BY_ID[plane.specId]?.name ?? plane.specId;
         set({
           secondHandListings: [...s.secondHandListings, listing],
           teams: s.teams.map((t) => t.id !== player.id ? t : {
@@ -4280,9 +4343,22 @@ export const useGame = create<GameStore>()(
               ...r,
               aircraftIds: r.aircraftIds.filter((id) => id !== aircraftId),
             })),
+            retiredHistory: [
+              ...(t.retiredHistory ?? []),
+              {
+                id: aircraftId,
+                specId: plane.specId,
+                specName,
+                acquiredAtQuarter: plane.purchaseQuarter,
+                exitQuarter: s.currentQuarter,
+                exitReason: "sold" as const,
+                proceedsUsd: askingPriceUsd,
+                acquisitionType: plane.acquisitionType,
+              },
+            ],
           }),
         });
-        toast.info(`Listed for sale: ${AIRCRAFT_BY_ID[plane.specId]?.name ?? plane.specId}`,
+        toast.info(`Listed for sale: ${specName}`,
           `Asking ${fmtMoneyPlain(askingPriceUsd)}`);
         return { ok: true };
       },
@@ -4713,6 +4789,7 @@ export const useGame = create<GameStore>()(
         sessionSlots: s.sessionSlots,
         preOrders: s.preOrders,
         productionCapOverrides: s.productionCapOverrides,
+        marketHistory: s.marketHistory,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;

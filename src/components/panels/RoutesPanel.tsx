@@ -7,7 +7,7 @@ import { useUi } from "@/store/ui";
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
-import { classFareRange, distanceBetween } from "@/lib/engine";
+import { classFareRange, distanceBetween, effectiveRangeKm } from "@/lib/engine";
 import type { City, PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { Pause, Play, Plus, X } from "lucide-react";
@@ -1005,10 +1005,14 @@ function RouteDetailModal({
             {idleOrOnRoute.map((p) => {
               const spec = AIRCRAFT_BY_ID[p.specId];
               if (!spec) return null;
-              const canReach = spec.rangeKm >= route.distanceKm;
+              // Honour the +10% range upgrade so a paid retrofit
+              // actually unlocks the routes the player paid for.
+              const effRange = effectiveRangeKm(spec, p.engineUpgrade ?? null);
+              const canReach = effRange >= route.distanceKm;
               const cargoMatch = route.isCargo ? spec.family === "cargo" : spec.family === "passenger";
               const selected = selectedPlaneIds.includes(p.id);
               const disabled = !canReach || !cargoMatch;
+              const hasUpgrades = p.engineUpgrade || p.fuselageUpgrade || p.ecoUpgrade;
               return (
                 <label
                   key={p.id}
@@ -1032,12 +1036,47 @@ function RouteDetailModal({
                     className="accent-primary"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-ink text-[0.875rem]">{spec.name}</div>
+                    <div className="text-ink text-[0.875rem] flex items-center gap-1.5 flex-wrap">
+                      {spec.name}
+                      {/* Surface active retrofits — earlier upgrades
+                          were silently applied with no UI signal so
+                          the player couldn't tell whether their
+                          $20M+ paid upgrade was actually working. */}
+                      {p.engineUpgrade === "fuel" && (
+                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Fuel engine retrofit: −10% fuel burn, +10% range">
+                          Fuel engine
+                        </span>
+                      )}
+                      {p.engineUpgrade === "power" && (
+                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded" title="Power engine retrofit: +10% cruise speed, raises rotation cap">
+                          Power engine
+                        </span>
+                      )}
+                      {p.engineUpgrade === "super" && (
+                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-warning bg-[var(--warning-soft)] px-1.5 py-0.5 rounded" title="Super engine: stacks fuel + power retrofits">
+                          Super engine
+                        </span>
+                      )}
+                      {p.fuselageUpgrade && (
+                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Anti-drag fuselage coating: stacks an extra −10% fuel burn">
+                          Fuselage
+                        </span>
+                      )}
+                      {p.ecoUpgrade && (
+                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Eco engine retrofit: −10% fuel burn">
+                          Eco
+                        </span>
+                      )}
+                    </div>
                     <div className="text-[0.6875rem] text-ink-muted font-mono">
-                      Range {spec.rangeKm.toLocaleString()} km ·
+                      Range {effRange.toLocaleString()} km
+                      {hasUpgrades && effRange > spec.rangeKm && (
+                        <span className="text-positive"> (+10% upgrade)</span>
+                      )}
+                      {" · "}
                       {spec.family === "passenger"
-                        ? ` ${spec.seats.first + spec.seats.business + spec.seats.economy} seats`
-                        : ` ${spec.cargoTonnes ?? 0}T cargo`}
+                        ? `${spec.seats.first + spec.seats.business + spec.seats.economy} seats`
+                        : `${spec.cargoTonnes ?? 0}T cargo`}
                     </div>
                   </div>
                   {!canReach && <Badge tone="negative">Out of range</Badge>}

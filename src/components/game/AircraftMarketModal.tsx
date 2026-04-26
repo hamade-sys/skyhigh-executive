@@ -4,7 +4,12 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Input, Modal, ModalBody, ModalHeader } from "@/components/ui";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { planeImagePath } from "@/lib/aircraft-images";
-import { fmtMoney, fmtAgeYQ } from "@/lib/format";
+import { fmtMoney, fmtAgeYQ, fmtQuarter } from "@/lib/format";
+import {
+  effectiveProductionCap,
+  isAnnouncementOpen,
+  isReleased,
+} from "@/lib/pre-orders";
 import { useGame } from "@/store/game";
 import { cn } from "@/lib/cn";
 import { Plane, ChevronDown, ChevronUp } from "lucide-react";
@@ -352,6 +357,7 @@ export function AircraftMarketModal({
                 <AircraftRow
                   key={a.id}
                   spec={a}
+                  currentQuarter={currentQuarter}
                   expanded={expandedSpecId === a.id}
                   onToggleExpand={() =>
                     setExpandedSpecId((cur) => (cur === a.id ? null : a.id))
@@ -376,15 +382,38 @@ export function AircraftMarketModal({
 }
 
 function AircraftRow({
-  spec, expanded, onToggleExpand, onOrder,
+  spec, currentQuarter, expanded, onToggleExpand, onOrder,
 }: {
   spec: AircraftSpec;
+  currentQuarter: number;
   expanded: boolean;
   onToggleExpand: () => void;
   onOrder: (type: "buy" | "lease", prefill?: OrderPrefill) => void;
 }) {
   const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
   const imgSrc = planeImagePath(spec.id);
+
+  // Inventory + pre-order signals: compute the production cap, the
+  // queue depth, and what's still available this round so the player
+  // doesn't have to expand the card to find out scarcity. The market
+  // modal sees pre-orders + cap overrides directly from the game store.
+  const preOrders = useGame((s) => s.preOrders);
+  const overrides = useGame((s) => s.productionCapOverrides);
+  const cap = effectiveProductionCap(spec, overrides);
+  const released = isReleased(spec, currentQuarter);
+  const announcementOpen = isAnnouncementOpen(spec, currentQuarter);
+  // Queue depth across all teams for this spec.
+  const queuedThisSpec = preOrders.filter(
+    (o) => o.specId === spec.id && o.status === "queued",
+  ).length;
+  // Already-delivered this round (counts toward the cap).
+  const deliveredThisRound = preOrders.filter(
+    (o) => o.specId === spec.id && o.deliveredAtQuarter === currentQuarter,
+  ).length;
+  const availableNow = released
+    ? Math.max(0, cap - deliveredThisRound - queuedThisSpec)
+    : 0;
+  const isPreOrderOnly = announcementOpen && !released;
 
   return (
     <div
@@ -449,8 +478,30 @@ function AircraftRow({
           <span className="text-[0.6875rem] tabular text-ink-muted">
             or {fmtMoney(spec.leasePerQuarterUsd)}/Q lease
           </span>
+          {/* Inventory + pre-order signal — visible without expanding.
+              Three states:
+                Pre-order (announcement window, not yet released)
+                Available N · queue M (released, partial inventory)
+                Sold out · queue M (released, all this round's slots taken)
+              */}
+          {isPreOrderOnly ? (
+            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
+              Pre-order · unlocks {fmtQuarter(spec.unlockQuarter)}
+            </span>
+          ) : released && (
+            <span className={cn(
+              "text-[0.625rem] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded",
+              availableNow > 0
+                ? "text-positive bg-[var(--positive-soft)]"
+                : "text-warning bg-[var(--warning-soft)]",
+            )}>
+              {availableNow > 0
+                ? `${availableNow} avail · ${cap}/Q cap`
+                : `Sold out · queue ${queuedThisSpec}`}
+            </span>
+          )}
           <span className="mt-1 inline-flex items-center gap-1 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold">
-            {expanded ? "Hide" : "Configure"}
+            {expanded ? "Hide" : isPreOrderOnly ? "Pre-order" : "Configure"}
             {expanded
               ? <ChevronUp size={12} />
               : <ChevronDown size={12} />}

@@ -1491,6 +1491,16 @@ export interface QuarterCloseResult {
    *  computed but never actually deducted — leases were silently free
    *  after the initial signing fee. */
   leaseFeesUsd: number;
+  /** Net non-aviation revenue from owned subsidiaries (hotel, limo,
+   *  lounge, MRO, fuel storage, catering, training academy) — sum
+   *  of each subsidiary's revenuePerQuarterUsd × conditionPct. */
+  subsidiaryRevenueUsd: number;
+  /** Net revenue from owned airports — gross slot fees collected
+   *  from every operating airline's leases minus the 30% opex and
+   *  minus the airline's own intra-company slot fees. Earlier this
+   *  rolled into `revenue` invisibly; now broken out so the P&L
+   *  shows airport ownership as a distinct line. */
+  airportRevenueUsd: number;
   otherSliderCost: number;
   /** Sub-components of `otherSliderCost` so the P&L UI can break out
    *  Marketing vs In-flight Service vs Operations vs Customer-Service
@@ -1705,29 +1715,25 @@ export function runQuarterClose(
   }
 
   // ─ Airport ownership revenue + opex (Sprint 10) ───────────
-  // For every airport this team owns, collect slot revenue from every
-  // OTHER team's lease at that airport, plus the team's own slot fees
-  // are effectively net-zero (they pay themselves). Operating cost =
-  // 30% of gross slot revenue at owned airports. Net surfaces in
-  // `revenue` so it shows up alongside subsidiary revenue in P&L.
+  // Now broken out as a distinct P&L line — `airportRevenueUsd` —
+  // so the player can see the airport's contribution separately from
+  // aviation revenue. Total `revenue` still includes it (slider math
+  // and brand value reads from total) but the breakdown surfaces it.
+  let airportRevenueUsd = 0;
   if (ctx.airportSlots) {
     for (const [code, slotState] of Object.entries(ctx.airportSlots)) {
       if (slotState.ownerTeamId !== next.id) continue;
-      // Gross revenue = sum of every team's quarterly slot fee at this
-      // airport (own slots cancel out below, but include them so the
-      // opex denominator is the full-airport revenue figure).
       const grossRevenue = (ctx.allTeams ?? []).reduce((sum, t) => {
         const lease = t.airportLeases?.[code];
         if (!lease || lease.slots === 0) return sum;
         return sum + lease.totalWeeklyCost * 13;
       }, 0);
-      // Subtract our OWN slot fees at this airport since they're an
-      // intra-company transfer rather than real revenue.
       const ownLease = next.airportLeases?.[code];
       const ownSlotFees = ownLease ? ownLease.totalWeeklyCost * 13 : 0;
       const netRevenue = grossRevenue - ownSlotFees;
       const opex = grossRevenue * 0.30;
       const airportNet = netRevenue - opex;
+      airportRevenueUsd += airportNet;
       revenue += airportNet;
       // Refund our own slot fees from `slotCost` since we paid ourselves.
       slotCost -= ownSlotFees;
@@ -1735,17 +1741,16 @@ export function runQuarterClose(
   }
 
   // ─ Subsidiary quarterly revenue + appreciation ─────────────
-  // Each owned subsidiary pays revenue scaled by its conditionPct
-  // and appreciates 2% per quarter toward a 1.5× ceiling on its
-  // original purchase price. Both are folded into team-level
-  // revenue (passenger/cargo split unchanged — this is "other
-  // revenue", but the simulation lumps it into total revenue so
-  // the existing slider-as-%-of-revenue math still works).
+  // Tracked separately as `subsidiaryRevenueUsd` so the P&L can
+  // show non-aviation income as a distinct line; still folded into
+  // total revenue so slider-%-of-revenue math is unaffected.
+  let subsidiaryRevenueUsd = 0;
   if ((next.subsidiaries?.length ?? 0) > 0) {
     const updatedSubs = (next.subsidiaries ?? []).map((sub) => {
       const entry = SUBSIDIARY_CATALOG_BY_TYPE[sub.type];
       if (!entry) return sub;
       const subRevenue = entry.revenuePerQuarterUsd * sub.conditionPct;
+      subsidiaryRevenueUsd += subRevenue;
       revenue += subRevenue;
       // Appreciation: lerp toward the ceiling at the configured rate.
       const ceiling = sub.purchaseCostUsd * 1.5;
@@ -2486,6 +2491,8 @@ export function runQuarterClose(
     slotCost,
     staffCost,
     leaseFeesUsd,
+    subsidiaryRevenueUsd,
+    airportRevenueUsd,
     otherSliderCost,
     marketingCost,
     serviceCost,
