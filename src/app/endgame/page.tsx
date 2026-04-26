@@ -15,7 +15,7 @@ function legacyTitle(bv: number): { title: string; sub: string } {
   if (bv >= 85) return { title: "The Legend", sub: "A new benchmark for the industry. Regulators write case studies. Rivals study your playbook." };
   if (bv >= 72) return { title: "The Architect", sub: "Built a carrier that will outlive you. Your moves define the next decade." };
   if (bv >= 60) return { title: "The Operator", sub: "Solid, respected, durable. The airline that investors trust." };
-  if (bv >= 45) return { title: "The Survivor", sub: "You took the hits and made it to Q20. That counts." };
+  if (bv >= 45) return { title: "The Survivor", sub: "You took the hits and made it to Q4 2024. That counts." };
   if (bv >= 30) return { title: "The Cautionary Tale", sub: "Your story will be taught — as a lesson in what not to do." };
   return { title: "The Grounded", sub: "The board convenes next week. The conversation will be short." };
 }
@@ -76,7 +76,7 @@ export default function Endgame() {
         <div className="flex items-baseline gap-3">
           <span className="font-display text-xl text-ink">SkyForce</span>
           <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
-            Final scoring · Q20 closed
+            Final scoring · Q4 2024 closed
           </span>
         </div>
       </header>

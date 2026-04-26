@@ -745,10 +745,21 @@ function RouteDetailModal({
   });
 
   function save() {
+    // Reject empty aircraft assignment — earlier the modal happily
+    // saved aircraftIds=[] with a positive frequency, so the route
+    // would stay "active" earning no revenue while still consuming
+    // slots until the player manually closed it.
+    if (selectedPlaneIds.length === 0) {
+      setError("Pick at least one aircraft, or close the route from the routes list.");
+      return;
+    }
     const r = updateRoute(route.id, {
       aircraftIds: selectedPlaneIds,
-      // Convert weekly UI back to daily for engine. Round to nearest int.
-      dailyFrequency: Math.max(1, Math.round(weeklyFreq / 7)),
+      // Preserve fractional daily — earlier this snapped 1-3 weekly
+      // schedules up to 7/wk and 4-10 to 14/wk by rounding daily to
+      // an integer. Now passes through as weekly/7 so the engine
+      // and slot-cap math both see the player's real intent.
+      dailyFrequency: Math.max(1 / 7, weeklyFreq / 7),
       pricingTier: tier,
       econFare,
       busFare,

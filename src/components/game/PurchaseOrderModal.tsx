@@ -27,17 +27,13 @@ import type { AircraftSpec } from "@/types/game";
  *   5. Live total price + Order button
  */
 
-// Upgrade pricing scales with the airframe value — a 10% premium per
-// upgrade so an A380 costs proportionally more to retrofit than a small
-// narrow-body. Base flat fee guards against absurdly cheap upgrades on
-// cheap aircraft.
-function engineCost(specPrice: number, kind: "fuel" | "power" | "super"): number {
-  const pct = kind === "super" ? 0.20 : 0.10;
-  return Math.max(2_000_000, Math.round(specPrice * pct));
-}
-function fuselageCost(specPrice: number): number {
-  return Math.max(2_000_000, Math.round(specPrice * 0.10));
-}
+// Upgrade pricing now lives in src/lib/aircraft-upgrades.ts so the
+// modal preview and the store's orderAircraft action read the same
+// numbers — no more "UI shows $8M, store charges $24.9M" surprises.
+import {
+  engineUpgradeCostUsd as engineCost,
+  fuselageUpgradeCostUsd as fuselageCost,
+} from "@/lib/aircraft-upgrades";
 
 type EngineKind = "none" | "fuel" | "power" | "super";
 

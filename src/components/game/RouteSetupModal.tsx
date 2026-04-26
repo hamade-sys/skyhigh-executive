@@ -9,6 +9,7 @@ import {
   cruiseSpeedKmh,
   detectTierFromAverage,
   distanceBetween,
+  effectiveRangeKm,
   maxRouteDailyFrequency,
   routeDemandPerDay,
 } from "@/lib/engine";
@@ -80,7 +81,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
       }
       const spec = AIRCRAFT_BY_ID[f.specId];
       if (!spec) return false;
-      if (spec.rangeKm < dist) return false;
+      // Honour fuel/super engine retrofit +10% range bonus when
+      // checking reach. Earlier the auto-pick used base spec range
+      // and skipped over upgraded planes that could actually fly
+      // the route.
+      if (effectiveRangeKm(spec, f.engineUpgrade ?? null) < dist) return false;
       return cargo ? spec.family === "cargo" : spec.family === "passenger";
     });
     setSelectedPlaneIds(idle ? [idle.id] : []);
@@ -177,6 +182,31 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   // pattern of setState-in-effect.
   const isCargo = allCargo || (forceCargo ?? false);
 
+  // Per-class fare ranges — needed for the bidirectional tier detector
+  // hook below. Computed unconditionally (returns null when origin/dest
+  // are missing) so the hook order stays stable across renders.
+  const econRange = origin && dest ? classFareRange(dist, "econ") : null;
+  const busRange = origin && dest ? classFareRange(dist, "bus") : null;
+  const firstRange = origin && dest ? classFareRange(dist, "first") : null;
+
+  // Bidirectional binding: when the player nudges any per-class slider
+  // away from the active tier preset, recompute which tier the AVERAGE
+  // of all visible class fares matches and highlight that button.
+  // MUST run before any conditional return so React hook order stays
+  // identical between "no player yet" and "player loaded" renders —
+  // otherwise React throws a hooks-order error mid-route-setup.
+  useEffect(() => {
+    if (isCargo) return;
+    const entries: Array<{ base: number; value: number }> = [];
+    if (econRange) entries.push({ base: econRange.base, value: econFare ?? econRange.base });
+    if (hasBusiness && busRange) entries.push({ base: busRange.base, value: busFare ?? busRange.base });
+    if (hasFirst && firstRange) entries.push({ base: firstRange.base, value: firstFare ?? firstRange.base });
+    const detected = detectTierFromAverage(entries);
+    if (detected !== tier) setTier(detected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [econFare, busFare, firstFare, isCargo, hasBusiness, hasFirst,
+      econRange?.base, busRange?.base, firstRange?.base]);
+
   if (!player) return null;
 
   // Idle = active AND not currently flying a non-closed route. Defensively
@@ -209,9 +239,9 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     };
   })();
 
-  const econRange = origin && dest ? classFareRange(dist, "econ") : null;
-  const busRange = origin && dest ? classFareRange(dist, "bus") : null;
-  const firstRange = origin && dest ? classFareRange(dist, "first") : null;
+  // econRange / busRange / firstRange already defined above the early
+  // return so the hook block can reference them — kept here as a
+  // visual marker for where the tier-apply block historically lived.
 
   // Apply pricing-tier preset to all per-class fares (player can still
   // override individual classes after; reset clears the override).
@@ -223,24 +253,9 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     if (hasFirst && firstRange) setFirstFare(Math.round(firstRange.base * mult));
   }
 
-  // Bidirectional binding: when the player nudges any per-class slider
-  // away from the active tier preset, recompute which tier the AVERAGE
-  // of all visible class fares matches and highlight that button. This
-  // lets the player see "I'm now in Premium territory" without having
-  // to click a tier button explicitly.
-  useEffect(() => {
-    if (isCargo) return;
-    const entries: Array<{ base: number; value: number }> = [];
-    if (econRange) entries.push({ base: econRange.base, value: econFare ?? econRange.base });
-    if (hasBusiness && busRange) entries.push({ base: busRange.base, value: busFare ?? busRange.base });
-    if (hasFirst && firstRange) entries.push({ base: firstRange.base, value: firstFare ?? firstRange.base });
-    const detected = detectTierFromAverage(entries);
-    if (detected !== tier) setTier(detected);
-    // We intentionally don't depend on `tier` to avoid setState loops —
-    // the next slider change re-runs detection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [econFare, busFare, firstFare, isCargo, hasBusiness, hasFirst,
-      econRange?.base, busRange?.base, firstRange?.base]);
+  // (Bidirectional tier-detection useEffect lives above the early
+  // return so hook order stays stable across renders — see the hook
+  // ordering note further up.)
 
   // Projected demand vs capacity preview — passenger uses pax/day,
   // cargo uses tonnes/day. Earlier the cargo path skipped this preview
@@ -658,9 +673,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
               Higher bids beat lower ones at the quarter-close auction.
               <br />
               <span className="text-[0.6875rem] text-ink-muted mt-1 inline-block">
-                Route will be <strong>Pending</strong> until the auction
-                resolves. If outbid, the route is cancelled and aircraft
-                return idle (no charge).
+                Route will stay <strong>Pending</strong> while the auction runs;
+                bids re-submit automatically each quarter at the price you set
+                here until you either win the slots or cancel the pending
+                route from the Routes panel. Aircraft remain assigned to the
+                pending route while it waits.
               </span>
             </div>
 

@@ -774,7 +774,7 @@ export interface RouteEconomics {
   distanceKm: number;
   dailyDemand: number;
   dailyCapacity: number;
-  occupancy: number;               // 0..1 capped at 0.98
+  occupancy: number;               // 0..1 (full 100% achievable on hot routes)
   dailyPax: number;
   ticketPrice: number;
   quarterlyRevenue: number;
@@ -854,7 +854,7 @@ export function computeRouteEconomics(
       cityBusinessAtQuarter(dest, quarter) * (1 + cargoEventB),
     ) * cargoFocusBonus;
     const dailyTonnes = Math.min(dailyCapacityT, cargoDemandT);
-    const occupancy = dailyCapacityT > 0 ? Math.min(0.98, dailyTonnes / dailyCapacityT) : 0;
+    const occupancy = dailyCapacityT > 0 ? Math.min(1.0, dailyTonnes / dailyCapacityT) : 0;
     // Cargo pricing now mirrors passenger fares — base $/tonne by haul
     // distance, scaled by the route's PricingTier (Budget/Standard/Premium/
     // Ultra → 0.5×/1.0×/1.5×/2.0×), and player-overridable per route via
@@ -966,8 +966,12 @@ export function computeRouteEconomics(
   const effectiveDemand = demand.total * hubBonus * csMultiplier * loungeBonus * onboardingBonus * cabinPenalty;
 
   const dailyPax = Math.min(dailyCapacity, effectiveDemand);
+  // Cap at 1.0 — earlier the engine clamped to 0.98 to reserve a
+  // "no-show buffer" but the player saw "98%" on every hot route and
+  // assumed it was a UI cap rather than the result. Real overbooked
+  // flights routinely achieve 100% load factor.
   let occupancy =
-    dailyCapacity > 0 ? Math.min(0.98, dailyPax / dailyCapacity) : 0;
+    dailyCapacity > 0 ? Math.min(1.0, dailyPax / dailyCapacity) : 0;
 
   // Tournament demand boost (PRD §10.3, refined per user feedback):
   //   The World Cup and Olympics each have a single neutral host city
@@ -987,23 +991,21 @@ export function computeRouteEconomics(
   // World Cup window: rounds 19-24
   if (touchesWorldCup && quarter >= 19 && quarter <= 24) {
     if (team.flags?.has("global_brand")) {
-      // S10 winner — sealed-in 98% load through the main event,
-      // +50% uplift in the tail two rounds.
-      if (quarter <= 22) occupancy = 0.98;
-      else occupancy = Math.min(0.98, occupancy * 1.5);
+      // S10 winner — sealed-in 100% load through the main event,
+      // +50% uplift in the tail two rounds (clamped at 1.0).
+      if (quarter <= 22) occupancy = 1.0;
+      else occupancy = Math.min(1.0, occupancy * 1.5);
     } else {
-      // Everyone else flying through the host city still rides the surge,
-      // just smaller and only as long as their schedule has slack.
-      occupancy = Math.min(0.98, occupancy * 1.25);
+      occupancy = Math.min(1.0, occupancy * 1.25);
     }
   }
   // Olympic window: rounds 29-32 (smaller global event than World Cup)
   if (touchesOlympic && quarter >= 29 && quarter <= 32) {
     if (team.flags?.has("premium_airline")) {
-      // S11 official partner — 95% sealed load on Olympic-host routes.
-      occupancy = Math.max(occupancy, 0.95);
+      // S11 official partner — sealed at 100% on Olympic-host routes.
+      occupancy = Math.max(occupancy, 1.0);
     } else {
-      occupancy = Math.min(0.98, occupancy * 1.18);
+      occupancy = Math.min(1.0, occupancy * 1.18);
     }
   }
 

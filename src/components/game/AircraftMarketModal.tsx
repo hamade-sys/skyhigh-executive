@@ -137,7 +137,10 @@ export function AircraftMarketModal({
       bombardier: [], comac: [], other: [],
     };
     for (const a of AIRCRAFT) {
-      if (a.unlockQuarter > currentQuarter) continue;
+      // Pre-orders open 2 quarters before unlock (announcement window).
+      // Hide specs that haven't even been announced yet.
+      const announcedAt = a.unlockQuarter - 2;
+      if (announcedAt > currentQuarter) continue;
       // Discontinuation filter (Update 4): once cutoffRound is reached
       // the spec disappears from the New-Build market. Existing fleet
       // keeps flying and the secondary-market tab is unaffected.

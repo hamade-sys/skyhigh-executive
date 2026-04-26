@@ -29,7 +29,8 @@ import {
   loadSnapshot as snapLoad,
   deleteSnapshot as snapDelete,
 } from "@/lib/snapshots";
-import { FUEL_BASELINE_USD_PER_L, effectiveBaseRatePct, newsFuelIndexHint } from "@/lib/engine";
+import { FUEL_BASELINE_USD_PER_L, effectiveBaseRatePct, effectiveRangeKm, newsFuelIndexHint } from "@/lib/engine";
+import { totalUpgradeCostPerPlaneUsd } from "@/lib/aircraft-upgrades";
 import {
   PREORDER_DEPOSIT_PCT,
   PREORDER_CANCEL_PENALTY_PCT,
@@ -963,17 +964,16 @@ export const useGame = create<GameStore>()(
         if (!player) return { ok: false, error: "No player team" };
         const qty = Math.max(1, Math.floor(quantity));
 
-        // Engine + fuselage upgrade pricing (Air-Tycoon-style retrofit fees).
-        // These are per-aircraft costs added on top of the base buy/lease price.
-        const ENGINE_FUEL_COST = 24_900_000;
-        const ENGINE_POWER_COST = 24_900_000;
-        const ENGINE_SUPER_COST = 49_800_000;
-        const FUSELAGE_COST = 24_900_000;
-        const upgradeCostPerPlane =
-          (engineUpgrade === "fuel" ? ENGINE_FUEL_COST :
-           engineUpgrade === "power" ? ENGINE_POWER_COST :
-           engineUpgrade === "super" ? ENGINE_SUPER_COST : 0) +
-          (fuselageUpgrade ? FUSELAGE_COST : 0);
+        // Engine + fuselage upgrade pricing — shared with the Purchase
+        // Order modal via totalUpgradeCostPerPlaneUsd(). Earlier the
+        // store used flat constants ($24.9M / $49.8M) while the UI
+        // showed 10% / 20% of buy price; on a cheap airframe the UI
+        // looked affordable then the store rejected it as too costly.
+        const upgradeCostPerPlane = totalUpgradeCostPerPlaneUsd(
+          spec.buyPriceUsd,
+          engineUpgrade,
+          !!fuselageUpgrade,
+        );
 
         // Validate custom seat allocation against the seat-equivalence cap:
         //   first × 3 + business × 2 + economy ≤ defaultEquivalents.
@@ -1889,12 +1889,21 @@ export const useGame = create<GameStore>()(
         for (const p of planes) {
           const spec = AIRCRAFT_BY_ID[p.specId];
           if (!spec) return { ok: false, error: "Spec missing" };
-          if (dist > spec.rangeKm)
-            return { ok: false, error: `${spec.name} cannot reach ${destCode} (${Math.round(dist)} km > ${spec.rangeKm} km)` };
+          // Honour engine retrofit range bonus: fuel/super engines
+          // ship a +10% range extension. Earlier this was advertised
+          // in the upgrade card but never actually checked here, so
+          // a player who paid for "+10% range" still got blocked
+          // from routes the upgraded plane can physically reach.
+          const effRange = effectiveRangeKm(spec, p.engineUpgrade ?? null);
+          if (dist > effRange)
+            return { ok: false, error: `${spec.name} cannot reach ${destCode} (${Math.round(dist)} km > ${effRange} km${p.engineUpgrade ? " w/ upgrade" : ""})` };
         }
-        // Engine stores daily; UI works in weekly. Cap at 24/day (168/wk)
-        // — that's well past anything achievable with current aircraft physics.
-        if (dailyFrequency < 1 || dailyFrequency > 24)
+        // Engine stores daily; UI works in weekly. The minimum is 1
+        // weekly schedule = 1/7 daily ≈ 0.143. Earlier this rejected
+        // anything < 1 daily so a player picking 3/wk in the modal
+        // got a "must be at least 1/week" error from the store on
+        // submit. Cap at 24/day (168/wk).
+        if (dailyFrequency < 1 / 7 || dailyFrequency > 24)
           return { ok: false, error: "Frequency must be at least 1/week" };
 
         // PRD slot capacity check (Model B). Total weekly schedules at each
@@ -2138,8 +2147,10 @@ export const useGame = create<GameStore>()(
             if (!p) return { ok: false, error: "Aircraft not found" };
             const spec = AIRCRAFT_BY_ID[p.specId];
             if (!spec) return { ok: false, error: "Spec missing" };
-            if (spec.rangeKm < route.distanceKm)
-              return { ok: false, error: `${spec.name} out of range` };
+            // Honour fuel/super engine +10% range upgrade.
+            const effRange = effectiveRangeKm(spec, p.engineUpgrade ?? null);
+            if (effRange < route.distanceKm)
+              return { ok: false, error: `${spec.name} out of range (${Math.round(route.distanceKm)} km > ${effRange} km)` };
             // Must be idle or already on this route
             if (p.routeId && p.routeId !== routeId)
               return { ok: false, error: `${spec.name} already on another route` };
@@ -2163,6 +2174,32 @@ export const useGame = create<GameStore>()(
           : 0;
         const clampedDaily =
           physicsCap > 0 ? Math.min(finalDaily, physicsCap) : 1;
+
+        // Slot-capacity check on edit. Earlier updateRoute let a player
+        // raise frequency or reassign aircraft without re-validating
+        // slot leases at either endpoint, which let players bypass
+        // the slot-market mechanic after a route was already open.
+        // Now we sum every active/pending route's weekly slot use
+        // EXCLUDING this route, then add the proposed new weekly demand
+        // (clampedDaily × 7) and compare against airportLeases.
+        const proposedWeekly = clampedDaily * 7;
+        for (const code of [route.originCode, route.destCode]) {
+          const slotsHeld = player.airportLeases?.[code]?.slots ?? 0;
+          const usedByOthers = player.routes
+            .filter((r) =>
+              r.id !== routeId &&
+              (r.status === "active" || r.status === "suspended" || r.status === "pending") &&
+              (r.originCode === code || r.destCode === code),
+            )
+            .reduce((sum, r) => sum + r.dailyFrequency * 7, 0);
+          if (usedByOthers + proposedWeekly > slotsHeld) {
+            const shortfall = usedByOthers + proposedWeekly - slotsHeld;
+            return {
+              ok: false,
+              error: `Not enough slots at ${code} — ${shortfall} more weekly slot${shortfall === 1 ? "" : "s"} needed. Lower the frequency, drop an aircraft, or bid for more slots in the Slot Market first.`,
+            };
+          }
+        }
 
         set({
           teams: s.teams.map((t) => t.id !== player.id ? t : {
@@ -2204,6 +2241,31 @@ export const useGame = create<GameStore>()(
         if (!option) return;
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return;
+
+        // Idempotency guard: a double-click, timer-race, or programmatic
+        // re-call could otherwise apply the option's effect twice — duplicate
+        // cash awards, doubled brand/loyalty deltas, two debt instruments
+        // from one S7 acquisition. Skip silently if a decision for this
+        // scenario+quarter already exists.
+        const alreadyDecided = player.decisions.some(
+          (d) => d.scenarioId === scenarioId && d.quarter === s.currentQuarter,
+        );
+        if (alreadyDecided) return;
+
+        // Eligibility check on the chosen option — applies to direct
+        // submits AND timer auto-submits. Earlier the auto-submit path
+        // bypassed blockedByFlags / requires, so S15 timer-out applied
+        // mass redundancy even when gov_board_card / redundancy_freeze
+        // should have blocked it.
+        if (option.blockedByFlags?.some((f) => player.flags.has(f))) {
+          return;
+        }
+        if (option.requires === "cargo-fleet") {
+          const hasCargo = player.fleet.some(
+            (a) => a.status !== "retired" && AIRCRAFT_BY_ID[a.specId]?.family === "cargo",
+          );
+          if (!hasCargo) return;
+        }
 
         const decision: ScenarioDecision = {
           scenarioId: scenarioId as ScenarioDecision["scenarioId"],
@@ -2399,6 +2461,54 @@ export const useGame = create<GameStore>()(
         const s = get();
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return;
+
+        // Auto-submit pending board decisions (PRD fallback path).
+        // Earlier the close button warned the player about open
+        // decisions but advanced anyway, leaving the scenario silently
+        // skipped — the worst-case option from the PRD never fired.
+        // Now we walk every scenario for this quarter and submit the
+        // first ELIGIBLE fallback option (skipping any blocked by flags
+        // or the cargo-fleet requirement) for any scenario the player
+        // didn't explicitly answer. Calls submitDecision so all the
+        // dedup + eligibility logic from above also applies.
+        {
+          const pending = (SCENARIOS_BY_QUARTER[s.currentQuarter] ?? []).filter(
+            (sc) => !player.decisions.some(
+              (d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter,
+            ),
+          );
+          if (pending.length > 0) {
+            for (const sc of pending) {
+              // Pick the configured fallback first, but if it's blocked
+              // for this team (S15 mass redundancy when redundancy_freeze
+              // is active, etc), walk the option list and pick the next
+              // eligible one. Tie-breaker: order ID alphabetical so the
+              // fallback is deterministic.
+              const eligibleOptions = sc.options.filter((o) => {
+                if (o.blockedByFlags?.some((f) => player.flags.has(f))) return false;
+                if (o.requires === "cargo-fleet") {
+                  const hasCargo = player.fleet.some(
+                    (a) => a.status !== "retired" && AIRCRAFT_BY_ID[a.specId]?.family === "cargo",
+                  );
+                  if (!hasCargo) return false;
+                }
+                return true;
+              });
+              if (eligibleOptions.length === 0) continue;
+              const preferred = eligibleOptions.find((o) => o.id === sc.autoSubmitOptionId);
+              const pick = preferred ?? eligibleOptions[0];
+              get().submitDecision({
+                scenarioId: sc.id,
+                optionId: pick.id,
+                lockInQuarters: 0,
+              });
+            }
+            // Re-read team state after the auto-submits so the rest of
+            // the close run uses the fresh decisions/flags/cash.
+            const refreshed = get().teams.find((t) => t.id === s.playerTeamId);
+            if (refreshed) Object.assign(player, refreshed);
+          }
+        }
 
         // Insurance coverage (PRD E5) — paid out on mandatory retirement at end of lifespan
         const coverageByPolicy = { none: 0, low: 0.3, medium: 0.5, high: 0.8 } as const;
@@ -2670,7 +2780,10 @@ export const useGame = create<GameStore>()(
             newRoutes.push({
               ...r,
               status: "active" as const,
-              dailyFrequency: Math.max(1, Math.round(effectiveWeekly / 7)),
+              // Preserve fractional daily so 1–6 won weekly slots
+              // become 0.14–0.86 daily, not snapped up to 1 daily
+              // (= 7 weekly) which would silently over-consume slots.
+              dailyFrequency: Math.max(1 / 7, effectiveWeekly / 7),
               pendingReason: undefined,
               pendingBidPrices: undefined,
               pendingBidSlots: undefined,
@@ -3355,7 +3468,9 @@ export const useGame = create<GameStore>()(
             newRoutes.push({
               ...r,
               status: "active" as const,
-              dailyFrequency: Math.max(1, Math.round(effectiveWeekly / 7)),
+              // Preserve fractional daily — see the early-activation
+              // path above for the rationale.
+              dailyFrequency: Math.max(1 / 7, effectiveWeekly / 7),
               // Clear stored bid commitments — the route is now active and
               // shouldn't auto-rebid next quarter.
               pendingBidPrices: undefined,

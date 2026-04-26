@@ -40,7 +40,23 @@ import { cn } from "@/lib/cn";
  * Market value appreciates 2% per quarter toward a 1.5× ceiling on the
  * original purchase price while held (resolved at quarter close).
  */
+/** Outer panel — keeps hook order stable. The actual content lives
+ *  in <InvestmentsPanelInner> which only mounts once `player` exists,
+ *  so its hooks never run with a missing player and won't see a
+ *  changed call order between renders. Earlier this whole component
+ *  early-returned BEFORE its useMemo hooks, which produced a
+ *  React hook-order error when transitioning from idle/hydration
+ *  to the loaded-player render. */
 export function InvestmentsPanel() {
+  const player = useGame(selectPlayer);
+  if (!player) return null;
+  return <InvestmentsPanelInner playerId={player.id} />;
+}
+
+function InvestmentsPanelInner({ playerId }: { playerId: string }) {
+  // Re-subscribe to player so this child re-renders when fleet/cash
+  // change — but the parent's early-return guarantees player exists
+  // by the time this component mounts.
   const player = useGame(selectPlayer);
   const buildSubsidiary = useGame((s) => s.buildSubsidiary);
   const sellSubsidiary = useGame((s) => s.sellSubsidiary);
@@ -49,9 +65,7 @@ export function InvestmentsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [confirmSell, setConfirmSell] = useState<Subsidiary | null>(null);
 
-  if (!player) return null;
-
-  const owned = player.subsidiaries ?? [];
+  const owned = player?.subsidiaries ?? [];
   const ownedByType = useMemo(() => {
     const m = new Map<SubsidiaryType, Subsidiary[]>();
     for (const s of owned) {
@@ -71,6 +85,7 @@ export function InvestmentsPanel() {
 
   // Network cities = hub + secondary hubs + every endpoint of an active route.
   const networkCities = useMemo(() => {
+    if (!player) return [];
     const set = new Set<string>([player.hubCode, ...player.secondaryHubCodes]);
     for (const r of player.routes) {
       if (r.status !== "closed") {
@@ -80,6 +95,11 @@ export function InvestmentsPanel() {
     }
     return Array.from(set);
   }, [player]);
+
+  // Defensive: if the player vanished between renders (e.g. session
+  // teardown) bail out without calling more hooks below.
+  if (!player) return null;
+  void playerId;
 
   return (
     <div className="space-y-5">
