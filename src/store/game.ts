@@ -2382,19 +2382,18 @@ export const useGame = create<GameStore>()(
         const nextQ = s.currentQuarter + 1;
 
         // PRD G4 — 787 Dreamliner delivery delay event.
-        // 40-round mapping: 787-8 unlocks at round 21, the delay event
-        // fires at round 22 (one round after unlock) and pushes any
-        // round-21 orders back by 2 rounds. Mirrors the real-world
-        // 787 program's 3-year delivery slip.
+        // After the gameplay-tuning shift, 787-8 unlocks at round 12,
+        // so the delay event fires at round 13 (one round after unlock)
+        // and pushes any round-12 orders back by 2 rounds.
         let delayedTeams = s.teams;
-        if (nextQ === 22) {
+        if (nextQ === 13) {
           let delayedCount = 0;
           delayedTeams = s.teams.map((t) => ({
             ...t,
             fleet: t.fleet.map((f) => {
-              if (f.specId === "B787-8" && f.status === "ordered" && f.purchaseQuarter === 21) {
+              if (f.specId === "B787-8" && f.status === "ordered" && f.purchaseQuarter === 12) {
                 delayedCount += 1;
-                return { ...f, purchaseQuarter: 23 };
+                return { ...f, purchaseQuarter: 14 };
               }
               return f;
             }),

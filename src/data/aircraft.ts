@@ -94,108 +94,112 @@ export const AIRCRAFT: AircraftSpec[] = [
     ecoUpgradeUsd: 11_000_000 },
 
   // ─── Unlocks ────────────────────────────────────────────────
-  // 40-round game (2015-2024 calendar) with 2:1 aircraft EIS
-  // compression: real year 2000 → round 1, real year 2026 →
-  // round 53 (clamped to 40). Formula: round = floor((eis-2000)/2)*4 + 1.
-  // A380 EIS 2007 → round 13
-  { id: "A380-800", name: "Airbus A380-800", family: "passenger", unlockQuarter: 13,
+  // Gameplay-tuned unlock cadence (user spec):
+  //   Original ≤R20 releases shifted −4 (clamped to R1)
+  //   Original R21–R29 releases shifted −9
+  //   Original R30+ releases shifted −12
+  // Result: every aircraft from the 2:1 EIS schedule arrives earlier
+  // so players actually use the late-game catalogue before the
+  // campaign ends.
+  // A380 EIS 2007 — was R13 → now R9
+  { id: "A380-800", name: "Airbus A380-800", family: "passenger", unlockQuarter: 9,
     seats: { first: 14, business: 76, economy: 465 }, rangeKm: 15_200,
     fuelBurnPerKm: 11.0, buyPriceUsd: 200_000_000, leasePerQuarterUsd: 1_640_000,
     ecoUpgradeUsd: 20_000_000, note: "Mega-capacity (real EIS 2007). Economics depend on load factor." },
-  // 787-8 EIS 2011 → round 21
-  { id: "B787-8", name: "Boeing 787-8 Dreamliner", family: "passenger", unlockQuarter: 21,
+  // 787-8 EIS 2011 — was R21 → now R12
+  { id: "B787-8", name: "Boeing 787-8 Dreamliner", family: "passenger", unlockQuarter: 12,
     seats: { first: 0, business: 32, economy: 210 }, rangeKm: 13_620,
     fuelBurnPerKm: 3.8, buyPriceUsd: 70_000_000, leasePerQuarterUsd: 575_000,
     ecoUpgradeUsd: 7_000_000, note: "First composite widebody (real EIS 2011). 20% fuel saving." },
-  // 787-9 EIS 2014 → round 29
-  { id: "B787-9", name: "Boeing 787-9 Dreamliner", family: "passenger", unlockQuarter: 29,
+  // 787-9 EIS 2014 — was R29 → now R20
+  { id: "B787-9", name: "Boeing 787-9 Dreamliner", family: "passenger", unlockQuarter: 20,
     seats: { first: 0, business: 48, economy: 248 }, rangeKm: 14_140,
     fuelBurnPerKm: 4.2, buyPriceUsd: 80_000_000, leasePerQuarterUsd: 655_000,
     ecoUpgradeUsd: 8_000_000, note: "Stretched 787 (real EIS 2014). Premium long-haul yields." },
-  // A350-900 EIS 2015 → round 29
-  { id: "A350-900", name: "Airbus A350-900 XWB", family: "passenger", unlockQuarter: 29,
+  // A350-900 EIS 2015 — was R29 → now R20
+  { id: "A350-900", name: "Airbus A350-900 XWB", family: "passenger", unlockQuarter: 20,
     seats: { first: 0, business: 48, economy: 267 }, rangeKm: 15_000,
     fuelBurnPerKm: 4.0, buyPriceUsd: 90_000_000, leasePerQuarterUsd: 738_000,
     ecoUpgradeUsd: 9_000_000, note: "Real EIS 2015. 25% fuel saving. Best long-haul economics." },
-  // A220-300 EIS 2016 → round 33
-  { id: "A220-300", name: "Airbus A220-300", family: "passenger", unlockQuarter: 33,
+  // A220-300 EIS 2016 — was R33 → now R21
+  { id: "A220-300", name: "Airbus A220-300", family: "passenger", unlockQuarter: 21,
     seats: { first: 0, business: 12, economy: 118 }, rangeKm: 6300,
     fuelBurnPerKm: 2.5, buyPriceUsd: 22_000_000, leasePerQuarterUsd: 180_000,
     ecoUpgradeUsd: 2_200_000, note: "Real EIS 2016 (as CSeries). Best narrow-body economics." },
-  // A320neo EIS 2016 → round 33
-  { id: "A320neo", name: "Airbus A320neo", family: "passenger", unlockQuarter: 33,
+  // A320neo EIS 2016 — was R33 → now R21
+  { id: "A320neo", name: "Airbus A320neo", family: "passenger", unlockQuarter: 21,
     seats: { first: 0, business: 24, economy: 156 }, rangeKm: 6500,
     fuelBurnPerKm: 2.8, buyPriceUsd: 28_000_000, leasePerQuarterUsd: 230_000,
     ecoUpgradeUsd: 2_800_000, note: "Real EIS 2016. 18% fuel saving over A320ceo." },
-  // 737 MAX 8 EIS 2017 → round 33
-  { id: "B737-MAX-8", name: "Boeing 737 MAX 8", family: "passenger", unlockQuarter: 33,
+  // 737 MAX 8 EIS 2017 — was R33 → now R21
+  { id: "B737-MAX-8", name: "Boeing 737 MAX 8", family: "passenger", unlockQuarter: 21,
     seats: { first: 0, business: 20, economy: 158 }, rangeKm: 6570,
     fuelBurnPerKm: 2.9, buyPriceUsd: 26_000_000, leasePerQuarterUsd: 215_000,
     ecoUpgradeUsd: 2_600_000, note: "Real EIS 2017. 14% fuel saving over 737-800." },
-  // A321neo EIS 2017 → round 33
-  { id: "A321neo", name: "Airbus A321neo", family: "passenger", unlockQuarter: 33,
+  // A321neo EIS 2017 — was R33 → now R21
+  { id: "A321neo", name: "Airbus A321neo", family: "passenger", unlockQuarter: 21,
     seats: { first: 0, business: 28, economy: 192 }, rangeKm: 7400,
     fuelBurnPerKm: 3.0, buyPriceUsd: 32_000_000, leasePerQuarterUsd: 265_000,
     ecoUpgradeUsd: 3_200_000, note: "Real EIS 2017. Stretched A320neo with longer range." },
-  // A350-1000 EIS 2018 → round 37
-  { id: "A350-1000", name: "Airbus A350-1000", family: "passenger", unlockQuarter: 37,
+  // A350-1000 EIS 2018 — was R37 → now R25
+  { id: "A350-1000", name: "Airbus A350-1000", family: "passenger", unlockQuarter: 25,
     seats: { first: 4, business: 56, economy: 327 }, rangeKm: 16_000,
     fuelBurnPerKm: 4.4, buyPriceUsd: 110_000_000, leasePerQuarterUsd: 905_000,
     ecoUpgradeUsd: 11_000_000, note: "Real EIS 2018. Long-haul flagship." },
-  // A330-900neo EIS 2018 → round 37
-  { id: "A330-900neo", name: "Airbus A330-900neo", family: "passenger", unlockQuarter: 37,
+  // A330-900neo EIS 2018 — was R37 → now R25
+  { id: "A330-900neo", name: "Airbus A330-900neo", family: "passenger", unlockQuarter: 25,
     seats: { first: 0, business: 36, economy: 252 }, rangeKm: 13_300,
     fuelBurnPerKm: 4.1, buyPriceUsd: 85_000_000, leasePerQuarterUsd: 700_000,
     ecoUpgradeUsd: 8_500_000, note: "Real EIS 2018. 14% fuel saving over A330ceo." },
-  // 787-10 EIS 2018 → round 37
-  { id: "B787-10", name: "Boeing 787-10 Dreamliner", family: "passenger", unlockQuarter: 37,
+  // 787-10 EIS 2018 — was R37 → now R25
+  { id: "B787-10", name: "Boeing 787-10 Dreamliner", family: "passenger", unlockQuarter: 25,
     seats: { first: 0, business: 56, economy: 280 }, rangeKm: 11_730,
     fuelBurnPerKm: 4.5, buyPriceUsd: 95_000_000, leasePerQuarterUsd: 780_000,
     ecoUpgradeUsd: 9_500_000, note: "Real EIS 2018. Largest Dreamliner variant." },
-  // A321XLR EIS 2024 → round 40 (clamped)
-  { id: "A321XLR", name: "Airbus A321XLR", family: "passenger", unlockQuarter: 40,
+  // A321XLR EIS 2024 — was R40 → now R28
+  { id: "A321XLR", name: "Airbus A321XLR", family: "passenger", unlockQuarter: 28,
     seats: { first: 0, business: 24, economy: 196 }, rangeKm: 8700,
     fuelBurnPerKm: 3.4, buyPriceUsd: 32_000_000, leasePerQuarterUsd: 265_000,
     ecoUpgradeUsd: 3_200_000, note: "Real EIS 2024. Transatlantic single-aisle. Late-game unlock." },
-  // 777X-9 EIS 2026 → round 40 (clamped)
-  { id: "B777X-9", name: "Boeing 777X-9", family: "passenger", unlockQuarter: 40,
+  // 777X-9 EIS 2026 — was R40 → now R28
+  { id: "B777X-9", name: "Boeing 777X-9", family: "passenger", unlockQuarter: 28,
     seats: { first: 8, business: 68, economy: 350 }, rangeKm: 13_940,
     fuelBurnPerKm: 5.0, buyPriceUsd: 180_000_000, leasePerQuarterUsd: 1_475_000,
     ecoUpgradeUsd: 18_000_000, note: "Real EIS 2026. Late-game unlock." },
 
   // ─── Mid-game unlocks: regional + alt brands ───────────────
-  // CRJ-900 EIS 2003 → round 5
-  { id: "CRJ-900", name: "Bombardier CRJ-900", family: "passenger", unlockQuarter: 5,
+  // CRJ-900 EIS 2003 — was R5 → now R1 (clamped)
+  { id: "CRJ-900", name: "Bombardier CRJ-900", family: "passenger", unlockQuarter: 1,
     seats: { first: 0, business: 12, economy: 78 }, rangeKm: 2876,
     fuelBurnPerKm: 2.6, buyPriceUsd: 22_000_000, leasePerQuarterUsd: 180_000,
     ecoUpgradeUsd: 2_200_000, note: "Real EIS 2003. Regional jet for short feeder routes." },
-  // 777-300ER EIS 2004 → round 9
-  { id: "B777-300ER", name: "Boeing 777-300ER", family: "passenger", unlockQuarter: 9,
+  // 777-300ER EIS 2004 — was R9 → now R5
+  { id: "B777-300ER", name: "Boeing 777-300ER", family: "passenger", unlockQuarter: 5,
     seats: { first: 8, business: 64, economy: 324 }, rangeKm: 13_650,
     fuelBurnPerKm: 6.2, buyPriceUsd: 105_000_000, leasePerQuarterUsd: 860_000,
     ecoUpgradeUsd: 10_500_000, note: "Real EIS 2004. Long-haul flagship of the 2000s." },
-  // E190 EIS 2005 → round 9
-  { id: "E190", name: "Embraer E190", family: "passenger", unlockQuarter: 9,
+  // E190 EIS 2005 — was R9 → now R5
+  { id: "E190", name: "Embraer E190", family: "passenger", unlockQuarter: 5,
     seats: { first: 0, business: 12, economy: 88 }, rangeKm: 4537,
     fuelBurnPerKm: 2.7, buyPriceUsd: 24_000_000, leasePerQuarterUsd: 195_000,
     ecoUpgradeUsd: 2_400_000, note: "Real EIS 2005. Premium regional jet, fits thin business routes." },
-  // ATR 72-600 EIS 2011 → round 21
-  { id: "ATR-72-600", name: "ATR 72-600", family: "passenger", unlockQuarter: 21,
+  // ATR 72-600 EIS 2011 — was R21 → now R12
+  { id: "ATR-72-600", name: "ATR 72-600", family: "passenger", unlockQuarter: 12,
     seats: { first: 0, business: 0, economy: 70 }, rangeKm: 1528,
     fuelBurnPerKm: 1.4, buyPriceUsd: 21_000_000, leasePerQuarterUsd: 170_000,
     ecoUpgradeUsd: 2_100_000, note: "Real EIS 2011. Most fuel-efficient turboprop on short routes." },
-  // 747-8 EIS 2012 → round 25
-  { id: "B747-8", name: "Boeing 747-8 Intercontinental", family: "passenger", unlockQuarter: 25,
+  // 747-8 EIS 2012 — was R25 → now R16
+  { id: "B747-8", name: "Boeing 747-8 Intercontinental", family: "passenger", unlockQuarter: 16,
     seats: { first: 12, business: 70, economy: 386 }, rangeKm: 14_320,
     fuelBurnPerKm: 8.0, buyPriceUsd: 135_000_000, leasePerQuarterUsd: 1_100_000,
     ecoUpgradeUsd: 13_500_000, note: "Real EIS 2012. Final 747 evolution; high-capacity hub-to-hub." },
-  // E195-E2 EIS 2019 → round 37
-  { id: "E195-E2", name: "Embraer E195-E2", family: "passenger", unlockQuarter: 37,
+  // E195-E2 EIS 2019 — was R37 → now R25
+  { id: "E195-E2", name: "Embraer E195-E2", family: "passenger", unlockQuarter: 25,
     seats: { first: 0, business: 12, economy: 120 }, rangeKm: 4815,
     fuelBurnPerKm: 2.4, buyPriceUsd: 30_000_000, leasePerQuarterUsd: 245_000,
-    ecoUpgradeUsd: 3_000_000, note: "Real EIS 2019. New-gen regional, beats narrow-body fuel burn." },
-  // C919 EIS 2022 → round 40 (clamped)
-  { id: "C919", name: "COMAC C919", family: "passenger", unlockQuarter: 40,
+    ecoUpgradeUsd: 3_000_000, note: "Real EIS 2022. China's narrow-body challenger to A320/737." },
+  // C919 EIS 2022 — was R40 → now R28
+  { id: "C919", name: "COMAC C919", family: "passenger", unlockQuarter: 28,
     seats: { first: 0, business: 18, economy: 140 }, rangeKm: 5555,
     fuelBurnPerKm: 3.1, buyPriceUsd: 25_000_000, leasePerQuarterUsd: 205_000,
     ecoUpgradeUsd: 2_500_000, note: "Real EIS 2022. China's narrow-body challenger to A320/737." },
