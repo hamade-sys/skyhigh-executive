@@ -842,6 +842,36 @@ export const CITIES: City[] = [
     "character": "Eastern Europe's fastest-growing economy."
   },
   {
+    "code": "BER",
+    "name": "Berlin",
+    "region": "eu",
+    "regionName": "Europe",
+    "tier": 2,
+    "tourism": 165,
+    "business": 145,
+    "amplifier": 1.2,
+    "tourismGrowth": 1.5,
+    "businessGrowth": 1.5,
+    "lon": 13.50,
+    "lat": 52.36,
+    "character": "Germany's cultural capital. Tech-startup hub and Euro 2024 host."
+  },
+  {
+    "code": "KBP",
+    "name": "Kyiv",
+    "region": "eu",
+    "regionName": "Europe",
+    "tier": 3,
+    "tourism": 80,
+    "business": 95,
+    "amplifier": 1,
+    "tourismGrowth": 1.5,
+    "businessGrowth": 1.5,
+    "lon": 30.89,
+    "lat": 50.34,
+    "character": "Ukraine's capital. Eastern European gateway, geopolitically exposed."
+  },
+  {
     "code": "PRG",
     "name": "Prague",
     "region": "eu",
@@ -1035,6 +1065,21 @@ export const CITIES: City[] = [
     "lon": 35.99,
     "lat": 31.72,
     "character": "Jordan's stable gateway. Regional Levant business hub."
+  },
+  {
+    "code": "BEY",
+    "name": "Beirut",
+    "region": "mea",
+    "regionName": "Middle East & Africa",
+    "tier": 3,
+    "tourism": 100,
+    "business": 95,
+    "amplifier": 1,
+    "tourismGrowth": 1.5,
+    "businessGrowth": 1.5,
+    "lon": 35.49,
+    "lat": 33.82,
+    "character": "Lebanon's coastal capital. Levant tourism gateway, geopolitically volatile."
   },
   {
     "code": "CAI",
