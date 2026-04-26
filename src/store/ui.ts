@@ -31,6 +31,13 @@ interface UiStore {
    *  clicks an existing route on the map; cleared after the panel reads it. */
   focusedRouteId: string | null;
   setFocusedRouteId(id: string | null): void;
+  /** When non-null, the canvas paints the named rival team's network
+   *  on the map and the active panel reads that team's data instead of
+   *  the player's. Strictly view-only — the player can't act on rival
+   *  state. Cleared when the player taps the "Return to your airline"
+   *  banner or selects their own airline from the switcher. */
+  viewingTeamId: string | null;
+  setViewingTeamId(id: string | null): void;
 }
 
 /**
@@ -47,4 +54,6 @@ export const useUi = create<UiStore>((set, get) => ({
   toggleRail: () => set({ railExpanded: !get().railExpanded }),
   focusedRouteId: null,
   setFocusedRouteId: (id) => set({ focusedRouteId: id }),
+  viewingTeamId: null,
+  setViewingTeamId: (id) => set({ viewingTeamId: id }),
 }));

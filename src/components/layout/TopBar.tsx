@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, selectRivals } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { fmtMoney, fmtQuarter, fmtQuarterShort } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -9,75 +9,117 @@ import { computeAirlineValue, brandRating } from "@/lib/engine";
 import { QuarterTimerChip } from "@/components/game/QuarterTimer";
 import { HelpModal } from "@/components/game/HelpModal";
 import { NotificationCenter } from "@/components/game/NotificationCenter";
-import { Button } from "@/components/ui";
+import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
-import { HelpCircle, Trophy } from "lucide-react";
+import { HelpCircle, Trophy, ChevronDown, Eye } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 
 export function TopBar() {
   // Fine-grained subscriptions so unrelated store writes don't re-render this.
   const player = useGame(selectPlayer);
+  const rivals = useGame(useShallow(selectRivals));
   const currentQuarter = useGame((state) => state.currentQuarter);
+  const viewingTeamId = useUi((u) => u.viewingTeamId);
+  const setViewingTeamId = useUi((u) => u.setViewingTeamId);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   if (!player) return null;
 
-  const airlineValue = computeAirlineValue(player);
+  // The "currently displayed" team — player by default, rival when in
+  // view-only mode. KPIs in the strip below also follow this so the
+  // airline identity and the numbers stay visually consistent.
+  const viewingRival = viewingTeamId
+    ? rivals.find((r) => r.id === viewingTeamId)
+    : null;
+  const displayTeam = viewingRival ?? player;
+  const airlineValue = computeAirlineValue(displayTeam);
 
   return (
     <header
       className={cn(
-        // z-[60] — highest of the chrome stack. Panel + Rail are both z-50;
-        // the topbar must stay above them so the airline identity, KPI strip,
-        // and Next-Quarter button are never covered.
         "fixed top-0 left-0 right-0 h-14 z-[60]",
         "flex items-center gap-5 pl-4 pr-4",
         "border-b border-line bg-surface/85 backdrop-blur-md",
+        viewingRival && "border-b-2 border-accent",
       )}
     >
-      {/* Brand + airline identity */}
+      {/* Brand + airline identity — clickable to open the switcher */}
       <div className="flex items-center gap-3 min-w-0 shrink-0 pr-4 mr-0.5 border-r border-line h-full">
-        <span
-          className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shadow-[var(--shadow-1)]"
-          style={{ background: player.color }}
-          title={player.name}
+        <button
+          type="button"
+          onClick={() => setSwitcherOpen(true)}
+          className="flex items-center gap-3 min-w-0 hover:bg-surface-hover rounded-md -ml-1.5 pl-1.5 pr-2 py-1 transition-colors group"
+          title="Switch view: see your airline or peek into a rival's network"
         >
-          {player.code}
-        </span>
-        <div className="min-w-0 hidden md:block">
-          <div className="font-display text-[1rem] text-ink leading-none truncate">
-            {player.name}
+          <span
+            className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shadow-[var(--shadow-1)]"
+            style={{ background: displayTeam.color }}
+          >
+            {displayTeam.code}
+          </span>
+          <div className="min-w-0 hidden md:block text-left">
+            <div className="font-display text-[1rem] text-ink leading-none truncate flex items-center gap-1">
+              {displayTeam.name}
+              {viewingRival && (
+                <Eye size={12} className="text-accent shrink-0" aria-label="View only" />
+              )}
+              <ChevronDown size={12} className="text-ink-muted opacity-50 group-hover:opacity-100 shrink-0" />
+            </div>
+            <div className="text-[0.625rem] text-ink-muted uppercase tracking-wider mt-1 truncate font-medium">
+              {viewingRival ? "View only · rival network" : (
+                <>Hub {displayTeam.hubCode}
+                {displayTeam.secondaryHubCodes.length > 0 &&
+                  ` +${displayTeam.secondaryHubCodes.length}`}</>
+              )}
+            </div>
           </div>
-          <div className="text-[0.625rem] text-ink-muted uppercase tracking-wider mt-1 truncate font-medium">
-            Hub {player.hubCode}
-            {player.secondaryHubCodes.length > 0 &&
-              ` +${player.secondaryHubCodes.length}`}
-          </div>
-        </div>
+        </button>
+        <AirlineSwitcher
+          open={switcherOpen}
+          onClose={() => setSwitcherOpen(false)}
+          player={player}
+          rivals={rivals}
+          viewingTeamId={viewingTeamId}
+          onSelect={(id) => {
+            setViewingTeamId(id === player.id ? null : id);
+            setSwitcherOpen(false);
+          }}
+        />
       </div>
 
-      {/* KPIs */}
+      {/* KPIs — follow the currently-displayed team. When viewing a
+          rival, the strip shows their numbers (read-only). */}
       <div className="flex items-center gap-0 overflow-x-auto flex-1 min-w-0">
-        <Kpi label="Cash" value={fmtMoney(player.cashUsd)} emphasize />
+        <Kpi label="Cash" value={fmtMoney(displayTeam.cashUsd)} emphasize />
         <Divider />
         <Kpi
           label="Debt"
-          value={fmtMoney(player.totalDebtUsd)}
-          tone={player.totalDebtUsd > 0 ? "neg" : undefined}
+          value={fmtMoney(displayTeam.totalDebtUsd)}
+          tone={displayTeam.totalDebtUsd > 0 ? "neg" : undefined}
         />
         <Divider />
         <Kpi label="Airline value" value={fmtMoney(airlineValue)} emphasize />
         <Divider />
-        <Kpi label="Brand rating" value={brandRating(player).grade} />
-        {/* Loyalty is internal; brand rating is the player-facing summary. */}
-        {player.rcfBalanceUsd > 0 && (
+        <Kpi label="Brand rating" value={brandRating(displayTeam).grade} />
+        {!viewingRival && displayTeam.rcfBalanceUsd > 0 && (
           <>
             <Divider />
             <Kpi
               label="RCF drawn"
-              value={fmtMoney(player.rcfBalanceUsd)}
+              value={fmtMoney(displayTeam.rcfBalanceUsd)}
               tone="warn"
             />
           </>
+        )}
+        {viewingRival && (
+          <button
+            onClick={() => setViewingTeamId(null)}
+            className="ml-auto mr-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.75rem] bg-accent/10 text-accent hover:bg-accent/20 font-semibold uppercase tracking-wider"
+            title="Return to your airline"
+          >
+            ← Return to {player.name}
+          </button>
         )}
       </div>
 
@@ -199,4 +241,74 @@ function Kpi({
 
 function Divider() {
   return <span className="w-px h-6 bg-line shrink-0" aria-hidden />;
+}
+
+/** Switcher modal opened by clicking the airline brand chip. Lists
+ *  the player's own airline + every rival in the simulation. Picking
+ *  a rival enters VIEW-ONLY mode — the map and panels render that
+ *  rival's network and KPIs, but no player action affects them. */
+function AirlineSwitcher({
+  open, onClose, player, rivals, viewingTeamId, onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  player: NonNullable<ReturnType<typeof selectPlayer>>;
+  rivals: ReturnType<typeof selectRivals>;
+  viewingTeamId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const all = [player, ...rivals];
+  return (
+    <Modal open={open} onClose={onClose}>
+      <ModalHeader>
+        <h2 className="font-display text-[1.5rem] text-ink">Switch view</h2>
+        <p className="text-ink-muted text-[0.8125rem] mt-1">
+          Peek into a rival&apos;s network for strategic intel. View-only — you can&apos;t change their state.
+        </p>
+      </ModalHeader>
+      <ModalBody className="space-y-1.5">
+        {all.map((t) => {
+          const isYou = t.id === player.id;
+          const isActive = isYou ? !viewingTeamId : viewingTeamId === t.id;
+          const activeRoutes = t.routes.filter((r) => r.status === "active").length;
+          return (
+            <button
+              key={t.id}
+              onClick={() => onSelect(t.id)}
+              className={cn(
+                "w-full flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors",
+                isActive
+                  ? "border-accent bg-[var(--accent-soft)]"
+                  : "border-line hover:bg-surface-hover",
+              )}
+            >
+              <span
+                className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shrink-0"
+                style={{ background: t.color }}
+              >
+                {t.code}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-ink text-[0.875rem] truncate">
+                  {t.name}
+                  {isYou && (
+                    <span className="ml-2 text-[0.5625rem] uppercase tracking-wider text-accent font-semibold">you</span>
+                  )}
+                </div>
+                <div className="text-[0.6875rem] text-ink-muted mt-0.5 truncate">
+                  Hub {t.hubCode} · {t.fleet.filter((f) => f.status !== "retired").length} aircraft · {activeRoutes} routes
+                </div>
+              </div>
+              {isActive && (
+                <Eye size={14} className="text-accent shrink-0" />
+              )}
+            </button>
+          );
+        })}
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="ghost" onClick={onClose}>Close</Button>
+      </ModalFooter>
+    </Modal>
+  );
 }

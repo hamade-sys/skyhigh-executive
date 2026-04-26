@@ -67,6 +67,11 @@ function CanvasInner() {
   const playerTeamId = useGame((state) => state.playerTeamId);
   const currentQuarter = useGame((state) => state.currentQuarter);
   const player = useGame(selectPlayer);
+  // View-only competitor mode (Sprint 7): when set, the map renders
+  // the named rival's network instead of the player's. Click handlers
+  // are still bound to the player so route creation always targets
+  // the player's airline — viewing a rival is strictly read-only.
+  const viewingTeamId = useUi((state) => state.viewingTeamId);
   // useShallow so the .filter() in selectRivals doesn't return a fresh array
   // reference every render and trip the getServerSnapshot infinite-loop guard.
   const rivals = useGame(useShallow(selectRivals));
@@ -222,7 +227,14 @@ function CanvasInner() {
         style={{ left: railExpanded ? "14rem" : "3.5rem" }}
       >
         <WorldMap
-          team={player}
+          team={
+            // In view-only mode, map paints the named rival's network.
+            // Click handlers and onClearSelection still target the
+            // player so route creation always affects the player only.
+            viewingTeamId
+              ? rivals.find((r) => r.id === viewingTeamId) ?? player
+              : player
+          }
           rivals={rivals}
           currentQuarter={currentQuarter}
           selectedOriginCode={origin}
