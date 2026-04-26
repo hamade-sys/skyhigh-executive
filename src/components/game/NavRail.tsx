@@ -132,40 +132,54 @@ export function NavRail() {
       {/* Expand/collapse handle — sits at the right edge inside the rail
           so it can't be clipped by any ancestor overflow. */}
       <button
+        type="button"
         onClick={toggleRail}
         aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
+        aria-expanded={expanded}
         className={cn(
           "absolute right-1 top-2 z-20 w-6 h-6 rounded-full",
           "bg-surface border border-line shadow-[var(--shadow-1)]",
           "flex items-center justify-center text-ink-2 hover:bg-surface-hover hover:text-ink",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
         )}
       >
-        {expanded ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
+        {expanded ? <ChevronLeft size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
       </button>
 
       {/* Top: nav buttons */}
-      <nav className="flex flex-col gap-1 px-2 pt-3">
+      <nav aria-label="Main navigation" className="flex flex-col gap-1 px-2 pt-3">
         {NAV.map((item) => {
           const active = current === item.id;
           const badge =
             item.id === "decisions" && pendingDecisions.length > 0
               ? pendingDecisions.length
               : null;
+          // The visible label is hidden when the rail is collapsed, so
+          // we always provide a contextual aria-label that includes the
+          // pending-decisions badge if present.
+          const ariaLabel =
+            badge !== null && badge > 0
+              ? `${item.label} — ${badge} pending decision${badge === 1 ? "" : "s"}`
+              : item.label;
           return (
             <button
               key={item.id}
+              type="button"
               onClick={() => togglePanel(item.id)}
+              aria-label={ariaLabel}
+              aria-current={active ? "page" : undefined}
               title={!expanded ? item.label : undefined}
               className={cn(
                 "group relative h-10 rounded-lg flex items-center",
                 expanded ? "px-3 gap-3 justify-start" : "w-10 justify-center mx-auto",
                 "transition-colors duration-[var(--dur-fast)]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
                 active
                   ? "bg-primary text-primary-fg shadow-[0_4px_12px_rgba(20,53,94,0.25)]"
                   : "text-ink-2 hover:bg-surface-hover hover:text-ink",
               )}
             >
-              <item.Icon size={18} strokeWidth={1.75} className="shrink-0" />
+              <item.Icon size={18} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
               {expanded && (
                 <span className="text-[0.8125rem] font-medium truncate">
                   {item.label}
@@ -173,6 +187,7 @@ export function NavRail() {
               )}
               {badge !== null && badge > 0 && (
                 <span
+                  aria-hidden="true"
                   className={cn(
                     "absolute min-w-[16px] h-4 rounded-full bg-accent text-primary-fg",
                     "text-[0.625rem] font-semibold flex items-center justify-center",
@@ -185,6 +200,7 @@ export function NavRail() {
               )}
               {!expanded && (
                 <span
+                  aria-hidden="true"
                   className={cn(
                     "absolute left-full ml-3 px-2.5 py-1 rounded-md",
                     "bg-ink text-[var(--bg)] text-[0.75rem] font-medium",
@@ -242,8 +258,10 @@ export function NavRail() {
         const item = currentItems[tickerIndex % currentItems.length];
         return (
           <button
+            type="button"
             onClick={() => useUi.getState().openPanel("news")}
-            className="border-t border-line bg-[var(--accent-soft)]/40 hover:bg-[var(--accent-soft)] px-3 py-2 text-left transition-colors"
+            aria-label={`This quarter's news, item ${tickerIndex + 1} of ${currentItems.length}: ${item.headline}. Click to open the full news panel.`}
+            className="border-t border-line bg-[var(--accent-soft)]/40 hover:bg-[var(--accent-soft)] px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
             title="Click to read this quarter's full news"
           >
             <div className="flex items-baseline justify-between mb-0.5">
@@ -268,21 +286,26 @@ export function NavRail() {
       {expanded ? (
         <div className="border-t border-line max-h-[40vh] flex flex-col">
           <button
+            type="button"
             onClick={() => setNewsExpanded((v) => !v)}
-            className="flex items-center justify-between px-3 py-2 text-[0.6875rem] uppercase tracking-wider text-ink-muted hover:bg-surface-hover"
+            aria-expanded={newsExpanded}
+            aria-controls="navrail-news-list"
+            className="flex items-center justify-between px-3 py-2 text-[0.6875rem] uppercase tracking-wider text-ink-muted hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
             <span className="flex items-center gap-1.5">
-              <Newspaper size={12} /> World news
+              <Newspaper size={12} aria-hidden="true" /> World news
             </span>
-            <span className="tabular text-ink">{newsItems.length}</span>
+            <span className="tabular text-ink" aria-label={`${newsItems.length} headlines`}>{newsItems.length}</span>
           </button>
           {newsExpanded && (
-            <div className="overflow-auto px-2 pb-3 space-y-1.5">
+            <div id="navrail-news-list" className="overflow-auto px-2 pb-3 space-y-1.5">
               {newsItems.map((n) => (
                 <button
                   key={n.id}
+                  type="button"
                   onClick={() => useUi.getState().openPanel("news")}
-                  className="w-full text-left rounded-md border border-line bg-surface px-2.5 py-2 hover:bg-surface-hover hover:border-primary/40 transition-colors"
+                  aria-label={`${outletFor(n)} (${fmtQuarter(n.quarter)}): ${n.headline}. Click to open the news panel.`}
+                  className="w-full text-left rounded-md border border-line bg-surface px-2.5 py-2 hover:bg-surface-hover hover:border-primary/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   title="Open World news panel to read full article"
                 >
                   <div className="flex items-baseline justify-between mb-0.5">
@@ -301,10 +324,11 @@ export function NavRail() {
                 </button>
               ))}
               <button
+                type="button"
                 onClick={() => useUi.getState().openPanel("news")}
-                className="w-full mt-1 px-2 py-1.5 rounded-md border border-line bg-surface-2/50 text-[0.6875rem] uppercase tracking-wider text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
+                className="w-full mt-1 px-2 py-1.5 rounded-md border border-line bg-surface-2/50 text-[0.6875rem] uppercase tracking-wider text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                Open World News →
+                Open World News <span aria-hidden="true">→</span>
               </button>
             </div>
           )}
@@ -312,11 +336,13 @@ export function NavRail() {
       ) : (
         // Collapsed: icon button that opens the News panel directly
         <button
+          type="button"
           onClick={() => useUi.getState().openPanel("news")}
+          aria-label="Open world news"
           title="World news"
-          className="border-t border-line py-3 flex flex-col items-center text-ink-2 hover:text-ink hover:bg-surface-hover"
+          className="border-t border-line py-3 flex flex-col items-center text-ink-2 hover:text-ink hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         >
-          <Newspaper size={16} />
+          <Newspaper size={16} aria-hidden="true" />
           <span className="text-[0.5625rem] uppercase tracking-wider mt-0.5">News</span>
         </button>
       )}

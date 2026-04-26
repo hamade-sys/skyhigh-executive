@@ -49,7 +49,14 @@ export function TopBar() {
         <button
           type="button"
           onClick={() => setSwitcherOpen(true)}
-          className="flex items-center gap-3 min-w-0 hover:bg-surface-hover rounded-md -ml-1.5 pl-1.5 pr-2 py-1 transition-colors group"
+          aria-haspopup="dialog"
+          aria-expanded={switcherOpen}
+          aria-label={
+            viewingRival
+              ? `Currently viewing ${displayTeam.name} (rival, view-only). Click to switch airlines.`
+              : `Currently viewing ${displayTeam.name}. Click to switch to a rival airline view.`
+          }
+          className="flex items-center gap-3 min-w-0 hover:bg-surface-hover rounded-md -ml-1.5 pl-1.5 pr-2 py-1 transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
           title="Switch view: see your airline or peek into a rival's network"
         >
           <span
@@ -115,10 +122,11 @@ export function TopBar() {
         {viewingRival && (
           <button
             onClick={() => setViewingTeamId(null)}
-            className="ml-auto mr-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.75rem] bg-accent/10 text-accent hover:bg-accent/20 font-semibold uppercase tracking-wider"
+            aria-label={`Return to ${player.name} (your airline)`}
+            className="ml-auto mr-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.75rem] bg-accent/10 text-accent hover:bg-accent/20 font-semibold uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             title="Return to your airline"
           >
-            ← Return to {player.name}
+            <span aria-hidden="true">←</span> Return to {player.name}
           </button>
         )}
       </div>
@@ -138,12 +146,15 @@ export function TopBar() {
         <LeaderboardButton />
         <NotificationCenter />
         <button
+          type="button"
           onClick={() => setHelpOpen(true)}
           aria-label="Help &amp; reference"
+          aria-haspopup="dialog"
+          aria-expanded={helpOpen}
           title="Quick reference (cheat sheet)"
-          className="w-8 h-8 rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center transition-colors"
+          className="w-8 h-8 rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
         >
-          <HelpCircle size={16} />
+          <HelpCircle size={16} aria-hidden="true" />
         </button>
         <CloseQuarterButton />
       </div>
@@ -158,17 +169,20 @@ function LeaderboardButton() {
   const isOpen = currentPanel === "leaderboard";
   return (
     <button
+      type="button"
       onClick={() => openPanel("leaderboard")}
-      aria-label="Leaderboard"
+      aria-label="Open leaderboard"
+      aria-pressed={isOpen}
       title="Leaderboard"
       className={cn(
         "w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
         isOpen
           ? "bg-surface-hover text-ink"
           : "text-ink-muted hover:text-ink hover:bg-surface-hover",
       )}
     >
-      <Trophy size={16} />
+      <Trophy size={16} aria-hidden="true" />
     </button>
   );
 }
@@ -319,23 +333,30 @@ function AirlineSwitcher({
           Peek into a rival&apos;s network for strategic intel. View-only — you can&apos;t change their state.
         </p>
       </ModalHeader>
-      <ModalBody className="space-y-1.5">
+      <ModalBody role="radiogroup" aria-label="Active airline view" className="space-y-1.5">
         {all.map((t) => {
           const isYou = t.id === player.id;
           const isActive = isYou ? !viewingTeamId : viewingTeamId === t.id;
           const activeRoutes = t.routes.filter((r) => r.status === "active").length;
+          const fleetSize = t.fleet.filter((f) => f.status !== "retired").length;
           return (
             <button
               key={t.id}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              aria-label={`${isYou ? "Your airline " : ""}${t.name}, hub ${t.hubCode}, ${fleetSize} aircraft, ${activeRoutes} routes`}
               onClick={() => onSelect(t.id)}
               className={cn(
                 "w-full flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
                 isActive
                   ? "border-accent bg-[var(--accent-soft)]"
                   : "border-line hover:bg-surface-hover",
               )}
             >
               <span
+                aria-hidden="true"
                 className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shrink-0"
                 style={{ background: t.color }}
               >
@@ -349,11 +370,11 @@ function AirlineSwitcher({
                   )}
                 </div>
                 <div className="text-[0.6875rem] text-ink-muted mt-0.5 truncate">
-                  Hub {t.hubCode} · {t.fleet.filter((f) => f.status !== "retired").length} aircraft · {activeRoutes} routes
+                  Hub {t.hubCode} · {fleetSize} aircraft · {activeRoutes} routes
                 </div>
               </div>
               {isActive && (
-                <Eye size={14} className="text-accent shrink-0" />
+                <Eye size={14} aria-hidden="true" className="text-accent shrink-0" />
               )}
             </button>
           );
