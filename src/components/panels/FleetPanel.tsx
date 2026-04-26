@@ -7,11 +7,16 @@ import { AircraftMarketModal } from "@/components/game/AircraftMarketModal";
 import { PurchaseOrderModal } from "@/components/game/PurchaseOrderModal";
 import { useGame, selectPlayer } from "@/store/game";
 import { toast } from "@/store/toasts";
-import { fmtMoney, fmtPct, fmtAgeYQ } from "@/lib/format";
+import { fmtMoney, fmtPct, fmtAgeYQ, fmtQuarter } from "@/lib/format";
 import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
-import { Plane, AlertTriangle } from "lucide-react";
+import { Plane, AlertTriangle, Clock, X } from "lucide-react";
 import { discontinuedMaintenanceBracket } from "@/lib/engine";
+import {
+  effectiveProductionCap,
+  estimatedDeliveryQuarter,
+  queuePosition,
+} from "@/lib/pre-orders";
 
 /** Group aircraft by spec id, count quantity, and aggregate utilisation. */
 function groupByType(player: ReturnType<typeof selectPlayer>) {
@@ -159,6 +164,9 @@ export function FleetPanel() {
           Order aircraft →
         </Button>
       </div>
+
+      {/* Pre-order queue — pending FIFO orders awaiting production. */}
+      <PreOrderQueue />
 
       {/* Insurance policy — directly editable from Fleet panel */}
       <div className="rounded-md border border-line bg-surface p-3">
@@ -740,3 +748,78 @@ function Th({
 // fmtPct is imported lazily only when needed for occupancy on cargo planes —
 // the unused import is suppressed by tsc since we reference it elsewhere.
 void fmtPct;
+
+/** Pre-order queue display — shows the player's queued orders with
+ *  position in the FIFO line and an estimated delivery quarter, plus
+ *  a Cancel action that refunds 85% of the deposit (15% penalty). */
+function PreOrderQueue() {
+  const playerTeamId = useGame((s) => s.playerTeamId);
+  const preOrders = useGame((s) => s.preOrders);
+  const overrides = useGame((s) => s.productionCapOverrides);
+  const currentQuarter = useGame((s) => s.currentQuarter);
+  const cancelPreOrder = useGame((s) => s.cancelPreOrder);
+
+  const myQueued = preOrders.filter(
+    (o) => o.teamId === playerTeamId && o.status === "queued",
+  );
+  if (myQueued.length === 0) return null;
+
+  const totalDeposit = myQueued.reduce((sum, o) => sum + o.depositUsd, 0);
+  const totalBalance = myQueued.reduce((sum, o) => sum + (o.totalPriceUsd - o.depositUsd), 0);
+
+  return (
+    <div className="rounded-md border border-line bg-surface overflow-hidden">
+      <div className="flex items-baseline justify-between gap-3 px-3 py-2 border-b border-line bg-surface-2/40">
+        <div className="flex items-center gap-2">
+          <Clock size={13} className="text-accent" />
+          <span className="text-[0.8125rem] font-semibold text-ink">
+            Pre-orders queued · {myQueued.length}
+          </span>
+        </div>
+        <div className="text-[0.6875rem] text-ink-muted tabular font-mono">
+          deposits paid {fmtMoney(totalDeposit)} · balance owed at delivery {fmtMoney(totalBalance)}
+        </div>
+      </div>
+      <div className="divide-y divide-line/40">
+        {myQueued.map((order) => {
+          const spec = AIRCRAFT_BY_ID[order.specId];
+          if (!spec) return null;
+          const pos = queuePosition(preOrders, order.id);
+          const eta = estimatedDeliveryQuarter(order, spec, preOrders, currentQuarter, overrides);
+          const cap = effectiveProductionCap(spec, overrides);
+          const refund = order.depositUsd * 0.85;
+          const penalty = order.depositUsd * 0.15;
+          return (
+            <div key={order.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[0.875rem] text-ink font-medium">{spec.name}</div>
+                <div className="text-[0.6875rem] text-ink-muted mt-0.5 tabular font-mono">
+                  Position {pos ?? "—"} of {myQueued.length} (cap {cap}/Q) ·
+                  {" "}ETA <span className="text-ink">{fmtQuarter(eta)}</span> ·
+                  {" "}{order.acquisitionType === "buy" ? "Buy" : "Lease"}
+                </div>
+              </div>
+              <div className="text-right text-[0.6875rem] text-ink-muted tabular font-mono shrink-0">
+                <div>Deposit {fmtMoney(order.depositUsd)}</div>
+                <div>Balance {fmtMoney(order.totalPriceUsd - order.depositUsd)}</div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!confirm(
+                    `Cancel pre-order for ${spec.name}?\n` +
+                    `Refund ${fmtMoney(refund)} (15% cancellation penalty: ${fmtMoney(penalty)} forfeited).`,
+                  )) return;
+                  cancelPreOrder(order.id);
+                }}
+                className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-line text-[0.6875rem] text-ink-2 hover:text-negative hover:border-negative"
+                title="Cancel pre-order (15% penalty on deposit)"
+              >
+                <X size={11} /> Cancel
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

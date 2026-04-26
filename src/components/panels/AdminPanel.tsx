@@ -749,7 +749,80 @@ export function AdminPanel() {
           Reset simulation
         </Button>
       </section>
+
+      {/* Aircraft production overrides (Sprint 8) — facilitator can
+          raise / lower the per-spec quarterly delivery cap for the
+          remainder of the campaign, and can force-deliver queued
+          pre-orders ahead of cap (e.g. to clear a backlog after a
+          dispute). */}
+      <ProductionCapAdmin />
     </div>
+  );
+}
+
+function ProductionCapAdmin() {
+  const preOrders = useGame((s) => s.preOrders);
+  const overrides = useGame((s) => s.productionCapOverrides);
+  const setProductionCapOverride = useGame((s) => s.setProductionCapOverride);
+  const forceDeliverPreOrders = useGame((s) => s.forceDeliverPreOrders);
+  // Aggregate queued counts per spec across all teams.
+  const bySpec = new Map<string, number>();
+  for (const o of preOrders) {
+    if (o.status !== "queued") continue;
+    bySpec.set(o.specId, (bySpec.get(o.specId) ?? 0) + 1);
+  }
+  const specs = Array.from(bySpec.entries()).sort((a, b) => b[1] - a[1]);
+  return (
+    <section>
+      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        Production overrides
+      </div>
+      <div className="rounded-md border border-line bg-surface p-3 space-y-2 text-[0.8125rem]">
+        {specs.length === 0 ? (
+          <div className="text-ink-muted italic">No pre-orders are currently queued.</div>
+        ) : (
+          specs.map(([specId, queued]) => {
+            const override = overrides[specId];
+            return (
+              <div key={specId} className="flex items-center justify-between gap-2 border-b border-line/40 last:border-0 pb-2 last:pb-0">
+                <div className="min-w-0">
+                  <div className="font-mono tabular text-ink text-[0.8125rem]">{specId}</div>
+                  <div className="text-[0.6875rem] text-ink-muted">
+                    {queued} queued ·
+                    {typeof override === "number" ? ` cap override ${override}` : " default cap"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    placeholder="cap"
+                    defaultValue={override ?? ""}
+                    onBlur={(e) => {
+                      const v = e.target.value;
+                      if (v === "") setProductionCapOverride(specId, null);
+                      else setProductionCapOverride(specId, parseInt(v, 10));
+                    }}
+                    className="w-16 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[0.75rem] tabular font-mono"
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const n = parseInt(prompt(`Force-deliver how many of ${specId}? (queued: ${queued})`, String(Math.min(queued, 5))) ?? "0", 10);
+                      if (n > 0) forceDeliverPreOrders(specId, n);
+                    }}
+                  >
+                    Force deliver
+                  </Button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </section>
   );
 }
 
