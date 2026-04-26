@@ -37,6 +37,52 @@ const M = 1_000_000;
  *  fuel against $1.7B revenue. Both paths now share this constant. */
 export const FUEL_BASELINE_USD_PER_L = 0.65;
 
+/** Discontinued-type maintenance escalation (master ref Update 5).
+ *  Once an aircraft type passes its `cutoffRound`, every still-flying
+ *  example gets a maintenance penalty that climbs in 4-round brackets
+ *  before flatlining at +15%:
+ *    rounds  1- 4 after cutoff: +5%   (parts pipeline still warm)
+ *    rounds  5- 8:               +7.5%
+ *    rounds  9-12:               +10%
+ *    rounds 13+:                 +15% (parts scarce, permanent)
+ *  Eco-upgraded aircraft get the rate halved (modernisation hedge).
+ *
+ *  Returns a multiplier (1.0 = no escalation) so callers can stack it
+ *  with the existing age-band base percentage and ops-points discount.
+ */
+export function discontinuedMaintenanceMultiplier(
+  spec: { cutoffRound?: number } | undefined,
+  currentQuarter: number,
+  ecoUpgraded: boolean,
+): number {
+  if (!spec || typeof spec.cutoffRound !== "number") return 1.0;
+  const roundsSince = currentQuarter - spec.cutoffRound;
+  if (roundsSince <= 0) return 1.0;
+  const fullRate =
+    roundsSince <= 4  ? 0.05  :
+    roundsSince <= 8  ? 0.075 :
+    roundsSince <= 12 ? 0.10  :
+                        0.15;
+  const rate = ecoUpgraded ? fullRate / 2 : fullRate;
+  return 1 + rate;
+}
+
+/** Bracket label for the FleetPanel badge (so the player sees WHY a
+ *  given aircraft's maintenance jumped). Returns null when the spec
+ *  isn't currently in escalation. */
+export function discontinuedMaintenanceBracket(
+  spec: { cutoffRound?: number } | undefined,
+  currentQuarter: number,
+): { roundsSince: number; bracketLabel: string; pct: number; isMax: boolean } | null {
+  if (!spec || typeof spec.cutoffRound !== "number") return null;
+  const roundsSince = currentQuarter - spec.cutoffRound;
+  if (roundsSince <= 0) return null;
+  if (roundsSince <= 4) return { roundsSince, bracketLabel: "1 of 3", pct: 5, isMax: false };
+  if (roundsSince <= 8) return { roundsSince, bracketLabel: "2 of 3", pct: 7.5, isMax: false };
+  if (roundsSince <= 12) return { roundsSince, bracketLabel: "3 of 3", pct: 10, isMax: false };
+  return { roundsSince, bracketLabel: "max", pct: 15, isMax: true };
+}
+
 // ─── Global Travel Index (PRD E6) — master demand multiplier ──
 /**
  * Per-round macro demand multiplier across the 40-round game.
@@ -1689,7 +1735,15 @@ export function runQuarterClose(
       ageQ < 14 ? 0.012 :
       ageQ < 21 ? 0.018 : 0.025;
     const effectivePct = basePct * (1 - opsPtsDiscount);
-    maintenanceCost += f.purchasePrice * effectivePct;
+    // Update 5 — discontinued-type maintenance escalation.
+    // Brackets after cutoff: 1-4Q +5%, 5-8Q +7.5%, 9-12Q +10%, 13Q+ +15%.
+    // Eco-upgraded aircraft get all rates halved (incentivises modernisation).
+    const escalationMult = discontinuedMaintenanceMultiplier(
+      AIRCRAFT_BY_ID[f.specId],
+      ctx.quarter,
+      !!f.ecoUpgrade,
+    );
+    maintenanceCost += f.purchasePrice * effectivePct * escalationMult;
   }
   if (next.flags.has("aging_fleet")) maintenanceCost += 15_000_000;
 

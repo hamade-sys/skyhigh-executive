@@ -10,7 +10,8 @@ import { toast } from "@/store/toasts";
 import { fmtMoney, fmtPct, fmtAgeYQ } from "@/lib/format";
 import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
-import { Plane } from "lucide-react";
+import { Plane, AlertTriangle } from "lucide-react";
+import { discontinuedMaintenanceBracket } from "@/lib/engine";
 
 /** Group aircraft by spec id, count quantity, and aggregate utilisation. */
 function groupByType(player: ReturnType<typeof selectPlayer>) {
@@ -232,7 +233,7 @@ export function FleetPanel() {
                     className="border-b border-line last:border-0 cursor-pointer hover:bg-surface-hover"
                   >
                     <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-ink">{spec.name}</span>
                         <Badge tone={spec.family === "cargo" ? "warning" : "neutral"}>
                           {spec.family}
@@ -240,6 +241,22 @@ export function FleetPanel() {
                         {g.grounded > 0 && (
                           <Badge tone="warning">{g.grounded} grounded</Badge>
                         )}
+                        {(() => {
+                          // Update 5: discontinued-type maintenance escalation
+                          // badge. Shows the bracket so the player knows WHY
+                          // their maintenance jumped on this fleet line.
+                          const br = discontinuedMaintenanceBracket(spec, s.currentQuarter);
+                          if (!br) return null;
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 text-[0.625rem] uppercase tracking-wider font-semibold text-warning bg-[var(--warning-soft)] px-1.5 py-0.5 rounded"
+                              title={`Production for this aircraft ended R${spec.cutoffRound}. Parts availability declining — maintenance +${br.pct}% (bracket ${br.bracketLabel}).`}
+                            >
+                              <AlertTriangle size={10} />
+                              Discontinued · maint +{br.pct}%
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="text-[0.6875rem] text-ink-muted mt-0.5 font-mono">
                         {spec.family === "passenger"

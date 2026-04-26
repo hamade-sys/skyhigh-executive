@@ -39,6 +39,13 @@ export interface AircraftSpec {
    *  (FIFO across teams). Defaults to 8 for standard aircraft and 5
    *  for premium ($80M+) airframes. May be overridden by facilitator. */
   productionCapPerQuarter?: number;
+  /** Round at which new orders for this airframe close. After cutoff:
+   *   - "Order new" disappears from the market for this spec
+   *   - Existing aircraft keep flying indefinitely (no forced retirement)
+   *   - Maintenance starts escalating per the bracket schedule
+   *   - Secondary market still trades the spec freely
+   *  Undefined = still in production at end of campaign. */
+  cutoffRound?: number;
   note?: string;
 }
 

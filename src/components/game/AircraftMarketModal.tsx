@@ -138,6 +138,10 @@ export function AircraftMarketModal({
     };
     for (const a of AIRCRAFT) {
       if (a.unlockQuarter > currentQuarter) continue;
+      // Discontinuation filter (Update 4): once cutoffRound is reached
+      // the spec disappears from the New-Build market. Existing fleet
+      // keeps flying and the secondary-market tab is unaffected.
+      if (typeof a.cutoffRound === "number" && currentQuarter > a.cutoffRound) continue;
       out[detectManufacturer(a)].push(a);
     }
     const variantOrder = (id: string): [number, string] => {

@@ -1699,6 +1699,94 @@ export const WORLD_NEWS: NewsItem[] = [
     headline: "Final investor pitch and MVP awards ceremony commences",
     detail: "The simulation ends here. All metrics permanent. What an airline you built.",
   }),
+
+  // ═══════════════════════════════════════════════════════════════
+  // Aircraft discontinuation announcements (Update 4 — 16 events)
+  // Each fires the round BEFORE the cutoffRound on the affected
+  // specs, giving teams one final round to place orders. After
+  // cutoff: Order New disappears, secondary market unaffected,
+  // maintenance starts escalating per Update 5 brackets.
+  // ═══════════════════════════════════════════════════════════════
+  n({
+    quarter: 10, id: "CUTOFF-737-CLASSIC", icon: "🛬", impact: "ops",
+    headline: "Boeing closes the 737 Classic line — last orders for -300, -400, -500, -600 next round",
+    detail: "After three decades, the original 737 family ends new production. Next-Generation variants assume the narrowbody role. Existing Classics remain airworthy. Last round to order: B737-300 / -400 / -500 / -600 — cutoff R11.",
+  }),
+  n({
+    quarter: 11, id: "CUTOFF-757-LR-E195", icon: "🛬", impact: "ops",
+    headline: "Boeing 757 family + 777-200LR retire from production · E195 superseded by E195-E2",
+    detail: "Three simultaneous closures: the 757 (1,050 built), the 777-200LR (longest range of its day) and the original E195 (the E195-E2 takes over). Last round to order: B757-200, B757-200F, B777-200LR, E195 — cutoff R12.",
+  }),
+  n({
+    quarter: 12, id: "CUTOFF-747-400-ATR500", icon: "🛬", impact: "ops",
+    headline: "Boeing 747-400 Jumbo Jet retires from production · ATR 72-500 closes for the -600",
+    detail: "The 747-400, most iconic widebody in history at 694 deliveries, ends new production. Both the passenger and -400F cargo variants close. Last round to order: B747-400, B747-400F, ATR 72-500 — cutoff R13.",
+  }),
+  n({
+    quarter: 13, id: "CUTOFF-A300-600F", icon: "🛬", impact: "ops",
+    headline: "Airbus A300-600F production ends — classic widebody freighter era closes after 35 years",
+    detail: "The A300-600F takes its final order. A330-200F and B777F absorb its routes. Last round to order: A300-600F — cutoff R14.",
+  }),
+  n({
+    quarter: 14, id: "CUTOFF-737-300F", icon: "🛬", impact: "ops",
+    headline: "Boeing 737-300F closes · the 737-800BCF converted freighter is your replacement",
+    detail: "The classic narrowbody freighter ends. The 737-800BCF (available now) offers better fuel economics on the same routes. Last round to order: B737-300F — cutoff R15. B737-800BCF now available.",
+  }),
+  n({
+    quarter: 15, id: "CUTOFF-E170-767-E190", icon: "🛬", impact: "ops",
+    headline: "Embraer E170, Boeing 767-300ER and original E190 all closing next quarter — E190-E2 ready",
+    detail: "Three aircraft retire from new production. The E190-E2 unlocks the same round as the E190 cutoff — direct upgrade available immediately. Last round to order: E170, B767-300ER, E190 — cutoff R16.",
+  }),
+  n({
+    quarter: 16, id: "CUTOFF-777-200", icon: "🛬", impact: "ops",
+    headline: "Boeing 777-200 original ends production — first ETOPS twin retires from manufacturing",
+    detail: "The 777-200, the aircraft that proved long-haul twin-engine operations, ends production after 88 deliveries. 777-200ER and 777-300ER continue. Last round to order: B777-200 — cutoff R17.",
+  }),
+  n({
+    quarter: 17, id: "CUTOFF-A330-300-777-200ER", icon: "🛬", impact: "ops",
+    headline: "Airbus A330-300 + Boeing 777-200ER closing next quarter — neo / 300ER take over",
+    detail: "The A330-300 and 777-200ER close simultaneously. A330-900neo and 777-300ER cover all capacity requirements going forward. Last round to order: A330-300, B777-200ER — cutoff R18.",
+  }),
+  n({
+    quarter: 19, id: "CUTOFF-737-900", icon: "🛬", impact: "ops",
+    headline: "Boeing 737-900 closes · MAX 9 now certified and delivering",
+    detail: "737-900 superseded by the 737 MAX 9. Final orders accepted this round. Last round to order: B737-900 — cutoff R20.",
+  }),
+  n({
+    quarter: 23, id: "CUTOFF-CRJ-A330-200", icon: "🛬", impact: "ops",
+    headline: "Bombardier exits commercial aviation — CRJ-700, CRJ-900 close · A330-200 also retires",
+    detail: "Bombardier sells the CRJ programme; no new CRJ aircraft will ever be manufactured. The A330-200 is superseded by the A330-900neo. Last round to order: CRJ-700, CRJ-900, A330-200 — cutoff R24.",
+  }),
+  n({
+    quarter: 26, id: "CUTOFF-A380", icon: "🛬", impact: "ops",
+    headline: "Airbus officially announces A380 end of production — superjumbo era closes",
+    detail: "Airbus confirms the last A380-800 will be delivered next quarter. The A380F cargo variant closes simultaneously. Both remain in service globally for years to come. Last round to order: A380-800 passenger, A380F cargo — cutoff R27.",
+  }),
+  n({
+    quarter: 27, id: "CUTOFF-737NG", icon: "🛬", impact: "ops",
+    headline: "Boeing 737-700 + 737-800 close — MAX family takes full narrowbody leadership",
+    detail: "NG variants retire as MAX 7 and MAX 8 ramp deliveries. ~7,000 NGs remain airworthy. Last round to order: B737-700, B737-800 — cutoff R28.",
+  }),
+  n({
+    quarter: 29, id: "CUTOFF-777-300ER", icon: "🛬", impact: "ops",
+    headline: "Boeing 777-300ER ends production — 777X-9 fully certified as replacement",
+    detail: "The 777-300ER, the most profitable widebody Boeing ever built, closes after 22 years and 800+ deliveries. Last round to order: B777-300ER — cutoff R30.",
+  }),
+  n({
+    quarter: 32, id: "CUTOFF-747-8", icon: "🛬", impact: "ops",
+    headline: "Boeing delivers final 747 — end of the jumbo jet era after 54 years",
+    detail: "The 747 programme began in 1968. More than 1,500 747s remain in service globally. The 747-8F cargo variant closes simultaneously. Aviation will never see another four-engine commercial giant. Last round to order: B747-8, B747-8F — cutoff R33.",
+  }),
+  n({
+    quarter: 34, id: "CUTOFF-E175-E2", icon: "🛬", impact: "ops",
+    headline: "Embraer E175-E2 final production slot allocated — programme closure complete",
+    detail: "The last committed E175-E2 order is fulfilled. No further new orders possible after next round. E195-E2 and E190-E2 carry the E2 family forward. Last round to order: E175-E2 — cutoff R35 (10-round minimum from R25 fulfilled).",
+  }),
+  n({
+    quarter: 35, id: "CUTOFF-A320-FAMILY", icon: "🛬", impact: "ops",
+    headline: "Airbus A319 / A320 / A321 originals close — neo family takes over from next round",
+    detail: "The original A320 family, backbone of short/medium-haul aviation for 35 years and 8,000+ deliveries, closes for new orders. A319neo, A320neo and A321neo are the only Airbus narrowbody options going forward. Last round to order: A319, A320, A321 — cutoff R36.",
+  }),
 ];
 
 export const NEWS_BY_QUARTER: Record<number, NewsItem[]> = WORLD_NEWS.reduce(
