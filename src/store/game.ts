@@ -505,6 +505,7 @@ function makeStartingTeam(args: {
     decisions: [],
     flags: new Set<string>(),
     deferredEvents: [],
+    routeObligations: [],
     rcfBalanceUsd: 0,
     taxLossCarryForward: [],
     insurancePolicy: "none",
@@ -1796,7 +1797,7 @@ export const useGame = create<GameStore>()(
           lockInQuarters,
         };
 
-        const updated = applyOptionEffect(player, option.effect);
+        const updated = applyOptionEffect(player, option.effect, s.currentQuarter);
         updated.decisions = [...updated.decisions, decision];
 
         // Debt assumption (e.g. S7 Full Acquisition's $180M of inherited
@@ -3016,6 +3017,7 @@ export const useGame = create<GameStore>()(
           routes: [],
           decisions: [],
           deferredEvents: [],
+          routeObligations: [],
           flags: new Set(),
           financialsByQuarter: [],
           brandPts: 50,
@@ -3912,6 +3914,7 @@ export const useGame = create<GameStore>()(
         const updated = applyOptionEffect(
           { ...player, decisions: cleanedDecisions },
           option.effect,
+          s.currentQuarter,
         );
         updated.decisions = [
           ...cleanedDecisions,

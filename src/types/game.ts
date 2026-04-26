@@ -317,6 +317,26 @@ export interface Team {
   flags: Set<string>;            // gov_board_card, trusted_operator, ...
   deferredEvents: DeferredEvent[];
 
+  /** Active route service obligations from accepted scenarios (e.g. S5
+   *  "Government Lifeline" requires service to Lagos + Casablanca for 2
+   *  years). The engine charges `finePerQuarterUsd` at quarter close
+   *  for every obligation city the team isn't actively serving. */
+  routeObligations?: Array<{
+    /** Identifier for tooling / display (matches the originating scenario id). */
+    id: string;
+    /** City codes that must each be served by an active route (any
+     *  endpoint counts — the route doesn't have to originate at hub). */
+    cities: string[];
+    /** First quarter the obligation is active. */
+    activeFromQuarter: number;
+    /** Last quarter the obligation applies (inclusive). */
+    activeUntilQuarter: number;
+    /** Fine per missed city per quarter. */
+    finePerQuarterUsd: number;
+    /** Human-readable label for the dashboard / news feed. */
+    label: string;
+  }>;
+
   // Revolving Credit Facility (A8)
   rcfBalanceUsd: number;
 

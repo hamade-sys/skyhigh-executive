@@ -63,6 +63,7 @@ function CanvasInner() {
   // a whole-canvas re-render.
   const phase = useGame((state) => state.phase);
   const playerTeamId = useGame((state) => state.playerTeamId);
+  const currentQuarter = useGame((state) => state.currentQuarter);
   const player = useGame(selectPlayer);
   // useShallow so the .filter() in selectRivals doesn't return a fresh array
   // reference every render and trip the getServerSnapshot infinite-loop guard.
@@ -214,6 +215,7 @@ function CanvasInner() {
         <WorldMap
           team={player}
           rivals={rivals}
+          currentQuarter={currentQuarter}
           selectedOriginCode={origin}
           onCityClick={handleCityClick}
           onCityDoubleClick={(c) => setAirportDetail(c)}

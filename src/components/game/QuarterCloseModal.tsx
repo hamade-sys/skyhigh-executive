@@ -167,6 +167,33 @@ export function QuarterCloseModal() {
               />
             </div>
 
+            {result.newRoutesActivatedThisQuarter && result.newRoutesActivatedThisQuarter.length > 0 && (
+              <div className="rounded-md border border-[var(--positive-soft)] bg-surface px-3 py-2">
+                <div className="flex items-center gap-2 text-positive text-[0.6875rem] uppercase tracking-wider font-semibold">
+                  <Plane size={13} /> New routes opened this quarter · {result.newRoutesActivatedThisQuarter.length}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {result.newRoutesActivatedThisQuarter.map((r) => (
+                    <span
+                      key={r.routeId}
+                      className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-[0.75rem] text-ink"
+                      title={`${r.originName} → ${r.destName}${r.isCargo ? " (cargo)" : ""}`}
+                    >
+                      <span className="font-mono tabular text-[0.6875rem] text-ink-muted">{r.originCode}</span>
+                      <span className="text-ink-muted">→</span>
+                      <span className="font-mono tabular text-[0.6875rem] text-ink-muted">{r.destCode}</span>
+                      <span className="text-[0.6875rem] text-ink-2">
+                        {r.originName} – {r.destName}
+                      </span>
+                      {r.isCargo && (
+                        <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted">cargo</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {result.milestonesEarnedThisQuarter.length > 0 && (
               <div className="rounded-md border border-[var(--accent-soft-2)] bg-[var(--accent-soft)] px-3 py-2">
                 <div className="flex items-center gap-2 text-accent text-[0.6875rem] uppercase tracking-wider font-semibold">

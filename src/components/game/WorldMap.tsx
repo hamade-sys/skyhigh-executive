@@ -33,6 +33,10 @@ import { cn } from "@/lib/cn";
 export interface WorldMapProps {
   team: Team;
   rivals?: Team[];
+  /** Current campaign round — used to render a "new route" halo on
+   *  any route whose openQuarter === currentQuarter so the player can
+   *  see at a glance which lanes were just launched. */
+  currentQuarter: number;
   selectedOriginCode?: string | null;
   onCityClick?: (city: City) => void;
   /** Double-click on a city marker — opens an airport detail popup
@@ -303,6 +307,7 @@ function MapEventBridge({
 export function WorldMap({
   team,
   rivals,
+  currentQuarter,
   selectedOriginCode,
   onCityClick,
   onCityDoubleClick,
@@ -413,6 +418,7 @@ export function WorldMap({
           // High-frequency routes earn a second plane offset 180° in
           // phase so heavy corridors visibly carry more traffic.
           const showSecondPlane = r.dailyFrequency >= 3;
+          const isNew = r.openQuarter === currentQuarter;
           return (
             <Fragment key={r.id}>
               {/* Soft halo — wider, very translucent line under the
@@ -428,6 +434,22 @@ export function WorldMap({
                   interactive: false,
                 }}
               />
+              {/* "Just launched" halo — only renders this round. A
+                  bright accent stroke + chunky cap so the player can
+                  spot brand-new lanes against an existing dense network
+                  at a glance. The classroom moment after Next Quarter. */}
+              {isNew && (
+                <Polyline
+                  positions={positions}
+                  pathOptions={{
+                    color: "#FFB94D",
+                    weight: 6,
+                    opacity: 0.35,
+                    lineCap: "round",
+                    interactive: false,
+                  }}
+                />
+              )}
               {/* Main stroke — thinner per user feedback. Cargo dashes
                   more sparsely so the line reads "freight schedule"
                   rather than a solid passenger corridor. */}
@@ -738,6 +760,14 @@ export function WorldMap({
               <line x1="0" y1="3" x2="20" y2="3" stroke="#E0A93B" strokeWidth="2.2" strokeDasharray="6 4" />
             </svg>
             <span className="text-ink-2">Pending bid</span>
+          </span>
+        )}
+        {activeRoutes.some((r) => r.openQuarter === currentQuarter) && (
+          <span className="flex items-center gap-1.5 border-l border-line pl-3">
+            <svg width="20" height="6" aria-hidden>
+              <line x1="0" y1="3" x2="20" y2="3" stroke="#FFB94D" strokeWidth="5" opacity="0.5" />
+            </svg>
+            <span className="text-ink-2">New this round</span>
           </span>
         )}
         <span className="hidden lg:inline text-ink-muted border-l border-line pl-3">

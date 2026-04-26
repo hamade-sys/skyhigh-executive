@@ -34,6 +34,20 @@ export interface OptionEffect {
    * whenever the player decides — not deducted from cash automatically.
    */
   debtAssumed?: number;
+  /**
+   * Service-route obligation. When picked, the team commits to keeping
+   * an active route to each city in `cities` for `durationQuarters`
+   * rounds. Engine charges `finePerQuarterUsd` per missed city per
+   * quarter (any-endpoint match — route can originate anywhere).
+   * Used by S5 Government Lifeline.
+   */
+  routeObligation?: {
+    id: string;
+    cities: string[];
+    durationQuarters: number;
+    finePerQuarterUsd: number;
+    label: string;
+  };
   // simplified — real engine should schedule these at targetQuarter:
   deferred?: {
     quarter: number;
@@ -192,12 +206,22 @@ export const SCENARIOS: Scenario[] = [
     id: "S5", title: "The Government Lifeline", quarter: 11, severity: "MEDIUM", timeLimitMinutes: 30,
     teaser: "Treasury offers $300M in emergency capital — with strings.",
     context:
-      "Post-crisis recovery capital. Government will inject $300M if you commit to unprofitable route obligations and a 2-quarter redundancy freeze.",
+      "Post-crisis recovery capital. Government will inject $300M if you commit to a 2-year service obligation: keep at least one active route to BOTH Lagos (LOS) and Casablanca (CMN) every quarter for 8 rounds. The route can originate from any of your cities — it does not have to be from your hub. Miss either city in a quarter and Treasury fines you $50M per missed city for that quarter.",
     options: [
       { id: "A", label: "Accept government deal",
-        description: "$300M next quarter, route obligations, redundancy freeze.",
-        effect: { opsPts: -2, setFlags: ["gov_board_card", "redundancy_freeze"] },
-        effectTags: ["+$300M next Q", "Route obligation -$20M/yr"] },
+        description: "$300M next quarter. Must service Lagos + Casablanca for 2 years; $50M/qtr fine per city missed.",
+        effect: {
+          opsPts: -2,
+          setFlags: ["gov_board_card", "redundancy_freeze"],
+          routeObligation: {
+            id: "S5_GOV_LIFELINE",
+            cities: ["LOS", "CMN"],
+            durationQuarters: 8,
+            finePerQuarterUsd: 50_000_000,
+            label: "Government lifeline · Lagos + Casablanca service",
+          },
+        },
+        effectTags: ["+$300M next Q", "Service LOS + CMN · 2 yrs", "Fine -$50M/qtr per missed city"] },
       { id: "B", label: "Negotiate lighter terms",
         description: "30% chance government walks away.",
         effect: { setFlags: ["negotiating_gov"] },

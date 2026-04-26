@@ -7,6 +7,7 @@ import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import {
   classFareRange,
   cruiseSpeedKmh,
+  detectTierFromAverage,
   distanceBetween,
   maxRouteDailyFrequency,
   routeDemandPerDay,
@@ -206,6 +207,25 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     if (hasBusiness && busRange) setBusFare(Math.round(busRange.base * mult));
     if (hasFirst && firstRange) setFirstFare(Math.round(firstRange.base * mult));
   }
+
+  // Bidirectional binding: when the player nudges any per-class slider
+  // away from the active tier preset, recompute which tier the AVERAGE
+  // of all visible class fares matches and highlight that button. This
+  // lets the player see "I'm now in Premium territory" without having
+  // to click a tier button explicitly.
+  useEffect(() => {
+    if (isCargo) return;
+    const entries: Array<{ base: number; value: number }> = [];
+    if (econRange) entries.push({ base: econRange.base, value: econFare ?? econRange.base });
+    if (hasBusiness && busRange) entries.push({ base: busRange.base, value: busFare ?? busRange.base });
+    if (hasFirst && firstRange) entries.push({ base: firstRange.base, value: firstFare ?? firstRange.base });
+    const detected = detectTierFromAverage(entries);
+    if (detected !== tier) setTier(detected);
+    // We intentionally don't depend on `tier` to avoid setState loops —
+    // the next slider change re-runs detection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [econFare, busFare, firstFare, isCargo, hasBusiness, hasFirst,
+      econRange?.base, busRange?.base, firstRange?.base]);
 
   // Projected occupancy preview
   const projection = (() => {

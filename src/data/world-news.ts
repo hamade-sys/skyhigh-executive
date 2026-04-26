@@ -12,11 +12,15 @@ import type { NewsItem, NewsModifier } from "@/types/game";
  *   ALA→DXB · AUS→SEA · BHX→MAN · BIO→BCN · CHE→MAA · CUN→MEX
  *   EDI→MAN · EKB→SVO · FUK→KIX · GMP→ICN · GVA→ZRH · HYD→BOM
  *   KZN→SVO · LED→SVO · LEJ→FRA · LYS→CDG · MRS→CDG · NCE→CDG
- *   NGO→KIX · NTE→CDG · ORY→CDG · ROM→FCO · TLV→BEY · TSE→DXB
- *   VCE→MXP
+ *   NGO→KIX · NTE→CDG · ORY→CDG · ROM→FCO · TSE→DXB · VCE→MXP
  *
  * Three cities were ADDED to the database to keep narrative anchors:
  *   BER (Berlin) · KBP (Kyiv) · BEY (Beirut)
+ *
+ * Per user content rule, the simulation never references Tel Aviv,
+ * Israel, or the TLV airport code in any headline, detail, or
+ * modifier. The Beirut market (BEY) carries any Levant-region
+ * narrative that previously involved TLV.
  *
  * When multiple regional hosts collapsed onto a single city (e.g. four
  * French Euros hosts → CDG), the modifiers were summed/averaged into
@@ -961,7 +965,7 @@ export const WORLD_NEWS: NewsItem[] = [
   // ═══ R23 — Q3 2020 — Travel Bubbles + R25 Aircraft Announced ═══
   n({
     quarter: 23, id: "BUBBLES", icon: "🫧", impact: "tourism",
-    headline: "Travel bubbles open — Singapore-Hong Kong, Australia-NZ, Cyprus-Israel",
+    headline: "Travel bubbles open — Singapore-Hong Kong, Australia-NZ, Cyprus-Greece",
     detail: "Specific bubble routes at near-normal demand. Non-bubble routes still at near-zero.",
     modifiers: [
       { city: "SIN", category: "tourism", pct: 40, rounds: 2 },
@@ -1040,10 +1044,9 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 25, id: "VACCINATED", icon: "💉", impact: "tourism",
     headline: "Mass vaccination underway in 45 countries — vaccinated corridors reopening",
-    detail: "Routes between Israel/Lebanon, UK, US improving ahead of rest.",
+    detail: "Routes between Lebanon, UK, US improving ahead of rest.",
     modifiers: [
-      { city: "BEY", category: "tourism", pct: 80, rounds: 2 },  // TLV → BEY
-      { city: "LHR", category: "tourism", pct: 30, rounds: 2 },
+      { city: "BEY", category: "tourism", pct: 80, rounds: 2 },      { city: "LHR", category: "tourism", pct: 30, rounds: 2 },
       { city: "JFK", category: "tourism", pct: 25, rounds: 2 },
     ],
     travelIndex: 32,
@@ -1449,11 +1452,11 @@ export const WORLD_NEWS: NewsItem[] = [
   }),
   n({
     quarter: 35, id: "ME-CONFLICT", icon: "⚠", impact: "tourism",
-    headline: "Hamas attacks Israel October 7 — Israel declares war. Airlines suspend Beirut routes",
+    headline: "Regional escalation in the Levant — airlines suspend Beirut routes industry-wide",
     detail: "Beirut routes suspended industry-wide on regional anxiety. Effect 6 rounds.",
     modifiers: [
-      { city: "BEY", category: "tourism", pct: -85, rounds: 6 },  // TLV → BEY
-      { city: "AMM", category: "tourism", pct: -20, rounds: 3 },
+      { city: "BEY", category: "tourism", pct: -85, rounds: 6 },
+      { city: "AMM", category: "tourism", pct: -20, rounds: 3 },  // FLAG-AMMAN: regional spillover
       { city: "CAI", category: "tourism", pct: -15, rounds: 3 },
       { city: "DXB", category: "tourism", pct: -10, rounds: 2 },
     ],

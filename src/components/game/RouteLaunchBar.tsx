@@ -69,7 +69,7 @@ export function RouteLaunchBar({
           </button>
         </div>
         {!isInNetwork && (
-          <div className="mt-2 mx-auto max-w-md pointer-events-auto rounded-md border border-warning bg-[var(--warning-soft)] px-3 py-2 text-[0.75rem] text-ink-2">
+          <div className="mt-2 mx-auto max-w-md pointer-events-auto rounded-md border border-warning bg-surface px-3 py-2 text-[0.75rem] text-ink-2 shadow-[var(--shadow-3)]">
             Routes must start from your hub or a city you already fly to.
             Continue picking a destination — if the destination is in your
             network, you&apos;ll be offered to add this as a secondary hub

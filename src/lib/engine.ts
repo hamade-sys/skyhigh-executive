@@ -281,28 +281,120 @@ export function baseFareForDistance(km: number): number {
   return 950;
 }
 
-/** Per-class fare range (PRD A11). Returns {min, base, max} for a class. */
+/** Per-class fare range (PRD A11). Returns {min, base, max} for a class.
+ *
+ *  Geometry contract (post-fix):
+ *    - Standard tier (1.0× base) = the `base` value.
+ *    - Slider min  = 0.5 × base  → matches Budget tier exactly.
+ *    - Slider max  = 2.0 × base  → matches Ultra tier exactly.
+ *  This puts `base` at slider midpoint and gives clean tier landmarks:
+ *    Budget 0.5× → far left
+ *    Standard 1.0× → midpoint
+ *    Premium 1.5× → 50% to the right of midpoint (75% along)
+ *    Ultra 2.0× → far right
+ *  Previously first-class returned `min == base` (slider stuck on left)
+ *  and the bands were asymmetric so base never sat at the midpoint. */
 export interface FareRange { min: number; base: number; max: number }
+
+const ECON_BASE_BY_KM: Array<{ maxKm: number; base: number }> = [
+  { maxKm: 2000,    base: 120 },
+  { maxKm: 5000,    base: 350 },
+  { maxKm: 10_000,  base: 650 },
+  { maxKm: Infinity, base: 950 },
+];
+const BUS_BASE_BY_KM: Array<{ maxKm: number; base: number }> = [
+  { maxKm: 2000,    base: 360 },
+  { maxKm: 5000,    base: 1100 },
+  { maxKm: 10_000,  base: 2200 },
+  { maxKm: Infinity, base: 3500 },
+];
+/** First-class base = business base × 3.5 (PRD A11). */
+function firstBase(km: number): number {
+  return baseForBand(km, BUS_BASE_BY_KM) * 3.5;
+}
+function baseForBand(
+  km: number,
+  table: Array<{ maxKm: number; base: number }>,
+): number {
+  for (const row of table) if (km < row.maxKm) return row.base;
+  return table[table.length - 1].base;
+}
 
 export function classFareRange(
   km: number,
   cls: "econ" | "bus" | "first",
 ): FareRange {
-  if (cls === "econ") {
-    if (km < 2000) return { min: 60, base: 120, max: 280 };
-    if (km < 5000) return { min: 150, base: 350, max: 800 };
-    if (km < 10_000) return { min: 300, base: 650, max: 1500 };
-    return { min: 500, base: 950, max: 2200 };
+  const base =
+    cls === "econ"  ? baseForBand(km, ECON_BASE_BY_KM) :
+    cls === "bus"   ? baseForBand(km, BUS_BASE_BY_KM) :
+    firstBase(km);
+  return {
+    min: Math.round(base * 0.5),
+    base,
+    max: Math.round(base * 2.0),
+  };
+}
+
+/** Tier multipliers used by the Budget/Standard/Premium/Ultra preset
+ *  buttons. Kept in sync with PRICE_TIER below for the engine math. */
+export const FARE_TIER_MULTIPLIER: Record<PricingTier, number> = {
+  budget: 0.5,
+  standard: 1.0,
+  premium: 1.5,
+  ultra: 2.0,
+};
+
+/** Inverse of applyTier — given a fare value relative to base, return the
+ *  closest pricing tier. Used by the UI to auto-highlight the active
+ *  tier button when the player nudges the per-class sliders directly.
+ *  When no class fares match a tier exactly, returns the nearest tier
+ *  by absolute multiplier distance. */
+export function detectTierFromFares(
+  base: number,
+  value: number,
+): PricingTier {
+  if (base <= 0) return "standard";
+  const ratio = value / base;
+  let best: PricingTier = "standard";
+  let bestDelta = Infinity;
+  for (const t of Object.keys(FARE_TIER_MULTIPLIER) as PricingTier[]) {
+    const delta = Math.abs(FARE_TIER_MULTIPLIER[t] - ratio);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = t;
+    }
   }
-  if (cls === "bus") {
-    if (km < 2000) return { min: 180, base: 360, max: 750 };
-    if (km < 5000) return { min: 450, base: 1100, max: 2500 };
-    if (km < 10_000) return { min: 900, base: 2200, max: 5000 };
-    return { min: 1500, base: 3500, max: 8000 };
+  return best;
+}
+
+/** Average tier across multiple class fares. Each class contributes
+ *  a `value/base` ratio; the average is mapped back to the closest
+ *  tier landmark via {@link detectTierFromFares}. Returns "standard"
+ *  if `entries` is empty. */
+export function detectTierFromAverage(
+  entries: Array<{ base: number; value: number }>,
+): PricingTier {
+  if (entries.length === 0) return "standard";
+  let sum = 0;
+  let n = 0;
+  for (const e of entries) {
+    if (e.base <= 0) continue;
+    sum += e.value / e.base;
+    n += 1;
   }
-  // first = business × 3.5 (PRD A11)
-  const bus = classFareRange(km, "bus");
-  return { min: bus.base * 3.5, base: bus.base * 3.5, max: bus.max * 3.5 };
+  if (n === 0) return "standard";
+  // Use the same matching as detectTierFromFares but on the averaged ratio.
+  const avg = sum / n;
+  let best: PricingTier = "standard";
+  let bestDelta = Infinity;
+  for (const t of Object.keys(FARE_TIER_MULTIPLIER) as PricingTier[]) {
+    const delta = Math.abs(FARE_TIER_MULTIPLIER[t] - avg);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = t;
+    }
+  }
+  return best;
 }
 
 // ─── Slider levels + impacts (PRD A2 + B1) ─────────────────
@@ -1136,7 +1228,15 @@ export function loyaltyRetentionFactor(loyaltyPct: number): number {
 }
 
 // ─── Apply an option effect ────────────────────────────────
-export function applyOptionEffect(team: Team, effect: OptionEffect): Team {
+export function applyOptionEffect(
+  team: Team,
+  effect: OptionEffect,
+  /** Current quarter — used to seed time-bounded effects like
+   *  routeObligation.activeFromQuarter. Optional for back-compat;
+   *  callers that omit it lose obligation start-quarter precision but
+   *  the engine will still register the obligation as starting "now". */
+  currentQuarter?: number,
+): Team {
   // Variable staff-cost savings (e.g. S15 Recession Gamble). Scales with
   // the team's actual quarterly staff bill rather than a hardcoded $.
   // Two quarters' worth × the percentage gets credited as cash.
@@ -1156,11 +1256,57 @@ export function applyOptionEffect(team: Team, effect: OptionEffect): Team {
     ),
     flags: new Set(team.flags),
     deferredEvents: [...(team.deferredEvents ?? [])],
+    routeObligations: [...(team.routeObligations ?? [])],
   };
   if (effect.setFlags) {
     for (const f of effect.setFlags) next.flags.add(f);
   }
+  if (effect.routeObligation) {
+    const startQ = currentQuarter ?? 1;
+    next.routeObligations = [
+      ...(next.routeObligations ?? []),
+      {
+        id: effect.routeObligation.id,
+        cities: [...effect.routeObligation.cities],
+        activeFromQuarter: startQ,
+        activeUntilQuarter: startQ + effect.routeObligation.durationQuarters - 1,
+        finePerQuarterUsd: effect.routeObligation.finePerQuarterUsd,
+        label: effect.routeObligation.label,
+      },
+    ];
+  }
   return next;
+}
+
+/** At quarter close, charge fines for any active route obligation
+ *  city the team is NOT serving. Returns the fine amount and a
+ *  per-city breakdown so the close summary can list which cities
+ *  triggered. Routes count as "served" when an active or pending
+ *  route touches the city as either origin or destination. */
+export function computeObligationFines(
+  team: Team,
+  currentQuarter: number,
+): { totalFineUsd: number; missed: Array<{ obligationId: string; city: string; fine: number }> } {
+  const out = { totalFineUsd: 0, missed: [] as Array<{ obligationId: string; city: string; fine: number }> };
+  const obligations = team.routeObligations ?? [];
+  if (obligations.length === 0) return out;
+  const servedCities = new Set<string>();
+  for (const r of team.routes) {
+    if (r.status === "active" || r.status === "pending") {
+      servedCities.add(r.originCode);
+      servedCities.add(r.destCode);
+    }
+  }
+  for (const ob of obligations) {
+    if (currentQuarter < ob.activeFromQuarter) continue;
+    if (currentQuarter > ob.activeUntilQuarter) continue;
+    for (const city of ob.cities) {
+      if (servedCities.has(city)) continue;
+      out.totalFineUsd += ob.finePerQuarterUsd;
+      out.missed.push({ obligationId: ob.id, city, fine: ob.finePerQuarterUsd });
+    }
+  }
+  return out;
 }
 
 /**
@@ -1246,6 +1392,17 @@ export interface QuarterCloseResult {
     slotCost: number;
     profit: number;
     occupancy: number;
+  }>;
+  /** City pairs of routes that ACTIVATED this quarter — i.e. went
+   *  from `pending` to `active`. Surfaced in the close modal's
+   *  Headline tab and used to render new-route badges on the map. */
+  newRoutesActivatedThisQuarter: Array<{
+    routeId: string;
+    originCode: string;
+    destCode: string;
+    originName: string;
+    destName: string;
+    isCargo: boolean;
   }>;
   triggeredEvents: Array<{
     id: string;
@@ -1382,6 +1539,21 @@ export function runQuarterClose(
         notes.push(`Cargo contract ${cc.originCode}↔${cc.destCode}: +$${(qRevenue / 1e6).toFixed(1)}M (guaranteed ${cc.guaranteedTonnesPerWeek}T/wk, ${cc.quartersRemaining}Q left)`);
       }
     }
+  }
+
+  // ─ Route service obligations (S5 Government Lifeline) ─────
+  // For every active obligation city the team isn't serving via any
+  // route endpoint this quarter, charge the per-city per-quarter fine
+  // and surface a note. Lasts only while ctx.quarter is within the
+  // obligation's [activeFrom, activeUntil] window.
+  const obligationFines = computeObligationFines(next, ctx.quarter);
+  if (obligationFines.totalFineUsd > 0) {
+    slotCost += obligationFines.totalFineUsd;
+    const cityList = obligationFines.missed.map((m) => m.city).join(" + ");
+    notes.push(
+      `Service-obligation fine: −$${(obligationFines.totalFineUsd / 1e6).toFixed(1)}M ` +
+      `· not serving ${cityList} this quarter`,
+    );
   }
 
   // ─ Hub Investments: Fuel Reserve Tank reduces fuel cost at that hub's routes
@@ -2039,6 +2211,21 @@ export function runQuarterClose(
     (m) => !milestonesBefore.has(m),
   );
 
+  // Routes the player created during the round being closed —
+  // surfaced in the close modal's Headline tab and used by the map
+  // to badge city pairs as "new".
+  const newRoutesActivatedThisQuarter: QuarterCloseResult["newRoutesActivatedThisQuarter"] =
+    next.routes
+      .filter((r) => r.openQuarter === ctx.quarter && r.status !== "closed")
+      .map((r) => ({
+        routeId: r.id,
+        originCode: r.originCode,
+        destCode: r.destCode,
+        originName: CITIES_BY_CODE[r.originCode]?.name ?? r.originCode,
+        destName: CITIES_BY_CODE[r.destCode]?.name ?? r.destCode,
+        isCargo: !!r.isCargo,
+      }));
+
   return {
     quarter: ctx.quarter,
     revenue,
@@ -2074,6 +2261,7 @@ export function runQuarterClose(
     milestonesEarnedThisQuarter,
     newsImpacts,
     routeBreakdown,
+    newRoutesActivatedThisQuarter,
     triggeredEvents,
     notes,
   };
