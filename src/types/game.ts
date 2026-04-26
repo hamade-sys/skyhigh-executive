@@ -626,6 +626,26 @@ export interface AirportSlotState {
   nextOpening: number;
   /** Quarter at which the next yearly tick fires (Q5/Q9/Q13/Q17/Q21). */
   nextTickQuarter: number;
+  /** Team id of the airline that has acquired the airport outright
+   *  (Sprint 10). When set, bidding at this airport is disabled — the
+   *  owner sets a fixed slot rate (`ownerSlotRatePerWeekUsd`) that any
+   *  team flying through here pays directly to the owner. The owner
+   *  also collects the per-slot revenue and pays operating costs;
+   *  selling the airport reverses everything. Undefined = unowned,
+   *  default bidding system applies. */
+  ownerTeamId?: string;
+  /** Owner-imposed weekly fee per slot. Replaces the auction-cleared
+   *  price when ownerTeamId is set. */
+  ownerSlotRatePerWeekUsd?: number;
+  /** Total runway capacity at the airport — the cap on
+   *  Σ(team slot leases) + available. Capacity grows in +200 chunks
+   *  via owner-funded expansions. Undefined = "default" (the engine
+   *  treats this as effectively unlimited for the auction path). */
+  totalCapacity?: number;
+  /** Quarter the airport was acquired (drives appreciation + history). */
+  acquiredAtQuarter?: number;
+  /** Original purchase price paid (for cost-basis display). */
+  purchaseCostUsd?: number;
 }
 
 /** A single team's slot lease at one airport (PRD update — Model B

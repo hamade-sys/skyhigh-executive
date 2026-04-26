@@ -18,6 +18,7 @@ import { SUBSIDIARY_BY_TYPE as SUBSIDIARY_CATALOG_BY_TYPE } from "@/data/subsidi
 import { NEWS_BY_QUARTER } from "@/data/world-news";
 import { cityEventImpact } from "./city-events";
 import type {
+  AirportSlotState,
   City,
   DeferredEvent,
   FleetAircraft,
@@ -1531,6 +1532,14 @@ export interface QuarterCloseContext {
   worldCupHostCode?: string | null;
   /** Tier 1-2 city hosting the Olympics (rounds 29-32 demand surge). */
   olympicHostCode?: string | null;
+  /** Every team in the simulation — used by airport-ownership revenue
+   *  to enumerate every operating airline's slot fees at owned airports.
+   *  Optional for back-compat: when absent, the engine skips airport
+   *  ownership revenue (test paths can omit). */
+  allTeams?: Team[];
+  /** Snapshot of airportSlots (mirrors GameState.airportSlots) so the
+   *  owner-revenue path can read ownerTeamId / totalCapacity etc. */
+  airportSlots?: Record<string, AirportSlotState>;
 }
 
 export function runQuarterClose(
@@ -1615,6 +1624,36 @@ export function runQuarterClose(
     const lease = next.airportLeases?.[code];
     if (!lease || lease.slots === 0) continue;
     slotCost += lease.totalWeeklyCost * 13;
+  }
+
+  // ─ Airport ownership revenue + opex (Sprint 10) ───────────
+  // For every airport this team owns, collect slot revenue from every
+  // OTHER team's lease at that airport, plus the team's own slot fees
+  // are effectively net-zero (they pay themselves). Operating cost =
+  // 30% of gross slot revenue at owned airports. Net surfaces in
+  // `revenue` so it shows up alongside subsidiary revenue in P&L.
+  if (ctx.airportSlots) {
+    for (const [code, slotState] of Object.entries(ctx.airportSlots)) {
+      if (slotState.ownerTeamId !== next.id) continue;
+      // Gross revenue = sum of every team's quarterly slot fee at this
+      // airport (own slots cancel out below, but include them so the
+      // opex denominator is the full-airport revenue figure).
+      const grossRevenue = (ctx.allTeams ?? []).reduce((sum, t) => {
+        const lease = t.airportLeases?.[code];
+        if (!lease || lease.slots === 0) return sum;
+        return sum + lease.totalWeeklyCost * 13;
+      }, 0);
+      // Subtract our OWN slot fees at this airport since they're an
+      // intra-company transfer rather than real revenue.
+      const ownLease = next.airportLeases?.[code];
+      const ownSlotFees = ownLease ? ownLease.totalWeeklyCost * 13 : 0;
+      const netRevenue = grossRevenue - ownSlotFees;
+      const opex = grossRevenue * 0.30;
+      const airportNet = netRevenue - opex;
+      revenue += airportNet;
+      // Refund our own slot fees from `slotCost` since we paid ourselves.
+      slotCost -= ownSlotFees;
+    }
   }
 
   // ─ Subsidiary quarterly revenue + appreciation ─────────────

@@ -1,13 +1,21 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { fmtMoney } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import type { City } from "@/types/game";
-import { Plane, Crown, MapPin } from "lucide-react";
+import { Crown, MapPin, Building, ShieldAlert } from "lucide-react";
+import {
+  airportAskingPriceUsd,
+  airportQuarterlySlotRevenueUsd,
+  AIRPORT_DEFAULT_CAPACITY_BY_TIER,
+  AIRPORT_EXPANSION_COST_PER_LEVEL,
+  AIRPORT_EXPANSION_SLOTS,
+  AIRPORT_MAX_CAPACITY_BY_TIER,
+} from "@/lib/airport-ownership";
 
 /**
  * Airport detail popup — opened when the player double-clicks a city on
@@ -266,22 +274,209 @@ export function AirportDetailModal({
           );
         })()}
 
-        {/* V2 placeholder — airport investment / ownership */}
-        <section>
-          <div className="rounded-md border border-dashed border-line bg-surface-2/30 px-3 py-2.5 text-[0.75rem] text-ink-muted leading-relaxed">
-            <strong className="text-ink-2">V2 — Airport investments.</strong> Future
-            iteration will let you co-invest in airport infrastructure
-            (terminals, lounges, ground handling). Returns scale with the
-            airport&apos;s tier-driven revenue base. Not active in this
-            simulation window.
-          </div>
-        </section>
+        {/* Airport ownership panel (Sprint 10) */}
+        <AirportOwnership cityCode={city.code} />
       </ModalBody>
 
       <ModalFooter>
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </ModalFooter>
     </Modal>
+  );
+}
+
+/** Airport ownership controls. Three states:
+ *   1. Unowned, player can afford → "Buy this airport for $X" CTA.
+ *   2. Unowned, player too poor → asking-price card with insufficient-cash hint.
+ *   3. Owned by player → slot-rate editor + expansion buttons + sell.
+ *   4. Owned by rival → status card noting who owns it (read-only).
+ *
+ *  Pricing follows the master-ref formula: base[tier] + 4 × current
+ *  quarterly slot revenue at this airport. */
+function AirportOwnership({ cityCode }: { cityCode: string }) {
+  const player = useGame(selectPlayer);
+  const teams = useGame((s) => s.teams);
+  const slotState = useGame((s) => s.airportSlots?.[cityCode]);
+  const buyAirport = useGame((s) => s.buyAirport);
+  const sellAirport = useGame((s) => s.sellAirport);
+  const setAirportSlotRate = useGame((s) => s.setAirportSlotRate);
+  const expandAirportCapacity = useGame((s) => s.expandAirportCapacity);
+  const [pendingRate, setPendingRate] = useState<string>("");
+
+  if (!player) return null;
+  const city = CITIES_BY_CODE[cityCode];
+  if (!city) return null;
+  const tier = city.tier as 1 | 2 | 3 | 4;
+  const askingPrice = airportAskingPriceUsd(cityCode, slotState, teams);
+  const qRevenue = airportQuarterlySlotRevenueUsd(cityCode, teams);
+  const ownedByMe = slotState?.ownerTeamId === player.id;
+  const ownedByRival = slotState?.ownerTeamId && slotState.ownerTeamId !== player.id;
+  const ownerTeam = ownedByRival ? teams.find((t) => t.id === slotState!.ownerTeamId) : null;
+  const capacity = slotState?.totalCapacity ?? AIRPORT_DEFAULT_CAPACITY_BY_TIER[tier];
+  const maxCap = AIRPORT_MAX_CAPACITY_BY_TIER[tier];
+  const expansionCost = AIRPORT_EXPANSION_COST_PER_LEVEL[tier];
+
+  if (ownedByMe) {
+    const currentRate = slotState?.ownerSlotRatePerWeekUsd ?? 0;
+    const opex = qRevenue * 0.30;
+    const ownLease = player.airportLeases?.[cityCode];
+    const ownSlotFees = ownLease ? ownLease.totalWeeklyCost * 13 : 0;
+    const netOwnerProfit = qRevenue - opex - ownSlotFees;
+    return (
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
+          <Building size={12} className="text-accent" />
+          Airport ownership · YOU OWN THIS AIRPORT
+        </div>
+        <div className="rounded-md border border-accent bg-[var(--accent-soft)] p-3 space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="Q slot revenue" value={fmtMoney(qRevenue)} hint="Across all tenants" />
+            <Stat label="Q opex (30%)" value={fmtMoney(opex)} hint="Crew + ATC + upkeep" />
+            <Stat
+              label="Q net to you"
+              value={fmtMoney(netOwnerProfit)}
+              hint="Surfaces in 'Subsidiary revenue'"
+            />
+          </div>
+
+          <div>
+            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5">
+              Slot rate · weekly fee per slot (no bidding while owned)
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                placeholder={String(currentRate)}
+                value={pendingRate}
+                onChange={(e) => setPendingRate(e.target.value)}
+                className="flex-1 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[0.875rem] tabular font-mono"
+              />
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={!pendingRate}
+                onClick={() => {
+                  const v = parseInt(pendingRate, 10);
+                  if (Number.isNaN(v)) return;
+                  setAirportSlotRate({ airportCode: cityCode, newRatePerWeekUsd: v });
+                  setPendingRate("");
+                }}
+              >
+                Apply rate
+              </Button>
+            </div>
+            <div className="text-[0.6875rem] text-ink-muted mt-1">
+              Current rate {fmtMoney(currentRate)} / wk per slot.
+              Higher rates extract more revenue but may price tenants out
+              (they can release slots if your fee outweighs the route).
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5">
+              Capacity · {capacity}/{maxCap} slots
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={capacity >= maxCap || player.cashUsd < expansionCost}
+                onClick={() => expandAirportCapacity(cityCode)}
+                title={
+                  capacity >= maxCap
+                    ? "Already at maximum capacity for this tier"
+                    : `+${AIRPORT_EXPANSION_SLOTS} slots for ${fmtMoney(expansionCost)}`
+                }
+              >
+                Add +{AIRPORT_EXPANSION_SLOTS} slots · {fmtMoney(expansionCost)}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  if (!confirm(
+                    `Sell ${city.name} airport?\n` +
+                    `Proceeds ~${fmtMoney(askingPrice * 0.95)} (5% broker fee). Bidding will resume at this airport.`,
+                  )) return;
+                  sellAirport(cityCode);
+                }}
+              >
+                Sell airport
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (ownedByRival && ownerTeam) {
+    return (
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
+          <ShieldAlert size={12} className="text-warning" /> Airport ownership
+        </div>
+        <div className="rounded-md border border-warning bg-[var(--warning-soft)] p-3">
+          <div className="text-[0.875rem] text-ink">
+            <span
+              className="inline-flex w-5 h-5 rounded-sm items-center justify-center font-mono text-[0.5625rem] font-semibold text-primary-fg mr-1.5 align-middle"
+              style={{ background: ownerTeam.color }}
+            >
+              {ownerTeam.code}
+            </span>
+            <strong>{ownerTeam.name}</strong> owns this airport and sets the slot rate.
+          </div>
+          <div className="text-[0.75rem] text-ink-2 mt-1.5 leading-relaxed">
+            Current rate{" "}
+            <span className="tabular font-mono font-semibold text-ink">
+              {fmtMoney(slotState?.ownerSlotRatePerWeekUsd ?? 0)} / wk per slot
+            </span>{" "}
+            · No bidding here. Your slot fees flow to {ownerTeam.name} as
+            their subsidiary revenue.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Unowned — show acquire CTA
+  const canAfford = player.cashUsd >= askingPrice;
+  return (
+    <section>
+      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
+        <Building size={12} /> Airport ownership
+      </div>
+      <div className="rounded-md border border-line bg-surface p-3 space-y-2">
+        <div className="grid grid-cols-3 gap-2">
+          <Stat label="Asking price" value={fmtMoney(askingPrice)} hint="Tier base + 4× Q rev" />
+          <Stat label="Q slot revenue" value={fmtMoney(qRevenue)} hint="What it earns now" />
+          <Stat label="Capacity" value={`${capacity} / ${maxCap}`} hint="+200 per expansion" />
+        </div>
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={!canAfford}
+          onClick={() => {
+            if (!confirm(
+              `Acquire ${city.name} airport for ${fmtMoney(askingPrice)}?\n\n` +
+              `You'll collect every airline's slot fees here as your own revenue. ` +
+              `Bidding for this airport will be disabled — you set the slot rate.`,
+            )) return;
+            buyAirport(cityCode);
+          }}
+        >
+          {canAfford
+            ? `Acquire airport · ${fmtMoney(askingPrice)}`
+            : `Need ${fmtMoney(askingPrice - player.cashUsd)} more cash`}
+        </Button>
+        <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
+          Tier {tier} airport. Owning lets you set the per-slot weekly fee and
+          collect slot revenue from every operating airline (yourself
+          included; intra-company fees net out). Operating cost is 30% of
+          gross slot revenue. Net surfaces in your P&L as Subsidiary revenue.
+        </p>
+      </div>
+    </section>
   );
 }
 

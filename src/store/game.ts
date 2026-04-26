@@ -44,8 +44,17 @@ import {
   SUBSIDIARY_QUARTERLY_APPRECIATION,
   SUBSIDIARY_VALUE_CEILING_MULT,
 } from "@/data/subsidiaries";
+import {
+  AIRPORT_DEFAULT_CAPACITY_BY_TIER,
+  AIRPORT_EXPANSION_COST_PER_LEVEL,
+  AIRPORT_EXPANSION_SLOTS,
+  AIRPORT_MAX_CAPACITY_BY_TIER,
+  airportAskingPriceUsd,
+  applyOwnerSlotRate,
+} from "@/lib/airport-ownership";
 import type {
   AirportLease,
+  AirportSlotState,
   CabinConfig,
   CargoContract,
   DeferredEvent,
@@ -147,6 +156,34 @@ export interface GameStore extends GameState {
    *  current marketValue (5% broker fee). If the subsidiary was the
    *  reason a hubInvestments entry existed, that entry is removed. */
   sellSubsidiary(subsidiaryId: string): { ok: boolean; error?: string; proceeds?: number };
+
+  /** Acquire an airport outright (Sprint 10). Price formula:
+   *    base[tier] + 4 × current quarterly slot revenue at this airport.
+   *  Bidding is disabled at an owned airport — the new owner sets a
+   *  fixed weekly slot rate (default = current auction-cleared rate
+   *  carried over from existing leases). Owner collects slot fees as
+   *  Q revenue, pays an opex of 30% of revenue, and can fund +200
+   *  slot expansions up to tier capacity. */
+  buyAirport(airportCode: string): { ok: boolean; error?: string };
+
+  /** Sell an owned airport back to the market. 5% broker fee on the
+   *  current asking price. Restores bidding for that airport; existing
+   *  team leases keep their slot counts (their weekly fee snaps back
+   *  to the system's auction baseline at next close). */
+  sellAirport(airportCode: string): { ok: boolean; error?: string; proceeds?: number };
+
+  /** Owner-only: change the weekly slot fee for an airport you own.
+   *  Effective immediately — every team's lease at this airport is
+   *  re-priced. Charges owner a small admin fee for changing rates. */
+  setAirportSlotRate(args: {
+    airportCode: string;
+    newRatePerWeekUsd: number;
+  }): { ok: boolean; error?: string };
+
+  /** Owner-only: invest in a +200-slot expansion. Costs the
+   *  per-tier expansion fee from cash; capacity rises by 200 (capped
+   *  at tier max). New slots become available for lease. */
+  expandAirportCapacity(airportCode: string): { ok: boolean; error?: string };
 
   addEcoUpgrade(aircraftId: string): { ok: boolean; error?: string };
 
@@ -1205,6 +1242,155 @@ export const useGame = create<GameStore>()(
             (entry?.operationalBonus ? `Operational bonus removed.` : ""),
         );
         return { ok: true, proceeds };
+      },
+
+      buyAirport: (airportCode) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (slotState?.ownerTeamId) {
+          return { ok: false, error: "Airport already owned" };
+        }
+        const price = airportAskingPriceUsd(airportCode, slotState, s.teams);
+        if (player.cashUsd < price) {
+          return {
+            ok: false,
+            error: `Need ${fmtMoneyPlain(price)} cash to acquire`,
+          };
+        }
+        const city = CITIES_BY_CODE[airportCode];
+        if (!city) return { ok: false, error: "Unknown airport" };
+
+        // Set the owner's initial rate to the average current weekly
+        // fee per slot — keeps existing leases revenue-neutral on day 1.
+        const totalSlots = s.teams.reduce(
+          (sum, t) => sum + (t.airportLeases?.[airportCode]?.slots ?? 0),
+          0,
+        );
+        const totalWeekly = s.teams.reduce(
+          (sum, t) => sum + (t.airportLeases?.[airportCode]?.totalWeeklyCost ?? 0),
+          0,
+        );
+        const avgRate = totalSlots > 0 ? totalWeekly / totalSlots :
+          BASE_SLOT_PRICE_BY_TIER[city.tier as 1 | 2 | 3 | 4] ?? 35_000;
+        const newSlotState: AirportSlotState = {
+          ...(slotState ?? { available: 0, nextOpening: 0, nextTickQuarter: 5 }),
+          ownerTeamId: player.id,
+          ownerSlotRatePerWeekUsd: Math.round(avgRate),
+          totalCapacity: AIRPORT_DEFAULT_CAPACITY_BY_TIER[city.tier as 1 | 2 | 3 | 4] ?? 140,
+          acquiredAtQuarter: s.currentQuarter,
+          purchaseCostUsd: price,
+        };
+
+        set({
+          teams: s.teams.map((t) =>
+            t.id === player.id ? { ...t, cashUsd: t.cashUsd - price } : t,
+          ),
+          airportSlots: { ...s.airportSlots, [airportCode]: newSlotState },
+        });
+        toast.success(
+          `Airport acquired · ${city.name} (${airportCode})`,
+          `${fmtMoneyPlain(price)}. You now collect slot fees from every airline operating here.`,
+        );
+        return { ok: true };
+      },
+
+      sellAirport: (airportCode) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
+          return { ok: false, error: "You don't own this airport" };
+        }
+        const price = airportAskingPriceUsd(airportCode, slotState, s.teams);
+        const proceeds = Math.round(price * 0.95);
+        const newSlotState: AirportSlotState = {
+          available: slotState.available,
+          nextOpening: slotState.nextOpening,
+          nextTickQuarter: slotState.nextTickQuarter,
+          totalCapacity: slotState.totalCapacity,
+        };
+        set({
+          teams: s.teams.map((t) =>
+            t.id === player.id ? { ...t, cashUsd: t.cashUsd + proceeds } : t,
+          ),
+          airportSlots: { ...s.airportSlots, [airportCode]: newSlotState },
+        });
+        const city = CITIES_BY_CODE[airportCode];
+        toast.warning(
+          `Airport sold · ${city?.name ?? airportCode}`,
+          `Proceeds ${fmtMoneyPlain(proceeds)} (5% broker fee). Bidding restored at this airport.`,
+        );
+        return { ok: true, proceeds };
+      },
+
+      setAirportSlotRate: ({ airportCode, newRatePerWeekUsd }) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
+          return { ok: false, error: "You don't own this airport" };
+        }
+        const rate = Math.max(1_000, Math.round(newRatePerWeekUsd));
+        const teams = applyOwnerSlotRate(s.teams, airportCode, rate);
+        set({
+          teams,
+          airportSlots: {
+            ...s.airportSlots,
+            [airportCode]: { ...slotState, ownerSlotRatePerWeekUsd: rate },
+          },
+        });
+        const city = CITIES_BY_CODE[airportCode];
+        toast.accent(
+          `Slot rate updated · ${city?.name ?? airportCode}`,
+          `New rate ${fmtMoneyPlain(rate)}/wk per slot. Tenants charged from next quarter.`,
+        );
+        return { ok: true };
+      },
+
+      expandAirportCapacity: (airportCode) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
+          return { ok: false, error: "You don't own this airport" };
+        }
+        const city = CITIES_BY_CODE[airportCode];
+        if (!city) return { ok: false, error: "Unknown airport" };
+        const tier = city.tier as 1 | 2 | 3 | 4;
+        const max = AIRPORT_MAX_CAPACITY_BY_TIER[tier];
+        const cap = slotState.totalCapacity ?? AIRPORT_DEFAULT_CAPACITY_BY_TIER[tier];
+        if (cap >= max) {
+          return { ok: false, error: "Airport already at maximum capacity" };
+        }
+        const cost = AIRPORT_EXPANSION_COST_PER_LEVEL[tier];
+        if (player.cashUsd < cost) {
+          return { ok: false, error: `Need ${fmtMoneyPlain(cost)} cash` };
+        }
+        const newCap = Math.min(max, cap + AIRPORT_EXPANSION_SLOTS);
+        const addedSlots = newCap - cap;
+        set({
+          teams: s.teams.map((t) =>
+            t.id === player.id ? { ...t, cashUsd: t.cashUsd - cost } : t,
+          ),
+          airportSlots: {
+            ...s.airportSlots,
+            [airportCode]: {
+              ...slotState,
+              totalCapacity: newCap,
+              available: slotState.available + addedSlots,
+            },
+          },
+        });
+        toast.success(
+          `+${addedSlots} slots at ${city.name}`,
+          `${fmtMoneyPlain(cost)} expansion. Capacity now ${newCap}/${max}.`,
+        );
+        return { ok: true };
       },
 
       addEcoUpgrade: (aircraftId) => {
@@ -2411,6 +2597,8 @@ export const useGame = create<GameStore>()(
           cargoContracts: s.cargoContracts ?? [],
           worldCupHostCode: s.worldCupHostCode,
           olympicHostCode: s.olympicHostCode,
+          allTeams: s.teams,
+          airportSlots: s.airportSlots,
         });
 
         // Decrement remaining quarters on each contract; drop expired
