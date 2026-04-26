@@ -10,6 +10,7 @@ export type PanelId =
   | "fleet"
   | "routes"
   | "ops"
+  | "investments"    // subsidiaries (hotel/limo/lounge/MRO/fuel/catering/training)
   | "decisions"
   | "news"
   | "leaderboard"

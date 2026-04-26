@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Newspaper,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 import { useGame, selectPlayer } from "@/store/game";
@@ -32,6 +33,7 @@ const NAV: Array<{ id: PanelId; label: string; Icon: LucideIcon }> = [
   { id: "fleet",       label: "Fleet",       Icon: Plane },
   { id: "routes",      label: "Routes",      Icon: RouteIcon },
   { id: "ops",         label: "Ops form",    Icon: SlidersHorizontal },
+  { id: "investments", label: "Investments", Icon: Building2 },
   { id: "decisions",   label: "Decisions",   Icon: Hexagon },
   { id: "slots",       label: "Slot market", Icon: Gavel },
 ];

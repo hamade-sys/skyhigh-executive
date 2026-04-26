@@ -378,6 +378,15 @@ export interface Team {
     opsExpansionSlots: number;           // extra route capacity (+5 per unit)
   };
 
+  /** Non-aviation subsidiary businesses owned by the airline.
+   *  Each subsidiary generates quarterly revenue, appreciates over
+   *  time, and can be sold to another airline (or to the open market
+   *  as a generic counterparty if no other airline is interested).
+   *  Some types ALSO grant operational benefits (maintenance hub
+   *  reduces costs at its city, fuel storage enables bulk buying,
+   *  premium lounge raises F/C occupancy at its airport). */
+  subsidiaries?: Subsidiary[];
+
   // Labour Relations Score (PRD E8.3)
   labourRelationsScore: number;          // 0..100
 
@@ -534,6 +543,42 @@ export interface GameState {
    *  overrides spec.productionCapPerQuarter for that spec for ALL future
    *  delivery batches. Used to cool off or surge supply. */
   productionCapOverrides: Record<string, number>;
+}
+
+/** Subsidiary business types — each one is a non-aviation revenue
+ *  asset the airline can build at one of its hubs/network cities. */
+export type SubsidiaryType =
+  | "hotel"             // 5-star airport hotel — premium revenue
+  | "limo"              // limo / chauffeur service for premium pax
+  | "lounge"            // premium lounge — also boosts F/C occupancy
+  | "maintenance-hub"   // MRO facility — reduces fleet maintenance cost
+  | "fuel-storage"      // bulk-buy depot — enables 25% off fuel buys
+  | "catering"          // in-flight catering — small revenue, ops bonus
+  | "training-academy"; // pilot/crew academy — ops slider boost
+
+/** A single subsidiary instance owned by a team. The airline can hold
+ *  multiple subsidiaries of the same type at different cities. Each
+ *  appreciates ~2% per quarter (toward a 1.5× ceiling) and pays its
+ *  configured `revenuePerQuarterUsd` × condition factor each round.
+ *  Selling cashes out at the current `marketValue` minus a 5% broker
+ *  fee, mirroring how aircraft second-hand listings work. */
+export interface Subsidiary {
+  id: string;
+  type: SubsidiaryType;
+  /** City code where this subsidiary operates. Drives the operational
+   *  bonus eligibility (e.g. fuel-storage at hub X reduces fuel for
+   *  routes from X). */
+  cityCode: string;
+  /** Quarter the subsidiary was acquired/built. */
+  acquiredAtQuarter: number;
+  /** Original cost paid (matches the catalog setupCostUsd at build time). */
+  purchaseCostUsd: number;
+  /** Current market value — appreciates toward 1.5× over the campaign
+   *  unless cancelled or condition collapses. Drives the sell-back price. */
+  marketValueUsd: number;
+  /** 0..1 condition multiplier on revenue. Default 1.0; future events
+   *  (fire, strike, regional shock) can knock it down. */
+  conditionPct: number;
 }
 
 /** Aircraft pre-order entry. Pre-orders open 2 rounds before unlock

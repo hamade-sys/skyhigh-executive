@@ -14,6 +14,7 @@
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { SCENARIOS, type OptionEffect, type Scenario } from "@/data/scenarios";
+import { SUBSIDIARY_BY_TYPE as SUBSIDIARY_CATALOG_BY_TYPE } from "@/data/subsidiaries";
 import { NEWS_BY_QUARTER } from "@/data/world-news";
 import { cityEventImpact } from "./city-events";
 import type {
@@ -1614,6 +1615,30 @@ export function runQuarterClose(
     const lease = next.airportLeases?.[code];
     if (!lease || lease.slots === 0) continue;
     slotCost += lease.totalWeeklyCost * 13;
+  }
+
+  // ─ Subsidiary quarterly revenue + appreciation ─────────────
+  // Each owned subsidiary pays revenue scaled by its conditionPct
+  // and appreciates 2% per quarter toward a 1.5× ceiling on its
+  // original purchase price. Both are folded into team-level
+  // revenue (passenger/cargo split unchanged — this is "other
+  // revenue", but the simulation lumps it into total revenue so
+  // the existing slider-as-%-of-revenue math still works).
+  if ((next.subsidiaries?.length ?? 0) > 0) {
+    const updatedSubs = (next.subsidiaries ?? []).map((sub) => {
+      const entry = SUBSIDIARY_CATALOG_BY_TYPE[sub.type];
+      if (!entry) return sub;
+      const subRevenue = entry.revenuePerQuarterUsd * sub.conditionPct;
+      revenue += subRevenue;
+      // Appreciation: lerp toward the ceiling at the configured rate.
+      const ceiling = sub.purchaseCostUsd * 1.5;
+      const newValue = Math.min(
+        ceiling,
+        sub.marketValueUsd + (ceiling - sub.marketValueUsd) * 0.02,
+      );
+      return { ...sub, marketValueUsd: newValue };
+    });
+    next.subsidiaries = updatedSubs;
   }
 
   // ─ Cargo contracts (PRD E8.6) — guaranteed revenue on matching routes

@@ -38,6 +38,12 @@ import {
   isReleased,
   queuedForSpec,
 } from "@/lib/pre-orders";
+import {
+  SUBSIDIARY_BY_TYPE,
+  SUBSIDIARY_BROKER_FEE_PCT,
+  SUBSIDIARY_QUARTERLY_APPRECIATION,
+  SUBSIDIARY_VALUE_CEILING_MULT,
+} from "@/data/subsidiaries";
 import type {
   AirportLease,
   CabinConfig,
@@ -127,6 +133,20 @@ export interface GameStore extends GameState {
    *  for a spec, bypassing the queue cap. Used to clear backlogs or
    *  resolve disputes during a workshop. */
   forceDeliverPreOrders(specId: string, count: number): { delivered: number };
+
+  /** Build a new subsidiary at the named city. Charges setup cost
+   *  immediately. Some types also flip the corresponding flag in
+   *  hubInvestments (maintenance hub / fuel-storage / lounge) so the
+   *  existing engine bonus paths fire automatically. */
+  buildSubsidiary(args: {
+    type: import("@/types/game").SubsidiaryType;
+    cityCode: string;
+  }): { ok: boolean; error?: string };
+
+  /** Sell an owned subsidiary back to the market. Returns 95% of its
+   *  current marketValue (5% broker fee). If the subsidiary was the
+   *  reason a hubInvestments entry existed, that entry is removed. */
+  sellSubsidiary(subsidiaryId: string): { ok: boolean; error?: string; proceeds?: number };
 
   addEcoUpgrade(aircraftId: string): { ok: boolean; error?: string };
 
@@ -1080,6 +1100,111 @@ export const useGame = create<GameStore>()(
           "Facilitator override · queue cap bypassed.",
         );
         return { delivered: toDeliver.length };
+      },
+
+      buildSubsidiary: ({ type, cityCode }) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const entry = SUBSIDIARY_BY_TYPE[type];
+        if (!entry) return { ok: false, error: "Unknown subsidiary type" };
+        if (player.cashUsd < entry.setupCostUsd) {
+          return {
+            ok: false,
+            error: `Need ${fmtMoneyPlain(entry.setupCostUsd)} cash to build`,
+          };
+        }
+        // Cap one of each type per city so a player can't stack ten
+        // hotels at DXB. Different cities are fine.
+        const dup = (player.subsidiaries ?? []).some(
+          (sub) => sub.type === type && sub.cityCode === cityCode,
+        );
+        if (dup) {
+          return { ok: false, error: `${entry.name} already exists at ${cityCode}` };
+        }
+
+        const newSub = {
+          id: mkId("sub"),
+          type,
+          cityCode,
+          acquiredAtQuarter: s.currentQuarter,
+          purchaseCostUsd: entry.setupCostUsd,
+          marketValueUsd: entry.setupCostUsd,
+          conditionPct: 1.0,
+        };
+
+        // Mirror the matching subsidiary types into hubInvestments so
+        // the existing engine bonus paths fire automatically. We don't
+        // duplicate the city if it's already in the list (manual
+        // hub-investment + subsidiary at the same place is allowed).
+        const inv = { ...player.hubInvestments };
+        function add(arr: string[]): string[] {
+          return arr.includes(cityCode) ? arr : [...arr, cityCode];
+        }
+        if (type === "maintenance-hub") inv.maintenanceDepotHubs = add(inv.maintenanceDepotHubs);
+        if (type === "fuel-storage")    inv.fuelReserveTankHubs   = add(inv.fuelReserveTankHubs);
+        if (type === "lounge")          inv.premiumLoungeHubs     = add(inv.premiumLoungeHubs);
+
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            cashUsd: t.cashUsd - entry.setupCostUsd,
+            subsidiaries: [...(t.subsidiaries ?? []), newSub],
+            hubInvestments: inv,
+          }),
+        });
+        toast.success(
+          `${entry.name} built at ${cityCode}`,
+          `${fmtMoneyPlain(entry.setupCostUsd)} setup. ` +
+            (entry.revenuePerQuarterUsd > 0
+              ? `Earns ${fmtMoneyPlain(entry.revenuePerQuarterUsd)}/Q.`
+              : "Operational asset (no direct revenue)."),
+        );
+        return { ok: true };
+      },
+
+      sellSubsidiary: (subsidiaryId) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const sub = (player.subsidiaries ?? []).find((x) => x.id === subsidiaryId);
+        if (!sub) return { ok: false, error: "Subsidiary not found" };
+        const proceeds = Math.round(sub.marketValueUsd * (1 - SUBSIDIARY_BROKER_FEE_PCT));
+
+        // Remove the matching hubInvestments entry IF no other
+        // subsidiary of the same type at the same city remains. This
+        // handles the multi-investment-at-one-city edge case.
+        const remaining = (player.subsidiaries ?? []).filter((x) => x.id !== subsidiaryId);
+        const soldType = sub.type;
+        const soldCity = sub.cityCode;
+        // If another subsidiary of the same type at this city exists,
+        // keep the bonus. Otherwise drop the city from the list.
+        function shouldKeep(arr: string[]): string[] {
+          const stillHave = remaining.some(
+            (x) => x.type === soldType && x.cityCode === soldCity,
+          );
+          return stillHave ? arr : arr.filter((c) => c !== soldCity);
+        }
+        const inv = { ...player.hubInvestments };
+        if (soldType === "maintenance-hub") inv.maintenanceDepotHubs = shouldKeep(inv.maintenanceDepotHubs);
+        if (soldType === "fuel-storage")    inv.fuelReserveTankHubs   = shouldKeep(inv.fuelReserveTankHubs);
+        if (soldType === "lounge")          inv.premiumLoungeHubs     = shouldKeep(inv.premiumLoungeHubs);
+
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            cashUsd: t.cashUsd + proceeds,
+            subsidiaries: remaining,
+            hubInvestments: inv,
+          }),
+        });
+        const entry = SUBSIDIARY_BY_TYPE[sub.type];
+        toast.warning(
+          `Sold · ${entry?.name ?? sub.type} @ ${sub.cityCode}`,
+          `Proceeds ${fmtMoneyPlain(proceeds)} (5% broker fee). ` +
+            (entry?.operationalBonus ? `Operational bonus removed.` : ""),
+        );
+        return { ok: true, proceeds };
       },
 
       addEcoUpgrade: (aircraftId) => {

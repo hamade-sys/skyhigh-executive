@@ -20,6 +20,7 @@ import { FleetPanel } from "@/components/panels/FleetPanel";
 import { RoutesPanel } from "@/components/panels/RoutesPanel";
 import { FinancialsPanel } from "@/components/panels/FinancialsPanel";
 import { OpsPanel } from "@/components/panels/OpsPanel";
+import { InvestmentsPanel } from "@/components/panels/InvestmentsPanel";
 import { DecisionsPanel } from "@/components/panels/DecisionsPanel";
 import { NewsPanel } from "@/components/panels/NewsPanel";
 import { LeaderboardPanel } from "@/components/panels/LeaderboardPanel";
@@ -50,6 +51,7 @@ const PANEL_META: Record<
   fleet:       { title: "Fleet",       subtitle: "Aircraft owned, leased, and on order", width: "wide", render: () => <FleetPanel /> },
   routes:      { title: "Routes",      subtitle: "Active network and profitability", width: "wide", render: () => <RoutesPanel /> },
   ops:         { title: "Quarterly ops", subtitle: "Set spend levels and close the quarter", width: "narrow", render: () => <OpsPanel /> },
+  investments: { title: "Investments",   subtitle: "Subsidiary businesses · revenue + operational leverage", width: "wide", render: () => <InvestmentsPanel /> },
   decisions:   { title: "Board decisions", subtitle: "Scenarios — final once submitted", width: "wide", render: () => <DecisionsPanel /> },
   news:        { title: "World news",  subtitle: "Headlines this quarter + forecast", width: "wide", render: () => <NewsPanel /> },
   leaderboard: { title: "Leaderboard", subtitle: "Ranked by Brand Value", width: "narrow", render: () => <LeaderboardPanel /> },
