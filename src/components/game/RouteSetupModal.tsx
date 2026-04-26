@@ -699,9 +699,9 @@ function BidRow({
   onSlotsChange: (n: number) => void;
 }) {
   const basePrice = BASE_SLOT_PRICE_BY_TIER[tier];
-  // Engine enforces basePrice as the floor (Lvl 3 = $40K, Lvl 1 = $120K
-  // etc.). Bidding below the floor is rejected. So the slider must
-  // start AT basePrice, not below it.
+  // Engine enforces basePrice as the floor (Tier 1 = $45K, Tier 2 = $30K,
+  // Tier 3 = $15K, Tier 4 = $7.5K — see lib/slots.ts). Bidding below the
+  // floor is rejected, so the slider starts AT basePrice.
   const minPrice = basePrice;
   const maxPrice = Math.round(basePrice * 3);
   const city = CITIES_BY_CODE[airportCode];

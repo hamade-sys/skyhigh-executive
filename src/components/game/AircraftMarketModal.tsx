@@ -40,20 +40,63 @@ function fuselageCost(specPrice: number): number {
   return Math.max(2_000_000, Math.round(specPrice * 0.10));
 }
 
-type Tab = "boeing" | "airbus" | "secondary";
+type ManufacturerTab =
+  | "boeing"
+  | "airbus"
+  | "embraer"
+  | "atr"
+  | "comac"
+  | "bombardier"
+  | "other";
+type Tab = ManufacturerTab | "secondary";
 type Subfamily = "passenger" | "cargo";
 
+/** Detect the manufacturer for a given aircraft spec from its id/name.
+ *  Falls back to "other" when no rule matches — better than silently
+ *  filing a Bombardier under Boeing the way the previous version did. */
+function detectManufacturer(spec: { id: string; name: string }): ManufacturerTab {
+  const id = spec.id;
+  const name = spec.name;
+  // Boeing: B-prefixed ids ("B737-700", "B777-200ER") or "Boeing …"
+  if (/^B7\d{2}/.test(id) || /^Boeing/i.test(name)) return "boeing";
+  // Airbus: A-prefixed ids ("A320", "A350-1000") or "Airbus …".
+  // Important: this must be checked BEFORE the COMAC `^C\d{3}` pattern.
+  if (/^A\d{3}/.test(id) || /^Airbus/i.test(name)) return "airbus";
+  // Embraer: E170/E175/E190/E195 (incl. E2 variants), ERJ-x.
+  if (/^E\d{3}/.test(id) || /^ERJ/.test(id) || /^Embraer/i.test(name)) return "embraer";
+  // ATR: id starts with "ATR" (with or without space/dash).
+  if (/^ATR/i.test(id) || /^ATR/i.test(name)) return "atr";
+  // Bombardier: CRJ-* and Dash-* (Q400 etc).
+  if (/^CRJ/.test(id) || /^Dash/i.test(id) || /Bombardier/i.test(name)) return "bombardier";
+  // COMAC: ARJ21, C919.
+  if (/^ARJ/.test(id) || /^C9\d{2}/.test(id) || /COMAC/i.test(name)) return "comac";
+  return "other";
+}
+
+const MANUFACTURER_LABELS: Record<ManufacturerTab, string> = {
+  boeing: "Boeing",
+  airbus: "Airbus",
+  embraer: "Embraer",
+  atr: "ATR",
+  bombardier: "Bombardier",
+  comac: "COMAC",
+  other: "Other",
+};
+
 /**
- * Aircraft market — restructured per PRD update.
+ * Aircraft market.
  *
- * Tab strip:
- *  - Boeing  (primary tab — passenger and cargo sub-tabs inside)
- *  - Airbus
- *  - Secondary market (every listed used aircraft, regardless of brand)
+ * Tab strip (top-left):
+ *  - Boeing · Airbus · Embraer · ATR · Bombardier · COMAC · (Other)
+ *  - Each tab has Passenger/Cargo sub-tabs inside.
  *
- * Within each manufacturer tab, aircraft are split by Passenger / Cargo,
- * sorted by family (737, 747, 757, 767, 777, 787 for Boeing; A220, A319,
- * A320, A321, A330, A350, A380 for Airbus) then by variant within a family.
+ * Top-right: separate "Secondary market" pill toggle. Splitting it from
+ * the manufacturer tabs prevents the brand list from being shoved off
+ * the row, and makes it visually clear that secondary is a different
+ * mode of acquisition (used vs new-build).
+ *
+ * Within each manufacturer, aircraft are sorted by family (e.g. 737
+ * before 747) then by variant within a family.
  */
 export function AircraftMarketModal({
   open, onClose, currentQuarter, marketQuery, setMarketQuery,
@@ -85,39 +128,44 @@ export function AircraftMarketModal({
     setExpandedSpecId(null);
   }
 
-  /** Bucket every aircraft into Boeing / Airbus by name prefix. */
+  /** Bucket every available aircraft by manufacturer. Each bucket sorts
+   *  by family (737 before 747) then by variant id. */
   const buckets = useMemo(() => {
-    const boeing: AircraftSpec[] = [];
-    const airbus: AircraftSpec[] = [];
+    const out: Record<ManufacturerTab, AircraftSpec[]> = {
+      boeing: [], airbus: [], embraer: [], atr: [],
+      bombardier: [], comac: [], other: [],
+    };
     for (const a of AIRCRAFT) {
       if (a.unlockQuarter > currentQuarter) continue;
-      const isBoeing =
-        /^B7\d{2}/.test(a.id) || /^Boeing/i.test(a.name);
-      const isAirbus = /^A\d{3}/.test(a.id) || /^Airbus/i.test(a.name);
-      if (isBoeing) boeing.push(a);
-      else if (isAirbus) airbus.push(a);
-      else boeing.push(a);  // unknown brand → bucket with Boeing as fallback
+      out[detectManufacturer(a)].push(a);
     }
-    // Sort by family (e.g. 737 before 747) then by variant.
     const variantOrder = (id: string): [number, string] => {
       const m = id.match(/(\d{3})/);
       const fam = m ? parseInt(m[1], 10) : 999;
       return [fam, id];
     };
-    boeing.sort((a, b) => {
-      const [af, av] = variantOrder(a.id);
-      const [bf, bv] = variantOrder(b.id);
-      return af - bf || av.localeCompare(bv);
-    });
-    airbus.sort((a, b) => {
-      const [af, av] = variantOrder(a.id);
-      const [bf, bv] = variantOrder(b.id);
-      return af - bf || av.localeCompare(bv);
-    });
-    return { boeing, airbus };
+    for (const k of Object.keys(out) as ManufacturerTab[]) {
+      out[k].sort((a, b) => {
+        const [af, av] = variantOrder(a.id);
+        const [bf, bv] = variantOrder(b.id);
+        return af - bf || av.localeCompare(bv);
+      });
+    }
+    return out;
   }, [currentQuarter]);
 
-  const list = (tab === "boeing" ? buckets.boeing : tab === "airbus" ? buckets.airbus : [])
+  /** Manufacturer tabs always render in the same order. Hide brands
+   *  that have ZERO aircraft unlocked yet (e.g. COMAC pre-R40), but
+   *  always show the major three (Boeing/Airbus/Embraer) so the tab
+   *  strip is stable as the campaign progresses. */
+  const manufacturerOrder: ManufacturerTab[] = [
+    "boeing", "airbus", "embraer", "atr", "bombardier", "comac", "other",
+  ];
+  const visibleTabs = manufacturerOrder.filter((m) =>
+    m === "boeing" || m === "airbus" || m === "embraer" || buckets[m].length > 0
+  );
+
+  const list = (tab === "secondary" ? [] : (buckets[tab as ManufacturerTab] ?? []))
     .filter((a) => a.family === subfamily)
     .filter((a) => {
       if (!marketQuery) return true;
@@ -142,46 +190,65 @@ export function AircraftMarketModal({
       return true;
     });
 
-  const tabs: Array<{ id: Tab; label: string; count: number }> = [
-    { id: "boeing", label: "Boeing", count: buckets.boeing.length },
-    { id: "airbus", label: "Airbus", count: buckets.airbus.length },
-    { id: "secondary", label: "Secondary market", count: secondHandListings.length },
-  ];
-
   return (
     <Modal open={open} onClose={onClose} className="w-[min(900px,calc(100vw-3rem))]">
       <ModalHeader>
-        <h2 className="font-display text-[1.5rem] text-ink">Aircraft market</h2>
-        <p className="text-ink-muted text-[0.8125rem] mt-1">
-          New-build orders by manufacturer, plus a secondary market for used aircraft.
-        </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h2 className="font-display text-[1.5rem] text-ink">Aircraft market</h2>
+            <p className="text-ink-muted text-[0.8125rem] mt-1">
+              New-build orders by manufacturer, plus a secondary market for used aircraft.
+            </p>
+          </div>
+          {/* Secondary-market toggle pinned top-right so it doesn't
+              compete for tab-strip space with the six manufacturer
+              tabs. Active state matches the manufacturer tab styling
+              for visual consistency. */}
+          <button
+            onClick={() => changeTab(tab === "secondary" ? "boeing" : "secondary")}
+            className={cn(
+              "shrink-0 rounded-md px-3 py-1.5 text-[0.75rem] font-medium border transition-colors flex items-center gap-1.5",
+              tab === "secondary"
+                ? "border-accent text-accent bg-[var(--accent-soft)]"
+                : "border-line text-ink-muted hover:bg-surface-hover",
+            )}
+          >
+            Secondary market
+            <span className="text-[0.6875rem] tabular font-mono opacity-80">
+              {secondHandListings.length}
+            </span>
+          </button>
+        </div>
 
-        {/* Tab strip — manufacturer + secondary */}
-        <nav className="mt-3 flex items-center gap-1 border-b border-line -mb-3">
-          {tabs.map((t) => {
-            const active = tab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => changeTab(t.id)}
-                className={cn(
-                  "px-3 py-2 text-[0.8125rem] font-medium border-b-2 -mb-px transition-colors",
-                  active
-                    ? "border-primary text-primary"
-                    : "border-transparent text-ink-muted hover:text-ink",
-                )}
-              >
-                {t.label}
-                <span className={cn(
-                  "ml-1.5 text-[0.6875rem] tabular font-mono",
-                  active ? "text-primary" : "text-ink-muted",
-                )}>
-                  {t.count}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
+        {/* Manufacturer tab strip — only shown when not on secondary. */}
+        {tab !== "secondary" && (
+          <nav className="mt-3 flex items-center gap-1 border-b border-line -mb-3 overflow-x-auto">
+            {visibleTabs.map((m) => {
+              const active = tab === m;
+              const count = buckets[m].length;
+              return (
+                <button
+                  key={m}
+                  onClick={() => changeTab(m)}
+                  className={cn(
+                    "shrink-0 px-3 py-2 text-[0.8125rem] font-medium border-b-2 -mb-px transition-colors",
+                    active
+                      ? "border-primary text-primary"
+                      : "border-transparent text-ink-muted hover:text-ink",
+                  )}
+                >
+                  {MANUFACTURER_LABELS[m]}
+                  <span className={cn(
+                    "ml-1.5 text-[0.6875rem] tabular font-mono",
+                    active ? "text-primary" : "text-ink-muted",
+                  )}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
       </ModalHeader>
 
       <ModalBody className="max-h-[34rem] overflow-auto space-y-3">
@@ -268,8 +335,9 @@ export function AircraftMarketModal({
 
             {list.length === 0 ? (
               <div className="text-[0.8125rem] text-ink-muted italic py-6 text-center">
-                No {subfamily} aircraft from {tab === "boeing" ? "Boeing" : "Airbus"} unlocked yet.
-                More variants unlock later in the simulation.
+                No {subfamily} aircraft from{" "}
+                {MANUFACTURER_LABELS[tab as ManufacturerTab]}
+                {" "}unlocked yet. More variants unlock later in the simulation.
               </div>
             ) : (
               list.map((a) => (

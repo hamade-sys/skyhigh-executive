@@ -27,6 +27,7 @@
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { distanceBetween, maxRouteDailyFrequency, baseFareForDistance } from "@/lib/engine";
+import { BASE_SLOT_PRICE_BY_TIER } from "@/lib/slots";
 import type { Team, FleetAircraft, Route, City, PricingTier } from "@/types/game";
 
 export type BotDifficulty = "easy" | "medium" | "hard";
@@ -344,10 +345,10 @@ export function botSlotBidPrice(
   const profile = PROFILES[difficulty];
   const city = CITIES_BY_CODE[airportCode];
   const tier = (city?.tier ?? 1) as 1 | 2 | 3 | 4;
-  const basePrice =
-    tier === 1 ? 120_000 :
-    tier === 2 ? 80_000 :
-    tier === 3 ? 40_000 : 20_000;
+  // Pull from the canonical table in slots.ts so bot bids stay in
+  // step with the player's validation floor (no more "$120K T1"
+  // drift after the rebalance).
+  const basePrice = BASE_SLOT_PRICE_BY_TIER[tier];
   return Math.round(basePrice * profile.slotBidMultiplier);
 }
 

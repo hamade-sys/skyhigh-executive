@@ -15,6 +15,7 @@ import {
   type QuarterCloseResult,
 } from "@/lib/engine";
 import {
+  BASE_SLOT_PRICE_BY_TIER,
   applyYearlyTickIfDue,
   makeInitialAirportSlots,
   resolveSlotAuctions,
@@ -3098,10 +3099,14 @@ export const useGame = create<GameStore>()(
         if (!CITIES_BY_CODE[airportCode]) return { ok: false, error: "Unknown airport" };
         if (slots < 1) return { ok: false, error: "At least 1 slot required" };
         const city = CITIES_BY_CODE[airportCode];
-        const basePrice =
-          city.tier === 1 ? 120_000 : city.tier === 2 ? 80_000 : city.tier === 3 ? 40_000 : 20_000;
+        // Pull the floor from the canonical slot-price table in
+        // slots.ts so this validation never drifts again. Previously
+        // hard-coded numbers here were stuck at the pre-rebalance
+        // T1=$120K / T2=$80K and rejected bids that the auction
+        // engine would happily clear at the new $45K / $30K floor.
+        const basePrice = BASE_SLOT_PRICE_BY_TIER[city.tier as 1 | 2 | 3 | 4];
         if (pricePerSlot < basePrice)
-          return { ok: false, error: `Minimum $${(basePrice / 1_000).toFixed(0)}K/slot at Lvl ${city.tier}` };
+          return { ok: false, error: `Minimum $${(basePrice / 1_000).toFixed(0)}K/slot at Tier ${city.tier}` };
         const maxCost = slots * pricePerSlot;
         if (player.cashUsd < maxCost)
           return { ok: false, error: `Need $${(maxCost / 1_000_000).toFixed(1)}M cash to commit` };
