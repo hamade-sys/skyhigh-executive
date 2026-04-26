@@ -1478,6 +1478,12 @@ export interface QuarterCloseResult {
   fuelCost: number;
   slotCost: number;
   staffCost: number;
+  /** Quarterly lease fees on every active leased aircraft this round.
+   *  7.5% of the leased airframe's spec buy price, charged for 12
+   *  quarters from delivery. Earlier the lease per-quarter rate was
+   *  computed but never actually deducted — leases were silently free
+   *  after the initial signing fee. */
+  leaseFeesUsd: number;
   otherSliderCost: number;
   /** Sub-components of `otherSliderCost` so the P&L UI can break out
    *  Marketing vs In-flight Service vs Operations vs Customer-Service
@@ -1615,6 +1621,20 @@ export function runQuarterClose(
 
   // ─ Route economics ──────────────────────────────────────
   const routeBreakdown: QuarterCloseResult["routeBreakdown"] = [];
+  // Lease fees charged this quarter — 7.5% of spec buy price for every
+  // active leased aircraft whose 12-quarter term has not yet ended.
+  // The lease term clock started at delivery (not at order), so an
+  // aircraft delivered at q=12 is charged through q=23 inclusive.
+  let leaseFeesUsd = 0;
+  for (const f of next.fleet) {
+    if (f.acquisitionType !== "lease") continue;
+    if (f.status !== "active" && f.status !== "ordered") continue;
+    if (typeof f.leaseTermEndsAtQuarter === "number" && ctx.quarter > f.leaseTermEndsAtQuarter) continue;
+    if (typeof f.leaseQuarterly === "number" && f.leaseQuarterly > 0) {
+      leaseFeesUsd += f.leaseQuarterly;
+    }
+  }
+
   let revenue = 0;
   let passengerRevenue = 0;
   let cargoRevenue = 0;
@@ -1996,6 +2016,7 @@ export function runQuarterClose(
   // with medium policy). Now part of the formula.
   const pretax =
     revenue - fuelCost - slotCost - staffCost - otherSliderCost -
+    leaseFeesUsd -
     maintenanceCost - insurancePremium - depreciation -
     interest - rcfInterest -
     passengerTax - fuelExcise - carbonLevy -
@@ -2457,6 +2478,7 @@ export function runQuarterClose(
     fuelCost,
     slotCost,
     staffCost,
+    leaseFeesUsd,
     otherSliderCost,
     marketingCost,
     serviceCost,

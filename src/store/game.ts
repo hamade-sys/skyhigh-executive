@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { AIRCRAFT_BY_ID } from "@/data/aircraft";
+import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { SCENARIOS, SCENARIOS_BY_QUARTER, type OptionEffect } from "@/data/scenarios";
 import {
@@ -52,6 +52,14 @@ import {
   airportAskingPriceUsd,
   applyOwnerSlotRate,
 } from "@/lib/airport-ownership";
+import {
+  LEASE_BUYOUT_RESIDUAL_PCT,
+  canLeaseSpec,
+  isLeaseExpired,
+  leaseFleetRatio,
+  leaseTermsFor,
+  wouldExceedLeaseCap,
+} from "@/lib/lease";
 import type {
   AirportLease,
   AirportSlotState,
@@ -156,6 +164,13 @@ export interface GameStore extends GameState {
    *  current marketValue (5% broker fee). If the subsidiary was the
    *  reason a hubInvestments entry existed, that entry is removed. */
   sellSubsidiary(subsidiaryId: string): { ok: boolean; error?: string; proceeds?: number };
+
+  /** Convert a leased aircraft to owned by paying the 25% buy-out
+   *  residual (against the spec buy price captured at order time).
+   *  Aircraft becomes acquisitionType="buy", lease fields cleared,
+   *  bookValue set to the residual. Available any time during the
+   *  12-quarter term and at end-of-term to keep the airframe. */
+  buyOutLease(aircraftId: string): { ok: boolean; error?: string; cost?: number };
 
   /** Acquire an airport outright (Sprint 10). Price formula:
    *    base[tier] + 4 × current quarterly slot revenue at this airport.
@@ -453,18 +468,28 @@ function deliverPreOrders(
     const balance = Math.max(0, totalPerPlane - order.depositUsd);
     const acId = mkId("ac");
     deliveredById.set(order.id, acId);
+    const leaseTerms = leaseTermsFor(spec);
     const ac: FleetAircraft = {
       id: acId,
       specId: order.specId,
       status: "ordered",
       acquisitionType: order.acquisitionType,
-      // PurchaseQuarter = delivery round (this is when it was paid in
-      // full and arrived as physical metal). Existing fleet code reads
-      // purchaseQuarter for arrival timing — we keep that contract.
+      // PurchaseQuarter = delivery round (this is when the airframe
+      // physically arrived). Existing fleet code reads purchaseQuarter
+      // for arrival timing — that contract is preserved.
       purchaseQuarter: deliveryQuarter,
       purchasePrice: order.acquisitionType === "buy" ? totalPerPlane : 0,
       bookValue: order.acquisitionType === "buy" ? totalPerPlane : 0,
-      leaseQuarterly: order.acquisitionType === "lease" ? spec.leasePerQuarterUsd : null,
+      leaseQuarterly: order.acquisitionType === "lease" ? leaseTerms.perQuarterUsd : null,
+      // Lease term clock starts at DELIVERY (not at order placement) —
+      // an airline doesn't pay the lessor for an airframe still being
+      // built. Pre-orders placed during the announcement window mean
+      // the term begins whenever the queue actually clears.
+      leaseDepositUsd: order.acquisitionType === "lease" ? leaseTerms.depositUsd : undefined,
+      leaseTermEndsAtQuarter: order.acquisitionType === "lease"
+        ? deliveryQuarter + leaseTerms.termQuarters - 1
+        : undefined,
+      leaseBuyoutBasisUsd: order.acquisitionType === "lease" ? spec.buyPriceUsd : undefined,
       ecoUpgrade: false,
       ecoUpgradeQuarter: null,
       ecoUpgradeCost: 0,
@@ -964,8 +989,33 @@ export const useGame = create<GameStore>()(
           }
         }
 
-        const basePrice = acquisitionType === "buy" ? spec.buyPriceUsd : spec.leasePerQuarterUsd;
-        const totalPerPlane = basePrice + upgradeCostPerPlane;
+        // Lease eligibility (top-7 passenger / top-3 cargo by stock) and
+        // 50% fleet-ratio cap. Both gate lease orders only — buy is
+        // unconstrained.
+        if (acquisitionType === "lease") {
+          if (!canLeaseSpec(spec, AIRCRAFT, s.currentQuarter)) {
+            return {
+              ok: false,
+              error: `${spec.name} is not currently leasable. Lease is restricted to the top 7 passenger and top 3 cargo airframes by production stock.`,
+            };
+          }
+          if (wouldExceedLeaseCap(player, qty)) {
+            const ratio = leaseFleetRatio(player) * 100;
+            return {
+              ok: false,
+              error: `Adding ${qty} leased aircraft would push your leased-fleet share above 50% (currently ${ratio.toFixed(0)}%). Buy or sell to rebalance.`,
+            };
+          }
+        }
+
+        // Lease vs buy pricing. Buy = full sticker. Lease = 15% deposit
+        // up front and a per-quarter fee charged at every quarter close
+        // for 12 quarters; total contract value = 105% of sticker, with
+        // a 25% buy-out option at end of term.
+        const leaseTerms = leaseTermsFor(spec);
+        const totalPerPlane = acquisitionType === "buy"
+          ? spec.buyPriceUsd + upgradeCostPerPlane
+          : leaseTerms.depositUsd + upgradeCostPerPlane;
         const totalCost = totalPerPlane * qty;
 
         // Decide how many of `qty` can be delivered this round vs queued.
@@ -1010,9 +1060,21 @@ export const useGame = create<GameStore>()(
         const planes: FleetAircraft[] = Array.from({ length: instantQty }, () => ({
           id: mkId("ac"), specId, status: "ordered" as const,
           acquisitionType, purchaseQuarter: s.currentQuarter,
+          // For owned aircraft purchasePrice = sticker + upgrades; book
+          // value depreciates from there. For leases, both stay at 0
+          // because the airline never owns the airframe (and so the
+          // P&L can't book depreciation against it).
           purchasePrice: acquisitionType === "buy" ? totalPerPlane : 0,
           bookValue: acquisitionType === "buy" ? totalPerPlane : 0,
-          leaseQuarterly: acquisitionType === "lease" ? spec.leasePerQuarterUsd : null,
+          leaseQuarterly: acquisitionType === "lease" ? leaseTerms.perQuarterUsd : null,
+          // 12-quarter lease term, 25% buy-out residual captured at
+          // order time so future spec-price changes can't re-price the
+          // contract mid-term.
+          leaseDepositUsd: acquisitionType === "lease" ? leaseTerms.depositUsd : undefined,
+          leaseTermEndsAtQuarter: acquisitionType === "lease"
+            ? s.currentQuarter + leaseTerms.termQuarters - 1
+            : undefined,
+          leaseBuyoutBasisUsd: acquisitionType === "lease" ? spec.buyPriceUsd : undefined,
           ecoUpgrade: false, ecoUpgradeQuarter: null, ecoUpgradeCost: 0,
           cabinConfig, routeId: null,
           customSeats: customSeats && spec.family === "passenger" ? customSeats : undefined,
@@ -1242,6 +1304,46 @@ export const useGame = create<GameStore>()(
             (entry?.operationalBonus ? `Operational bonus removed.` : ""),
         );
         return { ok: true, proceeds };
+      },
+
+      buyOutLease: (aircraftId) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const plane = player.fleet.find((f) => f.id === aircraftId);
+        if (!plane) return { ok: false, error: "Aircraft not found" };
+        if (plane.acquisitionType !== "lease") {
+          return { ok: false, error: "Only leased aircraft can be bought out" };
+        }
+        const basis = plane.leaseBuyoutBasisUsd
+          ?? AIRCRAFT_BY_ID[plane.specId]?.buyPriceUsd
+          ?? 0;
+        const cost = Math.round(basis * LEASE_BUYOUT_RESIDUAL_PCT);
+        if (player.cashUsd < cost) {
+          return { ok: false, error: `Need ${fmtMoneyPlain(cost)} cash for buy-out` };
+        }
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            cashUsd: t.cashUsd - cost,
+            fleet: t.fleet.map((f) => f.id !== aircraftId ? f : {
+              ...f,
+              acquisitionType: "buy" as const,
+              purchasePrice: cost,
+              bookValue: cost,
+              leaseQuarterly: null,
+              leaseDepositUsd: undefined,
+              leaseTermEndsAtQuarter: undefined,
+              leaseBuyoutBasisUsd: undefined,
+            }),
+          }),
+        });
+        const spec = AIRCRAFT_BY_ID[plane.specId];
+        toast.success(
+          `Lease bought out · ${spec?.name ?? plane.specId}`,
+          `${fmtMoneyPlain(cost)} (25% residual). Aircraft is now owned outright.`,
+        );
+        return { ok: true, cost };
       },
 
       buyAirport: (airportCode) => {
@@ -2301,7 +2403,10 @@ export const useGame = create<GameStore>()(
         let insuranceProceeds = 0;
 
         // Transition ordered → active planes, and retire aircraft whose
-        // retirementQuarter has been reached (A13).
+        // retirementQuarter has been reached (A13). Expired leases —
+        // 12-quarter term ended without a buy-out — are also returned
+        // to the lessor here (filtered out below the map).
+        let leaseReturnCount = 0;
         const updatedFleet = player.fleet.map((f) => {
           const retiring = f.retirementQuarter !== undefined && s.currentQuarter >= f.retirementQuarter;
           if (retiring) {
@@ -2311,10 +2416,26 @@ export const useGame = create<GameStore>()(
             insuranceProceeds += payout;
             return { ...f, status: "retired" as const, routeId: null };
           }
+          // Expired lease: mark as retired so the lessor-return filter
+          // below removes the airframe from the fleet entirely.
+          if (
+            f.acquisitionType === "lease" &&
+            typeof f.leaseTermEndsAtQuarter === "number" &&
+            s.currentQuarter > f.leaseTermEndsAtQuarter
+          ) {
+            leaseReturnCount += 1;
+            return { ...f, status: "retired" as const, routeId: null };
+          }
           if (f.status === "ordered") return { ...f, status: "active" as const };
           if (f.status === "grounded") return { ...f, status: "active" as const };
           return f;
         });
+        if (leaseReturnCount > 0) {
+          toast.info(
+            `${leaseReturnCount} lease${leaseReturnCount === 1 ? "" : "s"} returned`,
+            `Term ended without buy-out — airframe${leaseReturnCount === 1 ? "" : "s"} returned to the lessor.`,
+          );
+        }
 
         if (insuranceProceeds > 0 && coveragePct > 0) {
           const retiredCount = updatedFleet.filter((f) => f.status === "retired" && !player.fleet.find((p) => p.id === f.id && p.status === "retired")).length;

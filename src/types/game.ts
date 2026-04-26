@@ -76,6 +76,17 @@ export interface FleetAircraft {
   purchasePrice: number;
   bookValue: number;
   leaseQuarterly: number | null;
+  /** Lease deposit paid at order time (15% of spec buy price). Used so
+   *  the player can see the up-front capital cost vs the per-quarter
+   *  fee, and so a buy-out at end of term can credit it correctly. */
+  leaseDepositUsd?: number;
+  /** Quarter the 12-quarter lease ends. After this quarter the
+   *  aircraft returns to the lessor unless the player exercises the
+   *  buy-out option (25% of original buy price). */
+  leaseTermEndsAtQuarter?: number;
+  /** Spec buy price at the moment of leasing — captured so the buy-out
+   *  residual is calculable even if catalogue prices later change. */
+  leaseBuyoutBasisUsd?: number;
   ecoUpgrade: boolean;
   ecoUpgradeQuarter: number | null;
   ecoUpgradeCost: number;
