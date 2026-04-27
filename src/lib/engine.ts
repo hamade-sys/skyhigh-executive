@@ -98,6 +98,23 @@ export function discontinuedMaintenanceBracket(
  *   ...
  *   Old PRD Q20=130 → Rounds 39-40 = 130
  */
+/** Per-city event multiplier floor used by the passenger demand path.
+ *  Even the worst stacked news shocks leave demand at 15% of baseline.
+ *  Real-world calibration: peak COVID hit ~5-8% of normal pax volumes,
+ *  but the sim can't model freighter conversions or cargo-by-belly
+ *  proxy demand, so we sit a touch higher. */
+export const DEMAND_FLOOR_PASSENGER = 0.15;
+
+/** Cargo demand floor — freight is more shock-resilient than passenger
+ *  travel (parts pipelines, medical supply, e-commerce orders all keep
+ *  flowing even when passenger travel craters). */
+export const DEMAND_FLOOR_CARGO = 0.25;
+
+/** Global travel index floor. Catastrophic global pulses (full COVID
+ *  lockdown set travelIndex: 18) still leave the global multiplier at
+ *  20% so a stacked compound floor is ~3% of baseline. */
+export const TRAVEL_INDEX_FLOOR = 0.20;
+
 export const TRAVEL_INDEX: Record<number, number> = {
   1: 100, 2: 100,   // PRD Q1 — Market open. Baseline.
   3: 103, 4: 103,   // PRD Q2 — World Cup announced.
@@ -326,6 +343,56 @@ export function cityBusinessAtQuarter(city: City, quarter: number): number {
   return city.business * Math.pow(1 + city.businessGrowth / 100 / 4, quarter - 1);
 }
 
+/** Effective per-city demand for a quarter, after applying news event
+ *  modifiers, the global travel index, and the seasonal multiplier.
+ *  Used by read-only views (AirportDetailModal) so the player sees
+ *  the same number the route engine works against. Returns the
+ *  three categories separately because cargo runs on its own
+ *  modifier track. */
+export function cityEffectiveDemand(
+  city: City,
+  quarter: number,
+): {
+  tourism: number;
+  business: number;
+  cargo: number;
+  /** Q/Q % change vs the prior quarter, signed. Positive = demand up. */
+  tourismDeltaPct: number;
+  businessDeltaPct: number;
+  cargoDeltaPct: number;
+} {
+  function compute(q: number): { t: number; b: number; c: number } {
+    if (q < 1) return { t: 0, b: 0, c: 0 };
+    const tourismBase = cityTourismAtQuarter(city, q);
+    const businessBase = cityBusinessAtQuarter(city, q);
+    const evt = cityEventImpact(city.code, q);
+    const tMult = Math.max(DEMAND_FLOOR_PASSENGER, 1 + evt.tourism / 100);
+    const bMult = Math.max(DEMAND_FLOOR_PASSENGER, 1 + evt.business / 100);
+    const cMult = Math.max(DEMAND_FLOOR_CARGO, 1 + evt.cargo / 100);
+    const travelIdx = Math.max(TRAVEL_INDEX_FLOOR, effectiveTravelIndex(q) / 100);
+    const season = seasonalMultiplier(q);
+    return {
+      t: tourismBase * tMult * travelIdx * season.tourism,
+      b: businessBase * bMult * travelIdx * season.business,
+      c: businessBase * cMult * travelIdx,  // cargo doesn't use seasonality
+    };
+  }
+  const now = compute(quarter);
+  const prev = compute(quarter - 1);
+  function pctDelta(curr: number, p: number): number {
+    if (p <= 0) return 0;
+    return ((curr - p) / p) * 100;
+  }
+  return {
+    tourism: now.t,
+    business: now.b,
+    cargo: now.c,
+    tourismDeltaPct: pctDelta(now.t, prev.t),
+    businessDeltaPct: pctDelta(now.b, prev.b),
+    cargoDeltaPct: pctDelta(now.c, prev.c),
+  };
+}
+
 // ─── Route demand (PRD §5.2 + E6 + D5 + A1 events) ──────────
 export function routeDemandPerDay(
   origin: string,
@@ -356,26 +423,13 @@ export function routeDemandPerDay(
   const season = seasonalMultiplier(quarter);
 
   // Demand floor — even the worst stacked news shocks should leave
-  // SOME baseline demand. Per-city event multiplier floors at 15% of
-  // baseline (essential business travel, repatriation, freight bookings,
-  // etc continue at minimum levels even in catastrophic shocks). The
-  // global travel index floors at 20%. Compound minimum is ~3% of
-  // baseline city demand — small but non-zero so the route load never
-  // shows a flat 0% on a route that has aircraft assigned.
-  //
-  // Real-world calibration: at peak COVID lockdown (Apr 2020), global
-  // air passenger volumes hit ~5-8% of pre-pandemic. Hub-to-hub cargo
-  // never dropped below ~30% of normal even with all passenger travel
-  // banned. Our floors are deliberately a touch higher than reality
-  // because the simulation can't model freighter conversions or
-  // cargo-only flights, so the "passenger demand" floor includes
-  // unmodeled cargo-by-belly proxy demand.
-  const DEMAND_FLOOR = 0.15;
-  const TRAVEL_INDEX_FLOOR = 0.20;
-  const tourismMultA = Math.max(DEMAND_FLOOR, 1 + tourismEventA);
-  const tourismMultB = Math.max(DEMAND_FLOOR, 1 + tourismEventB);
-  const businessMultA = Math.max(DEMAND_FLOOR, 1 + businessEventA);
-  const businessMultB = Math.max(DEMAND_FLOOR, 1 + businessEventB);
+  // SOME baseline demand. Constants exported so the AirportDetailModal
+  // and other read-only views can compute effective demand using the
+  // same clamps as the simulation.
+  const tourismMultA = Math.max(DEMAND_FLOOR_PASSENGER, 1 + tourismEventA);
+  const tourismMultB = Math.max(DEMAND_FLOOR_PASSENGER, 1 + tourismEventB);
+  const businessMultA = Math.max(DEMAND_FLOOR_PASSENGER, 1 + businessEventA);
+  const businessMultB = Math.max(DEMAND_FLOOR_PASSENGER, 1 + businessEventB);
   const travelIdxFloored = Math.max(TRAVEL_INDEX_FLOOR, travelIdx);
 
   const tourism =
@@ -872,14 +926,11 @@ export function computeRouteEconomics(
     const cargoFocusBonus = team.marketFocus === "cargo" ? 1.15 : 1.0;
     const cargoEventA = cityEventImpact(route.originCode, quarter).cargo / 100;
     const cargoEventB = cityEventImpact(route.destCode, quarter).cargo / 100;
-    // Cargo demand floor — same logic as passenger but slightly higher
-    // (25% vs 15%) because freight is more resilient to shocks: parts
-    // pipelines, medical supply, e-commerce orders all continue when
-    // passenger travel craters. Real Q2 2020 cargo only hit ~70% of
-    // normal at the worst, and snapped back fastest.
-    const CARGO_DEMAND_FLOOR = 0.25;
-    const cargoMultA = Math.max(CARGO_DEMAND_FLOOR, 1 + cargoEventA);
-    const cargoMultB = Math.max(CARGO_DEMAND_FLOOR, 1 + cargoEventB);
+    // Cargo demand floor — see DEMAND_FLOOR_CARGO export at the top
+    // of this file. Same logic as passenger but slightly higher
+    // (25% vs 15%) because freight is more resilient to shocks.
+    const cargoMultA = Math.max(DEMAND_FLOOR_CARGO, 1 + cargoEventA);
+    const cargoMultB = Math.max(DEMAND_FLOOR_CARGO, 1 + cargoEventB);
     const cargoDemandT = Math.max(
       0,
       Math.min(

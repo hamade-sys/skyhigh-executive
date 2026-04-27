@@ -4,10 +4,10 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
 import { CITIES_BY_CODE } from "@/data/cities";
-import { fmtMoney } from "@/lib/format";
+import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import type { City } from "@/types/game";
-import { Crown, MapPin, Building, ShieldAlert } from "lucide-react";
+import { Crown, MapPin, Building, ShieldAlert, ArrowUp, ArrowDown, Trophy, Newspaper } from "lucide-react";
 import {
   airportAskingPriceUsd,
   airportQuarterlySlotRevenueUsd,
@@ -16,6 +16,8 @@ import {
   AIRPORT_EXPANSION_SLOTS,
   AIRPORT_MAX_CAPACITY_BY_TIER,
 } from "@/lib/airport-ownership";
+import { cityEffectiveDemand } from "@/lib/engine";
+import { cityEventImpact } from "@/lib/city-events";
 
 /**
  * Airport detail popup — opened when the player double-clicks a city on
@@ -139,6 +141,14 @@ export function AirportDetailModal({
             </div>
           </section>
         )}
+
+        {/* Active events at this city — World Cup host, Olympics
+            host, and any active news modifier hitting the city. */}
+        <CityEventsSection cityCode={city.code} quarter={s.currentQuarter} />
+
+        {/* Effective demand at this city, with Q/Q delta. Helps the
+            player decide where to bid and how to price routes. */}
+        <CityDemandSection city={city} quarter={s.currentQuarter} />
 
         {/* Airport pool */}
         <section>
@@ -637,6 +647,170 @@ function Stat({
       {hint && (
         <div className="text-[0.6875rem] text-ink-muted mt-0.5">{hint}</div>
       )}
+    </div>
+  );
+}
+
+/** "Active events" — pills showing every special status currently
+ *  affecting this city: World Cup host (rounds 19-24), Olympic host
+ *  (rounds 29-32), plus every active news item that touches the city
+ *  via its `modifiers` array. The list is the player's primary signal
+ *  for "why is demand spiking here?" */
+function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: number }) {
+  const worldCupHostCode = useGame((g) => g.worldCupHostCode);
+  const olympicHostCode = useGame((g) => g.olympicHostCode);
+  const isWorldCupHost = worldCupHostCode === cityCode;
+  const isOlympicHost = olympicHostCode === cityCode;
+  // World Cup runs Q19-Q24, Olympics Q29-Q32 (per engine logic). We
+  // surface the host status year-round as a planning signal, with an
+  // "active now" badge when the player is in the demand window.
+  const wcActiveNow = isWorldCupHost && quarter >= 19 && quarter <= 24;
+  const olActiveNow = isOlympicHost && quarter >= 29 && quarter <= 32;
+
+  // News modifiers active at this city right now.
+  const impact = cityEventImpact(cityCode, quarter);
+  const activeNews = impact.items.filter((n) =>
+    (n.modifiers ?? []).some(
+      (m) => (m.city === cityCode || m.city === "ALL") &&
+             quarter >= n.quarter &&
+             quarter < n.quarter + Math.max(1, m.rounds),
+    ),
+  );
+
+  if (!isWorldCupHost && !isOlympicHost && activeNews.length === 0) {
+    // Nothing to show. Skip the section entirely so the modal stays
+    // compact for cities with no active events.
+    return null;
+  }
+
+  return (
+    <section>
+      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+        Active events
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {isWorldCupHost && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[0.75rem] font-semibold",
+              wcActiveNow
+                ? "bg-[var(--accent-soft)] text-accent border border-accent/40"
+                : "bg-surface-2 text-ink-2 border border-line",
+            )}
+            title={wcActiveNow
+              ? "World Cup demand surge active now (Q19-Q24)."
+              : "World Cup host city. Demand surge fires at Q19 and runs through Q24."}
+          >
+            <Trophy size={12} aria-hidden="true" />
+            World Cup host
+            {wcActiveNow && <span className="text-[0.625rem] uppercase tracking-wider">live</span>}
+          </span>
+        )}
+        {isOlympicHost && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[0.75rem] font-semibold",
+              olActiveNow
+                ? "bg-[var(--accent-soft)] text-accent border border-accent/40"
+                : "bg-surface-2 text-ink-2 border border-line",
+            )}
+            title={olActiveNow
+              ? "Olympics demand surge active now (Q29-Q32)."
+              : "Olympics host city. Demand surge fires at Q29 and runs through Q32."}
+          >
+            <Trophy size={12} aria-hidden="true" />
+            Olympics host
+            {olActiveNow && <span className="text-[0.625rem] uppercase tracking-wider">live</span>}
+          </span>
+        )}
+        {activeNews.slice(0, 6).map((n) => (
+          <span
+            key={n.id}
+            className="inline-flex items-baseline gap-1.5 rounded-md bg-surface-2 border border-line px-2 py-1 text-[0.75rem] text-ink-2 max-w-full"
+            title={n.detail || n.headline}
+          >
+            <Newspaper size={11} aria-hidden="true" className="shrink-0 mt-0.5" />
+            <span className="truncate">{n.headline}</span>
+            <span className="text-[0.625rem] tabular text-ink-muted shrink-0">
+              {fmtQuarter(n.quarter)}
+            </span>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Effective per-city demand for the current quarter, with Q/Q delta.
+ *  Player sees the exact same values the route engine works against
+ *  (event modifiers + travel index + season all baked in), plus the
+ *  signed % change vs the prior quarter so they can spot demand
+ *  inflection events ("World Cup boost just kicked in" → +50% Q/Q). */
+function CityDemandSection({ city, quarter }: { city: City; quarter: number }) {
+  const demand = cityEffectiveDemand(city, quarter);
+
+  return (
+    <section>
+      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+        Demand · {fmtQuarter(quarter)}
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <DemandStat label="Tourism" value={demand.tourism} deltaPct={demand.tourismDeltaPct} />
+        <DemandStat label="Business" value={demand.business} deltaPct={demand.businessDeltaPct} />
+        <DemandStat label="Cargo" value={demand.cargo} deltaPct={demand.cargoDeltaPct} />
+      </div>
+      <div className="text-[0.6875rem] text-ink-muted mt-1.5 leading-relaxed">
+        Effective daily demand at this city — already includes news
+        modifiers, the global travel index, and seasonal effects. Δ
+        compares this quarter vs last quarter.
+      </div>
+    </section>
+  );
+}
+
+function DemandStat({
+  label, value, deltaPct,
+}: {
+  label: string;
+  value: number;
+  deltaPct: number;
+}) {
+  const rounded = Math.round(value);
+  // Hide the delta on opening quarter (no prior quarter to compare).
+  // |delta| < 0.5% reads as "flat" so tiny drift doesn't show as
+  // an arrow.
+  const flat = Math.abs(deltaPct) < 0.5;
+  const positive = deltaPct > 0;
+  const ArrowIcon = positive ? ArrowUp : ArrowDown;
+  return (
+    <div className="rounded-md border border-line bg-surface p-2.5">
+      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+        {label}
+      </div>
+      <div className="font-display text-[1.25rem] text-ink mt-0.5 tabular">
+        {rounded.toLocaleString()}
+      </div>
+      <div className="text-[0.6875rem] mt-0.5 flex items-center gap-1">
+        {flat ? (
+          <span className="text-ink-muted">flat Q/Q</span>
+        ) : (
+          <>
+            <ArrowIcon
+              size={11}
+              aria-hidden="true"
+              className={positive ? "text-positive" : "text-negative"}
+            />
+            <span
+              className={cn(
+                "tabular font-mono",
+                positive ? "text-positive" : "text-negative",
+              )}
+            >
+              {positive ? "+" : ""}{deltaPct.toFixed(1)}% Q/Q
+            </span>
+          </>
+        )}
+      </div>
     </div>
   );
 }
