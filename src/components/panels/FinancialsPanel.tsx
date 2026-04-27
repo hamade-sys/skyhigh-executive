@@ -61,6 +61,19 @@ export function FinancialsPanel() {
           : { tone: "neg", label: "Covenant breach",
               detail: "Debt > 70% of airline value. Borrowing rate +5pp, board is uncomfortable. Repay or refi to lower." };
 
+  // ── Cash runway: how many quarters of cash at current burn rate.
+  //    Burn rate = max(0, last quarter's cost − revenue). If the
+  //    airline is profitable, runway is "indefinite" (∞). The display
+  //    caps at 24Q (6 years) so the bar doesn't render off-screen.
+  const lastNetCashFlow = last ? last.revenue - last.costs : 0;
+  const burnPerQ = lastNetCashFlow < 0 ? -lastNetCashFlow : 0;
+  const runwayQ = burnPerQ > 0 ? Math.floor(player.cashUsd / burnPerQ) : Infinity;
+  const runwayCappedQ = runwayQ === Infinity ? 24 : Math.min(runwayQ, 24);
+  const runwayTone: "pos" | "neg" | "warn" | "neutral" =
+    runwayQ === Infinity ? "pos" :
+    runwayQ <= 2 ? "neg" :
+    runwayQ <= 6 ? "warn" : "neutral";
+
   return (
     <div className="space-y-4">
       {/* ── 1. Balance sheet ── */}
@@ -80,22 +93,28 @@ export function FinancialsPanel() {
           <Row k="Airline value" v={fmtMoney(airlineValue)} bold />
           <Row k="Debt ratio" v={`${debtRatio.toFixed(1)}%`} tone={covenant.tone === "neg" ? "neg" : undefined} />
         </div>
-        {covenant.tone && (
-          <div
-            className={`mt-2 rounded-md px-3 py-2 text-[0.75rem] leading-relaxed ${
-              covenant.tone === "neg"
-                ? "border border-negative bg-[var(--negative-soft)] text-negative"
-                : covenant.tone === "warn"
-                  ? "border border-warning bg-[var(--warning-soft)] text-warning"
-                  : "border border-line bg-surface-2/40 text-ink-2"
-            }`}
-          >
-            <span className="font-semibold uppercase tracking-wider text-[0.625rem] mr-2">
-              {covenant.label}
-            </span>
-            {covenant.detail}
-          </div>
-        )}
+
+        {/* ── Visual covenant gauge — replaces the older text-only
+            covenant block with a horizontal bar from 0-100% debt ratio,
+            with shaded thresholds at 30/50/70 and a marker showing
+            current position. Colour follows the covenant tone. */}
+        <CovenantGauge
+          debtRatio={debtRatio}
+          tone={covenant.tone}
+          label={covenant.label}
+          detail={covenant.detail}
+        />
+
+        {/* ── Cash runway gauge — months of cash at the most recent
+            burn rate. If the airline is profitable, runway is
+            "indefinite" and the bar renders fully positive. Helps
+            the player gauge how aggressively they can spend. */}
+        <CashRunwayGauge
+          quarters={runwayQ}
+          cappedQ={runwayCappedQ}
+          tone={runwayTone}
+          burnPerQ={burnPerQ}
+        />
       </section>
 
       {/* ── 2. Borrowing ── */}
@@ -679,6 +698,156 @@ function TrendRow({
       <span className={`tabular font-mono text-[0.6875rem] w-12 text-right pt-1 ${tone}`}>
         {delta >= 0 ? "+" : ""}{fmt(delta)}
       </span>
+    </div>
+  );
+}
+
+/**
+ * Visual covenant gauge — renders the debt ratio as a horizontal bar
+ * with shaded threshold zones (0-30 ok / 30-50 caution / 50-70 high /
+ * 70+ breach) and a marker at the current position. Replaces the
+ * older text-only block so the player sees the slope toward breach.
+ */
+function CovenantGauge({
+  debtRatio, tone, label, detail,
+}: {
+  debtRatio: number;
+  tone: "info" | "warn" | "neg" | null;
+  label: string;
+  detail: string;
+}) {
+  const pct = Math.min(100, Math.max(0, debtRatio));
+  return (
+    <div className="mt-3 rounded-md border border-line bg-surface-2/30 p-3">
+      <div className="flex items-baseline justify-between mb-1.5">
+        <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+          Covenant pressure
+        </span>
+        <span
+          className={`tabular font-mono text-[0.875rem] font-semibold ${
+            tone === "neg" ? "text-negative" :
+            tone === "warn" ? "text-warning" :
+            tone === "info" ? "text-accent" : "text-positive"
+          }`}
+        >
+          {debtRatio.toFixed(1)}%
+        </span>
+      </div>
+      {/* Threshold-zoned bar. Each segment colored with the same tone
+          the lender's covenant signal would emit at that debt ratio. */}
+      <div className="relative h-2 rounded-full bg-surface-2 overflow-hidden">
+        <div className="absolute inset-y-0 left-0 right-[70%] bg-positive/30" />
+        <div className="absolute inset-y-0 left-[30%] right-[50%] bg-accent/30" />
+        <div className="absolute inset-y-0 left-[50%] right-[30%] bg-warning/40" />
+        <div className="absolute inset-y-0 left-[70%] right-0 bg-negative/40" />
+        {/* Position marker. */}
+        <div
+          className="absolute top-[-2px] bottom-[-2px] w-[3px] bg-ink rounded-sm"
+          style={{ left: `calc(${pct}% - 1.5px)` }}
+        />
+      </div>
+      <div className="flex justify-between text-[0.5625rem] tabular font-mono text-ink-muted mt-1 px-[1px]">
+        <span>0%</span>
+        <span>30%</span>
+        <span>50%</span>
+        <span>70%</span>
+        <span>100%</span>
+      </div>
+      {label && (
+        <div className="mt-1.5 text-[0.6875rem] leading-relaxed">
+          <span
+            className={`font-semibold uppercase tracking-wider text-[0.625rem] mr-1.5 ${
+              tone === "neg" ? "text-negative" :
+              tone === "warn" ? "text-warning" :
+              tone === "info" ? "text-accent" : "text-positive"
+            }`}
+          >
+            {label}
+          </span>
+          <span className="text-ink-2">{detail}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Cash-runway gauge — translates "burn rate × cash on hand" into an
+ * intuitive visual. Bar fills from left in proportion to runway/24Q
+ * (capped at 24Q so a profitable airline doesn't render a 1000+ bar).
+ * Tone matches the urgency: ≤2Q = breach-imminent (red), ≤6Q = warn
+ * (amber), longer = ok, profitable = positive.
+ */
+function CashRunwayGauge({
+  quarters, cappedQ, tone, burnPerQ,
+}: {
+  /** Raw quarters of runway, may be Infinity. */
+  quarters: number;
+  /** Display value capped at 24Q for the bar fill. */
+  cappedQ: number;
+  tone: "pos" | "neg" | "warn" | "neutral";
+  burnPerQ: number;
+}) {
+  const fillPct = (cappedQ / 24) * 100;
+  const isInfinite = quarters === Infinity;
+  return (
+    <div className="mt-3 rounded-md border border-line bg-surface-2/30 p-3">
+      <div className="flex items-baseline justify-between mb-1.5">
+        <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+          Cash runway
+        </span>
+        <span
+          className={`tabular font-mono text-[0.875rem] font-semibold ${
+            tone === "pos" ? "text-positive" :
+            tone === "neg" ? "text-negative" :
+            tone === "warn" ? "text-warning" : "text-ink"
+          }`}
+        >
+          {isInfinite ? "Indefinite" : `${quarters}Q`}
+        </span>
+      </div>
+      <div className="relative h-2 rounded-full bg-surface-2 overflow-hidden">
+        <div
+          className={`absolute inset-y-0 left-0 transition-[width] ${
+            tone === "pos" ? "bg-positive" :
+            tone === "neg" ? "bg-negative" :
+            tone === "warn" ? "bg-warning" : "bg-accent"
+          }`}
+          style={{ width: `${fillPct}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-[0.5625rem] tabular font-mono text-ink-muted mt-1">
+        <span>0Q</span>
+        <span>6Q</span>
+        <span>12Q</span>
+        <span>18Q</span>
+        <span>24Q+</span>
+      </div>
+      <div className="mt-1.5 text-[0.6875rem] text-ink-2 leading-relaxed">
+        {isInfinite ? (
+          <>
+            <span className="font-semibold uppercase tracking-wider text-[0.625rem] text-positive mr-1.5">
+              Profitable
+            </span>
+            Last quarter you ran a surplus — runway grows as cash builds.
+          </>
+        ) : (
+          <>
+            <span
+              className={`font-semibold uppercase tracking-wider text-[0.625rem] mr-1.5 ${
+                tone === "neg" ? "text-negative" : tone === "warn" ? "text-warning" : "text-ink-muted"
+              }`}
+            >
+              Burning {fmtMoney(burnPerQ)}/Q
+            </span>
+            {tone === "neg"
+              ? "Cash runs out before next reporting cycle — refinance or cut spend now."
+              : tone === "warn"
+                ? "Less than 18 months of runway. Consider refinancing or trimming sliders."
+                : "Plenty of cushion at the current burn rate."}
+          </>
+        )}
+      </div>
     </div>
   );
 }
