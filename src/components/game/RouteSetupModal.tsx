@@ -10,7 +10,9 @@ import {
   detectTierFromAverage,
   distanceBetween,
   effectiveRangeKm,
+  groundTurnaroundHours,
   maxRouteDailyFrequency,
+  maxWeeklyRotations,
   routeDemandPerDay,
 } from "@/lib/engine";
 import { BASE_SLOT_PRICE_BY_TIER } from "@/lib/slots";
@@ -36,8 +38,8 @@ export interface RouteSetupModalProps {
  *      cabin-class availability are undefined.
  *   2. Daily frequency is capped at `maxRouteDailyFrequency` for the
  *      selected aircraft set + distance (PRD §D1: cruise speed × distance
- *      + 2hr ground turnaround at each end). Slider physically can't
- *      exceed the math.
+ *      + aircraft-size ground turnaround at each end, with cargo-belly
+ *      loading penalty). Slider physically can't exceed the math.
  *   3. Per-class fares (econ / business / first) only render for cabin
  *      classes the selected aircraft actually has. The default is the
  *      base fare from PRD §A11; sliding adjusts demand sensitivity.
@@ -112,23 +114,26 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
         .filter((x): x is string => !!x),
     [selectedPlaneIds, player],
   );
-  // Pass per-aircraft engine upgrades so power/super (+10% speed) raise
-  // the rotation cap. Without this, upgraded planes still maxed out at
-  // their stock-engine weekly rotations.
+  // Pass per-aircraft engine upgrades + cargo belly. Power/super increases
+  // speed; cargo belly increases ground time, lowering the rotation cap.
   const aircraftWithUpgrades = useMemo(() =>
     selectedPlaneIds
       .map((id) => {
         const p = player?.fleet.find((f) => f.id === id);
         if (!p) return null;
-        return { specId: p.specId, engineUpgrade: p.engineUpgrade ?? null };
+        return {
+          specId: p.specId,
+          engineUpgrade: p.engineUpgrade ?? null,
+          cargoBelly: p.cargoBelly,
+        };
       })
-      .filter((x): x is { specId: string; engineUpgrade: "fuel" | "power" | "super" | null } => !!x),
+      .filter((x): x is NonNullable<typeof x> => !!x),
     [selectedPlaneIds, player],
   );
   const maxDailyFreq = specIds.length > 0
     ? maxRouteDailyFrequency(specIds, dist, aircraftWithUpgrades)
     : 0;
-  const maxWeeklyFreq = maxDailyFreq * 7;
+  const maxWeeklyFreq = Math.round(maxDailyFreq * 7);
   useEffect(() => {
     if (maxWeeklyFreq === 0) {
       if (weeklyFreq !== 0) setWeeklyFreq(0);
@@ -225,17 +230,18 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
 
   // Schedule math summary used to explain the frequency cap
   const scheduleNote = (() => {
-    if (specIds.length === 0) return null;
-    const fastestSpeed = Math.max(...specIds.map((id) => cruiseSpeedKmh(id)));
-    const slowestSpeed = Math.min(...specIds.map((id) => cruiseSpeedKmh(id)));
+    if (aircraftWithUpgrades.length === 0) return null;
+    const fastestSpeed = Math.max(...aircraftWithUpgrades.map((a) => cruiseSpeedKmh(a.specId, a.engineUpgrade)));
+    const slowestSpeed = Math.min(...aircraftWithUpgrades.map((a) => cruiseSpeedKmh(a.specId, a.engineUpgrade)));
+    const turnaround = Math.max(...aircraftWithUpgrades.map((a) => groundTurnaroundHours(a.specId, a.cargoBelly)));
     const oneWayHrs = dist / slowestSpeed;
-    const turnaround = 2.0;
     const roundTripHrs = oneWayHrs * 2 + turnaround * 2;
     return {
-      perPlaneDaily: Math.max(1, Math.floor(24 / roundTripHrs)),
+      perPlaneWeekly: Math.max(1, Math.floor(168 / roundTripHrs)),
       roundTripHrs,
       fastestSpeed,
       slowestSpeed,
+      turnaround,
     };
   })();
 
@@ -455,10 +461,8 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                   ? AIRCRAFT_BY_ID[firstSelected.specId]?.family
                   : null;
                 const familyMismatch = !!lockedFamily && lockedFamily !== spec.family;
-                const planeMaxDaily = canReach
-                  ? Math.max(1, Math.floor(
-                      24 / ((dist / cruiseSpeedKmh(p.specId)) * 2 + 4),
-                    ))
+                const planeMaxWeekly = canReach
+                  ? maxWeeklyRotations(p.specId, dist, p.engineUpgrade ?? null, p.cargoBelly)
                   : 0;
                 const disabled = !canReach || familyMismatch;
                 return (
@@ -503,7 +507,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                           }
                           const s = p.customSeats ?? spec.seats;
                           return `${s.first + s.business + s.economy} seats (${s.first}F/${s.business}C/${s.economy}Y)`;
-                        })()} · {cruiseSpeedKmh(p.specId)} km/h cruise
+                        })()} · {cruiseSpeedKmh(p.specId, p.engineUpgrade ?? null)} km/h cruise
                       </div>
                     </div>
                     {!canReach ? (
@@ -513,7 +517,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                         {lockedFamily === "cargo" ? "Cargo route locked" : "Passenger route locked"}
                       </Badge>
                     ) : (
-                      <Badge tone="neutral">{planeMaxDaily * 7}/wk max</Badge>
+                      <Badge tone="neutral">{planeMaxWeekly}/wk max</Badge>
                     )}
                   </label>
                 );
@@ -523,8 +527,8 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
           {hasAircraft && scheduleNote && (
             <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-2">
               Schedule math: {Math.round(dist).toLocaleString()} km ÷ {scheduleNote.slowestSpeed} km/h
-              + 2 × 2 hr turnaround = {scheduleNote.roundTripHrs.toFixed(1)} hr round-trip per
-              aircraft · floor(24 / round-trip) × 7 days = <strong className="text-ink">{scheduleNote.perPlaneDaily * 7} flights/week per plane</strong>.
+              + 2 × {scheduleNote.turnaround.toFixed(0)} hr ground time = {scheduleNote.roundTripHrs.toFixed(1)} hr round-trip per
+              aircraft · floor(168 / round-trip) = <strong className="text-ink">{scheduleNote.perPlaneWeekly} flights/week per plane</strong>.
             </div>
           )}
         </Section>

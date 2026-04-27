@@ -33,7 +33,14 @@ import type { AircraftSpec } from "@/types/game";
 import {
   engineUpgradeCostUsd as engineCost,
   fuselageUpgradeCostUsd as fuselageCost,
+  amenityCostUsd,
+  cargoBellyCostUsd,
+  cargoBellyStandardTonnes,
+  AMENITY_PCT,
+  AMENITY_SAT_BUMP,
+  CARGO_BELLY_COST_PCT,
 } from "@/lib/aircraft-upgrades";
+import type { CabinAmenities, CargoBellyTier } from "@/types/game";
 
 type EngineKind = "none" | "fuel" | "power" | "super";
 
@@ -44,6 +51,8 @@ interface PurchaseOrderArgs {
   customSeats?: { first: number; business: number; economy: number };
   engineUpgrade: "fuel" | "power" | "super" | null;
   fuselageUpgrade: boolean;
+  cabinAmenities?: CabinAmenities;
+  cargoBelly?: CargoBellyTier;
 }
 
 interface Props {
@@ -94,12 +103,19 @@ function PurchaseOrderBody({
   }, [spec, isPassenger, defaultEquivalents]);
 
   const [quantity, setQuantity] = useState(prefill?.quantity ?? 1);
-  const [engine, setEngine] = useState<EngineKind>(
-    prefill?.engineUpgrade ?? "none",
-  );
-  const [fuselage, setFuselage] = useState(prefill?.fuselageUpgrade ?? false);
+  // Engine + fuselage are READ-ONLY from prefill — chosen on the
+  // AircraftMarketModal expanded card. Showing them again as
+  // editable fields earlier let the player override their previous
+  // pick by accident.
+  const engine: EngineKind = prefill?.engineUpgrade ?? "none";
+  const fuselage = prefill?.fuselageUpgrade ?? false;
   const [firstPct, setFirstPct] = useState(defaultRatios.first);
   const [businessPct, setBusinessPct] = useState(defaultRatios.business);
+  // New at PurchaseOrderModal: cabin amenities (passenger only) +
+  // cargo belly tier (passenger only). Each is a per-airframe
+  // commitment captured at order time.
+  const [amenities, setAmenities] = useState<CabinAmenities>({});
+  const [cargoBelly, setCargoBelly] = useState<CargoBellyTier>("none");
   // Economy is the remainder so it always balances.
   const economyPct = Math.max(0, 100 - firstPct - businessPct);
 
@@ -129,18 +145,15 @@ function PurchaseOrderBody({
       Math.abs(businessPct - defaultRatios.business) > 0
     );
 
-  // Pricing scales with the airframe (10% per upgrade, 20% for super).
-  // The buy price is the airframe value regardless of buy-vs-lease since
-  // upgrades belong to the aircraft, not the lease.
-  const fuelUpgradeCost = engineCost(spec.buyPriceUsd, "fuel");
-  const powerUpgradeCost = engineCost(spec.buyPriceUsd, "power");
-  const superUpgradeCost = engineCost(spec.buyPriceUsd, "super");
-  const fuselageUpgradeCost = fuselageCost(spec.buyPriceUsd);
-  const selectedEngineCost =
-    engine === "fuel" ? fuelUpgradeCost :
-    engine === "power" ? powerUpgradeCost :
-    engine === "super" ? superUpgradeCost : 0;
-  const upgradeCostPerPlane = selectedEngineCost + (fuselage ? fuselageUpgradeCost : 0);
+  // Pricing scales with the airframe. Engine + fuselage carry through
+  // from the AircraftMarketModal pick (read-only here); cabin amenities
+  // + cargo belly are new at this step.
+  const selectedEngineCost = engine === "none" ? 0 : engineCost(spec.buyPriceUsd, engine);
+  const fuselageUpgradeCost = fuselage ? fuselageCost(spec.buyPriceUsd) : 0;
+  const amenitiesCost = amenityCostUsd(spec.buyPriceUsd, amenities);
+  const bellyCost = isPassenger ? cargoBellyCostUsd(spec.buyPriceUsd, cargoBelly) : 0;
+  const upgradeCostPerPlane =
+    selectedEngineCost + fuselageUpgradeCost + amenitiesCost + bellyCost;
 
   const basePrice =
     acquisitionType === "buy" ? spec.buyPriceUsd : spec.leasePerQuarterUsd;
@@ -155,6 +168,12 @@ function PurchaseOrderBody({
       customSeats: isCustom && customSeats ? customSeats : undefined,
       engineUpgrade: engine === "none" ? null : engine,
       fuselageUpgrade: fuselage,
+      cabinAmenities:
+        isPassenger && (amenities.wifi || amenities.premiumSeating ||
+                        amenities.entertainment || amenities.foodService)
+          ? amenities
+          : undefined,
+      cargoBelly: isPassenger ? cargoBelly : undefined,
     });
   }
 
@@ -232,73 +251,125 @@ function PurchaseOrderBody({
           </div>
         </Section>
 
-        {/* 2 — Engine upgrade */}
-        <Section title="Engine retrofit (per aircraft)">
-          <div className="grid grid-cols-2 gap-2">
-            <EngineOption
-              kind="none"
-              active={engine === "none"}
-              label="Stock engine"
-              detail="No retrofit"
-              cost={0}
-              onClick={() => setEngine("none")}
-            />
-            <EngineOption
-              kind="fuel"
-              active={engine === "fuel"}
-              label="Fuel-efficient"
-              detail="+10% range, −10% fuel burn"
-              cost={fuelUpgradeCost}
-              onClick={() => setEngine("fuel")}
-            />
-            <EngineOption
-              kind="power"
-              active={engine === "power"}
-              label="Power-up"
-              detail="+10% speed → tighter schedule"
-              cost={powerUpgradeCost}
-              onClick={() => setEngine("power")}
-            />
-            <EngineOption
-              kind="super"
-              active={engine === "super"}
-              label="Super (fuel + power)"
-              detail="Both effects combined"
-              cost={superUpgradeCost}
-              onClick={() => setEngine("super")}
-            />
-          </div>
-        </Section>
-
-        {/* 3 — Fuselage coating */}
-        <Section title="Fuselage coating">
-          <label
-            className={cn(
-              "flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors",
-              fuselage
-                ? "border-primary bg-[rgba(20,53,94,0.04)]"
-                : "border-line hover:bg-surface-hover",
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={fuselage}
-              onChange={(e) => setFuselage(e.target.checked)}
-              className="accent-primary"
-            />
-            <div className="flex-1">
-              <div className="font-medium text-ink text-[0.875rem]">
-                Anti-drag coating
-              </div>
-              <div className="text-[0.75rem] text-ink-muted">
-                −10% fuel burn (stacks with engine retrofit)
-              </div>
+        {/* 2 — Engine + fuselage chosen on the previous screen.
+              Render as read-only summary so the player sees what's
+              already locked in without a chance to override here. */}
+        {(engine !== "none" || fuselage) && (
+          <Section title="Already configured (from previous screen)">
+            <div className="rounded-md border border-line bg-surface-2/40 p-3 text-[0.8125rem] flex flex-wrap items-baseline gap-x-4 gap-y-1.5">
+              {engine !== "none" && (
+                <span className="inline-flex items-baseline gap-1.5">
+                  <span className="text-ink-muted text-[0.6875rem] uppercase tracking-wider">Engine</span>
+                  <span className="text-ink font-medium capitalize">{engine}</span>
+                  <span className="text-ink-muted text-[0.6875rem] tabular font-mono">
+                    +{fmtMoney(selectedEngineCost)}/plane
+                  </span>
+                </span>
+              )}
+              {fuselage && (
+                <span className="inline-flex items-baseline gap-1.5">
+                  <span className="text-ink-muted text-[0.6875rem] uppercase tracking-wider">Fuselage</span>
+                  <span className="text-ink font-medium">Anti-drag coating</span>
+                  <span className="text-ink-muted text-[0.6875rem] tabular font-mono">
+                    +{fmtMoney(fuselageUpgradeCost)}/plane
+                  </span>
+                </span>
+              )}
             </div>
-            <span className="tabular font-mono text-ink-2 text-[0.875rem]">
-              +{fmtMoney(fuselageUpgradeCost)}
-            </span>
-          </label>
-        </Section>
+          </Section>
+        )}
+
+        {/* 3 — Cabin amenities (passenger only). Each toggle adds
+              a small per-plane cost AND a satisfaction bump that
+              feeds the cabin-condition demand multiplier in the
+              engine — the player buys passenger experience here. */}
+        {isPassenger && (
+          <Section title="Cabin amenities (per aircraft)">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <AmenityToggle
+                checked={!!amenities.wifi}
+                onChange={(v) => setAmenities((a) => ({ ...a, wifi: v }))}
+                label="In-flight WiFi"
+                detail={`+${AMENITY_SAT_BUMP.wifi} satisfaction`}
+                cost={spec.buyPriceUsd * AMENITY_PCT.wifi}
+              />
+              <AmenityToggle
+                checked={!!amenities.premiumSeating}
+                onChange={(v) => setAmenities((a) => ({ ...a, premiumSeating: v }))}
+                label="Premium seating"
+                detail={`+${AMENITY_SAT_BUMP.premiumSeating} satisfaction · upgraded shells, more pitch`}
+                cost={spec.buyPriceUsd * AMENITY_PCT.premiumSeating}
+              />
+              <AmenityToggle
+                checked={!!amenities.entertainment}
+                onChange={(v) => setAmenities((a) => ({ ...a, entertainment: v }))}
+                label="Inflight entertainment"
+                detail={`+${AMENITY_SAT_BUMP.entertainment} satisfaction · seat-back screens, content library`}
+                cost={spec.buyPriceUsd * AMENITY_PCT.entertainment}
+              />
+              <AmenityToggle
+                checked={!!amenities.foodService}
+                onChange={(v) => setAmenities((a) => ({ ...a, foodService: v }))}
+                label="Hot food service"
+                detail={`+${AMENITY_SAT_BUMP.foodService} satisfaction · galleys + chef partnership`}
+                cost={spec.buyPriceUsd * AMENITY_PCT.foodService}
+              />
+            </div>
+            <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
+              Amenities stack — picking premium seating + entertainment
+              on every plane in your fleet earns an additional 3% route
+              demand uplift on routes those planes fly.
+            </div>
+          </Section>
+        )}
+
+        {/* 4 — Cargo belly (passenger only). Standard belly per
+              seat-count tier; Expanded = 1.5× standard tonnage at
+              double the cost. Belly tonnage flies on every passenger
+              flight and consumes from cargo demand on the route. */}
+        {isPassenger && (() => {
+          const bellyStdT = cargoBellyStandardTonnes(totalSeats);
+          if (bellyStdT === 0) {
+            return null;  // sub-100-seat regional jets don't get a belly tier
+          }
+          const bellyExpT = Math.round(bellyStdT * 1.5);
+          return (
+            <Section title="Cargo belly (per aircraft)">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <BellyOption
+                  active={cargoBelly === "none"}
+                  label="No belly cargo"
+                  detail="Pax only — no belly capacity"
+                  tonnes={0}
+                  cost={0}
+                  onClick={() => setCargoBelly("none")}
+                />
+                <BellyOption
+                  active={cargoBelly === "standard"}
+                  label="Standard belly"
+                  detail="Tier-baseline tonnage on every flight"
+                  tonnes={bellyStdT}
+                  cost={spec.buyPriceUsd * CARGO_BELLY_COST_PCT.standard}
+                  onClick={() => setCargoBelly("standard")}
+                />
+                <BellyOption
+                  active={cargoBelly === "expanded"}
+                  label="Expanded belly"
+                  detail="1.5× standard tonnage"
+                  tonnes={bellyExpT}
+                  cost={spec.buyPriceUsd * CARGO_BELLY_COST_PCT.expanded}
+                  onClick={() => setCargoBelly("expanded")}
+                />
+              </div>
+              <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
+                Belly tonnage scales with seat count: 100-199 seats = 5T,
+                200-299 = 10T, 300-399 = 20T, 400+ = 25T. Belly cargo
+                consumes from the route&apos;s cargo demand and prices
+                at 80% of dedicated freighter rates.
+              </div>
+            </Section>
+          );
+        })()}
 
         {/* 4 — Seat configuration (passenger only) */}
         {isPassenger && customSeats && (
@@ -479,6 +550,20 @@ function PurchaseOrderBody({
               total={fmtMoney(fuselageUpgradeCost * quantity)}
             />
           )}
+          {amenitiesCost > 0 && (
+            <SummaryRow
+              label="Cabin amenities"
+              value={`${fmtMoney(amenitiesCost)} × ${quantity}`}
+              total={fmtMoney(amenitiesCost * quantity)}
+            />
+          )}
+          {bellyCost > 0 && (
+            <SummaryRow
+              label={`Cargo belly (${cargoBelly})`}
+              value={`${fmtMoney(bellyCost)} × ${quantity}`}
+              total={fmtMoney(bellyCost * quantity)}
+            />
+          )}
           <div className="flex items-baseline justify-between border-t border-line pt-2 mt-2">
             <span className="font-semibold text-ink uppercase text-[0.75rem] tracking-wider">
               Total {acquisitionType === "buy" ? "purchase" : "first-quarter"}
@@ -590,5 +675,81 @@ function SummaryRow({ label, value, total }: { label: string; value: string; tot
         <span className="font-mono tabular text-ink font-medium w-24 text-right">{total}</span>
       </div>
     </div>
+  );
+}
+
+/** Cabin amenity toggle — checkbox row with label + effect blurb +
+ *  cost. Visual matches the existing Fuselage coating row pattern
+ *  for consistency across the order form. */
+function AmenityToggle({
+  checked, onChange, label, detail, cost,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  detail: string;
+  cost: number;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors",
+        checked
+          ? "border-primary bg-[rgba(20,53,94,0.04)]"
+          : "border-line hover:bg-surface-hover",
+      )}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-primary"
+      />
+      <div className="flex-1">
+        <div className="font-medium text-ink text-[0.875rem]">{label}</div>
+        <div className="text-[0.75rem] text-ink-muted leading-snug">{detail}</div>
+      </div>
+      <span className="tabular font-mono text-ink-2 text-[0.875rem]">
+        +{fmtMoney(cost)}
+      </span>
+    </label>
+  );
+}
+
+/** Cargo belly tier option — radio-style card with tonnage badge. */
+function BellyOption({
+  active, label, detail, tonnes, cost, onClick,
+}: {
+  active: boolean;
+  label: string;
+  detail: string;
+  tonnes: number;
+  cost: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-md border px-3 py-3 text-left transition-colors",
+        active
+          ? "border-primary bg-[rgba(20,53,94,0.04)]"
+          : "border-line hover:bg-surface-hover",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-medium text-ink text-[0.875rem]">{label}</span>
+        {tonnes > 0 && (
+          <span className="text-[0.625rem] uppercase tracking-wider font-bold text-warning bg-[var(--warning-soft)] rounded px-1.5 py-0.5">
+            {tonnes}T
+          </span>
+        )}
+      </div>
+      <div className="text-[0.75rem] text-ink-muted mt-1 leading-snug">{detail}</div>
+      <div className="text-[0.75rem] tabular font-mono text-ink-2 mt-1.5">
+        {cost > 0 ? `+${fmtMoney(cost)}` : "free"}
+      </div>
+    </button>
   );
 }

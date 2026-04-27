@@ -17,6 +17,7 @@ import { SCENARIOS, type OptionEffect, type Scenario } from "@/data/scenarios";
 import { SUBSIDIARY_BY_TYPE as SUBSIDIARY_CATALOG_BY_TYPE } from "@/data/subsidiaries";
 import { NEWS_BY_QUARTER } from "@/data/world-news";
 import { cityEventImpact, newsItemImpactForCity } from "./city-events";
+import { cargoBellyTonnes } from "./aircraft-upgrades";
 import type {
   AirportSlotState,
   City,
@@ -27,6 +28,7 @@ import type {
   SliderLevel,
   Sliders,
   Team,
+  CargoBellyTier,
 } from "@/types/game";
 
 const M = 1_000_000;
@@ -223,6 +225,25 @@ export function cruiseSpeedKmh(
   return base;
 }
 
+/** Ground turnaround time at one endpoint. Regional/narrow-body aircraft
+ *  can be turned faster than wide/heavy aircraft. Passenger aircraft with
+ *  cargo belly loading need an extra hour on the ground at each end. */
+export function groundTurnaroundHours(
+  specId: string,
+  cargoBelly?: CargoBellyTier,
+): number {
+  const spec = AIRCRAFT_BY_ID[specId];
+  const seats = spec
+    ? spec.seats.first + spec.seats.business + spec.seats.economy
+    : 0;
+  const isWideOrHeavy =
+    (spec?.family === "cargo" && (spec.cargoTonnes ?? 0) >= 45) ||
+    seats >= 240 ||
+    /^A330|^A340|^A350|^A380|^B747|^B767|^B777|^B787|^IL-96|^MD-11/.test(specId);
+  const bellyPenalty = cargoBelly && cargoBelly !== "none" ? 1 : 0;
+  return (isWideOrHeavy ? 4 : 3) + bellyPenalty;
+}
+
 /** Effective range after retrofits. The "fuel" and "super" engines
  *  ship a 10% range extension on top of the spec's published range —
  *  that bonus is now actually applied here so the route-distance
@@ -261,44 +282,48 @@ export function maxWeeklyRotations(
   specId: string,
   routeDistanceKm: number,
   engineUpgrade?: "fuel" | "power" | "super" | null,
+  cargoBelly?: CargoBellyTier,
 ): number {
   const oneWayHrs = routeDistanceKm / cruiseSpeedKmh(specId, engineUpgrade);
-  const turnaround = 2.0;
+  const turnaround = groundTurnaroundHours(specId, cargoBelly);
   const roundTrip = oneWayHrs * 2 + turnaround * 2;
-  const daily = Math.max(1, Math.floor(24 / roundTrip));
-  return daily * 7;
+  return Math.max(1, Math.floor(168 / roundTrip));
 }
 
-/** Helper: max daily frequency across all planes on a route. Returns a
- *  whole number (the physical cap, e.g. you can't fly 1.5 round-trips
- *  per day — each plane completes either 1 or 2 sorties). The slider
- *  in the UI is in WEEKLY units and accepts any integer up to
- *  maxDailyFrequency × 7, so the player can pick e.g. 10/wk even
- *  though that maps to ~1.43 daily — the engine handles the fractional
- *  daily frequency in revenue / fuel / capacity math. Engine upgrades
- *  flow through via the optional aircraft list.
+/** Helper: max average daily frequency across all planes on a route. The
+ *  physics cap is computed on a 168-hour week, not by multiplying a whole
+ *  daily cap by 7. That allows realistic schedules like 8/wk or 22/wk when
+ *  round-trip time does not divide evenly into a day.
  *
  *  When `aircraft` is provided, each plane's individual engine upgrade
- *  is honoured (the +10% speed bump from `power` / `super` upgrades
- *  shortens the one-way time and therefore raises the daily cap). The
- *  bare-spec fallback is kept for the AI-bot path which only knows
- *  the spec id. */
+ *  and cargo belly state are honoured. Power/super shortens the one-way
+ *  time; cargo belly increases ground time. The bare-spec fallback is kept
+ *  for paths that only know the spec id. */
 export function maxRouteDailyFrequency(
   specIds: string[],
   routeDistanceKm: number,
-  aircraft?: Array<{ specId: string; engineUpgrade?: "fuel" | "power" | "super" | null }>,
+  aircraft?: Array<{
+    specId: string;
+    engineUpgrade?: "fuel" | "power" | "super" | null;
+    cargoBelly?: CargoBellyTier;
+  }>,
 ): number {
   if (aircraft && aircraft.length > 0) {
     const weeklyTotal = aircraft.reduce(
-      (sum, a) => sum + maxWeeklyRotations(a.specId, routeDistanceKm, a.engineUpgrade),
+      (sum, a) => sum + maxWeeklyRotations(
+        a.specId,
+        routeDistanceKm,
+        a.engineUpgrade,
+        a.cargoBelly,
+      ),
       0,
     );
-    return Math.floor(weeklyTotal / 7);
+    return weeklyTotal / 7;
   }
   const weeklyTotal = specIds.reduce(
     (sum, id) => sum + maxWeeklyRotations(id, routeDistanceKm), 0,
   );
-  return Math.floor(weeklyTotal / 7);
+  return weeklyTotal / 7;
 }
 
 // ─── Hub attractiveness bonus (PRD E7) ─────────────────────
@@ -1040,12 +1065,36 @@ export function computeRouteEconomics(
   // satisfactionPct < 30, knock 8% off demand. Below 50, knock 4%. Above 80
   // bonus 2%. Multiple planes pick the WORST condition (passengers
   // remember the bad flight).
+  //
+  // Cabin amenities (WiFi / Premium / Entertainment / Food) are
+  // additive virtual bumps to each plane's effective satisfaction —
+  // they don't drift like the base satisfactionPct does, so we add
+  // them on top here rather than baking into the stored value.
+  function effectiveSat(p: FleetAircraft): number {
+    const base = p.satisfactionPct ?? 75;
+    const a = p.cabinAmenities;
+    if (!a) return base;
+    let bump = 0;
+    if (a.wifi) bump += 5;
+    if (a.premiumSeating) bump += 8;
+    if (a.entertainment) bump += 5;
+    if (a.foodService) bump += 6;
+    return Math.min(100, base + bump);
+  }
   let cabinPenalty = 1.0;
   if (planes.length > 0) {
-    const worstSat = Math.min(...planes.map((p) => p.satisfactionPct ?? 75));
+    const worstSat = Math.min(...planes.map(effectiveSat));
     if (worstSat < 30) cabinPenalty = 0.92;
     else if (worstSat < 50) cabinPenalty = 0.96;
     else if (worstSat >= 80) cabinPenalty = 1.02;
+    // Premium-tier amenity stacking: when ALL planes on the route
+    // have at least Premium Seating + Entertainment fitted, the
+    // route earns a small additional uplift. Models the brand effect
+    // of a consistent premium product across the fleet.
+    const allPremium = planes.every(
+      (p) => p.cabinAmenities?.premiumSeating && p.cabinAmenities?.entertainment,
+    );
+    if (allPremium) cabinPenalty *= 1.03;
   }
 
   // Defense-in-depth floor: demand can be flattened to zero by a stack
@@ -1124,10 +1173,57 @@ export function computeRouteEconomics(
   const quarterlyFirstPax = seatsPerFlight.first * route.dailyFrequency * QUARTER_DAYS * occupancy;
   const quarterlyBusPax = seatsPerFlight.bus * route.dailyFrequency * QUARTER_DAYS * occupancy;
   const quarterlyEconPax = seatsPerFlight.econ * route.dailyFrequency * QUARTER_DAYS * occupancy;
-  const quarterlyRevenue =
+  let quarterlyRevenue =
     quarterlyFirstPax * firstFare +
     quarterlyBusPax * busFare +
     quarterlyEconPax * econFare;
+
+  // ─ Cargo-belly contribution on passenger flights ──────────
+  // Players can fit a Standard or Expanded cargo belly on each
+  // passenger airframe at order time. The belly tonnage scales with
+  // seat-class-equivalent capacity (5/10/20/25 tons depending on
+  // total seats; expanded = 1.5×). Belly cargo CONSUMES from the
+  // route's cargo demand (lower of demand & belly capacity), prices
+  // at 80% of dedicated cargo fares (passenger jets carry mail and
+  // small parcels, not full pallets), and adds to revenue with no
+  // additional fuel cost since the airframes are already flying.
+  let bellyCargoRevenue = 0;
+  let bellyCargoTonnesUsed = 0;
+  const totalBellyTonnesPerFlight = planes.reduce((sum, p) => {
+    const spec = AIRCRAFT_BY_ID[p.specId];
+    if (!spec || spec.family !== "passenger") return sum;
+    const totalSeats = (p.customSeats?.first ?? spec.seats.first)
+      + (p.customSeats?.business ?? spec.seats.business)
+      + (p.customSeats?.economy ?? spec.seats.economy);
+    return sum + cargoBellyTonnes(totalSeats, p.cargoBelly);
+  }, 0);
+  if (totalBellyTonnesPerFlight > 0) {
+    const bellyDailyCapacity = totalBellyTonnesPerFlight * route.dailyFrequency;
+    // Cargo demand at this OD pair (re-using the cargo path's demand
+    // formula) — clamps via DEMAND_FLOOR_CARGO so a belly never sees
+    // a full zero on a route the engine is otherwise running.
+    const cargoEventA = cityEventImpact(route.originCode, quarter).cargo / 100;
+    const cargoEventB = cityEventImpact(route.destCode, quarter).cargo / 100;
+    const bellyMultA = Math.max(DEMAND_FLOOR_CARGO, 1 + cargoEventA);
+    const bellyMultB = Math.max(DEMAND_FLOOR_CARGO, 1 + cargoEventB);
+    // Belly demand is a fraction (~30%) of full-cargo demand because
+    // belly cargo competes with dedicated freighters and most
+    // shipments need pallet-sized doors. We treat belly as a side
+    // market that won't cannibalize a full freighter.
+    const cargoDemandT = Math.min(
+      cityBusinessAtQuarter(origin, quarter) * bellyMultA,
+      cityBusinessAtQuarter(dest, quarter) * bellyMultB,
+    ) * 0.30;
+    const dailyTonnesUsed = Math.max(0, Math.min(bellyDailyCapacity, cargoDemandT));
+    bellyCargoTonnesUsed = dailyTonnesUsed * QUARTER_DAYS;
+    // Belly pricing: 80% of dedicated cargo rate (parcels/mail vs full
+    // pallets), scaled by route pricing tier same as passenger fares.
+    const baseCargoRate = distanceKm < 3000 ? 3.5 : 5.5;
+    const tierMult = PRICE_TIER[route.pricingTier];
+    const pricePerTonne = baseCargoRate * tierMult * 0.80;
+    bellyCargoRevenue = bellyCargoTonnesUsed * pricePerTonne * 1000;
+    quarterlyRevenue += bellyCargoRevenue;
+  }
 
   // Fuel — calibrated to real-world Jet A1 ($0.55–$0.85/L). At
   // fuelIndex=100 (baseline) the price is FUEL_BASELINE_USD_PER_L.

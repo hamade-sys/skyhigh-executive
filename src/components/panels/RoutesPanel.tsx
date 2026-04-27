@@ -7,7 +7,7 @@ import { useUi } from "@/store/ui";
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
-import { classFareRange, distanceBetween, effectiveRangeKm } from "@/lib/engine";
+import { classFareRange, distanceBetween, effectiveRangeKm, maxRouteDailyFrequency } from "@/lib/engine";
 import type { PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { AlertTriangle, Pause, Play, Plus, X } from "lucide-react";
@@ -141,7 +141,7 @@ export function RoutesPanel() {
   const avgLoad = activeRoutes.length > 0
     ? activeRoutes.reduce((s, r) => s + r.avgOccupancy, 0) / activeRoutes.length
     : 0;
-  const totalWeeklyFreq = activeRoutes.reduce((s, r) => s + r.dailyFrequency * 7, 0);
+  const totalWeeklyFreq = activeRoutes.reduce((s, r) => s + Math.round(r.dailyFrequency * 7), 0);
   const passengerRoutes = activeRoutes.filter((r) => !r.isCargo).length;
   const cargoRoutes = activeRoutes.filter((r) => r.isCargo).length;
 
@@ -315,7 +315,7 @@ export function RoutesPanel() {
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-right tabular font-mono text-ink">
-                      {r.dailyFrequency * 7}/wk
+                      {Math.round(r.dailyFrequency * 7)}/wk
                     </td>
                     <td className="py-2.5 px-3 text-right tabular font-mono text-ink">
                       {fmtMoney(r.quarterlyRevenue)}
@@ -793,7 +793,7 @@ function RouteDetailModal({
   const updateRoute = useGame((g) => g.updateRoute);
 
   // UI works in WEEKLY frequency (engine still stores dailyFrequency).
-  const [weeklyFreq, setWeeklyFreq] = useState<number>(route.dailyFrequency * 7);
+  const [weeklyFreq, setWeeklyFreq] = useState<number>(Math.round(route.dailyFrequency * 7));
   const [tier, setTier] = useState<PricingTier>(route.pricingTier);
   const [econFare, setEconFare] = useState<number | null>(route.econFare ?? null);
   const [busFare, setBusFare] = useState<number | null>(route.busFare ?? null);
@@ -810,15 +810,21 @@ function RouteDetailModal({
   const clampSpecIds = selectedPlaneIds
     .map((id) => player?.fleet.find((f) => f.id === id)?.specId)
     .filter((x): x is string => !!x);
+  const clampAircraftForPhysics = selectedPlaneIds
+    .map((id) => {
+      const f = player?.fleet.find((plane) => plane.id === id);
+      if (!f) return null;
+      return {
+        specId: f.specId,
+        engineUpgrade: f.engineUpgrade ?? null,
+        cargoBelly: f.cargoBelly,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
   const clampMaxDaily = clampSpecIds.length > 0
-    ? Math.max(1, Math.floor(clampSpecIds.reduce((sum, id) => {
-        const oneWayHrs = route.distanceKm / (
-          /^A319|^A320|^A321|^B737/.test(id) ? 840 :
-          /^B757|^B767|^A330/.test(id) ? 870 : 900);
-        return sum + Math.max(1, Math.floor(24 / (oneWayHrs * 2 + 4))) * 7;
-      }, 0) / 7))
+    ? maxRouteDailyFrequency(clampSpecIds, route.distanceKm, clampAircraftForPhysics)
     : 0;
-  const clampMaxWeekly = clampMaxDaily * 7;
+  const clampMaxWeekly = Math.round(clampMaxDaily * 7);
   useEffect(() => {
     if (clampMaxWeekly === 0 && weeklyFreq !== 0) {
       setWeeklyFreq(0);
@@ -1007,16 +1013,21 @@ function RouteDetailModal({
             const specIds = selectedPlaneIds
               .map((id) => player.fleet.find((f) => f.id === id)?.specId)
               .filter((x): x is string => !!x);
+            const aircraftForPhysics = selectedPlaneIds
+              .map((id) => {
+                const f = player.fleet.find((plane) => plane.id === id);
+                if (!f) return null;
+                return {
+                  specId: f.specId,
+                  engineUpgrade: f.engineUpgrade ?? null,
+                  cargoBelly: f.cargoBelly,
+                };
+              })
+              .filter((x): x is NonNullable<typeof x> => !!x);
             const maxDaily = specIds.length > 0
-              ? Math.max(1, Math.floor(specIds.reduce((sum, id) => {
-                  const oneWayHrs = route.distanceKm / (
-                    /^A319|^A320|^A321|^B737/.test(id) ? 840 :
-                    /^B757|^B767|^A330/.test(id) ? 870 : 900);
-                  const dailyPerPlane = Math.max(1, Math.floor(24 / (oneWayHrs * 2 + 4)));
-                  return sum + dailyPerPlane * 7;
-                }, 0) / 7))
+              ? maxRouteDailyFrequency(specIds, route.distanceKm, aircraftForPhysics)
               : 1;
-            const maxWeekly = maxDaily * 7;
+            const maxWeekly = Math.round(maxDaily * 7);
             return (
               <>
                 <div className="flex items-center gap-3">
@@ -1319,7 +1330,7 @@ function CompetitorsTable({
                       return plane ? plane.specId : "—";
                     })()}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular font-mono text-ink">{route.dailyFrequency * 7}</td>
+                  <td className="px-2 py-1.5 text-right tabular font-mono text-ink">{Math.round(route.dailyFrequency * 7)}</td>
                   <td className="px-2 py-1.5 text-right text-[0.6875rem] capitalize">{route.pricingTier}</td>
                   <td className={cn(
                     "px-2 py-1.5 text-right tabular font-mono",
@@ -1356,7 +1367,7 @@ function CompetitorsTable({
                     <span className="text-ink-2 truncate">{team.name}</span>
                   </td>
                   <td className="px-2 py-1.5 font-mono text-ink-muted">{plane?.specId ?? "—"}</td>
-                  <td className="px-2 py-1.5 text-right tabular font-mono text-ink-2">{r.dailyFrequency * 7}</td>
+                  <td className="px-2 py-1.5 text-right tabular font-mono text-ink-2">{Math.round(r.dailyFrequency * 7)}</td>
                   <td className="px-2 py-1.5 text-right text-[0.6875rem] capitalize text-ink-muted">{r.pricingTier}</td>
                   <td className={cn(
                     "px-2 py-1.5 text-right tabular font-mono",

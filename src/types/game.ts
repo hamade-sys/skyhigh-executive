@@ -112,7 +112,35 @@ export interface FleetAircraft {
    *  low = down). Below 30 triggers a soft demand penalty on routes
    *  this plane flies. */
   satisfactionPct: number;
+  /** Cabin amenities chosen at purchase order. Each adds a satisfaction
+   *  bump and a small per-flight operating cost. Stack — a plane can
+   *  carry multiple amenities. The cost is captured per-aircraft at
+   *  order time and added to the airframe's operating cost line. */
+  cabinAmenities?: CabinAmenities;
+  /** Cargo belly upgrade for passenger aircraft. Standard adds the
+   *  baseline tonnage (per seat-count tier); Expanded adds 1.5× of
+   *  that. The plane consumes from cargo demand on every route it
+   *  flies. Cargo planes (`spec.family === "cargo"`) ignore this
+   *  field — they use `spec.cargoTonnes` directly. */
+  cargoBelly?: CargoBellyTier;
 }
+
+/** Optional cabin amenities a player can toggle at purchase order.
+ *  Each individually costs a fixed % of the spec buyPrice and bumps
+ *  passenger satisfaction by a small amount. Picked once per
+ *  airframe at order; not retro-fittable in the current build. */
+export interface CabinAmenities {
+  wifi?: boolean;             // +5 satisfaction · 1% of spec buy price
+  premiumSeating?: boolean;   // +8 satisfaction · 3% of spec buy price
+  entertainment?: boolean;    // +5 satisfaction · 1.5% of spec buy price
+  foodService?: boolean;      // +6 satisfaction · 2% of spec buy price
+}
+
+/** Cargo belly tier on a passenger airframe.
+ *    none      - no belly cargo
+ *    standard  - tier-baseline tonnage @ 10% of spec buy price
+ *    expanded  - 1.5× standard tonnage @ 20% of spec buy price */
+export type CargoBellyTier = "none" | "standard" | "expanded";
 
 // ─── Insurance (PRD E5) ──────────────────────────────────
 export type InsurancePolicy = "none" | "low" | "medium" | "high";
@@ -673,6 +701,11 @@ export interface PreOrder {
   customSeats?: CustomCabin;
   engineUpgrade?: EngineUpgrade;
   fuselageUpgrade?: boolean;
+  /** Cabin amenities chosen at purchase order. Carry-through to the
+   *  delivered FleetAircraft. */
+  cabinAmenities?: CabinAmenities;
+  /** Cargo belly tier on a passenger frame. Carry-through to delivery. */
+  cargoBelly?: CargoBellyTier;
   status: "queued" | "delivered" | "cancelled";
   /** When the engine actually delivered this slot (status=delivered). */
   deliveredAtQuarter?: number;

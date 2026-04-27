@@ -573,20 +573,53 @@ function ExpandedConfigurator({
         )}
       </div>
 
-      {/* Spec readout — slightly more detailed than the collapsed row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[0.75rem]">
-        <Stat label="Range" value={`${spec.rangeKm.toLocaleString()} km`} />
-        <Stat label="Fuel burn" value={`${spec.fuelBurnPerKm} L/km`} />
-        <Stat
-          label={spec.family === "passenger" ? "Default seats" : "Cargo"}
-          value={
-            spec.family === "passenger"
-              ? `${spec.seats.first}F/${spec.seats.business}C/${spec.seats.economy}Y`
-              : `${spec.cargoTonnes ?? 0}T`
-          }
-        />
-        <Stat label="List price" value={fmtMoney(spec.buyPriceUsd)} />
-      </div>
+      {/* Spec readout — slightly more detailed than the collapsed row.
+          Range + fuel burn now reflect the SELECTED engine retrofit
+          live, so the player sees the spec change as they pick. The
+          old layout showed the static spec values regardless of the
+          retrofit choice, so the value of the upgrade was invisible
+          until you read the side text. */}
+      {(() => {
+        // Compute effective values given engine + fuselage choices.
+        // Fuel: stack retrofit + fuselage multiplicatively.
+        const fuelMult =
+          (engine === "fuel" || engine === "super" ? 0.9 : 1.0) *
+          (fuselage ? 0.9 : 1.0);
+        const effFuelBurn = spec.fuelBurnPerKm * fuelMult;
+        // Range: +10% with fuel or super engine.
+        const effRange = engine === "fuel" || engine === "super"
+          ? Math.round(spec.rangeKm * 1.10)
+          : spec.rangeKm;
+        const burnDelta = effFuelBurn - spec.fuelBurnPerKm;
+        const rangeDelta = effRange - spec.rangeKm;
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[0.75rem]">
+            <Stat
+              label="Range"
+              value={`${effRange.toLocaleString()} km`}
+              delta={rangeDelta > 0 ? `+${rangeDelta.toLocaleString()} km` : undefined}
+              positive={rangeDelta > 0}
+            />
+            <Stat
+              label="Fuel burn"
+              value={`${effFuelBurn.toFixed(1)} L/km`}
+              delta={Math.abs(burnDelta) > 0.05
+                ? `${burnDelta > 0 ? "+" : "−"}${Math.abs(burnDelta).toFixed(1)} L/km`
+                : undefined}
+              positive={burnDelta < 0}
+            />
+            <Stat
+              label={spec.family === "passenger" ? "Default seats" : "Cargo"}
+              value={
+                spec.family === "passenger"
+                  ? `${spec.seats.first}F/${spec.seats.business}C/${spec.seats.economy}Y`
+                  : `${spec.cargoTonnes ?? 0}T`
+              }
+            />
+            <Stat label="List price" value={fmtMoney(spec.buyPriceUsd)} />
+          </div>
+        );
+      })()}
 
       {spec.note && (
         <p className="text-[0.8125rem] text-ink-2 italic leading-relaxed">
@@ -714,7 +747,21 @@ function ExpandedConfigurator({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label, value, delta, positive,
+}: {
+  label: string;
+  value: string;
+  /** Optional delta line shown below the value, e.g. "+1,610 km" or
+   *  "−0.4 L/km". Used for live retrofit-impact rendering on the
+   *  AircraftMarketModal expanded card so the player sees the spec
+   *  change as they pick an engine option. */
+  delta?: string;
+  /** Whether the delta should render in the positive (green) tone.
+   *  For range, more = positive. For fuel burn, less = positive — so
+   *  the caller decides the polarity. */
+  positive?: boolean;
+}) {
   return (
     <div className="rounded-md bg-surface border border-line/60 px-2.5 py-1.5">
       <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
@@ -723,6 +770,16 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="font-mono tabular text-[0.8125rem] text-ink mt-0.5">
         {value}
       </div>
+      {delta && (
+        <div
+          className={cn(
+            "text-[0.625rem] tabular font-mono mt-0.5 leading-tight",
+            positive ? "text-positive" : "text-negative",
+          )}
+        >
+          {delta}
+        </div>
+      )}
     </div>
   );
 }

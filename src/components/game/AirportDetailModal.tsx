@@ -53,7 +53,7 @@ export function AirportDetailModal({
           (r.status === "active" || r.status === "suspended" || r.status === "pending") &&
           (r.originCode === city.code || r.destCode === city.code),
         )
-        .reduce((sum, r) => sum + r.dailyFrequency * 7, 0);
+        .reduce((sum, r) => sum + Math.round(r.dailyFrequency * 7), 0);
       const isHomeHub = t.hubCode === city.code;
       const isSecondaryHub = t.secondaryHubCodes?.includes(city.code) ?? false;
       return { team: t, held, used: usedAtCode, isHomeHub, isSecondaryHub };
@@ -266,7 +266,7 @@ export function AirportDetailModal({
                     </span>
                     <div className="flex items-baseline gap-3 text-[0.75rem]">
                       <span className="tabular text-ink-muted">
-                        {r.dailyFrequency * 7}/wk
+                        {Math.round(r.dailyFrequency * 7)}/wk
                       </span>
                       <Badge
                         tone={

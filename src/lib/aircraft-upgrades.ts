@@ -42,3 +42,73 @@ export function totalUpgradeCostPerPlaneUsd(
     (fuselageUpgrade ? fuselageUpgradeCostUsd(buyPriceUsd) : 0)
   );
 }
+
+// ─── Cabin amenities ────────────────────────────────────────────
+// Each is a purchase-time toggle. Cost is a fraction of the spec buy
+// price so the same percentages scale across narrow-body and widebody.
+// Satisfaction bumps stack — a plane with all four amenities sits ~24
+// satisfaction points above a stripped airframe.
+
+export const AMENITY_PCT = {
+  wifi: 0.010,           // 1% of buy price · +5 satisfaction
+  premiumSeating: 0.030, // 3% of buy price · +8 satisfaction
+  entertainment: 0.015,  // 1.5% of buy price · +5 satisfaction
+  foodService: 0.020,    // 2% of buy price · +6 satisfaction
+} as const;
+
+export const AMENITY_SAT_BUMP = {
+  wifi: 5,
+  premiumSeating: 8,
+  entertainment: 5,
+  foodService: 6,
+} as const;
+
+export function amenityCostUsd(
+  buyPriceUsd: number,
+  amenities: { wifi?: boolean; premiumSeating?: boolean; entertainment?: boolean; foodService?: boolean } | undefined,
+): number {
+  if (!amenities) return 0;
+  let total = 0;
+  if (amenities.wifi) total += buyPriceUsd * AMENITY_PCT.wifi;
+  if (amenities.premiumSeating) total += buyPriceUsd * AMENITY_PCT.premiumSeating;
+  if (amenities.entertainment) total += buyPriceUsd * AMENITY_PCT.entertainment;
+  if (amenities.foodService) total += buyPriceUsd * AMENITY_PCT.foodService;
+  return Math.round(total);
+}
+
+// ─── Cargo belly upgrade for passenger planes ─────────────────────
+// Player-spec'd: tonnage by seat count, expanded tier = 1.5×. Cost
+// 10% of spec buy price for standard, 20% for expanded.
+
+export const CARGO_BELLY_COST_PCT = {
+  standard: 0.10,
+  expanded: 0.20,
+} as const;
+
+/** Standard cargo-belly tonnage capacity by total seat count. */
+export function cargoBellyStandardTonnes(totalSeats: number): number {
+  if (totalSeats >= 400) return 25;
+  if (totalSeats >= 300) return 20;
+  if (totalSeats >= 200) return 10;
+  if (totalSeats >= 100) return 5;
+  return 0;  // sub-100-seat regional jets don't get a belly tier
+}
+
+/** Effective belly tonnage for a passenger airframe given its tier. */
+export function cargoBellyTonnes(
+  totalSeats: number,
+  tier: "none" | "standard" | "expanded" | undefined,
+): number {
+  if (!tier || tier === "none") return 0;
+  const base = cargoBellyStandardTonnes(totalSeats);
+  if (tier === "standard") return base;
+  return Math.round(base * 1.5);  // expanded
+}
+
+export function cargoBellyCostUsd(
+  buyPriceUsd: number,
+  tier: "none" | "standard" | "expanded" | undefined,
+): number {
+  if (!tier || tier === "none") return 0;
+  return Math.round(buyPriceUsd * CARGO_BELLY_COST_PCT[tier]);
+}

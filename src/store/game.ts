@@ -30,7 +30,11 @@ import {
   deleteSnapshot as snapDelete,
 } from "@/lib/snapshots";
 import { FUEL_BASELINE_USD_PER_L, effectiveBaseRatePct, effectiveRangeKm, effectiveTravelIndex, newsFuelIndexHint } from "@/lib/engine";
-import { totalUpgradeCostPerPlaneUsd } from "@/lib/aircraft-upgrades";
+import {
+  totalUpgradeCostPerPlaneUsd,
+  amenityCostUsd,
+  cargoBellyCostUsd,
+} from "@/lib/aircraft-upgrades";
 import {
   PREORDER_DEPOSIT_PCT,
   PREORDER_CANCEL_PENALTY_PCT,
@@ -139,10 +143,16 @@ export interface GameStore extends GameState {
     engineUpgrade?: "fuel" | "power" | "super" | null;
     /** Fuselage coating retrofit at purchase. */
     fuselageUpgrade?: boolean;
+    /** Cabin amenities chosen at purchase (WiFi / Premium / Entertainment /
+     *  Food). Each adds a small cost % of buy price + a satisfaction bump. */
+    cabinAmenities?: import("@/types/game").CabinAmenities;
+    /** Cargo belly tier for passenger aircraft. Standard / expanded /
+     *  none. Standard tonnage scales with seat count; expanded = 1.5×. */
+    cargoBelly?: import("@/types/game").CargoBellyTier;
   }): { ok: boolean; error?: string; queuedCount?: number; deliveredCount?: number };
 
-  /** Cancel a queued pre-order. 15% of the deposit is kept as a
-   *  cancellation penalty; the remaining 85% is refunded. Once
+  /** Cancel a queued pre-order. Forfeits half the deposit as the
+   *  cancellation penalty; the other half is refunded. Once
    *  delivered, an order can no longer be cancelled. */
   cancelPreOrder(orderId: string): { ok: boolean; error?: string };
 
@@ -557,6 +567,8 @@ function deliverPreOrders(
       customSeats: order.customSeats,
       engineUpgrade: order.engineUpgrade ?? null,
       fuselageUpgrade: !!order.fuselageUpgrade,
+      cabinAmenities: order.cabinAmenities,
+      cargoBelly: spec.family === "passenger" ? (order.cargoBelly ?? "none") : undefined,
       retirementQuarter: deliveryQuarter + 28,
       maintenanceDeficit: 0,
       satisfactionPct: 75,
@@ -1004,6 +1016,7 @@ export const useGame = create<GameStore>()(
       orderAircraft: ({
         specId, acquisitionType, cabinConfig = "default",
         quantity = 1, customSeats, engineUpgrade = null, fuselageUpgrade = false,
+        cabinAmenities, cargoBelly,
       }) => {
         const s = get();
         const spec = AIRCRAFT_BY_ID[specId];
@@ -1026,11 +1039,19 @@ export const useGame = create<GameStore>()(
         // store used flat constants ($24.9M / $49.8M) while the UI
         // showed 10% / 20% of buy price; on a cheap airframe the UI
         // looked affordable then the store rejected it as too costly.
-        const upgradeCostPerPlane = totalUpgradeCostPerPlaneUsd(
+        const enginePlusFuselageCost = totalUpgradeCostPerPlaneUsd(
           spec.buyPriceUsd,
           engineUpgrade,
           !!fuselageUpgrade,
         );
+        // Cabin amenities + cargo belly are new at PurchaseOrderModal.
+        // Each adds a small per-airframe cost. Cargo belly only applies
+        // to passenger spec — `cargoBellyCostUsd` returns 0 for "none".
+        const amenitiesCost = amenityCostUsd(spec.buyPriceUsd, cabinAmenities);
+        const bellyCost = spec.family === "passenger"
+          ? cargoBellyCostUsd(spec.buyPriceUsd, cargoBelly)
+          : 0;
+        const upgradeCostPerPlane = enginePlusFuselageCost + amenitiesCost + bellyCost;
 
         // Validate custom seat allocation against the seat-equivalence cap:
         //   first × 3 + business × 2 + economy ≤ defaultEquivalents.
@@ -1140,6 +1161,11 @@ export const useGame = create<GameStore>()(
           customSeats: customSeats && spec.family === "passenger" ? customSeats : undefined,
           engineUpgrade: engineUpgrade ?? null,
           fuselageUpgrade: !!fuselageUpgrade,
+          // Cabin amenities + cargo belly carry through from order →
+          // delivery. Cargo belly only on passenger frames; cargo
+          // family already has spec.cargoTonnes.
+          cabinAmenities: cabinAmenities,
+          cargoBelly: spec.family === "passenger" ? (cargoBelly ?? "none") : undefined,
           retirementQuarter: s.currentQuarter + 28,
           maintenanceDeficit: 0, satisfactionPct: 75,
         }));
@@ -1159,6 +1185,8 @@ export const useGame = create<GameStore>()(
           customSeats: customSeats && spec.family === "passenger" ? customSeats : undefined,
           engineUpgrade: engineUpgrade ?? null,
           fuselageUpgrade: !!fuselageUpgrade,
+          cabinAmenities,
+          cargoBelly: spec.family === "passenger" ? (cargoBelly ?? "none") : undefined,
           status: "queued",
         }));
 
@@ -2097,15 +2125,30 @@ export const useGame = create<GameStore>()(
           const mergedSpecIds = mergedAircraftIds
             .map((id) => player.fleet.find((f) => f.id === id)?.specId)
             .filter((x): x is string => !!x);
+          const mergedAircraftForPhysics = mergedAircraftIds
+            .map((id) => {
+              const f = player.fleet.find((plane) => plane.id === id);
+              if (!f) return null;
+              return {
+                specId: f.specId,
+                engineUpgrade: f.engineUpgrade ?? null,
+                cargoBelly: f.cargoBelly,
+              };
+            })
+            .filter((x): x is NonNullable<typeof x> => !!x);
           const mergedMaxDaily =
             mergedSpecIds.length > 0
-              ? maxRouteDailyFrequency(mergedSpecIds, duplicate.distanceKm)
+              ? maxRouteDailyFrequency(
+                  mergedSpecIds,
+                  duplicate.distanceKm,
+                  mergedAircraftForPhysics,
+                )
               : duplicate.dailyFrequency;
           // Player asked for `dailyFrequency` (weekly/7); honor that as
           // a target up to the merged cap.
           const targetDaily = Math.max(duplicate.dailyFrequency, dailyFrequency);
           const newDaily = Math.min(targetDaily, mergedMaxDaily);
-          const newWeekly = newDaily * 7;
+          const newWeekly = Math.round(newDaily * 7);
           // Capacity check at both endpoints — sum across player's
           // OTHER active routes touching each airport, plus this route's
           // new weekly load.
@@ -2386,7 +2429,7 @@ export const useGame = create<GameStore>()(
         } else {
           toast.success(
             `Route opened: ${originCode} → ${destCode}`,
-            `${Math.round(dist).toLocaleString()} km · ${dailyFrequency}/day · ${pricingTier}. ` +
+            `${Math.round(dist).toLocaleString()} km · ${Math.round(dailyFrequency * 7)}/wk · ${pricingTier}. ` +
             `Flights start running this quarter; first revenue shows at quarter close.`,
           );
         }
@@ -2444,8 +2487,8 @@ export const useGame = create<GameStore>()(
         const route = player.routes.find((r) => r.id === routeId);
         if (!route) return { ok: false, error: "Route not found" };
         if (patch.dailyFrequency !== undefined &&
-            (patch.dailyFrequency < 1 || patch.dailyFrequency > 24))
-          return { ok: false, error: "Daily frequency 1–24" };
+            (patch.dailyFrequency < 1 / 7 || patch.dailyFrequency > 24))
+          return { ok: false, error: "Frequency must be 1–168 schedules/week" };
 
         // If aircraft reassigned, validate range + availability
         const newAircraftIds = patch.aircraftIds ?? route.aircraftIds;
@@ -2473,16 +2516,22 @@ export const useGame = create<GameStore>()(
         const newSpecIds = newAircraftIds
           .map((id) => player.fleet.find((f) => f.id === id)?.specId)
           .filter((x): x is string => !!x);
+        const aircraftForPhysics = newAircraftIds
+          .map((id) => {
+            const f = player.fleet.find((plane) => plane.id === id);
+            if (!f) return null;
+            return {
+              specId: f.specId,
+              engineUpgrade: f.engineUpgrade ?? null,
+              cargoBelly: f.cargoBelly,
+            };
+          })
+          .filter((x): x is NonNullable<typeof x> => !!x);
         const physicsCap = newSpecIds.length > 0
-          ? newSpecIds.reduce((sum, sid) => {
-              const oneWayHrs = route.distanceKm / (
-                /^A319|^A320|^A321|^B737/.test(sid) ? 840 :
-                /^B757|^B767|^A330/.test(sid) ? 870 : 900);
-              return sum + Math.max(1, Math.floor(24 / (oneWayHrs * 2 + 4)));
-            }, 0)
+          ? maxRouteDailyFrequency(newSpecIds, route.distanceKm, aircraftForPhysics)
           : 0;
         const clampedDaily =
-          physicsCap > 0 ? Math.min(finalDaily, physicsCap) : 1;
+          physicsCap > 0 ? Math.min(finalDaily, physicsCap) : 1 / 7;
 
         // Slot-capacity check on edit. Earlier updateRoute let a player
         // raise frequency or reassign aircraft without re-validating
@@ -2491,7 +2540,7 @@ export const useGame = create<GameStore>()(
         // Now we sum every active/pending route's weekly slot use
         // EXCLUDING this route, then add the proposed new weekly demand
         // (clampedDaily × 7) and compare against airportLeases.
-        const proposedWeekly = clampedDaily * 7;
+        const proposedWeekly = Math.round(clampedDaily * 7);
         for (const code of [route.originCode, route.destCode]) {
           const slotsHeld = player.airportLeases?.[code]?.slots ?? 0;
           const usedByOthers = player.routes
@@ -3387,7 +3436,7 @@ export const useGame = create<GameStore>()(
           const routePlans = planBotRoutes(updated, t.botDifficulty, s.currentQuarter);
           for (const rp of routePlans) {
             const dist = distanceBetween(rp.origin, rp.dest);
-            const dailyFreq = Math.max(1, Math.round(rp.weeklyFreq / 7));
+            const dailyFreq = Math.max(1 / 7, rp.weeklyFreq / 7);
             const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
             const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
             const isCargo = acSpec?.family === "cargo";

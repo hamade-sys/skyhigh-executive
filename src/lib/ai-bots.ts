@@ -204,9 +204,20 @@ export function planBotRoutes(
   // Convert each pick into an opening proposal
   return picks.map((p) => {
     const dist = distanceBetween(p.origin, p.dest);
-    const maxDailyFreq = maxRouteDailyFrequency([p.aircraft.specId], dist);
-    // Bot opens at MAX possible freq for the plane (saturated route)
-    const weeklyFreq = Math.max(1, maxDailyFreq * 7);
+    const maxWeeklyFreq = Math.max(
+      1,
+      Math.round(maxRouteDailyFrequency([p.aircraft.specId], dist, [{
+        specId: p.aircraft.specId,
+        engineUpgrade: p.aircraft.engineUpgrade ?? null,
+        cargoBelly: p.aircraft.cargoBelly,
+      }]) * 7),
+    );
+    // Bot route schedules should use the same weekly unit players see.
+    // Saturating every aircraft at maxDaily * 7 made the whole world look
+    // like 7/wk, 14/wk, 21/wk only. Pick a high-but-not-always-max integer
+    // weekly schedule so short routes can land on values like 8, 15, 22/wk.
+    const utilization = 0.65 + Math.random() * 0.35;
+    const weeklyFreq = Math.max(1, Math.round(maxWeeklyFreq * utilization));
     const tier: PricingTier =
       profile.pricingBias > 0 ? "premium" :
       profile.pricingBias < 0 ? "budget" : "standard";

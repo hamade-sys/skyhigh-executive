@@ -202,7 +202,7 @@ export function DashboardPanel() {
                   <div className="text-[0.6875rem] text-ink-muted">
                     Total weekly schedules:{" "}
                     <strong className="text-ink">
-                      {activeRoutes.reduce((s, r) => s + r.dailyFrequency * 7, 0)}
+                      {activeRoutes.reduce((s, r) => s + Math.round(r.dailyFrequency * 7), 0)}
                     </strong>
                   </div>
                   {Object.keys(tierCounts).length > 0 && (
