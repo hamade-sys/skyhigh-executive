@@ -1335,9 +1335,33 @@ export function computeRouteEconomics(
 
   // ─ Per-class fares (A7 + A11) ──────────────────────────
   const tier = PRICE_TIER[route.pricingTier];
-  const econFare = route.econFare ?? classFareRange(distanceKm, "econ").base * tier;
-  const busFare = route.busFare ?? classFareRange(distanceKm, "bus").base * tier;
-  const firstFare = route.firstFare ?? classFareRange(distanceKm, "first").base * tier;
+  let econFare = route.econFare ?? classFareRange(distanceKm, "econ").base * tier;
+  let busFare = route.busFare ?? classFareRange(distanceKm, "bus").base * tier;
+  let firstFare = route.firstFare ?? classFareRange(distanceKm, "first").base * tier;
+
+  // ── Yield management — when projected demand exceeds capacity,
+  //    real airlines extract more revenue per seat through dynamic
+  //    pricing (last-minute fare ladders, restricted inventory).
+  //    Without this, seasonal peaks invisibly bottleneck at 100%
+  //    occupancy and revenue looks flat across Q1↔Q3 even when
+  //    underlying demand swings 30%+. Modelled as a per-route fare
+  //    lift scaling with demand-pressure ratio.
+  //
+  //    Pressure = effectiveDemand / dailyCapacity, clamped [0, 2.0].
+  //    Lift  = clamp(0, 0.20, (pressure - 1.0) × 0.4)  · max 20%.
+  //    Premium cabins (First/Business) flex more than Economy
+  //    because business travel is less price-sensitive last-minute.
+  if (dailyCapacity > 0) {
+    const pressure = Math.min(2.0, effectiveDemand / dailyCapacity);
+    if (pressure > 1.0) {
+      const econLift = Math.min(0.15, (pressure - 1.0) * 0.30);
+      const busLift = Math.min(0.20, (pressure - 1.0) * 0.40);
+      const firstLift = Math.min(0.25, (pressure - 1.0) * 0.50);
+      econFare *= 1 + econLift;
+      busFare *= 1 + busLift;
+      firstFare *= 1 + firstLift;
+    }
+  }
 
   // Blended ticket price used by market share / demand sensitivity
   const seatMix = totalSeatsPerFlight > 0
