@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
+import { useUi } from "@/store/ui";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import {
   classFareRangeForDoctrine,
@@ -912,6 +913,9 @@ export function BidRow({
   onChange: (n: number) => void;
   onSlotsChange: (n: number) => void;
 }) {
+  const player = useGame(selectPlayer);
+  const closePanel = useUi((u) => u.closePanel);
+  const openPanel = useUi((u) => u.openPanel);
   const basePrice = BASE_SLOT_PRICE_BY_TIER[tier];
   // Engine enforces basePrice as the floor (Tier 1 = $45K, Tier 2 = $30K,
   // Tier 3 = $15K, Tier 4 = $7.5K — see lib/slots.ts). Bidding below the
@@ -928,6 +932,14 @@ export function BidRow({
   const quarterlyCost = weeklyCost * 13;
   // Player can over-bid for headroom but never below the route's strict need.
   const maxSlots = Math.max(slotsNeeded * 4, slotsNeeded + 14);
+  // ── Surface escrow shortfall up-front. Slot auctions need real
+  //    cash (not borrowing headroom) — when the player is in
+  //    overdraft or just short, render an inline warning + a one-click
+  //    jump to Financials to refinance/borrow before they hit Submit
+  //    and bounce on a confusing error.
+  const maxBidCost = displayPrice * slots;
+  const cashShortfall = player ? Math.max(0, maxBidCost - player.cashUsd) : 0;
+  const isOverdraft = !!player && player.cashUsd < 0;
 
   return (
     <div
@@ -1024,6 +1036,40 @@ export function BidRow({
             <div className="text-ink-muted text-[0.625rem] uppercase tracking-wider">Quarterly (× 13)</div>
             <div className="font-mono text-ink font-semibold">${quarterlyCost.toLocaleString()}</div>
           </div>
+        </div>
+      )}
+
+      {/* ── Cash escrow shortfall warning. Slot auctions hold the
+          maximum bid in escrow until close, so borrowing headroom
+          doesn't substitute for cash. Surface this BEFORE the player
+          hits Submit and gets a confusing "Need $X cash" error.
+          One-click jump to Financials lets them refinance overdraft
+          or borrow before bidding. */}
+      {isSet && cashShortfall > 0 && (
+        <div className="mt-2 rounded-md border border-negative bg-[var(--negative-soft)] px-2.5 py-2 text-[0.75rem] text-ink-2 leading-snug">
+          <div className="flex items-baseline justify-between gap-2 mb-1">
+            <span className="font-semibold text-negative">
+              {isOverdraft ? "You're in overdraft" : "Not enough cash"}
+            </span>
+            <span className="tabular font-mono text-[0.6875rem] text-negative shrink-0">
+              short ${(cashShortfall / 1_000_000).toFixed(2)}M
+            </span>
+          </div>
+          <div className="mb-1.5">
+            Slot auctions hold the bid in escrow until close — you
+            need real cash, not borrowing headroom.
+            {isOverdraft && " Refinance the overdraft into a term loan to free up cash."}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              closePanel();
+              openPanel("reports");
+            }}
+            className="text-accent hover:underline text-[0.6875rem]"
+          >
+            Open Financials → Borrowing →
+          </button>
         </div>
       )}
       {isSet && (

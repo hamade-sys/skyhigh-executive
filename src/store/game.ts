@@ -4712,8 +4712,25 @@ export const useGame = create<GameStore>()(
         if (pricePerSlot < basePrice)
           return { ok: false, error: `Minimum $${(basePrice / 1_000).toFixed(0)}K/slot at Tier ${city.tier}` };
         const maxCost = slots * pricePerSlot;
-        if (player.cashUsd < maxCost)
-          return { ok: false, error: `Need $${(maxCost / 1_000_000).toFixed(1)}M cash to commit` };
+        if (player.cashUsd < maxCost) {
+          // The auction holds the maximum bid in escrow until close —
+          // we need real cash, not borrowing headroom. Explain WHY +
+          // what to do, especially when the player is in overdraft
+          // (where "need $X cash" sounds like a paradox to them).
+          const need = (maxCost / 1_000_000).toFixed(1);
+          if (player.cashUsd < 0) {
+            const overdraft = (-player.cashUsd / 1_000_000).toFixed(1);
+            return {
+              ok: false,
+              error: `Slot auctions hold the bid in escrow until close. You're $${overdraft}M overdrawn, so there's no cash to lock up. Refinance your overdraft (Financials → Borrowing) or borrow $${need}M+ first, then come back and bid.`,
+            };
+          }
+          const shortfall = ((maxCost - player.cashUsd) / 1_000_000).toFixed(1);
+          return {
+            ok: false,
+            error: `Slot auctions hold the bid in escrow until close. Need $${need}M available cash; you're $${shortfall}M short. Borrow or trim spend before bidding.`,
+          };
+        }
         const existing = (player.pendingSlotBids ?? []).filter(
           (b) => b.airportCode !== airportCode,
         );

@@ -1739,6 +1739,42 @@ export function loyaltyRetentionFactor(loyaltyPct: number): number {
   return 0.93;
 }
 
+export function scaledCashBasisUsd(team: Team, basis: ScaledCashEffect["basis"]): number {
+  const financials = team.financialsByQuarter ?? [];
+  const lastFinancial = financials[financials.length - 1];
+  const routeRevenue = (team.routes ?? []).reduce(
+    (sum, r) => sum + Math.max(0, r.quarterlyRevenue ?? 0),
+    0,
+  );
+  const lastRevenueQ = Math.max(0, lastFinancial?.revenue ?? routeRevenue);
+  const lastFuelCostQ = Math.max(
+    0,
+    lastFinancial?.fuelCost ??
+      (team.routes ?? []).reduce((sum, r) => sum + Math.max(0, r.quarterlyFuelCost ?? 0), 0),
+  );
+  switch (basis) {
+    case "lastRevenueQ": return lastRevenueQ;
+    case "annualRevenue": return lastRevenueQ * 4;
+    case "staffCostQ": return quarterlyStaffCost(team);
+    case "fuelCostQ": return lastFuelCostQ;
+    case "debt": return Math.max(0, team.totalDebtUsd);
+    case "fleetValue":
+      return (team.fleet ?? []).reduce(
+        (sum, f) => f.status === "retired" ? sum : sum + Math.max(0, f.bookValue || f.purchasePrice || 0),
+        0,
+      );
+    case "airlineValue": return Math.max(0, computeAirlineValue(team));
+  }
+}
+
+export function scaledCashAmount(team: Team, scaled?: ScaledCashEffect): number {
+  if (!scaled) return 0;
+  const raw = scaledCashBasisUsd(team, scaled.basis) * scaled.multiplier;
+  const lo = Math.min(scaled.min, scaled.max);
+  const hi = Math.max(scaled.min, scaled.max);
+  return clamp(lo, hi, raw);
+}
+
 // ─── Apply an option effect ────────────────────────────────
 export function applyOptionEffect(
   team: Team,
@@ -1757,6 +1793,7 @@ export function applyOptionEffect(
     const quarterlyStaff = quarterlyStaffCost(team);
     extraCash += quarterlyStaff * 2 * effect.staffSavingsPct;
   }
+  extraCash += scaledCashAmount(team, effect.scaledCash);
   const next: Team = {
     ...team,
     cashUsd: team.cashUsd + (effect.cash ?? 0) + extraCash,
@@ -1777,12 +1814,16 @@ export function applyOptionEffect(
     flags: new Set(team.flags),
     deferredEvents: [...(team.deferredEvents ?? [])],
     routeObligations: [...(team.routeObligations ?? [])],
+    timedModifiers: [...(team.timedModifiers ?? [])],
   };
   if (effect.setFlags) {
     for (const f of effect.setFlags) next.flags.add(f);
   }
   if (effect.routeObligation) {
     const startQ = currentQuarter ?? 1;
+    const finePerQuarterUsd = effect.routeObligation.fineScaled
+      ? Math.abs(scaledCashAmount(team, effect.routeObligation.fineScaled))
+      : effect.routeObligation.finePerQuarterUsd;
     next.routeObligations = [
       ...(next.routeObligations ?? []),
       {
@@ -1790,10 +1831,35 @@ export function applyOptionEffect(
         cities: [...effect.routeObligation.cities],
         activeFromQuarter: startQ,
         activeUntilQuarter: startQ + effect.routeObligation.durationQuarters - 1,
-        finePerQuarterUsd: effect.routeObligation.finePerQuarterUsd,
+        finePerQuarterUsd,
         label: effect.routeObligation.label,
       },
     ];
+  }
+  if (effect.timedModifier) {
+    const startQ = currentQuarter ?? 1;
+    const modifier = {
+      id: effect.timedModifier.id,
+      kind: effect.timedModifier.kind,
+      activeFromQuarter: startQ,
+      activeUntilQuarter: startQ + effect.timedModifier.durationQuarters - 1,
+    };
+    next.timedModifiers = [
+      ...(next.timedModifiers ?? []).filter((m) => m.id !== modifier.id),
+      modifier,
+    ];
+  }
+  if (effect.opsExpansionSlots && effect.opsExpansionSlots !== 0) {
+    const inv = next.hubInvestments ?? {
+      fuelReserveTankHubs: [],
+      maintenanceDepotHubs: [],
+      premiumLoungeHubs: [],
+      opsExpansionSlots: 0,
+    };
+    next.hubInvestments = {
+      ...inv,
+      opsExpansionSlots: Math.max(0, (inv.opsExpansionSlots ?? 0) + effect.opsExpansionSlots),
+    };
   }
   return next;
 }
@@ -2030,8 +2096,14 @@ export function runQuarterClose(
     ...team,
     flags: new Set(team.flags),
     deferredEvents: [...(team.deferredEvents ?? [])],
+    timedModifiers: [...(team.timedModifiers ?? [])],
     rcfBalanceUsd: team.rcfBalanceUsd ?? 0,
   };
+  const activeTimedModifiers = (next.timedModifiers ?? []).filter(
+    (m) => ctx.quarter >= m.activeFromQuarter && ctx.quarter <= m.activeUntilQuarter,
+  );
+  const hasTimedModifier = (kind: (typeof activeTimedModifiers)[number]["kind"]) =>
+    activeTimedModifiers.some((m) => m.kind === kind);
 
   // ─ Route economics ──────────────────────────────────────
   const routeBreakdown: QuarterCloseResult["routeBreakdown"] = [];
@@ -2189,6 +2261,24 @@ export function runQuarterClose(
     }
   }
 
+  function addScenarioRevenueUplift(label: string, pct: number, minUsd: number, maxUsd: number) {
+    if (revenue <= 0) return;
+    const uplift = clamp(minUsd, maxUsd, revenue * pct);
+    if (uplift <= 0) return;
+    revenue += uplift;
+    passengerRevenue += uplift;
+    notes.push(`${label}: +$${(uplift / 1e6).toFixed(1)}M revenue`);
+  }
+  if (hasTimedModifier("blue-ocean-first")) {
+    addScenarioRevenueUplift("Blue Ocean first-mover corridor", 0.07, 30 * M, 180 * M);
+  }
+  if (hasTimedModifier("blue-ocean-deepen")) {
+    addScenarioRevenueUplift("Blue Ocean route densification", 0.04, 15 * M, 100 * M);
+  }
+  if (hasTimedModifier("blue-ocean-split")) {
+    addScenarioRevenueUplift("Blue Ocean split-budget corridor", 0.025, 10 * M, 80 * M);
+  }
+
   // ─ Route service obligations (S5 Government Lifeline) ─────
   // For every active obligation city the team isn't serving via any
   // route endpoint this quarter, charge the per-city per-quarter fine.
@@ -2259,8 +2349,29 @@ export function runQuarterClose(
   let doctrineStaffMult = 1.0;
   if (isDoctrine(next, "budget-expansion")) doctrineStaffMult *= 0.80;
   if (isDoctrine(next, "premium-service")) doctrineStaffMult *= 1.15;
-  const staffCost =
+  let staffCost =
     staffBase * STAFF_MULTIPLIER[next.sliders.staff] * staffSurchargeMult * doctrineStaffMult;
+  let digitalStrikeChance = 0;
+  let timedLabourRelationsDelta = 0;
+  let digitalStaffSavings = 0;
+  if (hasTimedModifier("digital-full")) {
+    digitalStaffSavings += staffCost * 0.18;
+    digitalStrikeChance += 0.30;
+    timedLabourRelationsDelta -= 4;
+  }
+  if (hasTimedModifier("digital-phased")) {
+    digitalStaffSavings += staffCost * 0.10;
+    digitalStrikeChance += 0.10;
+    timedLabourRelationsDelta -= 1;
+  }
+  if (hasTimedModifier("digital-reskill")) {
+    digitalStaffSavings += staffCost * 0.06;
+    timedLabourRelationsDelta += 1;
+  }
+  if (digitalStaffSavings > 0) {
+    staffCost = Math.max(0, staffCost - digitalStaffSavings);
+    notes.push(`Digital operating model saved $${(digitalStaffSavings / 1e6).toFixed(1)}M payroll this quarter`);
+  }
 
   // ─ Other sliders as % of revenue (A2) — broken out ──────
   // Per-slider caps (user spec):
@@ -2274,8 +2385,30 @@ export function runQuarterClose(
   const serviceCost = revenue * SERVICE_PCT_REVENUE[next.sliders.service];
   const operationsCost = revenue * OPS_PCT_REVENUE[next.sliders.operations];
   const customerServiceCost = revenue * CS_PCT_REVENUE[next.sliders.customerService];
-  const otherSliderCost =
+  let otherSliderCost =
     marketingCost + serviceCost + operationsCost + customerServiceCost;
+  let politicalServiceCost = 0;
+  if (hasTimedModifier("political-favour-full")) {
+    politicalServiceCost += revenue > 0 ? clamp(3 * M, 18 * M, revenue * 0.012) : 0;
+  }
+  if (hasTimedModifier("political-favour-partial")) {
+    politicalServiceCost += revenue > 0 ? clamp(1.5 * M, 10 * M, revenue * 0.007) : 0;
+  }
+  if (hasTimedModifier("political-favour-subsidy")) {
+    politicalServiceCost = Math.max(0, politicalServiceCost * 0.35);
+  }
+  if (politicalServiceCost > 0) {
+    otherSliderCost += politicalServiceCost;
+    notes.push(`Political service package cost $${(politicalServiceCost / 1e6).toFixed(1)}M`);
+  }
+  if (hasTimedModifier("aging-operations")) {
+    const agingCost = revenue > 0 ? clamp(5 * M, 45 * M, revenue * 0.02) : 0;
+    if (agingCost > 0) {
+      otherSliderCost += agingCost;
+      next.opsPts = Math.max(0, next.opsPts - 2);
+      notes.push(`Aging operations gap cost $${(agingCost / 1e6).toFixed(1)}M`);
+    }
+  }
 
   // ─ Maintenance (PRD §5.3 age bands, scaled to 20-round lifespan) ──
   // PRD bands assume an 80Q lifespan with bands at 0-5/5-10/10-15/15-20
@@ -2559,23 +2692,25 @@ export function runQuarterClose(
       }
     }
   }
-  if (ctx.quarter === 6) {
+  if (ctx.quarter === 11) {
     // S16 Moscow Signal twist: false alarm — summer surge
     const s16 = team.decisions.find((d) => d.scenarioId === "S16");
     if (s16) {
       const lock = s16.lockInQuarters ?? 1;
       let twistDelta = 0;
       let twistLoyalty = 0;
+      const surgeBasis = Math.max(revenue, scaledCashBasisUsd(next, "lastRevenueQ"));
       if (s16.optionId === "A" || s16.optionId === "B") {
         // PRD: missed revenue per locked quarter over 1
         if (lock > 1) {
-          twistDelta = -65 * M * (lock - 1);
+          const missedPerQuarter = clamp(20 * M, 180 * M, surgeBasis * 0.12);
+          twistDelta = -missedPerQuarter * (lock - 1);
           twistLoyalty = -4 * (lock - 1);
           notes.push(`S16 false alarm — locked ${lock}Q missed summer surge`);
         }
       } else if (s16.optionId === "D") {
-        twistDelta = 55 * M;
-        notes.push("S16 counter-position captured competitor bookings (+$55M)");
+        twistDelta = clamp(15 * M, 120 * M, surgeBasis * 0.08);
+        notes.push(`S16 counter-position captured competitor bookings (+$${(twistDelta / 1e6).toFixed(1)}M)`);
       }
       if (twistDelta !== 0) newCashUsd += twistDelta;
       if (twistLoyalty !== 0)
@@ -2623,18 +2758,43 @@ export function runQuarterClose(
     const roll = Math.random();
     if (roll <= ev.probability) {
       const eff = deserializeEffect(ev.effectJson);
-      newCashUsd += eff.cash ?? 0;
+      const cashDelta = (eff.cash ?? 0) + scaledCashAmount(next, eff.scaledCash);
+      newCashUsd += cashDelta;
       next.brandPts = Math.max(0, next.brandPts + (eff.brandPts ?? 0));
       next.opsPts = Math.max(0, next.opsPts + (eff.opsPts ?? 0));
       next.customerLoyaltyPct = clamp(
         0, 100, next.customerLoyaltyPct + (eff.loyaltyDelta ?? 0),
       );
       if (eff.setFlags) for (const f of eff.setFlags) next.flags.add(f);
+      if (eff.timedModifier) {
+        const modifier = {
+          id: eff.timedModifier.id,
+          kind: eff.timedModifier.kind,
+          activeFromQuarter: ctx.quarter,
+          activeUntilQuarter: ctx.quarter + eff.timedModifier.durationQuarters - 1,
+        };
+        next.timedModifiers = [
+          ...(next.timedModifiers ?? []).filter((m) => m.id !== modifier.id),
+          modifier,
+        ];
+      }
+      if (eff.opsExpansionSlots && eff.opsExpansionSlots !== 0) {
+        const inv = next.hubInvestments ?? {
+          fuelReserveTankHubs: [],
+          maintenanceDepotHubs: [],
+          premiumLoungeHubs: [],
+          opsExpansionSlots: 0,
+        };
+        next.hubInvestments = {
+          ...inv,
+          opsExpansionSlots: Math.max(0, (inv.opsExpansionSlots ?? 0) + eff.opsExpansionSlots),
+        };
+      }
       triggeredEvents.push({
         id: ev.id,
         scenario: ev.sourceScenario,
         outcome: "triggered",
-        cashDelta: eff.cash,
+        cashDelta,
         brandDelta: eff.brandPts,
         note: ev.noteAtQueue,
       });
@@ -2809,7 +2969,11 @@ export function runQuarterClose(
   if (next.flags.has("people_first")) next.labourRelationsScore += 2;
   if (next.flags.has("trusted_employer")) next.labourRelationsScore += 2;
   if (next.flags.has("talent_shortage")) next.labourRelationsScore -= 3;
-  next.labourRelationsScore = clamp(0, 100, next.labourRelationsScore + lrsDelta);
+  next.labourRelationsScore = clamp(
+    0,
+    100,
+    next.labourRelationsScore + lrsDelta + timedLabourRelationsDelta,
+  );
   // High LRS → +3 Loyalty/Q bonus (E8.3)
   if (next.labourRelationsScore >= 75) {
     next.customerLoyaltyPct = clamp(0, 100, next.customerLoyaltyPct + 3);
@@ -2826,6 +2990,7 @@ export function runQuarterClose(
   if (lrs <= 15) strikeChance = isPaidBelow ? 0.55 : 0.35;
   else if (lrs <= 30) strikeChance = isPaidBelow ? 0.30 : 0.15;
   else if (lrs <= 45 && isPaidBelow) strikeChance = 0.10;
+  strikeChance = clamp(0, 0.85, strikeChance + digitalStrikeChance);
 
   // Deterministic-ish RNG so a given quarter+team yields a stable outcome
   // (avoids flickering during dev hot-reload).
