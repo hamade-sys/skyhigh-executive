@@ -442,7 +442,7 @@ export function QuarterCloseModal() {
                 <thead>
                   <tr className="bg-surface-2">
                     <th className="text-left font-semibold text-ink-muted uppercase tracking-wider text-[0.625rem] py-2 px-3">Route</th>
-                    <th className="text-right font-semibold text-ink-muted uppercase tracking-wider text-[0.625rem] py-2 px-3">Load</th>
+                    <th className="text-right font-semibold text-ink-muted uppercase tracking-wider text-[0.625rem] py-2 px-3">Occupancy</th>
                     <th className="text-right font-semibold text-ink-muted uppercase tracking-wider text-[0.625rem] py-2 px-3">Profit</th>
                   </tr>
                 </thead>
@@ -723,7 +723,7 @@ function RouteRow({ label, occupancy, profit }: { label: string; occupancy: numb
     <div className="flex items-center justify-between border-b border-line last:border-0 px-3 py-2 text-[0.8125rem]">
       <span className="font-mono text-ink">{label}</span>
       <span className="tabular text-ink-muted text-[0.75rem]">
-        {fmtPct(occupancy * 100, 0)} load
+        {fmtPct(occupancy * 100, 0)} occupancy
       </span>
       <span className={cn(
         "tabular font-mono font-semibold",

@@ -1,15 +1,34 @@
-/** Format a USD value. Abbreviates at $1M and $1B. */
+/** Format a USD value. Abbreviates at $1M and $1B.
+ *
+ * Default precision rules tuned for SkyForce display copy: aircraft
+ * prices and operating costs are mostly clean millions (e.g. "$80M"),
+ * so we drop the decimal when the amount is a whole million. The
+ * decimal still shows when the value is fractional ("$32.5M",
+ * "$1.5B"). Pass `decimals` explicitly to override.
+ */
 export function fmtMoney(n: number, opts?: { decimals?: number; compact?: boolean }): string {
   const sign = n < 0 ? "−" : "";
   const abs = Math.abs(n);
-  const d = opts?.decimals ?? 1;
   const compact = opts?.compact ?? true;
   if (!compact) {
     return `${sign}$${abs.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
   }
-  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(d)}B`;
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(d)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(d)}K`;
+  // Smart-rounding helper: if the value is a whole-unit (e.g. exactly
+  // 80M with the M divisor), show no decimal; otherwise show 1.
+  function smart(v: number, divisor: number, suffix: string): string {
+    const scaled = v / divisor;
+    const explicit = opts?.decimals;
+    const decimals =
+      explicit !== undefined
+        ? explicit
+        : Math.abs(scaled - Math.round(scaled)) < 0.05
+          ? 0
+          : 1;
+    return `${sign}$${scaled.toFixed(decimals)}${suffix}`;
+  }
+  if (abs >= 1_000_000_000) return smart(abs, 1_000_000_000, "B");
+  if (abs >= 1_000_000) return smart(abs, 1_000_000, "M");
+  if (abs >= 1_000) return smart(abs, 1_000, "K");
   return `${sign}$${abs.toFixed(0)}`;
 }
 

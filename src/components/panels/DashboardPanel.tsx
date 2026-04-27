@@ -186,7 +186,7 @@ export function DashboardPanel() {
                     Total active: <strong className="text-ink">{activeRoutes.length}</strong>
                   </div>
                   <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-1">
-                    Avg load factor:{" "}
+                    Avg occupancy:{" "}
                     <strong className={cn(
                       activeRoutes.length > 0 && (activeRoutes.reduce((s, r) => s + r.avgOccupancy, 0) / activeRoutes.length) >= 0.7
                         ? "text-positive"

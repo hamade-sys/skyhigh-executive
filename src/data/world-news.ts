@@ -452,7 +452,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 10, id: "JAPAN-REC", icon: "🇯🇵", impact: "tourism",
     headline: "Japan tourism breaks 28M visitor record — 40M target by 2020",
-    detail: "NRT, KIX routes at record load factors.",
+    detail: "NRT, KIX routes at record occupancy.",
     modifiers: [
       { city: "NRT", category: "tourism", pct: 25, rounds: 4 },
       { city: "KIX", category: "tourism", pct: 35, rounds: 4 },  // KIX + NGO collapsed
@@ -1335,7 +1335,7 @@ export const WORLD_NEWS: NewsItem[] = [
   n({
     quarter: 32, id: "S10-WINNER", icon: "🏆", impact: "brand",
     headline: "World Cup Official Carrier reports record revenue — Gulf routes premium for 8 weeks",
-    detail: "S10 winner: 100% load factor all routes this quarter and next.",
+    detail: "S10 winner: 100% occupancy on all routes this quarter and next.",
   }),
   n({
     quarter: 32, id: "FUEL", icon: "$", impact: "fuel",

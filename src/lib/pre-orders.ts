@@ -5,10 +5,12 @@ import type { AircraftSpec, PreOrder } from "@/types/game";
 export const PREORDER_ANNOUNCEMENT_LEAD_ROUNDS = 2;
 
 /** Deposit fraction held when a pre-order is placed.
- *  Balance is charged at delivery; cancellation refunds 85% of deposit
- *  (15% retained as the cancellation penalty per the master ref). */
+ *  Balance is charged at delivery; cancellation forfeits half the
+ *  deposit — manufacturers don't refund 85% of a real-world airframe
+ *  deposit when a slot has been built around your order. The 50%
+ *  penalty matches industry practice on late-cycle cancellations. */
 export const PREORDER_DEPOSIT_PCT = 0.20;
-export const PREORDER_CANCEL_PENALTY_PCT = 0.15;
+export const PREORDER_CANCEL_PENALTY_PCT = 0.50;
 
 /** Premium aircraft buy-price threshold. Above this we drop the per-quarter
  *  production cap from 8 → 5 to model genuine widebody supply scarcity

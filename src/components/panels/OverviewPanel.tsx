@@ -512,8 +512,8 @@ function StrategicInsights({
   if (lowLoadRoutes.length >= 3) {
     insights.push({
       tone: "warn",
-      title: `${lowLoadRoutes.length} routes under 50% load`,
-      detail: "Cut frequency or drop pricing tier to bring load factor up. Empty seats burn fuel.",
+      title: `${lowLoadRoutes.length} routes under 50% occupancy`,
+      detail: "Cut frequency or drop pricing tier to bring occupancy up. Empty seats burn fuel.",
       action: { label: "Review routes", onClick: () => onOpen("routes") },
     });
   }

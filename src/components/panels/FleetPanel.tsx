@@ -18,6 +18,7 @@ import {
   queuePosition,
 } from "@/lib/pre-orders";
 import { engineUpgradeCostUsd, fuselageUpgradeCostUsd } from "@/lib/aircraft-upgrades";
+import { PREORDER_CANCEL_PENALTY_PCT } from "@/lib/pre-orders";
 
 /** Group aircraft by spec id, count quantity, and aggregate utilisation. */
 function groupByType(player: ReturnType<typeof selectPlayer>) {
@@ -962,7 +963,7 @@ void fmtPct;
 
 /** Pre-order queue display — shows the player's queued orders with
  *  position in the FIFO line and an estimated delivery quarter, plus
- *  a Cancel action that refunds 85% of the deposit (15% penalty). */
+ *  a Cancel action that refunds half the deposit (50% penalty). */
 function PreOrderQueue() {
   const playerTeamId = useGame((s) => s.playerTeamId);
   const preOrders = useGame((s) => s.preOrders);
@@ -971,7 +972,7 @@ function PreOrderQueue() {
   const cancelPreOrder = useGame((s) => s.cancelPreOrder);
   // Branded cancel-pre-order confirm replaces the legacy native
   // confirm() — these are real-money irreversible cancellations
-  // (15% deposit penalty), so the UX has to feel deliberate.
+  // (half-deposit penalty), so the UX has to feel deliberate.
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
   const myQueued = preOrders.filter(
@@ -1025,7 +1026,7 @@ function PreOrderQueue() {
               <button
                 onClick={() => setConfirmCancelId(order.id)}
                 className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-line text-[0.6875rem] text-ink-2 hover:text-negative hover:border-negative"
-                title="Cancel pre-order (15% penalty on deposit)"
+                title="Cancel pre-order (50% penalty on deposit)"
               >
                 <X size={11} /> Cancel
               </button>
@@ -1034,12 +1035,16 @@ function PreOrderQueue() {
         })}
       </div>
 
-      {/* Branded cancel-pre-order confirm — irreversible 15% deposit
-          penalty, so the UX makes the trade-off explicit. */}
+      {/* Branded cancel-pre-order confirm — half-deposit penalty
+          on cancellation, so the UX makes the trade-off explicit.
+          The penalty pct is defined in lib/pre-orders so display +
+          actual deduction stay in sync. */}
       <Modal open={!!cancelTarget} onClose={() => setConfirmCancelId(null)}>
         {cancelTarget && cancelTargetSpec && (() => {
-          const refund = cancelTarget.depositUsd * 0.85;
-          const penalty = cancelTarget.depositUsd * 0.15;
+          const penaltyPct = PREORDER_CANCEL_PENALTY_PCT;
+          const refundPct = 1 - penaltyPct;
+          const refund = cancelTarget.depositUsd * refundPct;
+          const penalty = cancelTarget.depositUsd * penaltyPct;
           return (
             <>
               <ModalHeader>
@@ -1047,9 +1052,9 @@ function PreOrderQueue() {
                   Cancel pre-order for {cancelTargetSpec.name}?
                 </h2>
                 <p className="text-ink-muted text-[0.8125rem] mt-1">
-                  Pre-orders are real commitments — cancelling forfeits the
-                  cancellation penalty against your deposit. The refund is
-                  paid in cash next quarter close.
+                  Pre-orders are real commitments — cancelling forfeits
+                  half the deposit. The remaining refund is paid in cash
+                  next quarter close.
                 </p>
               </ModalHeader>
               <ModalBody className="space-y-2">
@@ -1059,11 +1064,11 @@ function PreOrderQueue() {
                     <span className="tabular font-mono text-ink">{fmtMoney(cancelTarget.depositUsd)}</span>
                   </div>
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-ink-muted">Refund (85%)</span>
+                    <span className="text-ink-muted">Refund ({Math.round(refundPct * 100)}%)</span>
                     <span className="tabular font-mono text-positive">{fmtMoney(refund)}</span>
                   </div>
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-ink-muted">Penalty (15%)</span>
+                    <span className="text-ink-muted">Penalty ({Math.round(penaltyPct * 100)}%)</span>
                     <span className="tabular font-mono text-negative">−{fmtMoney(penalty)}</span>
                   </div>
                 </div>

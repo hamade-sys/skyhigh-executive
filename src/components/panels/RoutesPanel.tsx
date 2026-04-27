@@ -214,7 +214,7 @@ export function RoutesPanel() {
         <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted mx-1 ml-3">Sort</span>
         {([
           { k: "profit", label: "Profit" },
-          { k: "load", label: "Load" },
+          { k: "load", label: "Occupancy" },
           { k: "revenue", label: "Revenue" },
           { k: "fuel", label: "Fuel" },
         ] as Array<{ k: SortKey; label: string }>).map(({ k, label }) => (
@@ -245,7 +245,7 @@ export function RoutesPanel() {
             <thead>
               <tr className="bg-surface-2 border-b border-line">
                 <Th className="w-[30%]">Route</Th>
-                <Th className="text-right w-[70px]">Load</Th>
+                <Th className="text-right w-[80px]">Occupancy</Th>
                 <Th className="text-right w-[80px]">Freq</Th>
                 <Th className="text-right w-[120px]">Q revenue</Th>
                 <Th className="text-right w-[120px]">Q profit</Th>
@@ -275,7 +275,7 @@ export function RoutesPanel() {
                     }}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Open route ${r.originCode} to ${r.destCode}, ${Math.round(r.avgOccupancy * 100)}% load, ${Math.round(r.dailyFrequency * 7)} weekly flights, ${r.status}`}
+                    aria-label={`Open route ${r.originCode} to ${r.destCode}, ${Math.round(r.avgOccupancy * 100)}% occupancy, ${Math.round(r.dailyFrequency * 7)} weekly flights, ${r.status}`}
                     className={cn(
                       "border-b border-line last:border-0 cursor-pointer",
                       "hover:bg-surface-hover transition-colors",
@@ -944,7 +944,7 @@ function RouteDetailModal({
             return (
               <>
                 <MiniStat
-                  label={route.isCargo ? "Cargo load" : "Load"}
+                  label={route.isCargo ? "Cargo occupancy" : "Occupancy"}
                   value={fmtPct(route.avgOccupancy * 100, 0)}
                   tone={route.avgOccupancy > 0.7 ? "pos" : route.avgOccupancy > 0 && route.avgOccupancy < 0.5 ? "neg" : undefined}
                   sub={route.isCargo ? "tonnes shipped / capacity" : "pax / seats"}
@@ -1291,7 +1291,7 @@ function CompetitorsTable({
               <th className="text-left px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Aircraft</th>
               <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Sch/wk</th>
               <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Tier</th>
-              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Load</th>
+              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Occupancy</th>
               <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Q profit</th>
             </tr>
           </thead>

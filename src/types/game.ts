@@ -655,7 +655,7 @@ export interface Subsidiary {
  *  Lifecycle:
  *    queued    → placed, deposit charged
  *    delivered → balance charged at delivery, FleetAircraft created
- *    cancelled → 15% of deposit kept as penalty, 85% refunded
+ *    cancelled → 50% of deposit kept as penalty, 50% refunded
  */
 export interface PreOrder {
   id: string;

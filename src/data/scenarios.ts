@@ -380,7 +380,7 @@ export const SCENARIOS: Scenario[] = [
       "The host city for the upcoming Summer Olympics has been announced — see the World News for which city. The IOC is offering the airline four tiered sponsorship slots, each unlocking a different mix of brand uplift, loyalty gains, and demand boosts on routes touching the host city during rounds 29-32. Or pass entirely and let your rivals lock in the halo.",
     options: [
       { id: "A", label: "Official airline partner — top tier",
-        description: "Spend $65M. You're the IOC's named carrier: best brand uplift, biggest loyalty bump, and locked 95% load factor on every route that touches the host city through the Games.",
+        description: "Spend $65M. You're the IOC's named carrier: best brand uplift, biggest loyalty bump, and locked 95% occupancy on every route that touches the host city through the Games.",
         effect: { cash: -65 * M, brandPts: 20, loyaltyDelta: 8, setFlags: ["premium_airline"] },
         effectTags: ["-$65M", "Brand +20", "Loyalty +8%", "Host-city load locked 95%"] },
       { id: "B", label: "Team performance sponsor — mid tier",

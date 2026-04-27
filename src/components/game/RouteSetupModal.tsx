@@ -739,7 +739,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
             projection.tone === "pos" && "border-positive bg-[var(--positive-soft)] text-positive",
           )}>
             <div className="font-semibold uppercase tracking-wider text-[0.6875rem] mb-0.5">
-              Projected {projection.kind === "cargo" ? "load" : "occupancy"} · {(projection.occupancy * 100).toFixed(0)}%
+              Projected occupancy · {(projection.occupancy * 100).toFixed(0)}%
             </div>
             <div className="text-ink-2 text-[0.75rem]">
               {projection.kind === "cargo"
@@ -747,7 +747,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                 : `Daily demand ${Math.round(projection.demand)} pax vs capacity ${Math.round(projection.capacity)} seats.`}
               {projection.tone === "neg" && " Route is unlikely to be profitable at this configuration."}
               {projection.tone === "warn" && " Consider lowering frequency or adjusting fares."}
-              {projection.tone === "pos" && " Strong load factor."}
+              {projection.tone === "pos" && " Strong occupancy projected."}
             </div>
           </div>
         )}

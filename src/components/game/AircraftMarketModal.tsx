@@ -449,13 +449,19 @@ function AircraftRow({
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-baseline gap-2 flex-wrap">
             <span className="font-semibold text-ink text-[0.9375rem]">{spec.name}</span>
-            <Badge tone={spec.family === "cargo" ? "warning" : "neutral"}>
+            {/* Subtle family marker — small lowercase tag instead of the
+                heavier Badge component. The aircraft name already
+                conveys whether it's a freighter (e.g. "Boeing 777F"),
+                so the tag is just a quick scan signal. */}
+            <span
+              className={cn(
+                "text-[0.5625rem] uppercase tracking-wider font-medium",
+                spec.family === "cargo" ? "text-warning" : "text-ink-muted",
+              )}
+            >
               {spec.family}
-            </Badge>
-            <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-mono">
-              {spec.id}
             </span>
           </div>
           <div className="text-[0.75rem] text-ink-muted mt-0.5 font-mono tabular">
