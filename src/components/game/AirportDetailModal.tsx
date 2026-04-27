@@ -354,6 +354,29 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
     const ownLease = player.airportLeases?.[cityCode];
     const ownSlotFees = ownLease ? ownLease.totalWeeklyCost * 13 : 0;
     const netOwnerProfit = qRevenue - opex - ownSlotFees;
+    // Tenant breakdown — every team (including the player themselves)
+    // with a non-zero lease at this airport. Shows how many slots they
+    // hold and what they're charged this quarter at the current rate.
+    // Lets the player see exactly which rivals are paying and verify
+    // the rate IS in effect.
+    const tenants = teams
+      .map((t) => {
+        const lease = t.airportLeases?.[cityCode];
+        if (!lease || lease.slots === 0) return null;
+        return {
+          teamId: t.id,
+          teamName: t.name,
+          teamCode: t.code,
+          teamColor: t.color,
+          isPlayer: t.id === player.id,
+          slots: lease.slots,
+          weeklyCost: lease.totalWeeklyCost,
+          quarterlyCost: lease.totalWeeklyCost * 13,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x)
+      .sort((a, b) => b.slots - a.slots);
+    const totalLeasedSlots = tenants.reduce((sum, t) => sum + t.slots, 0);
     return (
       <>
       <section>
@@ -362,6 +385,28 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           Airport ownership · YOU OWN THIS AIRPORT
         </div>
         <div className="rounded-md border border-accent bg-[var(--accent-soft)] p-3 space-y-3">
+          {/* Headline rate display — biggest number on the screen so the
+              player can verify their rate IS in effect at a glance. The
+              previous design buried this in a small italic note below
+              the input, which made it look like a hint rather than a
+              live setting. */}
+          <div className="rounded-md border border-accent bg-surface px-3 py-2.5">
+            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+              Current slot rate
+            </div>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="font-display text-[1.75rem] tabular text-ink leading-none">
+                ${currentRate.toLocaleString()}
+              </span>
+              <span className="text-[0.75rem] text-ink-muted">/ slot / week</span>
+            </div>
+            <div className="text-[0.6875rem] text-ink-muted mt-1">
+              Charged to all {tenants.length} tenant{tenants.length === 1 ? "" : "s"}
+              {" "}holding {totalLeasedSlots.toLocaleString()} slot
+              {totalLeasedSlots === 1 ? "" : "s"} at this airport.
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Q slot revenue" value={fmtMoney(qRevenue)} hint="Across all tenants" />
             <Stat label="Q opex (30%)" value={fmtMoney(opex)} hint="Crew + ATC + upkeep" />
@@ -372,24 +417,103 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
             />
           </div>
 
+          {/* Tenant breakdown — proves the rate IS being charged. */}
+          {tenants.length > 0 && (
+            <div className="rounded-md border border-line bg-surface overflow-hidden">
+              <div className="px-3 py-2 border-b border-line text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted bg-surface-2/40">
+                Who's paying this rate · {tenants.length} tenant{tenants.length === 1 ? "" : "s"}
+              </div>
+              <table className="w-full text-[0.75rem]">
+                <thead>
+                  <tr className="border-b border-line text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                    <th className="text-left px-3 py-1.5">Tenant</th>
+                    <th className="text-right px-3 py-1.5">Slots</th>
+                    <th className="text-right px-3 py-1.5">Weekly</th>
+                    <th className="text-right px-3 py-1.5">Quarterly</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenants.map((t) => (
+                    <tr
+                      key={t.teamId}
+                      className={cn(
+                        "border-b border-line/50 last:border-0",
+                        t.isPlayer && "bg-[var(--accent-soft)]/40",
+                      )}
+                    >
+                      <td className="px-3 py-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="inline-block w-3.5 h-3.5 rounded-sm shrink-0"
+                            style={{ background: t.teamColor }}
+                          />
+                          <span className={cn(
+                            "truncate",
+                            t.isPlayer ? "text-ink font-semibold" : "text-ink-2",
+                          )}>
+                            {t.teamName}
+                          </span>
+                          {t.isPlayer && (
+                            <span className="text-[0.5625rem] uppercase tracking-wider font-bold text-accent">
+                              YOU
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular font-mono text-ink">
+                        {t.slots.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular font-mono text-ink-2">
+                        ${t.weeklyCost.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular font-mono text-ink font-medium">
+                        ${t.quarterlyCost.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {tenants.length === 1 && tenants[0].isPlayer && (
+                <div className="px-3 py-1.5 border-t border-line bg-surface-2/30 text-[0.625rem] text-ink-muted leading-snug">
+                  You&apos;re the only tenant — rivals don&apos;t fly here yet.
+                  No external slot revenue while you&apos;re sole tenant.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Rate setter — formatted with commas. Saved rate echoes
+              into the headline display above the moment Apply is hit. */}
           <div>
             <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5">
-              Slot rate · weekly fee per slot (no bidding while owned)
+              Change slot rate
             </div>
             <div className="flex items-center gap-2">
-              <input
-                type="number"
-                placeholder={String(currentRate)}
-                value={pendingRate}
-                onChange={(e) => setPendingRate(e.target.value)}
-                className="flex-1 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[0.875rem] tabular font-mono"
-              />
+              <div className="flex-1 relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted text-[0.875rem] pointer-events-none">$</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder={currentRate.toLocaleString()}
+                  value={pendingRate}
+                  onChange={(e) => {
+                    // Strip any commas the user types so we can re-format
+                    // and keep the underlying number clean for parseInt.
+                    const digits = e.target.value.replace(/[^\d]/g, "");
+                    setPendingRate(
+                      digits === "" ? "" : parseInt(digits, 10).toLocaleString(),
+                    );
+                  }}
+                  className="w-full rounded-md border border-line bg-surface pl-6 pr-2.5 py-1.5 text-[0.875rem] tabular font-mono"
+                />
+              </div>
               <Button
                 size="sm"
                 variant="primary"
                 disabled={!pendingRate}
                 onClick={() => {
-                  const v = parseInt(pendingRate, 10);
+                  // Strip commas before parsing.
+                  const v = parseInt(pendingRate.replace(/,/g, ""), 10);
                   if (Number.isNaN(v)) return;
                   setAirportSlotRate({ airportCode: cityCode, newRatePerWeekUsd: v });
                   setPendingRate("");
@@ -399,9 +523,10 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
               </Button>
             </div>
             <div className="text-[0.6875rem] text-ink-muted mt-1">
-              Current rate {fmtMoney(currentRate)} / wk per slot.
               Higher rates extract more revenue but may price tenants out
               (they can release slots if your fee outweighs the route).
+              All current tenants are re-billed at the new rate from
+              next quarter.
             </div>
           </div>
 

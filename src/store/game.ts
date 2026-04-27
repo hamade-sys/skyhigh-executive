@@ -4449,6 +4449,12 @@ export const useGame = create<GameStore>()(
       },
 
       resetGame: () => {
+        // Clear the milestone-shown ledger so a fresh game's first
+        // close lights up the relevant milestones again instead of
+        // suppressing them as "already seen".
+        if (typeof window !== "undefined") {
+          try { window.localStorage.removeItem("skyforce:milestonesShown:v1"); } catch {}
+        }
         set({
           phase: "idle",
           currentQuarter: 1,

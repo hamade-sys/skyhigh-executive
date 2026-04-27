@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { fmtMoney, fmtPct, TOTAL_GAME_ROUNDS, fmtQuarter } from "@/lib/format";
@@ -28,6 +28,48 @@ export function QuarterCloseModal() {
   const [tab, setTab] = useState<Tab>("overview");
   const open = s.phase === "quarter-closing" && !!s.lastCloseResult;
   const result = s.lastCloseResult;
+
+  // ── Defensive milestone-shown ledger.
+  //    The engine's `milestonesEarnedThisQuarter` is a diff between
+  //    pre-close and post-close milestone sets, but players have
+  //    reported the same milestones surfacing every quarter (e.g. the
+  //    "First Cargo Route" stayed showing every Q3). We belt-and-
+  //    suspenders this at the UI layer: track every milestone we've
+  //    ever shown in localStorage and hide ones we've already paraded
+  //    past the player. Result: even if the engine's diff is wrong,
+  //    the modal won't repeat itself.
+  const SHOWN_KEY = "skyforce:milestonesShown:v1";
+  const milestonesShown = useMemo(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const raw = window.localStorage.getItem(SHOWN_KEY);
+      if (!raw) return new Set<string>();
+      const arr = JSON.parse(raw);
+      return new Set<string>(Array.isArray(arr) ? arr : []);
+    } catch {
+      return new Set<string>();
+    }
+  }, [result?.milestonesEarnedThisQuarter]);
+  const milestonesActuallyNew = useMemo(() => {
+    if (!result) return [];
+    return result.milestonesEarnedThisQuarter.filter(
+      (m) => !milestonesShown.has(m),
+    );
+  }, [result, milestonesShown]);
+
+  // When the modal renders new milestones, persist them to the shown
+  // ledger immediately so any subsequent re-render won't show them
+  // again. Effect runs only when the set of "new this time" changes.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (milestonesActuallyNew.length === 0) return;
+    try {
+      const merged = Array.from(new Set([...milestonesShown, ...milestonesActuallyNew]));
+      window.localStorage.setItem(SHOWN_KEY, JSON.stringify(merged));
+    } catch {
+      // Quota errors etc. — non-fatal, just lose dedupe for this turn.
+    }
+  }, [milestonesActuallyNew, milestonesShown]);
 
   function continueNext() {
     if (!result) return;
@@ -234,13 +276,13 @@ export function QuarterCloseModal() {
               </div>
             )}
 
-            {result.milestonesEarnedThisQuarter.length > 0 && (
+            {milestonesActuallyNew.length > 0 && (
               <div className="rounded-md border border-[var(--accent-soft-2)] bg-[var(--accent-soft)] px-3 py-2">
                 <div className="flex items-center gap-2 text-accent text-[0.6875rem] uppercase tracking-wider font-semibold">
                   <Award size={13} /> Milestones earned this quarter
                 </div>
                 <div className="mt-1 text-[0.8125rem] text-ink">
-                  {result.milestonesEarnedThisQuarter
+                  {milestonesActuallyNew
                     .map((id) => MILESTONES_BY_ID[id]?.title ?? id)
                     .join(" · ")}
                 </div>
