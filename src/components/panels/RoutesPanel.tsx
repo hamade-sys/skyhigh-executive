@@ -285,16 +285,80 @@ export function RoutesPanel() {
                     )}
                   >
                     <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-mono text-ink font-medium">
                           {r.originCode} → {r.destCode}
                         </span>
                         {r.isCargo && (
                           <Badge tone="warning">Cargo</Badge>
                         )}
-                        {losing && (
-                          <Badge tone="negative">Review</Badge>
-                        )}
+                        {/* Triage health badges (recommendation #10).
+                            Each tag flags one specific concern so the
+                            player can scan the table and act. */}
+                        {(() => {
+                          const tags: Array<{ tone: "negative" | "warning" | "info"; label: string; title: string }> = [];
+                          // Dormant: active but no operating aircraft
+                          const hasAc = r.aircraftIds.some((id) =>
+                            player.fleet.find((f) => f.id === id && f.status === "active"),
+                          );
+                          if (r.status === "active" && !hasAc) {
+                            tags.push({
+                              tone: "warning",
+                              label: "No aircraft",
+                              title: "Active route with no operating aircraft assigned. Slots are leased but no flights are scheduled.",
+                            });
+                          }
+                          // Pending auction
+                          if (pending) {
+                            tags.push({
+                              tone: "info",
+                              label: "Bid pending",
+                              title: "Slot bid resolves at quarter close.",
+                            });
+                          }
+                          // Losing money 2Q+
+                          if (losing) {
+                            tags.push({
+                              tone: "negative",
+                              label: "Losing 2Q+",
+                              title: "Two consecutive losing quarters. Reprice, suspend, or close.",
+                            });
+                          }
+                          // Underloaded — under 50% occupancy
+                          if (r.status === "active" && r.avgOccupancy > 0 && r.avgOccupancy < 0.5) {
+                            tags.push({
+                              tone: "warning",
+                              label: "Underloaded",
+                              title: `${Math.round(r.avgOccupancy * 100)}% avg occupancy. Cut frequency or drop pricing tier.`,
+                            });
+                          }
+                          // Aircraft mismatch — pax aircraft on cargo route or vice versa
+                          if (r.aircraftIds.length > 0) {
+                            const wrongFleet = r.aircraftIds.some((id) => {
+                              const f = player.fleet.find((x) => x.id === id);
+                              if (!f) return false;
+                              const spec = AIRCRAFT_BY_ID[f.specId];
+                              if (!spec) return false;
+                              return r.isCargo
+                                ? spec.family !== "cargo"
+                                : spec.family !== "passenger";
+                            });
+                            if (wrongFleet) {
+                              tags.push({
+                                tone: "negative",
+                                label: "Mismatch",
+                                title: r.isCargo
+                                  ? "Passenger aircraft on a cargo route — economics will be off."
+                                  : "Cargo aircraft on a passenger route — no seats to sell.",
+                              });
+                            }
+                          }
+                          return tags.map((t) => (
+                            <Badge key={t.label} tone={t.tone} title={t.title}>
+                              {t.label}
+                            </Badge>
+                          ));
+                        })()}
                       </div>
                       <div className="text-[0.6875rem] text-ink-muted truncate mt-0.5">
                         {origin?.name} · {dest?.name} · {Math.round(r.distanceKm).toLocaleString()} km

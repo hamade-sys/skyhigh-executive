@@ -191,10 +191,12 @@ function CloseQuarterButton() {
   const closeQuarter = useGame((s) => s.closeQuarter);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const player = useGame(selectPlayer);
-  // Confirmation modal replaces the legacy native confirm() — keeps
-  // the close-quarter flow on-brand and lets us spell out exactly what
-  // happens to pending decisions (auto-submit with first-eligible
-  // fallback, see store.closeQuarter / store.submitDecision).
+  const openPanel = useUi((u) => u.openPanel);
+  // Quarter close readiness modal — replaces the simple "you have N
+  // pending decisions, close anyway?" prompt with a full pre-close
+  // checklist (recommendation #1: stronger quarter cockpit). The
+  // player sees decisions / dormant routes / cash risk / losing
+  // routes / pending auctions all in one frame before committing.
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (!player) return null;
@@ -203,59 +205,172 @@ function CloseQuarterButton() {
     (sc) => !player.decisions.some((d) => d.scenarioId === sc.id && d.quarter === currentQuarter),
   );
 
-  function onClick() {
-    if (pending.length > 0) {
-      setConfirmOpen(true);
-      return;
-    }
-    closeQuarter();
-  }
+  // Readiness checks. Each yields {label, status, count, hint, openPanelId?}.
+  // status: "ok" / "warn" / "info". The button always opens the modal so
+  // the player gets the same frame whether everything is green or there
+  // are real issues — recommendation #1 specifically called for "ready
+  // to close?" as a journey, not a fork in the road.
+  const activeRoutes = player.routes.filter((r) => r.status === "active");
+  const dormantRoutes = activeRoutes.filter(
+    (r) => r.aircraftIds.length === 0 ||
+      !r.aircraftIds.some((id) => player.fleet.find((f) => f.id === id && f.status === "active")),
+  );
+  const losingRoutes = activeRoutes.filter((r) => (r.consecutiveLosingQuarters ?? 0) >= 2);
+  const pendingRoutes = player.routes.filter((r) => r.status === "pending");
+  const totalQuarterlyCosts = activeRoutes.reduce(
+    (s, r) => s + (r.quarterlyFuelCost ?? 0) + (r.quarterlySlotCost ?? 0), 0,
+  );
+  const cashRiskLevel: "ok" | "warn" | "danger" =
+    player.cashUsd <= 0 ? "danger"
+    : totalQuarterlyCosts > 0 && player.cashUsd < totalQuarterlyCosts * 1.5 ? "warn"
+    : "ok";
+
+  type CheckStatus = "ok" | "warn" | "danger" | "info";
+  type Check = {
+    id: string;
+    label: string;
+    detail: string;
+    status: CheckStatus;
+    panel?: import("@/store/ui").PanelId;
+    cta?: string;
+  };
+  const checks: Check[] = [
+    {
+      id: "decisions",
+      label: pending.length === 0 ? "All board decisions resolved" : `${pending.length} board decision${pending.length === 1 ? "" : "s"} pending`,
+      detail: pending.length === 0
+        ? "Every scenario this quarter has been answered."
+        : "Unanswered scenarios auto-submit to a sensible default at close.",
+      status: pending.length === 0 ? "ok" : "warn",
+      panel: "decisions",
+      cta: "Open Decisions",
+    },
+    {
+      id: "dormant",
+      label: dormantRoutes.length === 0
+        ? "No dormant routes"
+        : `${dormantRoutes.length} active route${dormantRoutes.length === 1 ? "" : "s"} with no aircraft`,
+      detail: dormantRoutes.length === 0
+        ? "Every active route has at least one operating aircraft."
+        : "Slots are leased but no flights are scheduled. Assign aircraft or close the route.",
+      status: dormantRoutes.length === 0 ? "ok" : "warn",
+      panel: "routes",
+      cta: "Open Routes",
+    },
+    {
+      id: "cash",
+      label: cashRiskLevel === "ok"
+        ? `Cash buffer healthy · ${fmtMoney(player.cashUsd)}`
+        : cashRiskLevel === "warn"
+          ? `Cash thin · ${fmtMoney(player.cashUsd)} vs ${fmtMoney(totalQuarterlyCosts)}/Q direct`
+          : `Cash negative · ${fmtMoney(player.cashUsd)}`,
+      detail: cashRiskLevel === "ok"
+        ? "Cash > 1.5× quarterly direct costs (fuel + slot)."
+        : cashRiskLevel === "warn"
+          ? "Cash is below 1.5× quarterly direct costs. A bad quarter could push you negative."
+          : "You're already in the red. Next quarter close charges fixed costs against an empty till.",
+      status: cashRiskLevel,
+      panel: "reports",
+      cta: "Open Reports",
+    },
+    {
+      id: "losing",
+      label: losingRoutes.length === 0
+        ? "No routes flagged losing 2Q+"
+        : `${losingRoutes.length} route${losingRoutes.length === 1 ? "" : "s"} losing money 2Q+`,
+      detail: losingRoutes.length === 0
+        ? "Every active route covered direct costs in at least one of the last two quarters."
+        : "Consider cutting frequency, lowering pricing tier, or closing.",
+      status: losingRoutes.length === 0 ? "ok" : "warn",
+      panel: "routes",
+      cta: "Open Routes",
+    },
+    {
+      id: "pending-routes",
+      label: pendingRoutes.length === 0
+        ? "No pending route auctions"
+        : `${pendingRoutes.length} route${pendingRoutes.length === 1 ? "" : "s"} awaiting slot auction`,
+      detail: pendingRoutes.length === 0
+        ? "No bids are queued at quarter close."
+        : "Your pending bids resolve at this close. Cash is deducted only on win.",
+      status: pendingRoutes.length === 0 ? ("ok" as const) : ("info" as const),
+      panel: "slots",
+      cta: "Open Slot Market",
+    },
+  ];
+
+  const issueCount = checks.filter((c) => c.status === "warn" || c.status === "danger").length;
 
   return (
     <>
       <Button
         variant="primary"
         size="sm"
-        onClick={onClick}
+        onClick={() => setConfirmOpen(true)}
         title="Lock decisions + run quarter close. In multi-team play this signals 'I'm ready' — the round advances when all teams (or admin) confirm."
       >
         Next Quarter →
       </Button>
 
-      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} className="max-w-xl">
         <ModalHeader>
           <h2 className="font-display text-[1.5rem] text-ink">
-            Close {fmtQuarter(currentQuarter)} with {pending.length} decision
-            {pending.length === 1 ? "" : "s"} still open?
+            Close {fmtQuarter(currentQuarter)}?
           </h2>
           <p className="text-ink-muted text-[0.8125rem] mt-1">
-            The board needs an answer on every scenario before the books
-            close. Anything you haven&apos;t answered will auto-resolve to a
-            sensible default — usually the first listed option, skipping
-            anything blocked by current cash, fleet or PR state.
+            {issueCount === 0
+              ? "Pre-flight checks all green. Locking decisions and running quarter close."
+              : `${issueCount} item${issueCount === 1 ? "" : "s"} flagged. Review or close anyway — auto-resolutions kick in for unfinished items.`}
           </p>
         </ModalHeader>
-        <ModalBody className="space-y-2">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-            Pending decisions
-          </div>
-          <ul className="space-y-1.5">
-            {pending.map((sc) => (
-              <li
-                key={sc.id}
-                className="rounded-md border border-line bg-surface px-3 py-2 text-[0.8125rem]"
+        <ModalBody className="space-y-1.5">
+          {checks.map((c) => (
+            <div
+              key={c.id}
+              className={cn(
+                "rounded-md border px-3 py-2.5 flex items-start gap-3",
+                c.status === "ok" && "border-positive/40 bg-[var(--positive-soft)]/30",
+                c.status === "warn" && "border-warning/40 bg-[var(--warning-soft)]/30",
+                c.status === "danger" && "border-negative/40 bg-[var(--negative-soft)]/30",
+                c.status === "info" && "border-line bg-surface",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[0.6875rem] font-bold mt-0.5",
+                  c.status === "ok" && "bg-positive text-primary-fg",
+                  c.status === "warn" && "bg-warning text-primary-fg",
+                  c.status === "danger" && "bg-negative text-primary-fg",
+                  c.status === "info" && "bg-ink-muted text-primary-fg",
+                )}
               >
-                <div className="font-semibold text-ink">{sc.title}</div>
-                <div className="text-[0.6875rem] text-ink-muted mt-0.5">
-                  Will auto-submit at quarter close.
+                {c.status === "ok" ? "✓" : c.status === "danger" ? "!" : c.status === "warn" ? "⚠" : "i"}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[0.875rem] font-semibold text-ink">{c.label}</div>
+                <div className="text-[0.75rem] text-ink-muted leading-relaxed mt-0.5">
+                  {c.detail}
                 </div>
-              </li>
-            ))}
-          </ul>
+              </div>
+              {c.cta && c.panel && (c.status === "warn" || c.status === "danger") && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setConfirmOpen(false);
+                    openPanel(c.panel!);
+                  }}
+                >
+                  {c.cta}
+                </Button>
+              )}
+            </div>
+          ))}
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-            Go back to decisions
+            Keep working
           </Button>
           <Button
             variant="primary"
@@ -264,7 +379,7 @@ function CloseQuarterButton() {
               closeQuarter();
             }}
           >
-            Close quarter anyway
+            {issueCount === 0 ? "Close quarter →" : "Close anyway →"}
           </Button>
         </ModalFooter>
       </Modal>

@@ -46,8 +46,99 @@ export function OverviewPanel() {
 
   const onOpen = (id: PanelId) => openPanel(id);
 
+  // ─── Executive 3-card layout (recommendation #5) ─────────────
+  // Replaces the metric dump that used to lead the panel. Three
+  // status cards at the top: Cash risk / Network health / Board
+  // attention. Each card has a single action button, traffic-light
+  // colour, and a 1-line summary of "what's the worst thing here".
+  // Detailed metrics + insights still live below for power users.
+  const totalQuarterlyDirectCosts = activeRoutes.reduce(
+    (s2, r) => s2 + (r.quarterlyFuelCost ?? 0) + (r.quarterlySlotCost ?? 0), 0,
+  );
+  const cashStatus: "ok" | "warn" | "danger" =
+    player.cashUsd <= 0 ? "danger"
+    : totalQuarterlyDirectCosts > 0 && player.cashUsd < totalQuarterlyDirectCosts * 1.5 ? "warn"
+    : "ok";
+
+  const profitableRoutes = activeRoutes.filter((r) => {
+    const profit = (r.quarterlyRevenue ?? 0) - (r.quarterlyFuelCost ?? 0) - (r.quarterlySlotCost ?? 0);
+    return profit > 0;
+  });
+  const profitablePct = activeRoutes.length > 0
+    ? (profitableRoutes.length / activeRoutes.length) * 100
+    : 100;
+  const avgOcc = activeRoutes.length > 0
+    ? activeRoutes.reduce((s2, r) => s2 + r.avgOccupancy, 0) / activeRoutes.length
+    : 0;
+  const losingRoutes = activeRoutes.filter((r) => (r.consecutiveLosingQuarters ?? 0) >= 2);
+  const dormantRoutes = activeRoutes.filter((r) =>
+    r.aircraftIds.length === 0 ||
+    !r.aircraftIds.some((id) => player.fleet.find((f) => f.id === id && f.status === "active")),
+  );
+  const networkStatus: "ok" | "warn" | "danger" =
+    activeRoutes.length === 0 ? "warn"
+    : losingRoutes.length >= 3 || profitablePct < 40 ? "danger"
+    : losingRoutes.length > 0 || avgOcc < 0.55 ? "warn"
+    : "ok";
+
+  const boardAttentionCount = pendingDecisions.length + losingRoutes.length + dormantRoutes.length;
+  const boardStatus: "ok" | "warn" | "danger" =
+    boardAttentionCount === 0 ? "ok"
+    : pendingDecisions.length > 0 || dormantRoutes.length > 0 ? "warn"
+    : "warn";
+
   return (
     <div className="space-y-5">
+      {/* Executive 3-card status row — leads the panel. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <ExecCard
+          label="Cash risk"
+          status={cashStatus}
+          headline={fmtMoney(player.cashUsd)}
+          detail={
+            cashStatus === "ok"
+              ? "Buffer healthy vs quarterly direct costs."
+              : cashStatus === "warn"
+                ? `Below 1.5× direct costs (${fmtMoney(totalQuarterlyDirectCosts)}/Q)`
+                : "Cash position negative."
+          }
+          ctaLabel="Open Reports"
+          onCta={() => onOpen("reports")}
+        />
+        <ExecCard
+          label="Network health"
+          status={networkStatus}
+          headline={`${profitableRoutes.length} of ${activeRoutes.length} routes profitable`}
+          detail={
+            activeRoutes.length === 0
+              ? "No active routes yet."
+              : `${(profitablePct).toFixed(0)}% profit-positive · ${(avgOcc * 100).toFixed(0)}% avg occupancy`
+          }
+          ctaLabel="Review routes"
+          onCta={() => onOpen("routes")}
+        />
+        <ExecCard
+          label="Board attention"
+          status={boardStatus}
+          headline={
+            boardAttentionCount === 0
+              ? "All clear"
+              : `${boardAttentionCount} item${boardAttentionCount === 1 ? "" : "s"}`
+          }
+          detail={
+            boardAttentionCount === 0
+              ? "No decisions, dormant routes, or chronic losers."
+              : [
+                  pendingDecisions.length > 0 ? `${pendingDecisions.length} decision${pendingDecisions.length === 1 ? "" : "s"} pending` : null,
+                  dormantRoutes.length > 0 ? `${dormantRoutes.length} dormant route${dormantRoutes.length === 1 ? "" : "s"}` : null,
+                  losingRoutes.length > 0 ? `${losingRoutes.length} losing 2Q+` : null,
+                ].filter(Boolean).join(" · ")
+          }
+          ctaLabel={pendingDecisions.length > 0 ? "Open Decisions" : "Review routes"}
+          onCta={() => onOpen(pendingDecisions.length > 0 ? "decisions" : "routes")}
+        />
+      </div>
+
       <div>
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
           Airline
@@ -731,6 +822,65 @@ function MetricWithSpark({
           {(delta.format ?? ((n) => `${n > 0 ? "+" : ""}${n.toFixed(1)}`))(delta.value)}
         </span>
       )}
+    </div>
+  );
+}
+
+/** Executive status card — used for the 3-card row at the top of
+ *  OverviewPanel. Each card has a coloured left border (traffic-light
+ *  status), a small label, a hero number/phrase, a one-line detail,
+ *  and a single action button. Recommendation #5: lead the Overview
+ *  with action-oriented status, not a metric dump. */
+function ExecCard({
+  label, status, headline, detail, ctaLabel, onCta,
+}: {
+  label: string;
+  status: "ok" | "warn" | "danger";
+  headline: string;
+  detail: string;
+  ctaLabel: string;
+  onCta: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border bg-surface p-4 flex flex-col gap-3 relative overflow-hidden",
+        status === "ok" && "border-line",
+        status === "warn" && "border-warning/40 bg-[var(--warning-soft)]/30",
+        status === "danger" && "border-negative/50 bg-[var(--negative-soft)]/30",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+          {label}
+        </span>
+        <span
+          className={cn(
+            "text-[0.5625rem] uppercase tracking-wider font-bold rounded px-1.5 py-0.5",
+            status === "ok" && "text-positive bg-[var(--positive-soft)]",
+            status === "warn" && "text-warning bg-[var(--warning-soft)]",
+            status === "danger" && "text-negative bg-[var(--negative-soft)]",
+          )}
+        >
+          {status === "ok" ? "Healthy" : status === "warn" ? "Watch" : "Action"}
+        </span>
+      </div>
+      <div>
+        <div className="font-display text-[1.5rem] tabular text-ink leading-none">
+          {headline}
+        </div>
+        <div className="text-[0.75rem] text-ink-muted leading-relaxed mt-1.5">
+          {detail}
+        </div>
+      </div>
+      <Button
+        size="sm"
+        variant={status === "ok" ? "ghost" : "primary"}
+        onClick={onCta}
+        className="self-start mt-auto"
+      >
+        {ctaLabel} →
+      </Button>
     </div>
   );
 }

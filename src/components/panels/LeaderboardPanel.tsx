@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui";
 import { useGame } from "@/store/game";
 import { fmtMoney } from "@/lib/format";
 import { computeAirlineValue, fleetCount, brandRating } from "@/lib/engine";
-import { Plane, Crown, Trophy } from "lucide-react";
+import { Plane, Crown, Trophy, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { cn } from "@/lib/cn";
 
 export function LeaderboardPanel() {
   const s = useGame();
@@ -17,7 +18,8 @@ export function LeaderboardPanel() {
       <div className="text-[0.8125rem] text-ink-2">
         Ranked by Airline Value (book equity × brand multiplier).
         Competitor finances stay private — only the rank, brand grade,
-        and fleet size are shown.
+        and fleet size are shown. Arrows show Q/Q rank movement vs
+        last close.
       </div>
       {/* Ordered list for proper ranking semantics — screen readers
           announce "list item N of M" with the rank built in. */}
@@ -28,9 +30,23 @@ export function LeaderboardPanel() {
           const RankIcon = rankIcon;
           const av = computeAirlineValue(t);
           const fc = fleetCount(t.fleet);
+          const currentRank = i + 1;
+          // Q/Q rank movement — pull from the second-last
+          // financialsByQuarter entry (the most recent CLOSED row's
+          // rank, vs the new sort position). Last entry is the same
+          // quarter as currentRank (snapshotted at close), so we
+          // look two-back for the prior quarter's rank.
+          const history = t.financialsByQuarter;
+          const priorRank = history.length >= 2 ? history[history.length - 2].rank : undefined;
+          const rankDelta = priorRank !== undefined ? priorRank - currentRank : null;
+          // Gap to next rank: distance in airline value to the team
+          // immediately above (or 0 if leader).
+          const aboveAv = i > 0 ? computeAirlineValue(ranked[i - 1]) : null;
+          const gapToNext = aboveAv !== null ? aboveAv - av : null;
+
           const ariaLabel = isPlayer
-            ? `Rank ${i + 1}: ${t.name} (you), Brand ${brandRating(t).grade}, airline value ${fmtMoney(av)}, ${fc} aircraft`
-            : `Rank ${i + 1}: ${t.name}, Brand ${brandRating(t).grade}, airline value ${fmtMoney(av)}, ${fc} aircraft`;
+            ? `Rank ${currentRank}${rankDelta && rankDelta !== 0 ? `, ${rankDelta > 0 ? "up" : "down"} ${Math.abs(rankDelta)} from last quarter` : ""}: ${t.name} (you), Brand ${brandRating(t).grade}, airline value ${fmtMoney(av)}, ${fc} aircraft`
+            : `Rank ${currentRank}${rankDelta && rankDelta !== 0 ? `, ${rankDelta > 0 ? "up" : "down"} ${Math.abs(rankDelta)} from last quarter` : ""}: ${t.name}, Brand ${brandRating(t).grade}, airline value ${fmtMoney(av)}, ${fc} aircraft`;
           return (
             <li
               key={t.id}
@@ -54,9 +70,39 @@ export function LeaderboardPanel() {
                     }
                   />
                 ) : (
-                  i + 1
+                  currentRank
                 )}
               </span>
+              {/* Q/Q rank movement chip — only renders when we have
+                  a prior rank to compare against. Up arrow + green
+                  for moved up; down + red for moved down; flat dash
+                  for unchanged. */}
+              {rankDelta !== null && (
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "shrink-0 inline-flex items-center gap-0.5 text-[0.625rem] tabular font-mono font-semibold rounded px-1 py-0.5",
+                    rankDelta > 0 && "bg-[var(--positive-soft)] text-positive",
+                    rankDelta < 0 && "bg-[var(--negative-soft)] text-negative",
+                    rankDelta === 0 && "text-ink-muted",
+                  )}
+                  title={
+                    rankDelta > 0
+                      ? `Up ${rankDelta} from last quarter`
+                      : rankDelta < 0
+                        ? `Down ${Math.abs(rankDelta)} from last quarter`
+                        : "Same rank as last quarter"
+                  }
+                >
+                  {rankDelta > 0 ? (
+                    <><ArrowUp size={9} />{rankDelta}</>
+                  ) : rankDelta < 0 ? (
+                    <><ArrowDown size={9} />{Math.abs(rankDelta)}</>
+                  ) : (
+                    <><Minus size={9} /></>
+                  )}
+                </span>
+              )}
               <span
                 aria-hidden="true"
                 className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shrink-0"
@@ -71,7 +117,17 @@ export function LeaderboardPanel() {
                   </span>
                   {isPlayer && <Badge tone="primary">You</Badge>}
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted font-mono">Hub {t.hubCode}</div>
+                <div className="text-[0.6875rem] text-ink-muted font-mono">
+                  Hub {t.hubCode}
+                  {gapToNext !== null && gapToNext > 0 && (
+                    <>
+                      {" · "}
+                      <span title="Airline value gap to the team immediately above">
+                        {fmtMoney(gapToNext)} to next
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="text-right shrink-0">
                 <div className="tabular font-display text-[1.25rem] text-ink leading-none">

@@ -7,6 +7,7 @@ import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { SCENARIOS, SCENARIOS_BY_QUARTER, type OptionEffect } from "@/data/scenarios";
 import {
   applyOptionEffect,
+  computeAirlineValue,
   computeBrandValue,
   distanceBetween,
   maxRouteDailyFrequency,
@@ -3763,8 +3764,41 @@ export const useGame = create<GameStore>()(
           },
         ];
 
+        // Snapshot leaderboard rank + airline value into every team's
+        // just-closed financialsByQuarter row. Lets the Leaderboard
+        // panel show Q/Q rank movement (▲ delta) without re-deriving
+        // historical rank from cash/brand alone. Sort by airline
+        // value desc; ties resolved arbitrarily by team id for
+        // determinism across closes.
+        const rankedTeams = [...teamsAfterDelivery]
+          .map((t) => ({ id: t.id, av: computeAirlineValue(t) }))
+          .sort((a, b) => b.av - a.av || a.id.localeCompare(b.id));
+        const rankById = new Map<string, number>();
+        const avById = new Map<string, number>();
+        rankedTeams.forEach((r, i) => {
+          rankById.set(r.id, i + 1);
+          avById.set(r.id, r.av);
+        });
+        const teamsWithRank = teamsAfterDelivery.map((t) => {
+          const lastIdx = t.financialsByQuarter.length - 1;
+          if (lastIdx < 0) return t;
+          const lastRow = t.financialsByQuarter[lastIdx];
+          if (lastRow.quarter !== s.currentQuarter) return t;
+          return {
+            ...t,
+            financialsByQuarter: [
+              ...t.financialsByQuarter.slice(0, lastIdx),
+              {
+                ...lastRow,
+                rank: rankById.get(t.id),
+                airlineValue: avById.get(t.id),
+              },
+            ],
+          };
+        });
+
         set({
-          teams: teamsAfterDelivery,
+          teams: teamsWithRank,
           cargoContracts: updatedCargoContracts,
           lastCloseResult: result,
           phase: "quarter-closing",

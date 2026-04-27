@@ -518,6 +518,14 @@ export interface Team {
     opsPts: number;
     loyalty: number;
     brandValue: number;
+    /** Leaderboard rank at this quarter's close (1 = leader). Set by
+     *  the closeQuarter action after every team has run. Used by the
+     *  Leaderboard panel to show Q/Q movement (▲ ▼ arrows + delta). */
+    rank?: number;
+    /** Airline value at this quarter's close. Snapshotted so the
+     *  leaderboard can show "gap to next rank" and trend without
+     *  re-deriving from cash + brandValue alone. */
+    airlineValue?: number;
   }>;
 }
 
