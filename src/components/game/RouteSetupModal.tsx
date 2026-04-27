@@ -54,6 +54,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   const [selectedPlaneIds, setSelectedPlaneIds] = useState<string[]>([]);
   // UI is weekly throughout; engine still stores daily.
   const [weeklyFreq, setWeeklyFreq] = useState(7);
+  const [freqTouched, setFreqTouched] = useState(false);
   const [tier, setTier] = useState<PricingTier>("standard");
   const [econFare, setEconFare] = useState<number | null>(null);
   const [busFare, setBusFare] = useState<number | null>(null);
@@ -90,8 +91,18 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
       if (effectiveRangeKm(spec, f.engineUpgrade ?? null) < dist) return false;
       return cargo ? spec.family === "cargo" : spec.family === "passenger";
     });
+    const defaultWeeklyFreq = idle
+      ? maxWeeklyRotations(
+          idle.specId,
+          dist,
+          idle.engineUpgrade ?? null,
+          idle.cargoBelly,
+          player.doctrine,
+        )
+      : 0;
     setSelectedPlaneIds(idle ? [idle.id] : []);
-    setWeeklyFreq(7);
+    setWeeklyFreq(defaultWeeklyFreq);
+    setFreqTouched(false);
     setTier("standard");
     setEconFare(null);
     setBusFare(null);
@@ -140,9 +151,13 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
       if (weeklyFreq !== 0) setWeeklyFreq(0);
       return;
     }
+    if (!freqTouched) {
+      if (weeklyFreq !== maxWeeklyFreq) setWeeklyFreq(maxWeeklyFreq);
+      return;
+    }
     if (weeklyFreq > maxWeeklyFreq) setWeeklyFreq(maxWeeklyFreq);
-    if (weeklyFreq < 1) setWeeklyFreq(Math.min(7, maxWeeklyFreq));
-  }, [maxWeeklyFreq]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (weeklyFreq < 1) setWeeklyFreq(maxWeeklyFreq);
+  }, [maxWeeklyFreq, weeklyFreq, freqTouched]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cabin availability from selected planes — must honor per-instance
   // customSeats (set at purchase via the Purchase Order modal), not just
@@ -593,7 +608,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                   min={1}
                   max={Math.max(1, maxWeeklyFreq)}
                   value={weeklyFreq}
-                  onChange={(e) => setWeeklyFreq(parseInt(e.target.value, 10))}
+                  onChange={(e) => {
+                    setFreqTouched(true);
+                    setWeeklyFreq(parseInt(e.target.value, 10));
+                  }}
                   className="flex-1 accent-primary"
                   disabled={maxWeeklyFreq < 1}
                 />
@@ -828,7 +846,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   );
 }
 
-function BidRow({
+export function BidRow({
   airportCode, slotsNeeded, tier, price, slots, onChange, onSlotsChange,
 }: {
   airportCode: string;

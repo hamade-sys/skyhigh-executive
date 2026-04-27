@@ -7,11 +7,11 @@ import { useUi } from "@/store/ui";
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
-import { classFareRangeForDoctrine, distanceBetween, effectiveRangeKm, maxRouteDailyFrequency } from "@/lib/engine";
-import type { PricingTier } from "@/types/game";
+import { classFareRangeForDoctrine, distanceBetween, effectiveRangeKm, maxRouteDailyFrequency, routeDemandPerDay } from "@/lib/engine";
+import type { CityTier, PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { AlertTriangle, Pause, Play, Plus, X } from "lucide-react";
-import { RouteSetupModal } from "@/components/game/RouteSetupModal";
+import { RouteSetupModal, BidRow } from "@/components/game/RouteSetupModal";
 import { toast } from "@/store/toasts";
 
 /**
@@ -855,6 +855,7 @@ function RouteDetailModal({
   const s = useGame();
   const player = selectPlayer(s);
   const updateRoute = useGame((g) => g.updateRoute);
+  const submitSlotBid = useGame((g) => g.submitSlotBid);
 
   // UI works in WEEKLY frequency (engine still stores dailyFrequency).
   const [weeklyFreq, setWeeklyFreq] = useState<number>(Math.round(route.dailyFrequency * 7));
@@ -865,6 +866,12 @@ function RouteDetailModal({
   const [cargoRate, setCargoRate] = useState<number | null>(route.cargoRatePerTonne ?? null);
   const [selectedPlaneIds, setSelectedPlaneIds] = useState<string[]>(route.aircraftIds);
   const [error, setError] = useState<string | null>(null);
+  // Inline slot-bid state — when the player tries to lift weeklyFreq
+  // beyond their current slot allocation, render a BidRow instead of
+  // the legacy "Not enough slots" error so they can resolve it without
+  // closing the modal. Keyed by airport code (origin or dest).
+  const [bidPrices, setBidPrices] = useState<Record<string, number>>({});
+  const [bidSlots, setBidSlots] = useState<Record<string, number>>({});
 
   // Auto-clamp weeklyFreq when aircraft selection changes — fewer planes
   // means a lower physics cap, and the slider/value MUST drop to match.
@@ -931,6 +938,72 @@ function RouteDetailModal({
     return !stale || stale.status === "closed";
   });
 
+  // ── Slot shortfall — replicates updateRoute's check so the UI can
+  //    inline-render a BidRow instead of bouncing on save with the
+  //    "Not enough slots" error. We exclude THIS route's contribution
+  //    from "usedByOthers" so the math is symmetric with the store.
+  const proposedWeekly = Math.max(0, Math.round((weeklyFreq / 7) * 7));
+  const shortfallAt = (code: string) => {
+    const slotsHeld = player.airportLeases?.[code]?.slots ?? 0;
+    const usedByOthers = player.routes
+      .filter((r) =>
+        r.id !== route.id &&
+        (r.status === "active" || r.status === "suspended" || r.status === "pending") &&
+        (r.originCode === code || r.destCode === code),
+      )
+      .reduce((sum, r) => sum + r.dailyFrequency * 7, 0);
+    return Math.max(0, usedByOthers + proposedWeekly - slotsHeld);
+  };
+  const shortfallOrigin = shortfallAt(route.originCode);
+  const shortfallDest = shortfallAt(route.destCode);
+  const hasShortfall = shortfallOrigin > 0 || shortfallDest > 0;
+
+  // ── Demand vs capacity projection — passenger uses pax/seats, cargo
+  //    uses tonnes. Read-only forecast that helps the player gauge
+  //    "is this aircraft set sized right for the demand on this OD pair?"
+  const projection = (() => {
+    if (selectedPlaneIds.length === 0 || weeklyFreq < 1) return null;
+    const dailyFreq = Math.max(1 / 7, weeklyFreq / 7);
+    if (route.isCargo) {
+      const tonnesPerFlight = selectedPlaneIds.reduce((sum, id) => {
+        const p = player.fleet.find((f) => f.id === id);
+        if (!p) return sum;
+        const spec = AIRCRAFT_BY_ID[p.specId];
+        return sum + (spec?.cargoTonnes ?? 0);
+      }, 0);
+      const dailyCapacity = tonnesPerFlight * dailyFreq;
+      if (dailyCapacity === 0) return null;
+      const o = CITIES_BY_CODE[route.originCode];
+      const d = CITIES_BY_CODE[route.destCode];
+      if (!o || !d) return null;
+      const dailyBusinessO = o.business * Math.pow(1 + o.businessGrowth / 100 / 4, s.currentQuarter - 1);
+      const dailyBusinessD = d.business * Math.pow(1 + d.businessGrowth / 100 / 4, s.currentQuarter - 1);
+      const demand = Math.min(dailyBusinessO, dailyBusinessD);
+      const occ = demand > 0 ? Math.min(1, demand / dailyCapacity) : 0;
+      return { kind: "cargo" as const, demand, capacity: dailyCapacity, occupancy: occ };
+    }
+    const demand = routeDemandPerDay(route.originCode, route.destCode, s.currentQuarter).total;
+    const totalSeats = selectedPlaneIds.reduce((sum, id) => {
+      const p = player.fleet.find((f) => f.id === id);
+      if (!p) return sum;
+      const spec = AIRCRAFT_BY_ID[p.specId];
+      const seats = p.customSeats ?? spec?.seats;
+      if (!seats) return sum;
+      return sum + seats.first + seats.business + seats.economy;
+    }, 0);
+    const dailyCapacity = totalSeats * dailyFreq;
+    if (dailyCapacity === 0) return null;
+    const occ = Math.min(1, demand / dailyCapacity);
+    return { kind: "passenger" as const, demand, capacity: dailyCapacity, occupancy: occ };
+  })();
+
+  // Are all required bids set when there's a shortfall? Save's split
+  // path uses this to gate the button.
+  const allBidsSet =
+    !hasShortfall ||
+    ((shortfallOrigin === 0 || bidPrices[route.originCode] !== undefined) &&
+      (shortfallDest === 0 || bidPrices[route.destCode] !== undefined));
+
   function save() {
     // Reject empty aircraft assignment — earlier the modal happily
     // saved aircraftIds=[] with a positive frequency, so the route
@@ -940,6 +1013,56 @@ function RouteDetailModal({
       setError("Pick at least one aircraft, or close the route from the routes list.");
       return;
     }
+    // ── Path A: shortfall + bids set → submit each bid via the auction
+    //    queue, then save the rest of the patch with the *current*
+    //    daily frequency (NOT the bumped one). The frequency will
+    //    auto-bump after the auction clears next quarter close. This
+    //    replaces the old "save fails → see error message" UX.
+    if (hasShortfall) {
+      if (!allBidsSet) {
+        setError("Set your bid for each shortfall airport below before saving.");
+        return;
+      }
+      const bidErrs: string[] = [];
+      if (shortfallOrigin > 0 && bidPrices[route.originCode] !== undefined) {
+        const slots = bidSlots[route.originCode] ?? shortfallOrigin;
+        const r = submitSlotBid(route.originCode, slots, bidPrices[route.originCode]!);
+        if (!r.ok) bidErrs.push(`${route.originCode}: ${r.error}`);
+      }
+      if (shortfallDest > 0 && bidPrices[route.destCode] !== undefined) {
+        const slots = bidSlots[route.destCode] ?? shortfallDest;
+        const r = submitSlotBid(route.destCode, slots, bidPrices[route.destCode]!);
+        if (!r.ok) bidErrs.push(`${route.destCode}: ${r.error}`);
+      }
+      if (bidErrs.length > 0) {
+        setError(`Slot bid${bidErrs.length === 1 ? "" : "s"} rejected — ${bidErrs.join(" · ")}`);
+        return;
+      }
+      // Save the non-frequency edits at the current daily frequency
+      // so the route doesn't break slot caps. Frequency auto-bumps
+      // after the auction clears.
+      const r = updateRoute(route.id, {
+        aircraftIds: selectedPlaneIds,
+        dailyFrequency: route.dailyFrequency,
+        pricingTier: tier,
+        econFare,
+        busFare,
+        firstFare,
+        cargoRatePerTonne: cargoRate,
+      });
+      if (!r.ok) {
+        setError(r.error ?? "Failed to save");
+        return;
+      }
+      toast.info(
+        "Slot bids queued",
+        "Bids resolve at quarter close — schedule auto-updates if you win the slots.",
+      );
+      onClose();
+      return;
+    }
+
+    // Path B: no shortfall → standard save with the new frequency.
     const r = updateRoute(route.id, {
       aircraftIds: selectedPlaneIds,
       // Preserve fractional daily — earlier this snapped 1-3 weekly
@@ -1029,171 +1152,82 @@ function RouteDetailModal({
           })()}
         </div>
 
-        {/* Why this performance — multipliers breakdown */}
-        <DemandBreakdown route={route} player={player} />
-
-        {/* Competitors on this OD pair */}
-        <CompetitorsTable route={route} />
-
-        {/* Pricing tier — quick preset that scales every per-class fare. */}
-        <div>
-          <Label>Pricing tier</Label>
-          <div className="grid grid-cols-4 gap-2">
-            {(["budget", "standard", "premium", "ultra"] as PricingTier[]).map((t) => {
-              const mult = t === "budget" ? "0.5×"
-                : t === "standard" ? "1.0×"
-                : t === "premium" ? "1.5×" : "2.0×";
-              return (
-                <button
-                  key={t}
-                  onClick={() => setTier(t)}
-                  className={cn(
-                    "rounded-md border px-3 py-2 capitalize transition-colors flex flex-col items-center gap-0.5",
-                    tier === t
-                      ? "border-primary bg-[rgba(20,53,94,0.06)] text-ink font-semibold"
-                      : "border-line text-ink-2 hover:bg-surface-hover",
-                  )}
-                >
-                  <span className="text-[0.8125rem]">{t}</span>
-                  <span className="text-[0.625rem] tabular font-mono text-ink-muted">
-                    {mult} base
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-1.5">
-            Quick preset that multiplies every per-class fare against a tier
-            multiplier. Budget is half base for high-volume capture; Premium
-            is 1.5× base; Ultra is 2× base for top-of-market positioning.
-            Per-class sliders below override individual cabin fares; the
-            tier just sets the starting point.
-          </div>
-        </div>
-
-        {/* Frequency — weekly with engine-derived cap */}
-        <div>
-          <Label>Schedules per week</Label>
-          {(() => {
-            const specIds = selectedPlaneIds
-              .map((id) => player.fleet.find((f) => f.id === id)?.specId)
-              .filter((x): x is string => !!x);
-            const aircraftForPhysics = selectedPlaneIds
-              .map((id) => {
-                const f = player.fleet.find((plane) => plane.id === id);
-                if (!f) return null;
-                return {
-                  specId: f.specId,
-                  engineUpgrade: f.engineUpgrade ?? null,
-                  cargoBelly: f.cargoBelly,
-                  doctrine: player.doctrine,
-                };
-              })
-              .filter((x): x is NonNullable<typeof x> => !!x);
-            const maxDaily = specIds.length > 0
-              ? maxRouteDailyFrequency(specIds, route.distanceKm, aircraftForPhysics)
-              : 1;
-            const maxWeekly = Math.round(maxDaily * 7);
-            return (
-              <>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={maxWeekly}
-                    value={Math.min(weeklyFreq, maxWeekly)}
-                    onChange={(e) => setWeeklyFreq(parseInt(e.target.value, 10))}
-                    className="flex-1 accent-primary"
-                  />
-                  <span className="tabular font-mono text-ink text-[0.9375rem] w-20 text-right">
-                    {weeklyFreq}/wk
-                  </span>
+        {/* ── Demand vs capacity projection — restored. Tells the player
+            the OD pair's daily demand AND how much of it the currently
+            selected aircraft set covers, so they can right-size the
+            fleet without flipping back to the route list. */}
+        {projection && (
+          <div
+            className={cn(
+              "rounded-md border px-3 py-2.5",
+              projection.occupancy < 0.25
+                ? "border-negative bg-[var(--negative-soft)]"
+                : projection.occupancy < 0.55
+                  ? "border-warning bg-[var(--warning-soft)]"
+                  : "border-positive bg-[var(--positive-soft)]",
+            )}
+          >
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+                Demand · capacity · projected occupancy
+              </span>
+              <span
+                className={cn(
+                  "tabular font-mono text-[0.875rem] font-semibold",
+                  projection.occupancy < 0.25
+                    ? "text-negative"
+                    : projection.occupancy < 0.55
+                      ? "text-warning"
+                      : "text-positive",
+                )}
+              >
+                {(projection.occupancy * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-[0.75rem]">
+              <div>
+                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                  Daily demand
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted mt-1">
-                  Cap with this aircraft set: <strong className="text-ink">{maxWeekly}/week</strong>
+                <div className="tabular font-mono text-ink font-medium">
+                  {Math.round(projection.demand).toLocaleString()}
+                  {projection.kind === "cargo" ? " T" : " pax"}
                 </div>
-              </>
-            );
-          })()}
-        </div>
-
-        {/* Per-class fares (passenger only) */}
-        {!route.isCargo && (
-          <div className="space-y-3">
-            <Label>Per-class fares (optional override)</Label>
-            <FareRow label="Economy" range={econRange} fare={econFare} setFare={setEconFare} active />
-            <FareRow label="Business" range={busRange} fare={busFare} setFare={setBusFare} active={hasBus} />
-            <FareRow label="First" range={firstRange} fare={firstFare} setFare={setFirstFare} active={hasFirst} />
+              </div>
+              <div>
+                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                  Daily capacity
+                </div>
+                <div className="tabular font-mono text-ink font-medium">
+                  {Math.round(projection.capacity).toLocaleString()}
+                  {projection.kind === "cargo" ? " T" : " seats"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                  Coverage
+                </div>
+                <div className="tabular font-mono text-ink font-medium">
+                  {projection.demand > 0
+                    ? `${Math.min(100, Math.round((projection.capacity / projection.demand) * 100))}%`
+                    : "—"}
+                </div>
+              </div>
+            </div>
+            <div className="text-[0.625rem] text-ink-muted leading-snug mt-1.5">
+              {projection.kind === "cargo"
+                ? "Demand = min(origin, dest) business demand in tonnes (before market-focus + news modifiers)."
+                : "Demand = engine-modelled pax/day for this OD pair. Capacity = total seats × daily frequency."}
+            </div>
           </div>
         )}
 
-        {/* Cargo rate (cargo only) — same UX shape as the passenger
-            fares so the player has a clear way to set fee instead of
-            being stuck at the fixed base. */}
-        {route.isCargo && (() => {
-          const baseRate = route.distanceKm < 3000 ? 3.5 : 5.5;
-          const tierMult =
-            tier === "budget" ? 0.5 :
-            tier === "premium" ? 1.5 :
-            tier === "ultra" ? 2.0 : 1.0;
-          const tierBaseRate = baseRate * tierMult;
-          const minRate = baseRate * 0.5;
-          const maxRate = baseRate * 3.0;
-          const effective = cargoRate ?? tierBaseRate;
-          return (
-            <div className="space-y-3">
-              <Label>Cargo rate per tonne (optional override)</Label>
-              <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-3">
-                <div className="flex items-baseline justify-between text-[0.8125rem]">
-                  <span className="text-ink-2">
-                    Base ${baseRate.toFixed(2)}/T
-                    <span className="text-ink-muted"> · {route.distanceKm < 3000 ? "short-haul" : "long-haul"}</span>
-                  </span>
-                  <span className="text-ink-muted">
-                    Tier × {tierMult.toFixed(1)} → ${tierBaseRate.toFixed(2)}/T
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={minRate}
-                    max={maxRate}
-                    step={0.1}
-                    value={effective}
-                    onChange={(e) => setCargoRate(parseFloat(e.target.value))}
-                    className="flex-1 accent-primary"
-                    aria-label="Cargo rate per tonne"
-                  />
-                  <span className="tabular font-mono text-ink font-semibold w-20 text-right">
-                    ${effective.toFixed(2)}/T
-                  </span>
-                </div>
-                <div className="flex items-baseline justify-between text-[0.6875rem] text-ink-muted">
-                  <span>Min ${minRate.toFixed(2)}</span>
-                  {cargoRate !== null && (
-                    <button
-                      type="button"
-                      onClick={() => setCargoRate(null)}
-                      className="text-accent hover:underline"
-                    >
-                      Reset to tier default
-                    </button>
-                  )}
-                  <span>Max ${maxRate.toFixed(2)}</span>
-                </div>
-                <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
-                  Higher rates extract more revenue per tonne but suppress demand against competitors;
-                  lower rates fill capacity at thinner margins. The pricing-tier preset moves the rate
-                  for you; this slider overrides it per route.
-                </p>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Aircraft assignment */}
+        {/* ── 1. Aircraft assigned — moved to first config step. The route
+            economics flow from this choice (frequency cap, cabin classes,
+            cargo capability), so picking aircraft first lets every other
+            slider reflect the actual hardware. */}
         <div>
-          <Label>Aircraft assigned</Label>
+          <Label>1 · Aircraft assigned</Label>
           <div className="space-y-1.5 max-h-40 overflow-auto">
             {idleOrOnRoute.map((p) => {
               const spec = AIRCRAFT_BY_ID[p.specId];
@@ -1231,10 +1265,6 @@ function RouteDetailModal({
                   <div className="flex-1 min-w-0">
                     <div className="text-ink text-[0.875rem] flex items-center gap-1.5 flex-wrap">
                       {spec.name}
-                      {/* Surface active retrofits — earlier upgrades
-                          were silently applied with no UI signal so
-                          the player couldn't tell whether their
-                          $20M+ paid upgrade was actually working. */}
                       {p.engineUpgrade === "fuel" && (
                         <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Fuel engine retrofit: −10% fuel burn, +10% range">
                           Fuel engine
@@ -1280,6 +1310,222 @@ function RouteDetailModal({
           </div>
         </div>
 
+        {/* ── 2. Frequency — weekly with engine-derived cap */}
+        <div>
+          <Label>2 · Schedules per week</Label>
+          {(() => {
+            const specIds = selectedPlaneIds
+              .map((id) => player.fleet.find((f) => f.id === id)?.specId)
+              .filter((x): x is string => !!x);
+            const aircraftForPhysics = selectedPlaneIds
+              .map((id) => {
+                const f = player.fleet.find((plane) => plane.id === id);
+                if (!f) return null;
+                return {
+                  specId: f.specId,
+                  engineUpgrade: f.engineUpgrade ?? null,
+                  cargoBelly: f.cargoBelly,
+                  doctrine: player.doctrine,
+                };
+              })
+              .filter((x): x is NonNullable<typeof x> => !!x);
+            const maxDaily = specIds.length > 0
+              ? maxRouteDailyFrequency(specIds, route.distanceKm, aircraftForPhysics)
+              : 1;
+            const maxWeekly = Math.round(maxDaily * 7);
+            return (
+              <>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={maxWeekly}
+                    value={Math.min(weeklyFreq, maxWeekly)}
+                    onChange={(e) => setWeeklyFreq(parseInt(e.target.value, 10))}
+                    className="flex-1 accent-primary"
+                  />
+                  <span className="tabular font-mono text-ink text-[0.9375rem] w-20 text-right">
+                    {weeklyFreq}/wk
+                  </span>
+                </div>
+                <div className="text-[0.6875rem] text-ink-muted mt-1">
+                  Cap with this aircraft set: <strong className="text-ink">{maxWeekly}/week</strong>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+
+        {/* ── 3. Pricing tier — quick preset that scales every per-class
+            fare. Verbose blurb removed per user feedback (the tier
+            multipliers on the buttons themselves communicate the
+            mechanic). */}
+        <div>
+          <Label>3 · Pricing tier</Label>
+          <div className="grid grid-cols-4 gap-2">
+            {(["budget", "standard", "premium", "ultra"] as PricingTier[]).map((t) => {
+              const mult = t === "budget" ? "0.5×"
+                : t === "standard" ? "1.0×"
+                : t === "premium" ? "1.5×" : "2.0×";
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTier(t)}
+                  className={cn(
+                    "rounded-md border px-3 py-2 capitalize transition-colors flex flex-col items-center gap-0.5",
+                    tier === t
+                      ? "border-primary bg-[rgba(20,53,94,0.06)] text-ink font-semibold"
+                      : "border-line text-ink-2 hover:bg-surface-hover",
+                  )}
+                >
+                  <span className="text-[0.8125rem]">{t}</span>
+                  <span className="text-[0.625rem] tabular font-mono text-ink-muted">
+                    {mult} base
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── 4. Per-class fares (passenger only) */}
+        {!route.isCargo && (
+          <div className="space-y-3">
+            <Label>4 · Per-class fares (optional override)</Label>
+            <FareRow label="Economy" range={econRange} fare={econFare} setFare={setEconFare} active />
+            <FareRow label="Business" range={busRange} fare={busFare} setFare={setBusFare} active={hasBus} />
+            <FareRow label="First" range={firstRange} fare={firstFare} setFare={setFirstFare} active={hasFirst} />
+          </div>
+        )}
+
+        {/* ── 4. Cargo rate (cargo only) — same UX shape as the passenger
+            fares so the player has a clear way to set fee instead of
+            being stuck at the fixed base. */}
+        {route.isCargo && (() => {
+          const baseRate = route.distanceKm < 3000 ? 3.5 : 5.5;
+          const tierMult =
+            tier === "budget" ? 0.5 :
+            tier === "premium" ? 1.5 :
+            tier === "ultra" ? 2.0 : 1.0;
+          const tierBaseRate = baseRate * tierMult;
+          const minRate = baseRate * 0.5;
+          const maxRate = baseRate * 3.0;
+          const effective = cargoRate ?? tierBaseRate;
+          return (
+            <div className="space-y-3">
+              <Label>4 · Cargo rate per tonne (optional override)</Label>
+              <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-3">
+                <div className="flex items-baseline justify-between text-[0.8125rem]">
+                  <span className="text-ink-2">
+                    Base ${baseRate.toFixed(2)}/T
+                    <span className="text-ink-muted"> · {route.distanceKm < 3000 ? "short-haul" : "long-haul"}</span>
+                  </span>
+                  <span className="text-ink-muted">
+                    Tier × {tierMult.toFixed(1)} → ${tierBaseRate.toFixed(2)}/T
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={minRate}
+                    max={maxRate}
+                    step={0.1}
+                    value={effective}
+                    onChange={(e) => setCargoRate(parseFloat(e.target.value))}
+                    className="flex-1 accent-primary"
+                    aria-label="Cargo rate per tonne"
+                  />
+                  <span className="tabular font-mono text-ink font-semibold w-20 text-right">
+                    ${effective.toFixed(2)}/T
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between text-[0.6875rem] text-ink-muted">
+                  <span>Min ${minRate.toFixed(2)}</span>
+                  {cargoRate !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setCargoRate(null)}
+                      className="text-accent hover:underline"
+                    >
+                      Reset to tier default
+                    </button>
+                  )}
+                  <span>Max ${maxRate.toFixed(2)}</span>
+                </div>
+                <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
+                  Higher rates extract more revenue per tonne but suppress demand against competitors;
+                  lower rates fill capacity at thinner margins.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── 5. Inline slot shortfall — replaces the legacy "Not enough
+            slots" save-fail error. Renders a BidRow per shortfall airport
+            with full bid form. On Save the bids submit via submitSlotBid
+            and the schedule auto-bumps after the auction clears next
+            quarter close. */}
+        {hasShortfall && (
+          <div>
+            <Label>5 · Slots needed — bid below to lift schedule</Label>
+            <div className="rounded-md border border-warning/40 bg-[var(--warning-soft)]/40 px-3 py-2 mb-2 text-[0.75rem] text-ink-2 leading-relaxed">
+              Lifting frequency to <strong className="text-ink">{weeklyFreq}/wk</strong> needs more
+              slots than you currently hold. Set your bid for each airport
+              below — bids resolve at quarter close, and the schedule will
+              auto-update if you win.
+            </div>
+            {shortfallOrigin > 0 && (
+              <BidRow
+                airportCode={route.originCode}
+                slotsNeeded={shortfallOrigin}
+                tier={(CITIES_BY_CODE[route.originCode]?.tier ?? 1) as CityTier}
+                price={bidPrices[route.originCode]}
+                slots={bidSlots[route.originCode] ?? shortfallOrigin}
+                onSlotsChange={(n) =>
+                  setBidSlots((prev) => ({ ...prev, [route.originCode]: n }))
+                }
+                onChange={(p) => setBidPrices((prev) => {
+                  if (Number.isNaN(p)) {
+                    const next = { ...prev };
+                    delete next[route.originCode];
+                    return next;
+                  }
+                  return { ...prev, [route.originCode]: p };
+                })}
+              />
+            )}
+            {shortfallDest > 0 && (
+              <BidRow
+                airportCode={route.destCode}
+                slotsNeeded={shortfallDest}
+                tier={(CITIES_BY_CODE[route.destCode]?.tier ?? 1) as CityTier}
+                price={bidPrices[route.destCode]}
+                slots={bidSlots[route.destCode] ?? shortfallDest}
+                onSlotsChange={(n) =>
+                  setBidSlots((prev) => ({ ...prev, [route.destCode]: n }))
+                }
+                onChange={(p) => setBidPrices((prev) => {
+                  if (Number.isNaN(p)) {
+                    const next = { ...prev };
+                    delete next[route.destCode];
+                    return next;
+                  }
+                  return { ...prev, [route.destCode]: p };
+                })}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ── Why this performance — multipliers breakdown. Moved to the
+            bottom (collapsible) since it's read-only context the player
+            consults rather than configures. */}
+        <DemandBreakdown route={route} player={player} />
+
+        {/* ── Competitors on this OD pair. Also bottom — informational. */}
+        <CompetitorsTable route={route} />
+
         {error && (
           <div className="text-negative text-[0.875rem] rounded-md border border-[var(--negative-soft)] bg-[var(--negative-soft)] px-3 py-2">
             {error}
@@ -1317,7 +1563,22 @@ function RouteDetailModal({
         <div className="flex items-center gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           {route.status !== "pending" && (
-            <Button variant="primary" onClick={save}>Save changes</Button>
+            <Button
+              variant="primary"
+              onClick={save}
+              disabled={hasShortfall && !allBidsSet}
+              title={
+                hasShortfall && !allBidsSet
+                  ? "Set your bid for each shortfall airport above"
+                  : undefined
+              }
+            >
+              {hasShortfall
+                ? allBidsSet
+                  ? "Submit bids & save →"
+                  : "Set your bids above ↑"
+                : "Save changes"}
+            </Button>
           )}
         </div>
       </ModalFooter>
