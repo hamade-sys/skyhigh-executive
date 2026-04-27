@@ -1604,7 +1604,18 @@ export interface QuarterCloseResult {
     headline: string;
     outlet: string;
     quarter: number;
-    cities: Array<{ code: string; name: string; pct: number }>;
+    /** Per-city impacts. `pct` is the blended (tourism+business+cargo)/3
+     *  for backward compat. The split fields let the digest show the
+     *  most-affected category — a cargo-only +50% news otherwise
+     *  averaged to "+17% blended" and looked weaker than it was. */
+    cities: Array<{
+      code: string;
+      name: string;
+      pct: number;
+      tourism?: number;
+      business?: number;
+      cargo?: number;
+    }>;
   }>;
   routeBreakdown: Array<{
     routeId: string;
@@ -2517,7 +2528,7 @@ export function runQuarterClose(
   };
   const newsImpacts: QuarterCloseResult["newsImpacts"] = [];
   for (const n of newsThisQuarter) {
-    const cities: { code: string; name: string; pct: number }[] = [];
+    const cities: NonNullable<QuarterCloseResult["newsImpacts"][number]["cities"]> = [];
     for (const code of networkCodes) {
       // Use THIS news item's own contribution, not the city-wide blended
       // pct from `cityEventImpact()`. The city-wide path was returning
@@ -2525,12 +2536,27 @@ export function runQuarterClose(
       // which made e.g. "E-commerce booms" headline show -73% net on
       // passenger hubs because the older lockdown news was bleeding in.
       // Each headline in the digest now shows only its own modifier
-      // delta on the player's network.
+      // delta on the player's network. Per-category split is also
+      // surfaced so a cargo-only +50% boost doesn't get averaged into
+      // a misleading "+17% blended" chip.
       const impact = newsItemImpactForCity(n, code, ctx.quarter);
-      if (!impact || impact.pct === 0) continue;
+      if (!impact) continue;
+      // Skip cities where the news truly has no effect across any
+      // category. The blended `pct` averaging means a cargo-only +50%
+      // news shows pct=17 and would have been kept under the old
+      // `pct === 0` filter; now we check whether ANY per-category
+      // value is non-zero.
+      if (impact.tourism === 0 && impact.business === 0 && impact.cargo === 0) continue;
       const city = CITIES_BY_CODE[code];
       if (!city) continue;
-      cities.push({ code, name: city.name, pct: impact.pct });
+      cities.push({
+        code,
+        name: city.name,
+        pct: impact.pct,
+        tourism: impact.tourism,
+        business: impact.business,
+        cargo: impact.cargo,
+      });
     }
     if (cities.length > 0) {
       newsImpacts.push({

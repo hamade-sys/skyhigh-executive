@@ -284,8 +284,51 @@ export function QuarterCloseModal() {
               </div>
             ) : (
               result.newsImpacts.map((n, i) => {
-                const totalImpact = n.cities.reduce((s, c) => s + c.pct, 0);
-                const positive = totalImpact >= 0;
+                // Pick the strongest category (by absolute value) per
+                // city — a cargo-only +50% news otherwise averaged to
+                // pct=17 and rendered as a weak "+17% blended" chip
+                // that didn't match the headline's intensity. Now the
+                // chip shows the actual headline category.
+                type ChipDatum = {
+                  code: string;
+                  category: string;
+                  pct: number;
+                };
+                const chips: ChipDatum[] = n.cities.map((c) => {
+                  const tourism = c.tourism ?? 0;
+                  const business = c.business ?? 0;
+                  const cargo = c.cargo ?? 0;
+                  // Find dominant category by absolute magnitude. If
+                  // every category is non-zero (an "all" wildcard
+                  // modifier), fall back to the blended pct.
+                  const candidates = [
+                    { cat: "tourism", v: tourism },
+                    { cat: "business", v: business },
+                    { cat: "cargo", v: cargo },
+                  ].filter((x) => x.v !== 0);
+                  if (candidates.length === 0) {
+                    return { code: c.code, category: "", pct: c.pct };
+                  }
+                  if (candidates.length >= 3) {
+                    // All three categories non-zero → "all" event;
+                    // single chip with the blended value.
+                    return { code: c.code, category: "all", pct: c.pct };
+                  }
+                  candidates.sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+                  return { code: c.code, category: candidates[0].cat, pct: candidates[0].v };
+                });
+                // "Net" summary uses the dominant category sums so a
+                // cargo-only +250% (5 cities × +50) shows as
+                // "Net +250% cargo" rather than "+83% blended".
+                const netPct = chips.reduce((s, c) => s + c.pct, 0);
+                const positive = netPct >= 0;
+                // Pick the most common chip category for the net label.
+                const catCounts = chips.reduce<Record<string, number>>((acc, c) => {
+                  if (c.category) acc[c.category] = (acc[c.category] ?? 0) + 1;
+                  return acc;
+                }, {});
+                const dominantCat = Object.entries(catCounts)
+                  .sort((a, b) => b[1] - a[1])[0]?.[0];
                 return (
                   <article
                     key={i}
@@ -302,8 +345,8 @@ export function QuarterCloseModal() {
                     <h3 className="text-[0.9375rem] font-medium text-ink leading-snug">
                       {n.headline}
                     </h3>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {n.cities.map((c) => (
+                    <div className="mt-2 flex flex-wrap gap-1.5 items-baseline">
+                      {chips.map((c) => (
                         <span
                           key={c.code}
                           className={cn(
@@ -314,6 +357,11 @@ export function QuarterCloseModal() {
                           )}
                         >
                           {c.code} {c.pct >= 0 ? "+" : ""}{c.pct}%
+                          {c.category && c.category !== "all" && (
+                            <span className="opacity-60 ml-1">
+                              {c.category}
+                            </span>
+                          )}
                         </span>
                       ))}
                       <span
@@ -322,7 +370,12 @@ export function QuarterCloseModal() {
                           positive ? "text-positive" : "text-negative",
                         )}
                       >
-                        Net {positive ? "+" : ""}{totalImpact}%
+                        Net {positive ? "+" : ""}{netPct}%
+                        {dominantCat && dominantCat !== "all" && (
+                          <span className="ml-1 opacity-70 normal-case">
+                            {dominantCat}
+                          </span>
+                        )}
                       </span>
                     </div>
                   </article>
@@ -338,10 +391,17 @@ export function QuarterCloseModal() {
               <Section title="Top performers" tone="positive">
                 {topWinners.map((r) => {
                   const route = player.routes.find((x) => x.id === r.routeId);
+                  // Disambiguate same-OD passenger + cargo routes by
+                  // tagging the cargo one. Earlier the player saw two
+                  // "DXB → LHR" rows in the digest with different
+                  // metrics and reasonably wondered which was which.
+                  const label = route
+                    ? `${route.originCode} → ${route.destCode}${route.isCargo ? " · cargo" : ""}`
+                    : r.routeId;
                   return (
                     <RouteRow
                       key={r.routeId}
-                      label={route ? `${route.originCode} → ${route.destCode}` : r.routeId}
+                      label={label}
                       occupancy={r.occupancy}
                       profit={r.profit}
                     />
@@ -353,10 +413,13 @@ export function QuarterCloseModal() {
               <Section title="Routes losing money" tone="negative">
                 {topLosers.map((r) => {
                   const route = player.routes.find((x) => x.id === r.routeId);
+                  const label = route
+                    ? `${route.originCode} → ${route.destCode}${route.isCargo ? " · cargo" : ""}`
+                    : r.routeId;
                   return (
                     <RouteRow
                       key={r.routeId}
-                      label={route ? `${route.originCode} → ${route.destCode}` : r.routeId}
+                      label={label}
                       occupancy={r.occupancy}
                       profit={r.profit}
                     />
@@ -396,10 +459,15 @@ export function QuarterCloseModal() {
                         )}
                       >
                         <td className="py-2 px-3 text-ink font-mono">
-                          <div className="flex items-baseline gap-2">
+                          <div className="flex items-baseline gap-2 flex-wrap">
                             <span>
                               {route ? `${route.originCode} → ${route.destCode}` : r.routeId}
                             </span>
+                            {route?.isCargo && (
+                              <span className="text-[0.5625rem] uppercase tracking-wider font-bold text-ink-muted">
+                                cargo
+                              </span>
+                            )}
                             {dormant && (
                               <span
                                 className="text-[0.5625rem] uppercase tracking-wider font-bold text-warning"
