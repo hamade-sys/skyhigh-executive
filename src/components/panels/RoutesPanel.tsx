@@ -12,6 +12,7 @@ import type { CityTier, PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { AlertTriangle, Pause, Play, Plus, X } from "lucide-react";
 import { RouteSetupModal, BidRow } from "@/components/game/RouteSetupModal";
+import { PanelSubheader } from "@/components/game/PanelSubheader";
 import { toast } from "@/store/toasts";
 
 /**
@@ -165,33 +166,37 @@ export function RoutesPanel() {
           gives the player a persistent reminder while building routes. */}
       <TournamentBanner />
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <Input
-          placeholder="Search by code or city name…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="flex-1 min-w-[180px] h-9 text-[0.875rem]"
-        />
-        <div className="text-[0.75rem] text-ink-muted tabular shrink-0">
-          {rows.length} of {player.routes.filter((r) => r.status !== "closed").length}
+      {/* Sticky subheader: search + filters stay pinned at the top of
+          the panel scroll region so the player can re-filter without
+          losing their place in a long route list. */}
+      <PanelSubheader>
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <Input
+            placeholder="Search by code or city name…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="flex-1 min-w-[180px] h-9 text-[0.875rem]"
+          />
+          <div className="text-[0.75rem] text-ink-muted tabular shrink-0">
+            {rows.length} of {player.routes.filter((r) => r.status !== "closed").length}
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setPickerOrigin(player.hubCode);  // sensible default
+              setPickerDest(null);
+              setPickerOpen(true);
+            }}
+            className="shrink-0"
+          >
+            <Plus size={13} className="mr-1" /> New route
+          </Button>
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            setPickerOrigin(player.hubCode);  // sensible default
-            setPickerDest(null);
-            setPickerOpen(true);
-          }}
-          className="shrink-0"
-        >
-          <Plus size={13} className="mr-1" /> New route
-        </Button>
-      </div>
 
-      {/* Filter + sort chips */}
-      <div className="flex items-center gap-1.5 flex-wrap text-[0.75rem]">
-        <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted mr-1">Filter</span>
+        {/* Filter + sort chips */}
+        <div className="flex items-center gap-1.5 flex-wrap text-[0.75rem]">
+          <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted mr-1">Filter</span>
         {([
           { k: "all", label: "All" },
           { k: "passenger", label: "Passenger" },
@@ -231,7 +236,8 @@ export function RoutesPanel() {
             {label}
           </button>
         ))}
-      </div>
+        </div>
+      </PanelSubheader>
 
       {rows.length === 0 ? (
         <div className="py-12 text-center text-ink-muted text-[0.875rem] rounded-lg border border-dashed border-line">

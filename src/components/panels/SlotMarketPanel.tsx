@@ -10,6 +10,7 @@ import { BASE_SLOT_PRICE_BY_TIER } from "@/lib/slots";
 import { AIRPORT_DEFAULT_CAPACITY_BY_TIER } from "@/lib/airport-ownership";
 import { toast } from "@/store/toasts";
 import { cn } from "@/lib/cn";
+import { PanelSubheader } from "@/components/game/PanelSubheader";
 import type { CityTier } from "@/types/game";
 import { Search, Calendar, ChevronRight, ChevronDown, ExternalLink } from "lucide-react";
 
@@ -120,16 +121,18 @@ export function SlotMarketPanel() {
         )}
       </div>
 
-      <div className="relative">
-        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by airport code, city, or region…"
-          className="w-full rounded-md border border-line bg-surface px-8 py-2 text-[0.875rem] text-ink placeholder:text-ink-muted focus:outline-none focus:border-primary"
-        />
-      </div>
+      <PanelSubheader>
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by airport code, city, or region…"
+            className="w-full rounded-md border border-line bg-surface px-8 py-2 text-[0.875rem] text-ink placeholder:text-ink-muted focus:outline-none focus:border-primary"
+          />
+        </div>
+      </PanelSubheader>
 
       <div className="rounded-md border border-line overflow-hidden">
         {/* Table header */}
