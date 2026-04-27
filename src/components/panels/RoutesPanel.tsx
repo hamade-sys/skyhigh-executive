@@ -989,15 +989,23 @@ function RouteDetailModal({
       return { kind: "cargo" as const, demand, capacity: dailyCapacity, occupancy: occ };
     }
     const demand = routeDemandPerDay(route.originCode, route.destCode, s.currentQuarter).total;
-    const totalSeats = selectedPlaneIds.reduce((sum, id) => {
+    // Capacity bug fix (matches engine.ts): each daily flight uses ONE
+    // plane's seats, not the sum across planes. dailyFreq is already
+    // the total daily flights across the fleet, so capacity is
+    // (avg seats per flight) × dailyFreq.
+    let seatsSum = 0;
+    let seatedPlaneCount = 0;
+    for (const id of selectedPlaneIds) {
       const p = player.fleet.find((f) => f.id === id);
-      if (!p) return sum;
+      if (!p) continue;
       const spec = AIRCRAFT_BY_ID[p.specId];
       const seats = p.customSeats ?? spec?.seats;
-      if (!seats) return sum;
-      return sum + seats.first + seats.business + seats.economy;
-    }, 0);
-    const dailyCapacity = totalSeats * dailyFreq;
+      if (!seats) continue;
+      seatsSum += seats.first + seats.business + seats.economy;
+      seatedPlaneCount += 1;
+    }
+    const avgSeatsPerFlight = seatedPlaneCount > 0 ? seatsSum / seatedPlaneCount : 0;
+    const dailyCapacity = avgSeatsPerFlight * dailyFreq;
     if (dailyCapacity === 0) return null;
     const occ = Math.min(1, demand / dailyCapacity);
     return { kind: "passenger" as const, demand, capacity: dailyCapacity, occupancy: occ };

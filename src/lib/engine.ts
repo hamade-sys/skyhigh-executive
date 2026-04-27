@@ -1140,19 +1140,38 @@ export function computeRouteEconomics(
   }
 
   // ─ Passenger route (default) ───────────────────────────
-  const seatsPerFlight = {
-    first: 0, bus: 0, econ: 0,
-  };
+  // Bug fix: previously summed seats across all planes and called the
+  // result "seats per flight", then multiplied by dailyFrequency
+  // (which is itself the sum of per-plane rotations / 7). With 2 planes
+  // of 302 seats each at 7/wk apiece, that produced
+  //   604 seats/flight × 2 flights/day = 1208 seats/day
+  // when the truth is 302 × 2 = 604 seats/day. Each flight uses ONE
+  // plane's seats, not all planes summed. Now we sum to get a fleet
+  // total then divide by plane count to get an average seats-per-flight,
+  // which is exact for homogeneous fleets and a reasonable
+  // approximation for mixed.
+  const seatsSum = { first: 0, bus: 0, econ: 0 };
+  let seatedPlaneCount = 0;
   for (const p of planes) {
     const spec = AIRCRAFT_BY_ID[p.specId];
     if (!spec) continue;
     // Honor per-instance custom seat allocation (set at purchase order).
     // Falls back to spec defaults when no override.
     const seats = p.customSeats ?? spec.seats;
-    seatsPerFlight.first += seats.first;
-    seatsPerFlight.bus += seats.business;
-    seatsPerFlight.econ += seats.economy;
+    seatsSum.first += seats.first;
+    seatsSum.bus += seats.business;
+    seatsSum.econ += seats.economy;
+    seatedPlaneCount += 1;
   }
+  // Average seats-per-flight. Mix ratios are still computed from the
+  // sum below — they're scale-invariant so they don't need this fix.
+  const seatsPerFlight = seatedPlaneCount > 0
+    ? {
+        first: seatsSum.first / seatedPlaneCount,
+        bus: seatsSum.bus / seatedPlaneCount,
+        econ: seatsSum.econ / seatedPlaneCount,
+      }
+    : { first: 0, bus: 0, econ: 0 };
   const totalSeatsPerFlight =
     seatsPerFlight.first + seatsPerFlight.bus + seatsPerFlight.econ;
   const dailyCapacity = totalSeatsPerFlight * route.dailyFrequency;
