@@ -61,6 +61,10 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
   const player = useGame(selectPlayer);
   const buyHubInvestment = useGame((s) => s.buyHubInvestment);
   const [hubCode, setHubCode] = useState<string>("");
+  // Branded confirm — these are $5M-$12M one-time spends. Previously a
+  // single click committed the spend; now the click stages a confirm
+  // modal showing target hub + cost + effect, then the confirm fires.
+  const [confirmInvestment, setConfirmInvestment] = useState<Investment | null>(null);
 
   if (!player) return null;
   const allHubs = [player.hubCode, ...player.secondaryHubCodes];
@@ -74,10 +78,10 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
     return false;  // opsExpansion is global (slot count)
   }
 
-  function buy(inv: Investment) {
-    const r = buyHubInvestment(inv.kind, targetHub);
+  function commitBuy(investment: Investment) {
+    const r = buyHubInvestment(investment.kind, targetHub);
     if (!r.ok) toast.negative(r.error ?? "Purchase failed");
-    else toast.success(`${inv.title} installed`, inv.effect);
+    else toast.success(`${investment.title} installed`, investment.effect);
   }
 
   return (
@@ -171,14 +175,15 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
                 <div className="shrink-0">
                   {installed && !isOpsExpansion ? (
                     <span className="inline-flex items-center gap-1 text-[0.6875rem] uppercase tracking-wider text-positive font-semibold">
-                      <Check size={11} /> Installed
+                      <Check size={11} aria-hidden="true" /> Installed
                     </span>
                   ) : (
                     <Button
                       size="sm"
                       variant="primary"
                       disabled={!canAfford}
-                      onClick={() => buy(iv)}
+                      onClick={() => setConfirmInvestment(iv)}
+                      aria-label={`Buy ${iv.title} at hub ${targetHub} for ${fmtMoney(iv.cost)}`}
                     >
                       Buy
                     </Button>
@@ -193,6 +198,71 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
       <ModalFooter>
         <Button variant="ghost" onClick={onClose}>Done</Button>
       </ModalFooter>
+
+      {/* Branded confirm — $5M-$12M one-time spend per investment.
+          Previously a single click committed the spend; this now
+          spells out target hub + cost + effect before the player
+          commits. The HubInvestmentsModal stays mounted underneath. */}
+      <Modal open={!!confirmInvestment} onClose={() => setConfirmInvestment(null)}>
+        {confirmInvestment && (() => {
+          const cantAfford = player.cashUsd < confirmInvestment.cost;
+          return (
+            <>
+              <ModalHeader>
+                <h2 className="font-display text-[1.5rem] text-ink">
+                  Buy {confirmInvestment.title} at {targetHub}?
+                </h2>
+                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                  One-time capital spend. The effect compounds every quarter
+                  for the rest of the game — no recurring fees, no maintenance
+                  cost on the asset itself.
+                </p>
+              </ModalHeader>
+              <ModalBody>
+                <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Asset</span>
+                    <span className="text-ink">{confirmInvestment.title}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Target hub</span>
+                    <span className="font-mono tabular text-ink">
+                      {targetHub === player.hubCode ? `${targetHub} (primary)` : `${targetHub} (secondary)`}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Effect</span>
+                    <span className="text-positive text-right max-w-[60%]">
+                      {confirmInvestment.effect}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 border-t border-line pt-1.5 mt-1.5">
+                    <span className="text-ink font-semibold">Cost</span>
+                    <span className="tabular font-mono text-negative font-semibold">
+                      −{fmtMoney(confirmInvestment.cost)}
+                    </span>
+                  </div>
+                </div>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" onClick={() => setConfirmInvestment(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={cantAfford}
+                  onClick={() => {
+                    commitBuy(confirmInvestment);
+                    setConfirmInvestment(null);
+                  }}
+                >
+                  Buy · {fmtMoney(confirmInvestment.cost)}
+                </Button>
+              </ModalFooter>
+            </>
+          );
+        })()}
+      </Modal>
     </Modal>
   );
 }

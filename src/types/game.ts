@@ -542,6 +542,13 @@ export interface GameState {
    *  awarded to the highest bidder via end-of-quarter resolution. */
   airportSlots: Record<string, AirportSlotState>;
 
+  /** Pending + historical airport-acquisition bids. Players submit a
+   *  bid via `submitAirportBid`; cash is escrowed immediately and the
+   *  bid sits here as `pending` until the facilitator approves or
+   *  rejects (or 2 quarters pass and it auto-expires). Approved bids
+   *  transfer ownership; rejected/expired bids refund the held cash. */
+  airportBids?: AirportBid[];
+
   /** City code that hosts the World Cup (rounds 19-24 window). Picked
    *  once at game init from tier 1-2 cities that are NOT a hub of any
    *  team. Demand boost only applies to routes touching this city. */
@@ -703,6 +710,36 @@ export interface AirportSlotState {
   acquiredAtQuarter?: number;
   /** Original purchase price paid (for cost-basis display). */
   purchaseCostUsd?: number;
+}
+
+/** Pending bid to acquire an airport outright. Submitted by a player
+ *  team and held in escrow (cash already deducted) until the
+ *  facilitator/admin approves or rejects, or the 2-quarter approval
+ *  window expires (auto-reject + refund). Real-world airports require
+ *  government approval for transfer of operating control; in-game the
+ *  facilitator plays the role of the regulator. */
+export interface AirportBid {
+  /** Stable id, "abid_<random>". */
+  id: string;
+  /** IATA code of the airport being bid on. */
+  airportCode: string;
+  /** Team submitting the bid (cash already escrowed from this team). */
+  bidderTeamId: string;
+  /** Price the bidder is willing to pay. Defaults to the live asking
+   *  price at submission time but the bidder could overbid in future. */
+  bidPriceUsd: number;
+  /** Lifecycle. `pending` = awaiting facilitator decision. `approved` =
+   *  ownership transferred + held cash committed. `rejected` = held
+   *  cash returned to bidder. `expired` = 2Q passed with no decision,
+   *  treated as rejection. */
+  status: "pending" | "approved" | "rejected" | "expired";
+  /** Quarter the bid was submitted (used for the 2Q expiry window). */
+  submittedQuarter: number;
+  /** Quarter the bid was resolved (approved/rejected/expired). */
+  resolvedQuarter?: number;
+  /** Optional facilitator-supplied reason on reject. Stored for audit
+   *  and surfaced in the player's notification. */
+  resolutionNote?: string;
 }
 
 /** A single team's slot lease at one airport (PRD update — Model B

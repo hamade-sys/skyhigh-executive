@@ -65,6 +65,7 @@ import {
   wouldExceedLeaseCap,
 } from "@/lib/lease";
 import type {
+  AirportBid,
   AirportLease,
   AirportSlotState,
   CabinConfig,
@@ -202,6 +203,29 @@ export interface GameStore extends GameState {
    *  team leases keep their slot counts (their weekly fee snaps back
    *  to the system's auction baseline at next close). */
   sellAirport(airportCode: string): { ok: boolean; error?: string; proceeds?: number };
+
+  /** Submit a bid to acquire an airport. Real-world airport transfers
+   *  require government regulatory approval — in-game the facilitator
+   *  plays the regulator. Cash is escrowed immediately (deducted from
+   *  bidder's cash and held in the pending bid). The bid sits as
+   *  `pending` until the facilitator approves (`approveAirportBid`)
+   *  or rejects (`rejectAirportBid`); if 2 quarters pass with no
+   *  decision, the bid auto-expires and the cash is refunded.
+   *  Returns the new bid id on success. */
+  submitAirportBid(args: {
+    airportCode: string;
+    bidPriceUsd?: number;  // defaults to live asking price
+  }): { ok: boolean; error?: string; bidId?: string };
+
+  /** Facilitator/admin only: approve a pending airport bid. Transfers
+   *  ownership to the bidder, sets the default slot rate (carried over
+   *  from existing leases), and commits the escrowed cash. */
+  approveAirportBid(bidId: string): { ok: boolean; error?: string };
+
+  /** Facilitator/admin only: reject a pending airport bid. Refunds the
+   *  escrowed cash to the bidder and notes the resolution reason for
+   *  audit. */
+  rejectAirportBid(bidId: string, reason?: string): { ok: boolean; error?: string };
 
   /** Owner-only: change the weekly slot fee for an airport you own.
    *  Effective immediately — every team's lease at this airport is
@@ -664,6 +688,7 @@ export const useGame = create<GameStore>()(
       secondHandListings: [],
       cargoContracts: [],
       airportSlots: {},
+      airportBids: [],
       worldCupHostCode: null,
       olympicHostCode: null,
       sessionCode: null,
@@ -925,6 +950,7 @@ export const useGame = create<GameStore>()(
           playerTeamId: player.id,
           lastCloseResult: null,
           airportSlots: makeInitialAirportSlots(),
+          airportBids: [],
           worldCupHostCode,
           olympicHostCode,
         });
@@ -1453,7 +1479,17 @@ export const useGame = create<GameStore>()(
         return { ok: true, cost };
       },
 
+      // Legacy "buy now" entry point — superseded by the bid + approval
+      // flow. Kept for old callers, but routes through `submitAirportBid`
+      // so cash is escrowed and the facilitator approves.
       buyAirport: (airportCode) => {
+        const r = get().submitAirportBid({ airportCode });
+        return r.ok
+          ? { ok: true }
+          : { ok: false, error: r.error };
+      },
+
+      submitAirportBid: ({ airportCode, bidPriceUsd }) => {
         const s = get();
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player team" };
@@ -1461,46 +1497,141 @@ export const useGame = create<GameStore>()(
         if (slotState?.ownerTeamId) {
           return { ok: false, error: "Airport already owned" };
         }
-        const price = airportAskingPriceUsd(airportCode, slotState, s.teams);
-        if (player.cashUsd < price) {
-          return {
-            ok: false,
-            error: `Need ${fmtMoneyPlain(price)} cash to acquire`,
-          };
-        }
         const city = CITIES_BY_CODE[airportCode];
         if (!city) return { ok: false, error: "Unknown airport" };
 
-        // Set the owner's initial rate to the average current weekly
-        // fee per slot — keeps existing leases revenue-neutral on day 1.
+        // Block double-bidding: a team can have at most one pending bid
+        // per airport at a time.
+        const existingPending = (s.airportBids ?? []).find(
+          (b) =>
+            b.status === "pending" &&
+            b.airportCode === airportCode &&
+            b.bidderTeamId === player.id,
+        );
+        if (existingPending) {
+          return {
+            ok: false,
+            error: "You already have a pending bid on this airport. Wait for the facilitator to approve or reject it.",
+          };
+        }
+
+        const askingPrice = airportAskingPriceUsd(airportCode, slotState, s.teams);
+        const price = Math.max(1, Math.round(bidPriceUsd ?? askingPrice));
+        if (player.cashUsd < price) {
+          return {
+            ok: false,
+            error: `Need ${fmtMoneyPlain(price)} cash to bid (will be held in escrow)`,
+          };
+        }
+
+        const bidId = `abid_${Math.random().toString(36).slice(2, 10)}`;
+        const newBid: AirportBid = {
+          id: bidId,
+          airportCode,
+          bidderTeamId: player.id,
+          bidPriceUsd: price,
+          status: "pending",
+          submittedQuarter: s.currentQuarter,
+        };
+
+        set({
+          // Cash is escrowed immediately — deducted from bidder, held
+          // by the bid record until approved (committed) or rejected
+          // (refunded).
+          teams: s.teams.map((t) =>
+            t.id === player.id ? { ...t, cashUsd: t.cashUsd - price } : t,
+          ),
+          airportBids: [...(s.airportBids ?? []), newBid],
+        });
+        toast.accent(
+          `Bid submitted · ${city.name} (${airportCode})`,
+          `${fmtMoneyPlain(price)} held in escrow. Awaiting facilitator approval (auto-rejects after 2 quarters).`,
+        );
+        return { ok: true, bidId };
+      },
+
+      approveAirportBid: (bidId) => {
+        const s = get();
+        const bid = (s.airportBids ?? []).find((b) => b.id === bidId);
+        if (!bid) return { ok: false, error: "Bid not found" };
+        if (bid.status !== "pending") {
+          return { ok: false, error: `Bid is already ${bid.status}` };
+        }
+        const slotState = s.airportSlots?.[bid.airportCode];
+        if (slotState?.ownerTeamId) {
+          // Race: airport got bought by another path between bid and
+          // approval. Treat as reject + refund.
+          return get().rejectAirportBid(bidId, "Airport already owned by another team");
+        }
+        const city = CITIES_BY_CODE[bid.airportCode];
+        if (!city) return { ok: false, error: "Unknown airport" };
+
+        // Existing-leases blend: preserve the current avg slot rate so
+        // tenants don't see a price shock on day 1.
         const totalSlots = s.teams.reduce(
-          (sum, t) => sum + (t.airportLeases?.[airportCode]?.slots ?? 0),
+          (sum, t) => sum + (t.airportLeases?.[bid.airportCode]?.slots ?? 0),
           0,
         );
         const totalWeekly = s.teams.reduce(
-          (sum, t) => sum + (t.airportLeases?.[airportCode]?.totalWeeklyCost ?? 0),
+          (sum, t) => sum + (t.airportLeases?.[bid.airportCode]?.totalWeeklyCost ?? 0),
           0,
         );
         const avgRate = totalSlots > 0 ? totalWeekly / totalSlots :
           BASE_SLOT_PRICE_BY_TIER[city.tier as 1 | 2 | 3 | 4] ?? 35_000;
         const newSlotState: AirportSlotState = {
           ...(slotState ?? { available: 0, nextOpening: 0, nextTickQuarter: 5 }),
-          ownerTeamId: player.id,
+          ownerTeamId: bid.bidderTeamId,
           ownerSlotRatePerWeekUsd: Math.round(avgRate),
           totalCapacity: AIRPORT_DEFAULT_CAPACITY_BY_TIER[city.tier as 1 | 2 | 3 | 4] ?? 140,
           acquiredAtQuarter: s.currentQuarter,
-          purchaseCostUsd: price,
+          purchaseCostUsd: bid.bidPriceUsd,
         };
 
         set({
-          teams: s.teams.map((t) =>
-            t.id === player.id ? { ...t, cashUsd: t.cashUsd - price } : t,
+          // Cash already deducted at bid-submit time; approval just
+          // commits the escrow (no further movement of bidder's cash).
+          airportBids: (s.airportBids ?? []).map((b) =>
+            b.id === bidId
+              ? { ...b, status: "approved" as const, resolvedQuarter: s.currentQuarter }
+              : b,
           ),
-          airportSlots: { ...s.airportSlots, [airportCode]: newSlotState },
+          airportSlots: { ...s.airportSlots, [bid.airportCode]: newSlotState },
         });
         toast.success(
-          `Airport acquired · ${city.name} (${airportCode})`,
-          `${fmtMoneyPlain(price)}. You now collect slot fees from every airline operating here.`,
+          `Bid approved · ${city.name} (${bid.airportCode})`,
+          `${fmtMoneyPlain(bid.bidPriceUsd)} committed. Ownership transferred. Slot fees now flow to the new owner.`,
+        );
+        return { ok: true };
+      },
+
+      rejectAirportBid: (bidId, reason) => {
+        const s = get();
+        const bid = (s.airportBids ?? []).find((b) => b.id === bidId);
+        if (!bid) return { ok: false, error: "Bid not found" };
+        if (bid.status !== "pending") {
+          return { ok: false, error: `Bid is already ${bid.status}` };
+        }
+        const city = CITIES_BY_CODE[bid.airportCode];
+
+        set({
+          // Refund the escrowed cash to the bidder.
+          teams: s.teams.map((t) =>
+            t.id === bid.bidderTeamId ? { ...t, cashUsd: t.cashUsd + bid.bidPriceUsd } : t,
+          ),
+          airportBids: (s.airportBids ?? []).map((b) =>
+            b.id === bidId
+              ? {
+                  ...b,
+                  status: "rejected" as const,
+                  resolvedQuarter: s.currentQuarter,
+                  resolutionNote: reason,
+                }
+              : b,
+          ),
+        });
+        toast.warning(
+          `Bid rejected · ${city?.name ?? bid.airportCode}`,
+          `${fmtMoneyPlain(bid.bidPriceUsd)} refunded${reason ? ` — ${reason}` : ""}.`,
         );
         return { ok: true };
       },
@@ -2609,6 +2740,60 @@ export const useGame = create<GameStore>()(
             }
             // Re-read team state after the auto-submits so the rest of
             // the close run uses the fresh decisions/flags/cash.
+            const refreshed = get().teams.find((t) => t.id === s.playerTeamId);
+            if (refreshed) Object.assign(player, refreshed);
+          }
+        }
+
+        // Auto-expire pending airport bids that have sat for 2+ quarters
+        // without a facilitator decision. Real-world airport-acquisition
+        // approvals usually run on a regulatory clock; here we treat
+        // 2 quarters as the regulatory window. Expired bids refund the
+        // escrowed cash to the bidder team and are stamped with a
+        // resolutionNote so the audit trail shows why.
+        {
+          const sNow = get();
+          const expiringBids = (sNow.airportBids ?? []).filter(
+            (b) =>
+              b.status === "pending" &&
+              sNow.currentQuarter - b.submittedQuarter >= 2,
+          );
+          if (expiringBids.length > 0) {
+            // Refund each in turn — sum refunds per team so we touch
+            // each team object once even if multiple bids expire.
+            const refundByTeam: Record<string, number> = {};
+            for (const b of expiringBids) {
+              refundByTeam[b.bidderTeamId] = (refundByTeam[b.bidderTeamId] ?? 0) + b.bidPriceUsd;
+            }
+            const expiredIds = new Set(expiringBids.map((b) => b.id));
+            set({
+              teams: sNow.teams.map((t) =>
+                refundByTeam[t.id]
+                  ? { ...t, cashUsd: t.cashUsd + refundByTeam[t.id] }
+                  : t,
+              ),
+              airportBids: (sNow.airportBids ?? []).map((b) =>
+                expiredIds.has(b.id)
+                  ? {
+                      ...b,
+                      status: "expired" as const,
+                      resolvedQuarter: sNow.currentQuarter,
+                      resolutionNote: "Approval window elapsed (2 quarters)",
+                    }
+                  : b,
+              ),
+            });
+            for (const b of expiringBids) {
+              const city = CITIES_BY_CODE[b.airportCode];
+              if (b.bidderTeamId === sNow.playerTeamId) {
+                toast.warning(
+                  `Bid expired · ${city?.name ?? b.airportCode}`,
+                  `${fmtMoneyPlain(b.bidPriceUsd)} refunded — facilitator didn't decide within the 2-quarter window.`,
+                );
+              }
+            }
+            // Re-pull player state after the cash refund so the rest
+            // of the close run uses the fresh cash position.
             const refreshed = get().teams.find((t) => t.id === s.playerTeamId);
             if (refreshed) Object.assign(player, refreshed);
           }
@@ -3939,6 +4124,7 @@ export const useGame = create<GameStore>()(
           secondHandListings: [],
           cargoContracts: [],
           airportSlots: {},
+          airportBids: [],
           sessionCode: null,
           sessionLocked: false,
           sessionSlots: [],
@@ -3973,6 +4159,7 @@ export const useGame = create<GameStore>()(
           secondHandListings: s.secondHandListings,
           cargoContracts: s.cargoContracts,
           airportSlots: s.airportSlots,
+          airportBids: s.airportBids,
           worldCupHostCode: s.worldCupHostCode,
           olympicHostCode: s.olympicHostCode,
           sessionCode: s.sessionCode,
@@ -4889,6 +5076,7 @@ export const useGame = create<GameStore>()(
         secondHandListings: s.secondHandListings,
         cargoContracts: s.cargoContracts,
         airportSlots: s.airportSlots,
+        airportBids: s.airportBids,
         worldCupHostCode: s.worldCupHostCode,
         olympicHostCode: s.olympicHostCode,
         sessionCode: s.sessionCode,

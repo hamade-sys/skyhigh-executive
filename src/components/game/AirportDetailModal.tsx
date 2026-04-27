@@ -301,7 +301,9 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   const player = useGame(selectPlayer);
   const teams = useGame((s) => s.teams);
   const slotState = useGame((s) => s.airportSlots?.[cityCode]);
-  const buyAirport = useGame((s) => s.buyAirport);
+  const airportBids = useGame((s) => s.airportBids);
+  const currentQuarter = useGame((s) => s.currentQuarter);
+  const submitAirportBid = useGame((s) => s.submitAirportBid);
   const sellAirport = useGame((s) => s.sellAirport);
   const setAirportSlotRate = useGame((s) => s.setAirportSlotRate);
   const expandAirportCapacity = useGame((s) => s.expandAirportCapacity);
@@ -321,6 +323,16 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   const capacity = slotState?.totalCapacity ?? AIRPORT_DEFAULT_CAPACITY_BY_TIER[tier];
   const maxCap = AIRPORT_MAX_CAPACITY_BY_TIER[tier];
   const expansionCost = AIRPORT_EXPANSION_COST_PER_LEVEL[tier];
+
+  // Pending bids on this airport — separate the player's own pending
+  // bid (so we can show "Your bid pending") from any other team's
+  // bid (so we can show "Another team has a bid pending — yours will
+  // be considered against theirs").
+  const pendingBidsAtAirport = (airportBids ?? []).filter(
+    (b) => b.airportCode === cityCode && b.status === "pending",
+  );
+  const myPendingBid = pendingBidsAtAirport.find((b) => b.bidderTeamId === player.id);
+  const otherPendingBids = pendingBidsAtAirport.filter((b) => b.bidderTeamId !== player.id);
 
   // Sell modal — only relevant when ownedByMe; rendered inline in
   // that branch's fragment.
@@ -488,8 +500,12 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
     );
   }
 
-  // Unowned — show acquire CTA
+  // Unowned — show bid CTA. Cash is escrowed at submission, regulator
+  // approval is required, 2Q window before auto-expiry refund.
   const canAfford = player.cashUsd >= askingPrice;
+  const myBidQuartersHeld = myPendingBid
+    ? currentQuarter - myPendingBid.submittedQuarter
+    : 0;
   return (
     <>
     <section>
@@ -502,21 +518,55 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           <Stat label="Q slot revenue" value={fmtMoney(qRevenue)} hint="What it earns now" />
           <Stat label="Capacity" value={`${capacity} / ${maxCap}`} hint="+200 per expansion" />
         </div>
-        <Button
-          size="sm"
-          variant="primary"
-          disabled={!canAfford}
-          onClick={() => setConfirmBuy(true)}
-        >
-          {canAfford
-            ? `Acquire airport · ${fmtMoney(askingPrice)}`
-            : `Need ${fmtMoney(askingPrice - player.cashUsd)} more cash`}
-        </Button>
+
+        {/* Pending-bid surfaces — explain to the player why they
+            can't bid again while their previous bid is held. */}
+        {myPendingBid ? (
+          <div className="rounded-md border border-warning bg-[var(--warning-soft)] p-2.5 text-[0.8125rem]">
+            <div className="font-semibold text-warning flex items-baseline justify-between gap-2">
+              <span>Your bid is in regulatory review</span>
+              <span className="tabular font-mono text-[0.6875rem] text-ink-muted">
+                {myBidQuartersHeld === 0 ? "submitted this quarter" : `${myBidQuartersHeld}Q held`}
+              </span>
+            </div>
+            <div className="text-ink-2 mt-1 leading-relaxed">
+              {fmtMoney(myPendingBid.bidPriceUsd)} held in escrow. The
+              facilitator will approve or reject before the 2-quarter
+              window expires (auto-refund if no decision).
+            </div>
+          </div>
+        ) : otherPendingBids.length > 0 ? (
+          <div className="rounded-md border border-line bg-surface-2/40 p-2.5 text-[0.8125rem]">
+            <div className="font-semibold text-ink">
+              {otherPendingBids.length} other bid{otherPendingBids.length === 1 ? "" : "s"} in review
+            </div>
+            <div className="text-ink-muted mt-0.5 text-[0.6875rem]">
+              You can still submit your own bid — the facilitator picks
+              one to approve and refunds the rest.
+            </div>
+          </div>
+        ) : null}
+
+        {!myPendingBid && (
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={!canAfford}
+            onClick={() => setConfirmBuy(true)}
+          >
+            {canAfford
+              ? `Submit bid · ${fmtMoney(askingPrice)}`
+              : `Need ${fmtMoney(askingPrice - player.cashUsd)} more cash`}
+          </Button>
+        )}
+
         <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
-          Tier {tier} airport. Owning lets you set the per-slot weekly fee and
-          collect slot revenue from every operating airline (yourself
-          included; intra-company fees net out). Operating cost is 30% of
-          gross slot revenue. Net surfaces in your P&L as Subsidiary revenue.
+          Tier {tier} airport. Acquiring requires facilitator (regulator)
+          approval — your bid amount is held in escrow for up to 2 quarters
+          while the facilitator reviews. If approved, ownership transfers
+          and you collect every airline&apos;s slot fees as Subsidiary
+          revenue (30% opex). If rejected or expired, your cash is
+          refunded in full.
         </p>
       </div>
     </section>
@@ -524,19 +574,20 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
     <Modal open={confirmBuy} onClose={() => setConfirmBuy(false)}>
       <ModalHeader>
         <h2 className="font-display text-[1.5rem] text-ink">
-          Acquire {city.name} airport?
+          Submit bid for {city.name} airport?
         </h2>
         <p className="text-ink-muted text-[0.8125rem] mt-1">
-          You&apos;ll collect every airline&apos;s slot fees here as your own
-          revenue. Bidding for this airport will be disabled — you set the
-          weekly slot rate. Net (after 30% opex) surfaces in your P&amp;L as
-          Subsidiary revenue.
+          Your bid amount is held in escrow immediately. The facilitator
+          (acting as regulator) reviews and either approves the transfer
+          of operating control or rejects the bid. If 2 quarters pass
+          without a decision, the bid auto-expires and your cash is
+          refunded in full. No fees on rejection.
         </p>
       </ModalHeader>
       <ModalBody className="space-y-2">
         <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-ink-muted">Asking price</span>
+            <span className="text-ink-muted">Bid amount (escrowed)</span>
             <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
           </div>
           <div className="flex items-baseline justify-between gap-3">
@@ -544,8 +595,8 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
             <span className="tabular font-mono text-positive">{fmtMoney(qRevenue)}</span>
           </div>
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-ink-muted">Capacity / max</span>
-            <span className="tabular font-mono text-ink">{capacity} / {maxCap}</span>
+            <span className="text-ink-muted">Approval window</span>
+            <span className="tabular font-mono text-ink">2 quarters</span>
           </div>
         </div>
       </ModalBody>
@@ -556,11 +607,11 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
         <Button
           variant="primary"
           onClick={() => {
-            buyAirport(cityCode);
+            submitAirportBid({ airportCode: cityCode });
             setConfirmBuy(false);
           }}
         >
-          Acquire · {fmtMoney(askingPrice)}
+          Submit bid · {fmtMoney(askingPrice)}
         </Button>
       </ModalFooter>
     </Modal>

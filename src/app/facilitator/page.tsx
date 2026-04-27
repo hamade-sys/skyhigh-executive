@@ -8,7 +8,8 @@ import { AdminPanel } from "@/components/panels/AdminPanel";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { computeAirlineValue, brandRating, fleetCount } from "@/lib/engine";
 import { cn } from "@/lib/cn";
-import { ArrowLeft, Plane, Users, Settings2, Trophy, Key, Mic, Save, Download, Upload, RotateCcw, Trash2, Lock, Unlock } from "lucide-react";
+import { ArrowLeft, Plane, Users, Settings2, Trophy, Key, Mic, Save, Download, Upload, RotateCcw, Trash2, Lock, Unlock, Building, Check, X } from "lucide-react";
+import { CITIES } from "@/data/cities";
 import {
   listSnapshots,
   exportSnapshotJson,
@@ -35,7 +36,11 @@ export default function FacilitatorPage() {
   const player = selectPlayer(s);
   const setActiveTeam = useGame((g) => g.setActiveTeam);
 
-  const [section, setSection] = useState<"teams" | "admin" | "leaderboard" | "session" | "livesims" | "saves">("session");
+  const [section, setSection] = useState<"teams" | "admin" | "leaderboard" | "session" | "livesims" | "saves" | "airports">("session");
+  // Auto-jump the facilitator to the Airports section if a new bid
+  // arrives while they're on a different tab — this is the regulator's
+  // primary alert, so we make it impossible to miss.
+  const pendingBidsCount = (s.airportBids ?? []).filter((b) => b.status === "pending").length;
 
   return (
     <main className="flex-1 flex flex-col bg-surface-2/30">
@@ -89,6 +94,14 @@ export default function FacilitatorPage() {
             sub="Live rankings"
           />
           <NavItem
+            active={section === "airports"}
+            onClick={() => setSection("airports")}
+            Icon={Building}
+            label="Airports"
+            sub={pendingBidsCount > 0 ? `${pendingBidsCount} bid${pendingBidsCount === 1 ? "" : "s"} pending` : "Ownership · bids"}
+            badge={pendingBidsCount > 0 ? pendingBidsCount : undefined}
+          />
+          <NavItem
             active={section === "livesims"}
             onClick={() => setSection("livesims")}
             Icon={Mic}
@@ -133,6 +146,7 @@ export default function FacilitatorPage() {
           {section === "leaderboard" && (
             <LeaderboardView teams={s.teams} />
           )}
+          {section === "airports" && <AirportsView />}
           {section === "livesims" && s.teams.length > 0 && (
             <Card>
               <CardBody>
@@ -338,29 +352,34 @@ function SessionView() {
 }
 
 function NavItem({
-  active, onClick, Icon, label, sub,
+  active, onClick, Icon, label, sub, badge,
 }: {
   active: boolean;
   onClick: () => void;
   Icon: typeof Users;
   label: string;
   sub: string;
+  /** Optional unread/pending count. Renders a top-right pill chip when
+   *  > 0. Used by the Airports tab to surface pending bid count. */
+  badge?: number;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      aria-label={`${label} — ${sub}`}
+      aria-label={badge && badge > 0
+        ? `${label} — ${sub}, ${badge} pending`
+        : `${label} — ${sub}`}
       className={cn(
-        "rounded-lg flex items-start gap-3 px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+        "relative rounded-lg flex items-start gap-3 px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
         active
           ? "bg-primary text-primary-fg"
           : "text-ink-2 hover:bg-surface-hover hover:text-ink",
       )}
     >
       <Icon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 mt-0.5" />
-      <div>
+      <div className="min-w-0 flex-1">
         <div className="font-medium text-[0.875rem] leading-tight">{label}</div>
         <div className={cn(
           "text-[0.6875rem] mt-0.5",
@@ -369,6 +388,19 @@ function NavItem({
           {sub}
         </div>
       </div>
+      {badge !== undefined && badge > 0 && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "shrink-0 min-w-[20px] h-5 rounded-full flex items-center justify-center px-1.5 text-[0.625rem] font-bold tabular leading-none",
+            active
+              ? "bg-primary-fg text-primary"
+              : "bg-accent text-primary-fg",
+          )}
+        >
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -797,6 +829,401 @@ function SavesView() {
                   }}
                 >
                   Delete
+                </Button>
+              </ModalFooter>
+            </>
+          );
+        })()}
+      </Modal>
+    </div>
+  );
+}
+
+/**
+ * Facilitator-side airport oversight. Two roles:
+ *   1. **Bid inbox** — pending bids submitted by player teams that need
+ *      regulator approval. Each row shows the airport, bidder, price,
+ *      quarters held; approve / reject buttons commit or refund the
+ *      escrowed cash.
+ *   2. **Airport ownership table** — every Tier-1/2 airport with current
+ *      owner (or "auction" if unowned), owner-set slot rate, capacity,
+ *      and a Bids column that lights up when there's an active bid
+ *      pending facilitator review.
+ */
+function AirportsView() {
+  const teams = useGame((s) => s.teams);
+  const airportSlots = useGame((s) => s.airportSlots);
+  const airportBids = useGame((s) => s.airportBids ?? []);
+  const currentQuarter = useGame((s) => s.currentQuarter);
+  const approveAirportBid = useGame((s) => s.approveAirportBid);
+  const rejectAirportBid = useGame((s) => s.rejectAirportBid);
+
+  const [confirmApproveId, setConfirmApproveId] = useState<string | null>(null);
+  const [confirmRejectId, setConfirmRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>("");
+
+  const pendingBids = airportBids.filter((b) => b.status === "pending");
+  const recentResolved = airportBids
+    .filter((b) => b.status !== "pending")
+    .sort((a, b) => (b.resolvedQuarter ?? 0) - (a.resolvedQuarter ?? 0))
+    .slice(0, 6);
+
+  // Airport list — every airport that's either currently owned, has a
+  // pending bid, or has any historical activity. Skips empty Tier-1/2
+  // entries with nothing happening to keep the table compact.
+  type AirportRow = {
+    code: string;
+    name: string;
+    ownerTeamId?: string;
+    capacity?: number;
+    rate?: number;
+    pendingCount: number;
+  };
+  const slotsMap = airportSlots ?? {};
+  const rows: AirportRow[] = Object.entries(slotsMap)
+    .flatMap(([code, st]) => {
+      const pendingCount = pendingBids.filter((b) => b.airportCode === code).length;
+      const isInteresting = !!st.ownerTeamId || pendingCount > 0;
+      if (!isInteresting) return [];
+      const row: AirportRow = {
+        code,
+        name: CITIES.find((c) => c.code === code)?.name ?? code,
+        ownerTeamId: st.ownerTeamId,
+        capacity: st.totalCapacity,
+        rate: st.ownerSlotRatePerWeekUsd,
+        pendingCount,
+      };
+      return [row];
+    })
+    .sort((a, b) => {
+      // Pending bids float to top, then owned, then by code.
+      if (a.pendingCount !== b.pendingCount) return b.pendingCount - a.pendingCount;
+      if (!!a.ownerTeamId !== !!b.ownerTeamId) return a.ownerTeamId ? -1 : 1;
+      return a.code.localeCompare(b.code);
+    });
+
+  function teamName(id: string): { name: string; code: string; color: string } {
+    const t = teams.find((x) => x.id === id);
+    return t
+      ? { name: t.name, code: t.code, color: t.color }
+      : { name: "(unknown)", code: "??", color: "#888" };
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <header>
+        <h1 className="font-display text-[1.75rem] text-ink mb-1">Airports · regulator</h1>
+        <p className="text-ink-2 text-[0.9375rem] leading-relaxed">
+          Player teams can bid to acquire airports outright. As facilitator
+          you act as the regulator — approve a bid to transfer operating
+          control, or reject it (escrowed cash refunds in full). Bids that
+          sit pending for 2 quarters auto-expire and refund.
+        </p>
+      </header>
+
+      {/* Pending bids inbox — the regulator's primary workspace. */}
+      <section>
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+            Pending bids · {pendingBids.length}
+          </div>
+          {pendingBids.length > 0 && (
+            <div className="text-[0.6875rem] text-warning font-semibold uppercase tracking-wider">
+              ⚠ Awaiting your decision
+            </div>
+          )}
+        </div>
+        {pendingBids.length === 0 ? (
+          <Card>
+            <CardBody>
+              <p className="text-[0.875rem] text-ink-muted italic">
+                No pending bids. Submitted bids will appear here for
+                approval or rejection.
+              </p>
+            </CardBody>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {pendingBids.map((bid) => {
+              const bidder = teamName(bid.bidderTeamId);
+              const cityName = CITIES.find((c) => c.code === bid.airportCode)?.name ?? bid.airportCode;
+              const heldQ = currentQuarter - bid.submittedQuarter;
+              const expiresInQ = Math.max(0, 2 - heldQ);
+              return (
+                <div
+                  key={bid.id}
+                  className={cn(
+                    "rounded-lg border p-4 flex items-start gap-4",
+                    expiresInQ === 0
+                      ? "border-warning bg-[var(--warning-soft)]/40"
+                      : "border-line bg-surface",
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                      <span className="font-display text-[1.25rem] text-ink leading-none">
+                        {cityName}
+                      </span>
+                      <span className="font-mono text-[0.75rem] text-ink-muted">{bid.airportCode}</span>
+                      {expiresInQ === 0 && (
+                        <Badge tone="warning">Expires this quarter</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[0.8125rem] mb-2">
+                      <span
+                        className="inline-block w-6 h-6 rounded-md flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg"
+                        style={{ background: bidder.color }}
+                      >
+                        {bidder.code}
+                      </span>
+                      <span className="text-ink font-medium">{bidder.name}</span>
+                      <span className="text-ink-muted">bid</span>
+                      <span className="font-mono tabular text-ink font-semibold">
+                        {fmtMoney(bid.bidPriceUsd)}
+                      </span>
+                    </div>
+                    <div className="text-[0.6875rem] text-ink-muted">
+                      Submitted {fmtQuarter(bid.submittedQuarter)} ·{" "}
+                      Held {heldQ} quarter{heldQ === 1 ? "" : "s"} ·{" "}
+                      {expiresInQ === 0
+                        ? "Auto-expires at this quarter close if not decided"
+                        : `${expiresInQ} quarter${expiresInQ === 1 ? "" : "s"} until auto-expiry`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => setConfirmApproveId(bid.id)}
+                    >
+                      <Check size={13} className="mr-1" /> Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setRejectReason("");
+                        setConfirmRejectId(bid.id);
+                      }}
+                    >
+                      <X size={13} className="mr-1" /> Reject
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Airport ownership table — Bids column is highlighted when an
+          active bid exists. Sorted: bids first, then owned, then code. */}
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          Airports · {rows.length} active
+        </div>
+        {rows.length === 0 ? (
+          <Card>
+            <CardBody>
+              <p className="text-[0.875rem] text-ink-muted italic">
+                No airport ownership yet. Once teams submit bids or own
+                airports, they&apos;ll appear here.
+              </p>
+            </CardBody>
+          </Card>
+        ) : (
+          <div className="rounded-md border border-line overflow-hidden bg-surface">
+            <table className="w-full text-[0.8125rem]">
+              <thead className="bg-surface-2/40">
+                <tr className="text-left">
+                  <th className="px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Airport</th>
+                  <th className="px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Owner</th>
+                  <th className="px-3 py-2 text-right text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Slot rate / wk</th>
+                  <th className="px-3 py-2 text-right text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Capacity</th>
+                  <th className="px-3 py-2 text-right text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Bids</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const owner = r.ownerTeamId ? teamName(r.ownerTeamId) : null;
+                  return (
+                    <tr key={r.code} className="border-t border-line/60">
+                      <td className="px-3 py-2.5">
+                        <div className="font-display text-ink">{r.name}</div>
+                        <div className="font-mono text-[0.6875rem] text-ink-muted">{r.code}</div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {owner ? (
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-[0.5625rem] font-semibold text-primary-fg"
+                              style={{ background: owner.color }}
+                            >
+                              {owner.code}
+                            </span>
+                            <span className="text-ink">{owner.name}</span>
+                          </div>
+                        ) : (
+                          <span className="text-ink-muted italic text-[0.75rem]">unowned · auction</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular font-mono text-ink">
+                        {r.rate ? fmtMoney(r.rate) : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular font-mono text-ink-2">
+                        {r.capacity ?? "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {r.pendingCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--warning-soft)] text-warning font-semibold tabular text-[0.75rem]">
+                            ⚠ {r.pendingCount}
+                          </span>
+                        ) : (
+                          <span className="text-ink-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Resolved bids history — last 6 decisions, helps the facilitator
+          remember what they approved/rejected. */}
+      {recentResolved.length > 0 && (
+        <section>
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+            Recent decisions
+          </div>
+          <div className="space-y-1.5">
+            {recentResolved.map((bid) => {
+              const bidder = teamName(bid.bidderTeamId);
+              const cityName = CITIES.find((c) => c.code === bid.airportCode)?.name ?? bid.airportCode;
+              return (
+                <div
+                  key={bid.id}
+                  className="flex items-baseline gap-3 rounded-md border border-line bg-surface px-3 py-2 text-[0.8125rem]"
+                >
+                  <Badge
+                    tone={
+                      bid.status === "approved" ? "positive"
+                        : bid.status === "rejected" ? "negative"
+                        : "warning"
+                    }
+                  >
+                    {bid.status}
+                  </Badge>
+                  <span className="text-ink font-medium">{cityName}</span>
+                  <span className="text-ink-muted text-[0.75rem] font-mono">{bid.airportCode}</span>
+                  <span className="text-ink-muted">·</span>
+                  <span className="text-ink-2 text-[0.75rem]">{bidder.name}</span>
+                  <span className="text-ink-muted">·</span>
+                  <span className="tabular font-mono text-ink-2 text-[0.75rem]">
+                    {fmtMoney(bid.bidPriceUsd)}
+                  </span>
+                  {bid.resolvedQuarter && (
+                    <span className="ml-auto text-[0.6875rem] text-ink-muted font-mono">
+                      {fmtQuarter(bid.resolvedQuarter)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Approve confirm */}
+      <Modal open={!!confirmApproveId} onClose={() => setConfirmApproveId(null)}>
+        {confirmApproveId && (() => {
+          const bid = pendingBids.find((b) => b.id === confirmApproveId);
+          if (!bid) return null;
+          const bidder = teamName(bid.bidderTeamId);
+          const cityName = CITIES.find((c) => c.code === bid.airportCode)?.name ?? bid.airportCode;
+          return (
+            <>
+              <ModalHeader>
+                <h2 className="font-display text-[1.5rem] text-ink">
+                  Approve bid for {cityName}?
+                </h2>
+                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                  Operating control transfers to <strong>{bidder.name}</strong>.
+                  The escrowed bid is committed (no further cash movement —
+                  the {fmtMoney(bid.bidPriceUsd)} was already deducted at
+                  bid submission). Slot fees from every airline operating
+                  here will flow to the new owner from next quarter.
+                </p>
+              </ModalHeader>
+              <ModalFooter>
+                <Button variant="ghost" onClick={() => setConfirmApproveId(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    approveAirportBid(bid.id);
+                    setConfirmApproveId(null);
+                  }}
+                >
+                  Approve transfer · {fmtMoney(bid.bidPriceUsd)}
+                </Button>
+              </ModalFooter>
+            </>
+          );
+        })()}
+      </Modal>
+
+      {/* Reject confirm with optional reason */}
+      <Modal open={!!confirmRejectId} onClose={() => setConfirmRejectId(null)}>
+        {confirmRejectId && (() => {
+          const bid = pendingBids.find((b) => b.id === confirmRejectId);
+          if (!bid) return null;
+          const bidder = teamName(bid.bidderTeamId);
+          const cityName = CITIES.find((c) => c.code === bid.airportCode)?.name ?? bid.airportCode;
+          return (
+            <>
+              <ModalHeader>
+                <h2 className="font-display text-[1.5rem] text-ink">
+                  Reject bid for {cityName}?
+                </h2>
+                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                  The escrowed {fmtMoney(bid.bidPriceUsd)} is refunded to{" "}
+                  <strong>{bidder.name}</strong> at this quarter close. They
+                  can submit a new bid afterwards. Optional: leave a reason
+                  so the bidder knows why.
+                </p>
+              </ModalHeader>
+              <ModalBody>
+                <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+                  Reason (optional)
+                </label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value.slice(0, 200))}
+                  placeholder="e.g. Strategic asset, government wants to retain control"
+                  rows={3}
+                  className="w-full rounded-md border border-line bg-surface px-3 py-2 text-[0.875rem] text-ink focus:outline-none focus:border-primary resize-none"
+                />
+                <div className="text-[0.625rem] text-ink-muted mt-1 tabular font-mono">
+                  {rejectReason.length}/200
+                </div>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" onClick={() => setConfirmRejectId(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    rejectAirportBid(bid.id, rejectReason.trim() || undefined);
+                    setConfirmRejectId(null);
+                    setRejectReason("");
+                  }}
+                >
+                  Reject · refund {fmtMoney(bid.bidPriceUsd)}
                 </Button>
               </ModalFooter>
             </>
