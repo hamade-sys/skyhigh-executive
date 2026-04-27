@@ -1390,47 +1390,49 @@ function AgingFleetModal({
   return (
     <Modal open={open} onClose={onClose} className="w-[min(720px,calc(100vw-2rem))]">
       <ModalHeader>
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-baseline gap-2 mb-1">
           <Badge tone="warning">Aging fleet</Badge>
           <span className="text-[0.6875rem] text-ink-muted">
-            {agingPlanes.length} aircraft within 4 quarters of retirement
+            {agingPlanes.length} ≤4Q from retirement
           </span>
         </div>
         <h2 className="font-display text-[1.5rem] text-ink leading-tight">
           Plan replacements
         </h2>
-        <p className="text-[0.8125rem] text-ink-muted mt-1">
-          Each aircraft can be retrofitted once for +14Q of life, or replaced
-          via a fresh order from the same model line. Routes stay assigned
-          either way until the original airframe retires.
+        <p className="text-[0.8125rem] text-ink-muted mt-1 leading-snug">
+          Retrofit once for +14Q life, or replace via a fresh order in the
+          same model line.
         </p>
       </ModalHeader>
 
-      <ModalBody className="space-y-2 max-h-[60vh] overflow-auto">
+      <ModalBody className="max-h-[60vh] overflow-auto p-0">
         {agingPlanes.length === 0 ? (
-          <div className="rounded-md border border-line bg-surface-2/40 px-3 py-6 text-center text-[0.8125rem] text-ink-muted">
-            No aging aircraft right now. The "Aging" card lights up when a
-            plane has 4 quarters or fewer of mandatory life remaining.
+          <div className="px-4 py-8 text-center text-[0.8125rem] text-ink-muted">
+            No aging aircraft right now. The &ldquo;Aging&rdquo; card lights
+            up when a plane has 4 quarters or fewer of mandatory life
+            remaining.
           </div>
         ) : (
-          agingPlanes.map((f) => (
-            <AgingFleetRow
-              key={f.id}
-              plane={f}
-              currentQuarter={s.currentQuarter}
-              playerCash={player.cashUsd}
-              routeAssignment={
-                f.routeId
-                  ? player.routes.find((r) => r.id === f.routeId)
-                  : undefined
-              }
-              onRetrofit={() => {
-                const r = retrofitLifespan(f.id);
-                if (!r.ok) toast.negative("Retrofit failed", r.error ?? "");
-              }}
-              onReplace={() => onReplaceWithSameSpec(f.specId)}
-            />
-          ))
+          <div className="divide-y divide-line">
+            {agingPlanes.map((f) => (
+              <AgingFleetRow
+                key={f.id}
+                plane={f}
+                currentQuarter={s.currentQuarter}
+                playerCash={player.cashUsd}
+                routeAssignment={
+                  f.routeId
+                    ? player.routes.find((r) => r.id === f.routeId)
+                    : undefined
+                }
+                onRetrofit={() => {
+                  const r = retrofitLifespan(f.id);
+                  if (!r.ok) toast.negative("Retrofit failed", r.error ?? "");
+                }}
+                onReplace={() => onReplaceWithSameSpec(f.specId)}
+              />
+            ))}
+          </div>
         )}
       </ModalBody>
 
@@ -1463,63 +1465,64 @@ function AgingFleetRow({
   const alreadyExtended = !!plane.lifespanExtended;
   const tail = plane.id.slice(-4).toUpperCase();
   return (
-    <div className="rounded-md border border-line bg-surface px-3 py-2.5">
-      <div className="flex items-baseline justify-between gap-3 mb-2">
-        <div className="min-w-0">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-semibold text-ink text-[0.9375rem]">
-              {spec.name}
+    <div className="flex items-center gap-4 px-4 py-3 hover:bg-surface-2/30 transition-colors">
+      {/* Left column — aircraft identity + status. Single row of small
+          text instead of a stacked layout, keeps the row compact. */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="font-semibold text-ink text-[0.875rem]">
+            {spec.name}
+          </span>
+          <span className="font-mono text-[0.6875rem] text-ink-muted">
+            #{tail}
+          </span>
+          {routeAssignment && routeAssignment.status !== "closed" && (
+            <span className="font-mono text-[0.6875rem] text-accent">
+              {routeAssignment.originCode} → {routeAssignment.destCode}
             </span>
-            <span className="font-mono text-[0.6875rem] text-ink-muted">
-              · #{tail}
+          )}
+          {alreadyExtended && (
+            <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
+              Retrofitted
             </span>
-            {routeAssignment && routeAssignment.status !== "closed" && (
-              <span className="font-mono text-[0.6875rem] text-accent">
-                {routeAssignment.originCode} → {routeAssignment.destCode}
-              </span>
-            )}
-            {alreadyExtended && (
-              <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
-                Already retrofitted
-              </span>
-            )}
-          </div>
-          <div className="text-[0.6875rem] text-ink-muted mt-0.5 font-mono">
-            Age {ageQ}Q · retires in <strong className="text-warning">{quartersLeft}Q</strong>
-            {" · "}book {fmtMoney(plane.bookValue ?? 0)}
-          </div>
+          )}
+        </div>
+        <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+          Age <span className="tabular font-mono text-ink-2">{ageQ}Q</span>
+          {" · "}retires in
+          {" "}<span className="tabular font-mono text-warning font-semibold">{quartersLeft}Q</span>
+          {" · "}book <span className="tabular font-mono text-ink-2">{fmtMoney(plane.bookValue ?? 0)}</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 text-[0.75rem]">
+      {/* Right column — two action buttons side-by-side, fixed widths
+          so the price lines and chevrons sit on a single row each. */}
+      <div className="flex items-center gap-2 shrink-0">
         <Button
           size="sm"
           variant="primary"
           disabled={alreadyExtended || !canAffordRetrofit}
           title={
             alreadyExtended
-              ? "This airframe has already been retrofitted once"
+              ? "Already retrofitted once"
               : !canAffordRetrofit
-                ? `Need ${fmtMoney(retrofitCost)} cash for retrofit`
-                : `Pay ${fmtMoney(retrofitCost)} (30% of original purchase) for +14Q lifespan`
+                ? `Need ${fmtMoney(retrofitCost)} cash`
+                : `30% of original purchase · +14Q lifespan`
           }
           onClick={onRetrofit}
+          className="whitespace-nowrap"
         >
-          Retrofit · {fmtMoney(retrofitCost)} → +14Q
+          Retrofit · {fmtMoney(retrofitCost)}
         </Button>
         <Button
           size="sm"
           variant="secondary"
           onClick={onReplace}
-          title={`Open the market filtered to ${spec.name} for replacement orders`}
+          title={`Open the market filtered to ${spec.name}`}
+          className="whitespace-nowrap"
         >
-          Replace with new →
+          Replace →
         </Button>
-        <span className="text-[0.625rem] text-ink-muted ml-auto leading-snug">
-          {alreadyExtended
-            ? "Replacement is the only option — already retrofitted once."
-            : "Pick one — retrofit defers the decision, replace lets you choose a newer model."}
-        </span>
       </div>
     </div>
   );
