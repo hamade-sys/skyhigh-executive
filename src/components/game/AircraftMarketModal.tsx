@@ -10,11 +10,19 @@ import {
   isAnnouncementOpen,
   isReleased,
 } from "@/lib/pre-orders";
-import { useGame } from "@/store/game";
+import { useGame, selectPlayer } from "@/store/game";
 import { cn } from "@/lib/cn";
-import { Plane, ChevronDown, ChevronUp, GitCompare, X } from "lucide-react";
+import { Plane, ChevronDown, ChevronUp, GitCompare, X, Info } from "lucide-react";
 import type { AircraftSpec, SecondHandListing } from "@/types/game";
 import { AircraftCompareModal } from "@/components/game/AircraftCompareModal";
+import {
+  canLeaseSpec,
+  leaseFleetRatio,
+  wouldExceedLeaseCap,
+  LEASE_FLEET_RATIO_CAP,
+  LEASE_ELIGIBLE_PASSENGER_TOP_N,
+  LEASE_ELIGIBLE_CARGO_TOP_N,
+} from "@/lib/lease";
 
 type EngineKind = "none" | "fuel" | "power" | "super";
 
@@ -610,9 +618,21 @@ function AircraftRow({
           <span className="tabular font-mono text-[0.875rem] font-semibold text-ink">
             {fmtMoney(spec.buyPriceUsd)}
           </span>
-          <span className="text-[0.6875rem] tabular text-ink-muted">
-            or {fmtMoney(spec.leasePerQuarterUsd)}/Q lease
-          </span>
+          {/* Row-level lease subtitle reflects spec-level eligibility
+              only (the 50% fleet-cap check needs quantity context, so
+              we evaluate that inside the configurator). When the spec
+              isn't leasable from any lessor, hide the lease price hint
+              entirely so the row doesn't promise an option that
+              doesn't exist on expand. */}
+          {canLeaseSpec(spec, AIRCRAFT, currentQuarter) ? (
+            <span className="text-[0.6875rem] tabular text-ink-muted">
+              or {fmtMoney(spec.leasePerQuarterUsd)}/Q lease
+            </span>
+          ) : (
+            <span className="text-[0.6875rem] tabular text-ink-muted italic">
+              buy only
+            </span>
+          )}
           {/* Inventory + pre-order signal — visible without expanding.
               Three states:
                 Pre-order (announcement window, not yet released)
@@ -663,6 +683,21 @@ function ExpandedConfigurator({
   const [quantity, setQuantity] = useState(1);
   const [engine, setEngine] = useState<EngineKind>("none");
   const [fuselage, setFuselage] = useState(false);
+
+  // ── Lease eligibility — surface here so the Lease button doesn't
+  //    silently fail. Two distinct ineligibility reasons we need to
+  //    show separately so the player knows what to do:
+  //
+  //    1. Spec-level: not in the top-N production-stock list.
+  //       Permanent for this spec until it climbs in the rankings.
+  //    2. Fleet-level: 50% leased-fleet ratio cap would be breached.
+  //       Resolvable by buying or selling planes to rebalance.
+  const currentQuarter = useGame((g) => g.currentQuarter);
+  const player = useGame(selectPlayer);
+  const leaseSpecEligible = canLeaseSpec(spec, AIRCRAFT, currentQuarter);
+  const leaseRatioBreached = !!player && wouldExceedLeaseCap(player, quantity);
+  const currentLeaseRatio = player ? leaseFleetRatio(player) * 100 : 0;
+  const leaseEligible = leaseSpecEligible && !leaseRatioBreached;
 
   const fuelUpgradeCost = engineCost(spec.buyPriceUsd, "fuel");
   const powerUpgradeCost = engineCost(spec.buyPriceUsd, "power");
@@ -857,21 +892,64 @@ function ExpandedConfigurator({
               </span>
             )}
           </div>
-          <div className="mt-0.5">
-            Lease total{" "}
-            <span className="text-ink font-mono font-semibold">{fmtMoney(leaseTotal)}/Q</span>
-            <span className="text-ink-muted"> · seat config on next screen</span>
-          </div>
+          {leaseEligible && (
+            <div className="mt-0.5">
+              Lease total{" "}
+              <span className="text-ink font-mono font-semibold">{fmtMoney(leaseTotal)}/Q</span>
+              <span className="text-ink-muted"> · seat config on next screen</span>
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
           <Button size="sm" variant="primary" onClick={() => go("buy")}>
             Buy →
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => go("lease")}>
-            Lease →
-          </Button>
+          {leaseEligible ? (
+            <Button size="sm" variant="secondary" onClick={() => go("lease")}>
+              Lease →
+            </Button>
+          ) : null}
         </div>
       </div>
+
+      {/* Lease availability explainer — replaces the old silently-failing
+          button when this spec or fleet state isn't lease-eligible. We
+          show the SPECIFIC reason + what to do about it instead of just
+          dropping the button (or worse, leaving it active to fail). */}
+      {!leaseEligible && (
+        <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[0.75rem] text-ink-2 leading-snug flex items-start gap-2">
+          <Info size={13} className="text-ink-muted shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="font-semibold text-ink mb-0.5">
+              Lease unavailable for this aircraft
+            </div>
+            {!leaseSpecEligible && (
+              <div>
+                Lessors only underwrite the highest-volume airframes —
+                top {LEASE_ELIGIBLE_PASSENGER_TOP_N} passenger and top
+                {" "}{LEASE_ELIGIBLE_CARGO_TOP_N} cargo specs by current
+                production stock. <strong className="text-ink">{spec.name}</strong>
+                {" "}isn&apos;t in that ranking right now.
+                <span className="text-ink-muted">
+                  {" "}It may become leasable later if production caps shift,
+                  or pick a more common airframe to lease.
+                </span>
+              </div>
+            )}
+            {leaseSpecEligible && leaseRatioBreached && (
+              <div>
+                You&apos;re at <strong className="text-ink">{currentLeaseRatio.toFixed(0)}%</strong>
+                {" "}leased fleet — adding {quantity} more would push you past
+                the {(LEASE_FLEET_RATIO_CAP * 100).toFixed(0)}% cap.
+                <span className="text-ink-muted">
+                  {" "}Buy this airframe instead, or sell / let leases expire to
+                  free up headroom before leasing again.
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
