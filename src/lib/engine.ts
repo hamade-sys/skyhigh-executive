@@ -16,7 +16,7 @@ import { CITIES_BY_CODE } from "@/data/cities";
 import { SCENARIOS, type OptionEffect, type Scenario } from "@/data/scenarios";
 import { SUBSIDIARY_BY_TYPE as SUBSIDIARY_CATALOG_BY_TYPE } from "@/data/subsidiaries";
 import { NEWS_BY_QUARTER } from "@/data/world-news";
-import { cityEventImpact } from "./city-events";
+import { cityEventImpact, newsItemImpactForCity } from "./city-events";
 import type {
   AirportSlotState,
   City,
@@ -355,14 +355,26 @@ export function routeDemandPerDay(
   // Seasonal multiplier (PRD D5)
   const season = seasonalMultiplier(quarter);
 
+  // Clamp the per-city event multiplier to never go below zero. News
+  // modifiers stack additively (e.g. -82% global lockdown + -60% Tokyo
+  // delay → -142% on NRT) and a naive `1 + (-1.42)` = -0.42 was producing
+  // NEGATIVE demand, which then propagated through `dailyPax` and
+  // `occupancy` to give the player a "-257% load" surprise on the
+  // quarter-close screen. Demand floors at zero — passengers simply
+  // don't fly when conditions collapse, they don't "anti-fly".
+  const tourismMultA = Math.max(0, 1 + tourismEventA);
+  const tourismMultB = Math.max(0, 1 + tourismEventB);
+  const businessMultA = Math.max(0, 1 + businessEventA);
+  const businessMultB = Math.max(0, 1 + businessEventB);
+
   const tourism =
-    (cityTourismAtQuarter(a, quarter) * (1 + tourismEventA) +
-     cityTourismAtQuarter(b, quarter) * (1 + tourismEventB)) *
-    amplifier * travelIdx * season.tourism;
+    (cityTourismAtQuarter(a, quarter) * tourismMultA +
+     cityTourismAtQuarter(b, quarter) * tourismMultB) *
+    amplifier * Math.max(0, travelIdx) * season.tourism;
   const business =
-    (cityBusinessAtQuarter(a, quarter) * (1 + businessEventA) +
-     cityBusinessAtQuarter(b, quarter) * (1 + businessEventB)) *
-    amplifier * travelIdx * season.business;
+    (cityBusinessAtQuarter(a, quarter) * businessMultA +
+     cityBusinessAtQuarter(b, quarter) * businessMultB) *
+    amplifier * Math.max(0, travelIdx) * season.business;
   return { tourism, business, total: tourism + business, amplifier };
 }
 
@@ -849,12 +861,20 @@ export function computeRouteEconomics(
     const cargoFocusBonus = team.marketFocus === "cargo" ? 1.15 : 1.0;
     const cargoEventA = cityEventImpact(route.originCode, quarter).cargo / 100;
     const cargoEventB = cityEventImpact(route.destCode, quarter).cargo / 100;
-    const cargoDemandT = Math.min(
-      cityBusinessAtQuarter(origin, quarter) * (1 + cargoEventA),
-      cityBusinessAtQuarter(dest, quarter) * (1 + cargoEventB),
-    ) * cargoFocusBonus;
-    const dailyTonnes = Math.min(dailyCapacityT, cargoDemandT);
-    const occupancy = dailyCapacityT > 0 ? Math.min(1.0, dailyTonnes / dailyCapacityT) : 0;
+    // Same clamp as passenger: stacked negative cargo modifiers
+    // (port closures, lockdowns) can push the per-city multiplier
+    // below 0, which would yield negative cargo demand. Clamp to zero.
+    const cargoMultA = Math.max(0, 1 + cargoEventA);
+    const cargoMultB = Math.max(0, 1 + cargoEventB);
+    const cargoDemandT = Math.max(
+      0,
+      Math.min(
+        cityBusinessAtQuarter(origin, quarter) * cargoMultA,
+        cityBusinessAtQuarter(dest, quarter) * cargoMultB,
+      ) * cargoFocusBonus,
+    );
+    const dailyTonnes = Math.max(0, Math.min(dailyCapacityT, cargoDemandT));
+    const occupancy = dailyCapacityT > 0 ? Math.max(0, Math.min(1.0, dailyTonnes / dailyCapacityT)) : 0;
     // Cargo pricing now mirrors passenger fares — base $/tonne by haul
     // distance, scaled by the route's PricingTier (Budget/Standard/Premium/
     // Ultra → 0.5×/1.0×/1.5×/2.0×), and player-overridable per route via
@@ -963,15 +983,24 @@ export function computeRouteEconomics(
     else if (worstSat >= 80) cabinPenalty = 1.02;
   }
 
-  const effectiveDemand = demand.total * hubBonus * csMultiplier * loungeBonus * onboardingBonus * cabinPenalty;
+  // Defense-in-depth floor: demand can be flattened to zero by a stack
+  // of negative news modifiers but should never go negative — there's
+  // no such thing as anti-passengers. The upstream multiplier clamp
+  // (computeRouteDemand) handles the common path; this catches any
+  // future code that bypasses that helper.
+  const effectiveDemand = Math.max(
+    0,
+    demand.total * hubBonus * csMultiplier * loungeBonus * onboardingBonus * cabinPenalty,
+  );
 
-  const dailyPax = Math.min(dailyCapacity, effectiveDemand);
+  const dailyPax = Math.max(0, Math.min(dailyCapacity, effectiveDemand));
   // Cap at 1.0 — earlier the engine clamped to 0.98 to reserve a
   // "no-show buffer" but the player saw "98%" on every hot route and
   // assumed it was a UI cap rather than the result. Real overbooked
-  // flights routinely achieve 100% load factor.
+  // flights routinely achieve 100% load factor. Floor at 0 because
+  // load is a [0,1] ratio, not a signed delta.
   let occupancy =
-    dailyCapacity > 0 ? Math.min(1.0, dailyPax / dailyCapacity) : 0;
+    dailyCapacity > 0 ? Math.max(0, Math.min(1.0, dailyPax / dailyCapacity)) : 0;
 
   // Tournament demand boost (PRD §10.3, refined per user feedback):
   //   The World Cup and Olympics each have a single neutral host city
@@ -2445,9 +2474,15 @@ export function runQuarterClose(
   for (const n of newsThisQuarter) {
     const cities: { code: string; name: string; pct: number }[] = [];
     for (const code of networkCodes) {
-      const impact = cityEventImpact(code, ctx.quarter);
-      if (impact.pct === 0) continue;
-      if (!impact.items.some((it) => it.id === n.id)) continue;
+      // Use THIS news item's own contribution, not the city-wide blended
+      // pct from `cityEventImpact()`. The city-wide path was returning
+      // the sum of every active news (lockdown + Tokyo delay + ...)
+      // which made e.g. "E-commerce booms" headline show -73% net on
+      // passenger hubs because the older lockdown news was bleeding in.
+      // Each headline in the digest now shows only its own modifier
+      // delta on the player's network.
+      const impact = newsItemImpactForCity(n, code, ctx.quarter);
+      if (!impact || impact.pct === 0) continue;
       const city = CITIES_BY_CODE[code];
       if (!city) continue;
       cities.push({ code, name: city.name, pct: impact.pct });

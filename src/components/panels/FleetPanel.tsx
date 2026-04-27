@@ -17,6 +17,7 @@ import {
   estimatedDeliveryQuarter,
   queuePosition,
 } from "@/lib/pre-orders";
+import { engineUpgradeCostUsd, fuselageUpgradeCostUsd } from "@/lib/aircraft-upgrades";
 
 /** Group aircraft by spec id, count quantity, and aggregate utilisation. */
 function groupByType(player: ReturnType<typeof selectPlayer>) {
@@ -102,6 +103,54 @@ export function FleetPanel() {
     name: string;
     tail: string;
   } | null>(null);
+  /** Retrofit/service/renovation confirmation. Replaces the previous
+   *  one-tap commits which were silently spending $1M-$50M+ per click.
+   *  `kind` discriminates which store action to fire on confirm. */
+  const [retrofitState, setRetrofitState] = useState<
+    | {
+        kind: "eco";
+        aircraftId: string;
+        name: string;
+        tail: string;
+        costUsd: number;
+        effectLine: string;
+      }
+    | {
+        kind: "engine";
+        engineType: "fuel" | "power" | "super";
+        aircraftId: string;
+        name: string;
+        tail: string;
+        costUsd: number;
+        effectLine: string;
+      }
+    | {
+        kind: "fuselage";
+        aircraftId: string;
+        name: string;
+        tail: string;
+        costUsd: number;
+        effectLine: string;
+      }
+    | {
+        kind: "quickService";
+        aircraftId: string;
+        name: string;
+        tail: string;
+        costUsd: number;
+        effectLine: string;
+      }
+    | {
+        kind: "fullReno";
+        aircraftId: string;
+        name: string;
+        tail: string;
+        costUsd: number;
+        cabinConfig: import("@/types/game").CabinConfig;
+        effectLine: string;
+      }
+    | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedSpecId, setExpandedSpecId] = useState<string | null>(null);
   const [marketQuery, setMarketQuery] = useState("");
@@ -511,11 +560,14 @@ export function FleetPanel() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => {
-                          const r = s.addEcoUpgrade(f.id);
-                          if (!r.ok) toast.negative("Eco upgrade failed", r.error ?? "Could not apply eco retrofit.");
-                          else toast.success("Eco retrofit applied", `${expanded.name} (${f.id.slice(-6).toUpperCase()}) — −10% fuel burn`);
-                        }}
+                        onClick={() => setRetrofitState({
+                          kind: "eco",
+                          aircraftId: f.id,
+                          name: expanded.name,
+                          tail: f.id.slice(-6).toUpperCase(),
+                          costUsd: expanded.ecoUpgradeUsd ?? 0,
+                          effectLine: "−10% fuel burn",
+                        })}
                         title={`Eco engine retrofit · ${fmtMoney(expanded.ecoUpgradeUsd ?? 0)} · −10% fuel burn`}
                       >
                         + Eco · {fmtMoney(expanded.ecoUpgradeUsd ?? 0)}
@@ -523,47 +575,75 @@ export function FleetPanel() {
                     )}
                     {!f.engineUpgrade && (f.status === "active" || f.status === "grounded") && (
                       <>
-                        <Button size="sm" variant="secondary" onClick={() => {
-                          const r = s.retrofitEngine(f.id, "fuel");
-                          if (!r.ok) toast.negative("Retrofit failed", r.error ?? ""); else toast.success("Fuel-efficient engine fitted", "+10% range, −10% fuel burn");
-                        }} title="Fuel-efficient engine: +10% range, −10% fuel burn">
+                        <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
+                          kind: "engine",
+                          engineType: "fuel",
+                          aircraftId: f.id,
+                          name: expanded.name,
+                          tail: f.id.slice(-6).toUpperCase(),
+                          costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "fuel"),
+                          effectLine: "+10% range · −10% fuel burn",
+                        })} title="Fuel-efficient engine: +10% range, −10% fuel burn">
                           + Fuel engine
                         </Button>
-                        <Button size="sm" variant="secondary" onClick={() => {
-                          const r = s.retrofitEngine(f.id, "power");
-                          if (!r.ok) toast.negative("Retrofit failed", r.error ?? ""); else toast.success("Power engine fitted", "+10% cruise speed → tighter schedule");
-                        }} title="Power engine: +10% cruise speed">
+                        <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
+                          kind: "engine",
+                          engineType: "power",
+                          aircraftId: f.id,
+                          name: expanded.name,
+                          tail: f.id.slice(-6).toUpperCase(),
+                          costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "power"),
+                          effectLine: "+10% cruise speed → tighter schedule",
+                        })} title="Power engine: +10% cruise speed">
                           + Power engine
                         </Button>
-                        <Button size="sm" variant="secondary" onClick={() => {
-                          const r = s.retrofitEngine(f.id, "super");
-                          if (!r.ok) toast.negative("Retrofit failed", r.error ?? ""); else toast.success("Super engine fitted", "+10% range, −10% fuel burn, +10% speed");
-                        }} title="Super engine: combines fuel + power">
+                        <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
+                          kind: "engine",
+                          engineType: "super",
+                          aircraftId: f.id,
+                          name: expanded.name,
+                          tail: f.id.slice(-6).toUpperCase(),
+                          costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "super"),
+                          effectLine: "+10% range · −10% fuel burn · +10% speed",
+                        })} title="Super engine: combines fuel + power">
                           + Super
                         </Button>
                       </>
                     )}
                     {!f.fuselageUpgrade && (f.status === "active" || f.status === "grounded") && (
-                      <Button size="sm" variant="secondary" onClick={() => {
-                        const r = s.retrofitFuselage(f.id);
-                        if (!r.ok) toast.negative("Retrofit failed", r.error ?? ""); else toast.success("Anti-drag coating applied", "−10% fuel burn, stacks with engine retrofit");
-                      }} title="Anti-drag fuselage coating · −10% fuel burn">
+                      <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
+                        kind: "fuselage",
+                        aircraftId: f.id,
+                        name: expanded.name,
+                        tail: f.id.slice(-6).toUpperCase(),
+                        costUsd: fuselageUpgradeCostUsd(expanded.buyPriceUsd),
+                        effectLine: "−10% fuel burn · stacks with engine retrofit",
+                      })} title="Anti-drag fuselage coating · −10% fuel burn">
                         + Fuselage
                       </Button>
                     )}
                     {f.acquisitionType === "buy" && f.status === "active" && (
-                      <Button size="sm" variant="secondary" onClick={() => {
-                        const r = s.quickServiceAircraft(f.id);
-                        if (!r.ok) toast.negative("Quick service failed", r.error ?? ""); else toast.success("Quick service complete", "Cabin satisfaction restored");
-                      }} title={`Quick service · ${fmtMoney(f.bookValue * 0.05)} · cabin sat. restored, no downtime`}>
+                      <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
+                        kind: "quickService",
+                        aircraftId: f.id,
+                        name: expanded.name,
+                        tail: f.id.slice(-6).toUpperCase(),
+                        costUsd: Math.round(f.bookValue * 0.05),
+                        effectLine: "Cabin satisfaction restored · no downtime",
+                      })} title={`Quick service · ${fmtMoney(f.bookValue * 0.05)} · cabin sat. restored, no downtime`}>
                         Quick svc
                       </Button>
                     )}
                     {f.acquisitionType === "buy" && f.status === "active" && (
-                      <Button size="sm" variant="secondary" onClick={() => {
-                        const r = s.renovateAircraft(f.id, f.cabinConfig);
-                        if (!r.ok) toast.negative("Renovation failed", r.error ?? ""); else toast.success("Full renovation started", "+8Q lifespan, 1 round downtime");
-                      }} title={`Full renovation · ${fmtMoney(Math.max(f.bookValue * 0.20, f.purchasePrice * 0.05))} · +8Q lifespan, 1Q downtime`}>
+                      <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
+                        kind: "fullReno",
+                        aircraftId: f.id,
+                        name: expanded.name,
+                        tail: f.id.slice(-6).toUpperCase(),
+                        costUsd: Math.round(Math.max(f.bookValue * 0.20, f.purchasePrice * 0.05)),
+                        cabinConfig: f.cabinConfig,
+                        effectLine: "+8Q lifespan · 1Q downtime · airframe refurb",
+                      })} title={`Full renovation · ${fmtMoney(Math.max(f.bookValue * 0.20, f.purchasePrice * 0.05))} · +8Q lifespan, 1Q downtime`}>
                         Full reno
                       </Button>
                     )}
@@ -743,6 +823,117 @@ export function FleetPanel() {
         onClose={() => { setOrdering(null); setError(null); }}
         onConfirm={handlePurchaseConfirm}
       />
+
+      {/* Retrofit / service / renovation confirm — one modal handles
+          all of: eco upgrade, engine retrofits (fuel/power/super),
+          fuselage coating, quick service, and full renovation. Each
+          variant carries its own cost and effect copy in retrofitState. */}
+      <Modal
+        open={!!retrofitState}
+        onClose={() => setRetrofitState(null)}
+        className="w-[min(480px,calc(100vw-3rem))]"
+      >
+        {retrofitState && (() => {
+          const { kind, name, tail, costUsd, effectLine } = retrofitState;
+          const titleByKind: Record<typeof kind, string> = {
+            eco: "Apply eco engine retrofit?",
+            engine: "Fit new engine?",
+            fuselage: "Apply anti-drag fuselage coating?",
+            quickService: "Run quick service?",
+            fullReno: "Schedule full renovation?",
+          };
+          const ctaByKind: Record<typeof kind, string> = {
+            eco: "Apply",
+            engine: "Fit engine",
+            fuselage: "Apply coating",
+            quickService: "Service",
+            fullReno: "Schedule reno",
+          };
+          const subByKind: Record<typeof kind, string> = {
+            eco: "Mature eco package — installs immediately and pays back over the rest of the airframe's life through fuel savings.",
+            engine: "Engine retrofits permanently change the airframe's performance profile. Eligibility requires no existing engine retrofit.",
+            fuselage: "Anti-drag fuselage coating stacks with engine retrofits for compounding fuel savings.",
+            quickService: "Restores cabin satisfaction in-place — no downtime, no scheduled outage. Useful between full renos.",
+            fullReno: "Heavy-touch refurbishment: airframe goes off-line for one round (lost route revenue) but emerges with +8 quarters of life and a fresh interior.",
+          };
+          const player2 = useGame.getState().teams.find((t) => t.id === useGame.getState().playerTeamId);
+          const cantAfford = (player2?.cashUsd ?? 0) < costUsd;
+          return (
+            <>
+              <ModalHeader>
+                <h2 className="font-display text-[1.5rem] text-ink">
+                  {titleByKind[kind]}
+                </h2>
+                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                  {subByKind[kind]}
+                </p>
+              </ModalHeader>
+              <ModalBody>
+                <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Aircraft</span>
+                    <span className="text-ink">{name}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Tail (last 6)</span>
+                    <span className="font-mono tabular text-ink">{tail}</span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-ink-muted">Effect</span>
+                    <span className="text-positive text-right max-w-[60%]">
+                      {effectLine}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 border-t border-line pt-1.5 mt-1.5">
+                    <span className="text-ink font-semibold">Cost</span>
+                    <span className="tabular font-mono text-negative font-semibold">
+                      −{fmtMoney(costUsd)}
+                    </span>
+                  </div>
+                </div>
+                {cantAfford && (
+                  <div className="mt-2 text-[0.8125rem] text-negative">
+                    Insufficient cash — you have {fmtMoney(player2?.cashUsd ?? 0)}.
+                  </div>
+                )}
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" onClick={() => setRetrofitState(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={cantAfford}
+                  onClick={() => {
+                    let r: { ok: boolean; error?: string };
+                    if (retrofitState.kind === "eco") {
+                      r = s.addEcoUpgrade(retrofitState.aircraftId);
+                      if (r.ok) toast.success("Eco retrofit applied", `${name} (${tail}) — ${effectLine}`);
+                    } else if (retrofitState.kind === "engine") {
+                      r = s.retrofitEngine(retrofitState.aircraftId, retrofitState.engineType);
+                      const labels = { fuel: "Fuel-efficient engine fitted", power: "Power engine fitted", super: "Super engine fitted" };
+                      if (r.ok) toast.success(labels[retrofitState.engineType], effectLine);
+                    } else if (retrofitState.kind === "fuselage") {
+                      r = s.retrofitFuselage(retrofitState.aircraftId);
+                      if (r.ok) toast.success("Anti-drag coating applied", effectLine);
+                    } else if (retrofitState.kind === "quickService") {
+                      r = s.quickServiceAircraft(retrofitState.aircraftId);
+                      if (r.ok) toast.success("Quick service complete", effectLine);
+                    } else {
+                      r = s.renovateAircraft(retrofitState.aircraftId, retrofitState.cabinConfig);
+                      if (r.ok) toast.success("Full renovation started", effectLine);
+                    }
+                    if (!r.ok) toast.negative("Action failed", r.error ?? "Could not apply retrofit.");
+                    setRetrofitState(null);
+                  }}
+                >
+                  {ctaByKind[kind]} · {fmtMoney(costUsd)}
+                </Button>
+              </ModalFooter>
+            </>
+          );
+        })()}
+      </Modal>
     </div>
   );
 }

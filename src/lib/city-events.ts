@@ -59,6 +59,59 @@ function modifierActiveAt(
   return quarter < fireQuarter + Math.max(1, rounds);
 }
 
+/** Per-city impact contributed by a SINGLE news item (rather than the
+ *  cumulative impact across every active news). Used by the close-quarter
+ *  digest's "News" tab so each headline shows the cities IT affected and
+ *  by how much — not the city's net impact across all background noise.
+ *
+ *  Returns null if this news item has no modifier active for this city
+ *  at this quarter (caller skips emitting a row for that city). */
+export function newsItemImpactForCity(
+  news: NewsItem,
+  cityCode: string,
+  quarter: number,
+): { pct: number; tourism: number; business: number; cargo: number } | null {
+  if (news.quarter > quarter) return null;
+  if (!news.modifiers || news.modifiers.length === 0) {
+    // Legacy fallback: only emits when the firing quarter matches and
+    // the headline mentions the city by code. Used for older headlines
+    // that haven't been migrated to structured modifiers yet.
+    if (news.quarter !== quarter) return null;
+    const text = `${news.headline} ${news.detail}`;
+    const codeHit = new RegExp(`\\b${cityCode}\\b`).test(text);
+    if (!codeHit) return null;
+    const nominal = legacyNominalForImpact(news.impact);
+    return { pct: nominal, tourism: nominal, business: nominal, cargo: nominal };
+  }
+  let tourism = 0;
+  let business = 0;
+  let cargo = 0;
+  let touched = false;
+  for (const m of news.modifiers) {
+    if (m.city !== cityCode && m.city !== "ALL") continue;
+    if (!modifierActiveAt(news.quarter, m.rounds, quarter)) continue;
+    touched = true;
+    if (m.category === "tourism") tourism += m.pct;
+    else if (m.category === "business") business += m.pct;
+    else if (m.category === "cargo") cargo += m.pct;
+    else {
+      tourism += m.pct;
+      business += m.pct;
+      cargo += m.pct;
+    }
+  }
+  if (!touched) return null;
+  // Match the cityEventImpact convention: blended pct = average of the
+  // three category buckets, rounded to whole %.
+  const pct = Math.round((tourism + business + cargo) / 3);
+  return {
+    pct,
+    tourism: Math.round(tourism),
+    business: Math.round(business),
+    cargo: Math.round(cargo),
+  };
+}
+
 export function cityEventImpact(
   cityCode: string,
   quarter: number,
