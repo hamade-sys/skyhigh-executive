@@ -168,10 +168,28 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                       const city = CITIES_BY_CODE[sub.cityCode];
                       const ageQ = currentQuarter - sub.acquiredAtQuarter;
                       const sellProceeds = Math.round(sub.marketValueUsd * 0.95);
+                      // ── Payback storytelling: optimistic cumulative
+                      //    earnings = revenuePerQ × ageQ × current
+                      //    condition. (Real earnings would integrate
+                      //    condition decay quarter-by-quarter; this is
+                      //    a defensible upper-bound estimate without
+                      //    history.) Compared to setup cost, surfaces
+                      //    "paid back" or "X% to breakeven".
+                      const ratePerQ = entry.revenuePerQuarterUsd * sub.conditionPct;
+                      const cumulativeEarned = ratePerQ * ageQ;
+                      const paybackPct = sub.purchaseCostUsd > 0
+                        ? Math.min(1, cumulativeEarned / sub.purchaseCostUsd)
+                        : 1;
+                      const isPaidBack = paybackPct >= 1;
+                      const qToBreakeven = isPaidBack
+                        ? 0
+                        : ratePerQ > 0
+                          ? Math.ceil((sub.purchaseCostUsd - cumulativeEarned) / ratePerQ)
+                          : Infinity;
                       return (
                         <div key={sub.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="flex items-baseline gap-2">
+                            <div className="flex items-baseline gap-2 flex-wrap">
                               <span className="font-mono tabular text-ink text-[0.8125rem]">{sub.cityCode}</span>
                               <span className="text-[0.8125rem] text-ink-2 truncate">
                                 {city?.name ?? sub.cityCode}
@@ -179,11 +197,39 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                               <span className="text-[0.625rem] text-ink-muted">
                                 acquired {fmtQuarter(sub.acquiredAtQuarter)} · {ageQ}Q held
                               </span>
+                              {entry.revenuePerQuarterUsd > 0 && (
+                                isPaidBack ? (
+                                  <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
+                                    Paid back
+                                  </span>
+                                ) : qToBreakeven < 100 ? (
+                                  <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
+                                    {qToBreakeven}Q to breakeven
+                                  </span>
+                                ) : null
+                              )}
                             </div>
                             <div className="text-[0.6875rem] text-ink-muted mt-0.5">
-                              Earns {fmtMoney(entry.revenuePerQuarterUsd * sub.conditionPct)}/Q
+                              Earns {fmtMoney(ratePerQ)}/Q
+                              {entry.revenuePerQuarterUsd > 0 && (
+                                <span className="ml-1.5">
+                                  · {fmtMoney(cumulativeEarned)} earned vs {fmtMoney(sub.purchaseCostUsd)} setup
+                                </span>
+                              )}
                               {entry.operationalBonus && ` · ${entry.operationalBonus}`}
                             </div>
+                            {/* Payback progress bar — only renders for cash-
+                                generating subsidiaries. Bar fills as
+                                cumulative earnings approach the original
+                                setup cost. */}
+                            {entry.revenuePerQuarterUsd > 0 && !isPaidBack && (
+                              <div className="mt-1 h-1 bg-surface-2 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-accent transition-[width] duration-[var(--dur-fast)]"
+                                  style={{ width: `${(paybackPct * 100).toFixed(0)}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
                           <div className="text-right shrink-0">
                             <div className="font-mono tabular text-[0.8125rem] text-ink font-semibold">
@@ -288,6 +334,74 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                     <div className="text-ink-muted italic text-[0.6875rem]">Operational asset</div>
                   )}
                 </div>
+
+                {/* ROI storytelling — payback period + 5Y net so the
+                    player can compare investments without doing the math
+                    in their head. Operational assets show their bonus
+                    text instead since they don't have a cash payback. */}
+                {entry.revenuePerQuarterUsd > 0 ? (() => {
+                  const paybackQ = Math.ceil(entry.setupCostUsd / entry.revenuePerQuarterUsd);
+                  // 5Y horizon = 20 quarters at 100% condition. Real
+                  // condition decays slightly each quarter, so this is
+                  // the optimistic / "if you stay on top of upkeep" floor.
+                  const fiveYearNet = entry.revenuePerQuarterUsd * 20 - entry.setupCostUsd;
+                  const paybackTone =
+                    paybackQ <= 8
+                      ? "fast"
+                      : paybackQ <= 16
+                        ? "medium"
+                        : "slow";
+                  return (
+                    <div className="rounded-md border border-line bg-surface-2/40 px-2 py-1.5 grid grid-cols-2 gap-2 text-[0.6875rem]">
+                      <div>
+                        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                          Payback
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="tabular font-mono font-semibold text-ink">
+                            {paybackQ}Q
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[0.5625rem] uppercase tracking-wider font-semibold",
+                              paybackTone === "fast"
+                                ? "text-positive"
+                                : paybackTone === "medium"
+                                  ? "text-accent"
+                                  : "text-warning",
+                            )}
+                          >
+                            {paybackTone}
+                          </span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                          5Y net
+                        </div>
+                        <div
+                          className={cn(
+                            "tabular font-mono font-semibold",
+                            fiveYearNet >= 0 ? "text-positive" : "text-negative",
+                          )}
+                        >
+                          {fiveYearNet >= 0 ? "+" : ""}{fmtMoney(fiveYearNet)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })() : (
+                  <div className="rounded-md border border-line bg-surface-2/40 px-2 py-1.5 text-[0.6875rem] text-ink-2">
+                    <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                      Strategic value
+                    </span>
+                    <div className="text-ink-2 leading-snug mt-0.5">
+                      No direct cash return — value via brand, loyalty, or
+                      operational leverage at this hub.
+                    </div>
+                  </div>
+                )}
+
                 {entry.operationalBonus && (
                   <div className="text-[0.6875rem] text-accent leading-relaxed">
                     {entry.operationalBonus}

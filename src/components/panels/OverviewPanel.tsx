@@ -7,10 +7,23 @@ import { useGame, selectPlayer } from "@/store/game";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { computeAirlineValue, fleetCount, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { DOCTRINES, DOCTRINE_BY_ID } from "@/data/doctrines";
+import { CITIES_BY_CODE } from "@/data/cities";
 import { useUi, type PanelId } from "@/store/ui";
 import { SecondaryHubModal } from "@/components/game/SecondaryHubModal";
 import { HubInvestmentsModal } from "@/components/game/HubInvestmentsModal";
-import { Plus, MapPin, Award, Lock, Layers } from "lucide-react";
+import {
+  Armchair,
+  Award,
+  Fuel,
+  Gauge,
+  Layers,
+  Lock,
+  MapPin,
+  Network as NetworkIcon,
+  Plane,
+  Plus,
+  Wrench,
+} from "lucide-react";
 import { MILESTONES } from "@/data/milestones";
 import { cn } from "@/lib/cn";
 import type { DoctrineId } from "@/types/game";
@@ -227,75 +240,13 @@ export function OverviewPanel() {
         <BrandValueBreakdown player={player} />
       </div>
 
-      {/* Network — primary + secondary hubs (PRD §4.4) */}
-      <div>
-        <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-            Network
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setHubInvestmentsOpen(true)}
-              className="text-[0.6875rem] uppercase tracking-wider text-accent font-semibold hover:underline flex items-center gap-1"
-            >
-              <Layers size={11} /> Invest
-            </button>
-            <button
-              onClick={() => setHubModalOpen(true)}
-              disabled={s.currentQuarter < 3}
-              title={s.currentQuarter < 3 ? "Secondary hubs unlock Q3" : undefined}
-              className="text-[0.6875rem] uppercase tracking-wider text-accent font-semibold hover:underline disabled:text-ink-muted disabled:no-underline disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              <Plus size={11} /> Add secondary
-            </button>
-          </div>
-        </div>
-        <div className="rounded-md border border-line bg-surface p-3">
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-primary-fg text-[0.75rem] font-mono font-semibold"
-              style={{ background: player.color }}
-            >
-              <MapPin size={11} /> HUB · {player.hubCode}
-            </span>
-            {player.secondaryHubCodes.map((code) => (
-              <span
-                key={code}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed text-[0.75rem] font-mono font-semibold"
-                style={{ borderColor: player.color, color: player.color }}
-              >
-                HUB·2 · {code}
-              </span>
-            ))}
-            {player.secondaryHubCodes.length === 0 && (
-              <span className="text-[0.75rem] text-ink-muted italic">
-                {s.currentQuarter < 3
-                  ? "Secondary hubs unlock Q3"
-                  : "No secondary hubs yet — expand to break the spoke-only constraint."}
-              </span>
-            )}
-          </div>
-          {/* Hub investments summary */}
-          {(() => {
-            const inv = player.hubInvestments;
-            const lines: string[] = [];
-            if (inv.fuelReserveTankHubs.length > 0)
-              lines.push(`⛽ ${inv.fuelReserveTankHubs.length} fuel tank${inv.fuelReserveTankHubs.length > 1 ? "s" : ""}`);
-            if (inv.maintenanceDepotHubs.length > 0)
-              lines.push(`🔧 ${inv.maintenanceDepotHubs.length} depot${inv.maintenanceDepotHubs.length > 1 ? "s" : ""}`);
-            if (inv.premiumLoungeHubs.length > 0)
-              lines.push(`🛋 ${inv.premiumLoungeHubs.length} lounge${inv.premiumLoungeHubs.length > 1 ? "s" : ""}`);
-            if (inv.opsExpansionSlots > 0)
-              lines.push(`+${inv.opsExpansionSlots} ops slots`);
-            if (lines.length === 0) return null;
-            return (
-              <div className="mt-2 pt-2 border-t border-line text-[0.6875rem] text-ink-muted leading-relaxed">
-                {lines.join(" · ")}
-              </div>
-            );
-          })()}
-        </div>
-      </div>
+      <NetworkOverviewSection
+        player={player}
+        activeRoutes={activeRoutes}
+        currentQuarter={s.currentQuarter}
+        onInvest={() => setHubInvestmentsOpen(true)}
+        onAddSecondary={() => setHubModalOpen(true)}
+      />
 
       <div>
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
@@ -662,6 +613,274 @@ export function OverviewPanel() {
         </ModalFooter>
       </Modal>
     </div>
+  );
+}
+
+function NetworkOverviewSection({
+  player,
+  activeRoutes,
+  currentQuarter,
+  onInvest,
+  onAddSecondary,
+}: {
+  player: NonNullable<ReturnType<typeof selectPlayer>>;
+  activeRoutes: NonNullable<ReturnType<typeof selectPlayer>>["routes"];
+  currentQuarter: number;
+  onInvest: () => void;
+  onAddSecondary: () => void;
+}) {
+  const networkCodes = new Set<string>([player.hubCode, ...(player.secondaryHubCodes ?? [])]);
+  for (const r of activeRoutes) {
+    networkCodes.add(r.originCode);
+    networkCodes.add(r.destCode);
+  }
+
+  const networkCities = [...networkCodes]
+    .map((code) => CITIES_BY_CODE[code])
+    .filter((city): city is NonNullable<typeof city> => !!city);
+  const tierCounts = [1, 2, 3, 4].map((tier) => ({
+    tier,
+    count: networkCities.filter((city) => city.tier === tier).length,
+  }));
+  const secondaryCount = player.secondaryHubCodes.length;
+  const networkShape =
+    activeRoutes.length === 0 ? "Network not launched"
+    : secondaryCount === 0 ? "Single-hub spoke"
+    : secondaryCount < 3 ? "Multi-hub buildout"
+    : "Distributed network";
+  const reachLabel = `${networkCities.length} cit${networkCities.length === 1 ? "y" : "ies"}`;
+
+  const slotPressure = networkCities
+    .map((city) => {
+      const used = activeRoutes
+        .filter((r) => r.originCode === city.code || r.destCode === city.code)
+        .reduce((sum, r) => sum + Math.round(r.dailyFrequency * 7), 0);
+      const held = player.airportLeases?.[city.code]?.slots ?? player.slotsByAirport?.[city.code] ?? 0;
+      return {
+        code: city.code,
+        used,
+        held,
+        pct: held > 0 ? used / held : used > 0 ? 1 : 0,
+      };
+    })
+    .filter((row) => row.used > 0 || row.held > 0)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 3);
+  const tightest = slotPressure[0];
+  const pressureLabel = tightest
+    ? `${tightest.code} ${fmtPct(Math.min(100, tightest.pct * 100), 0)}`
+    : "No usage yet";
+
+  const corridors = [...activeRoutes]
+    .sort((a, b) => b.dailyFrequency - a.dailyFrequency)
+    .slice(0, 4);
+  const inv = player.hubInvestments;
+  const secondaryLocked = currentQuarter < 3;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+          Network
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onInvest}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <Layers size={12} /> Invest
+          </button>
+          <button
+            type="button"
+            onClick={onAddSecondary}
+            disabled={secondaryLocked}
+            title={secondaryLocked ? "Secondary hubs unlock Q3" : undefined}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold hover:bg-surface-hover disabled:text-ink-muted disabled:hover:bg-transparent disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <Plus size={12} /> Add secondary
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-md border border-line bg-surface">
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-x md:divide-y-0 divide-line">
+          <NetworkStatCell
+            icon={<NetworkIcon size={15} />}
+            label="Network shape"
+            value={networkShape}
+            detail={`${player.hubCode} primary hub · ${secondaryCount} secondary`}
+          />
+          <NetworkStatCell
+            icon={<Plane size={15} />}
+            label="Reach"
+            value={reachLabel}
+            detail={tierCounts.map((row) => `T${row.tier} ${row.count}`).join(" · ")}
+          />
+          <NetworkStatCell
+            icon={<Gauge size={15} />}
+            label="Slot pressure"
+            value={pressureLabel}
+            detail={tightest ? `${tightest.used}/${tightest.held} weekly slots used` : "Open routes to build demand"}
+          />
+        </div>
+
+        <div className="border-t border-line p-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <NetworkPill tone="primary" style={{ background: player.color }}>
+              <MapPin size={11} /> HUB · {player.hubCode}
+            </NetworkPill>
+            {player.secondaryHubCodes.map((code) => (
+              <NetworkPill key={code}>
+                <MapPin size={11} /> HUB 2 · {code}
+              </NetworkPill>
+            ))}
+            {player.secondaryHubCodes.length === 0 && (
+              <span className="text-[0.75rem] text-ink-muted">
+                {secondaryLocked
+                  ? "Secondary hubs unlock in Q3."
+                  : "No secondary hubs yet. Add one to unlock non-spoke expansion."}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 border-t border-line divide-x divide-y md:divide-y-0 divide-line">
+          <NetworkStatCell
+            compact
+            icon={<Fuel size={14} />}
+            label="Fuel tanks"
+            value={String(inv.fuelReserveTankHubs.length)}
+            detail={inv.fuelReserveTankHubs.join(", ") || "None installed"}
+          />
+          <NetworkStatCell
+            compact
+            icon={<Wrench size={14} />}
+            label="Depots"
+            value={String(inv.maintenanceDepotHubs.length)}
+            detail={inv.maintenanceDepotHubs.join(", ") || "None installed"}
+          />
+          <NetworkStatCell
+            compact
+            icon={<Armchair size={14} />}
+            label="Lounges"
+            value={String(inv.premiumLoungeHubs.length)}
+            detail={inv.premiumLoungeHubs.join(", ") || "None installed"}
+          />
+          <NetworkStatCell
+            compact
+            icon={<Gauge size={14} />}
+            label="Ops slots"
+            value={`+${inv.opsExpansionSlots}`}
+            detail="Expansion capacity"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1.15fr_0.85fr] border-t border-line divide-y md:divide-x md:divide-y-0 divide-line">
+          <div className="p-3">
+            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2">
+              Key corridors
+            </div>
+            {corridors.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {corridors.map((r) => (
+                  <span
+                    key={r.id}
+                    className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-[0.6875rem] text-ink-2"
+                  >
+                    <span className="font-mono text-ink">{r.originCode}-{r.destCode}</span>
+                    <span>{Math.round(r.dailyFrequency * 7)}/wk</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[0.75rem] text-ink-muted">No active corridors yet.</div>
+            )}
+          </div>
+          <div className="p-3">
+            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2">
+              Tightest airports
+            </div>
+            {slotPressure.length > 0 ? (
+              <div className="space-y-1.5">
+                {slotPressure.map((row) => (
+                  <div key={row.code} className="grid grid-cols-[3rem_1fr_4.25rem] items-center gap-2 text-[0.6875rem]">
+                    <span className="font-mono font-semibold text-ink">{row.code}</span>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                      <div
+                        className={cn(
+                          "h-full",
+                          row.pct >= 0.9 ? "bg-negative" : row.pct >= 0.7 ? "bg-warning" : "bg-primary",
+                        )}
+                        style={{ width: `${Math.min(100, row.pct * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-right tabular font-mono text-ink-muted">
+                      {row.used}/{row.held}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[0.75rem] text-ink-muted">No slot usage yet.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NetworkStatCell({
+  icon,
+  label,
+  value,
+  detail,
+  compact = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  detail: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={cn("min-w-0 p-3", compact ? "space-y-1" : "space-y-1.5")}>
+      <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted">
+        <span className="text-accent">{icon}</span>
+        <span>{label}</span>
+      </div>
+      <div className={cn("truncate font-display text-ink", compact ? "text-[1.25rem]" : "text-[1.5rem]")}>
+        {value}
+      </div>
+      <div className="truncate text-[0.75rem] text-ink-muted">
+        {detail}
+      </div>
+    </div>
+  );
+}
+
+function NetworkPill({
+  children,
+  tone = "neutral",
+  style,
+}: {
+  children: React.ReactNode;
+  tone?: "primary" | "neutral";
+  style?: React.CSSProperties;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.75rem] font-mono font-semibold",
+        tone === "primary"
+          ? "text-primary-fg"
+          : "border border-dashed border-line-strong text-ink-2",
+      )}
+      style={style}
+    >
+      {children}
+    </span>
   );
 }
 
