@@ -1526,7 +1526,9 @@ export function effectiveBorrowingRate(team: Team, baseRatePct: number): number 
   const equity = computeNetEquityUsdSafe(team);
   const debtRatio = equity > 0 ? team.totalDebtUsd / equity : 1;
   let premium = 0.5;
-  if (debtRatio >= 0.7) premium = 5.0;
+  if (debtRatio >= 1.0) premium = 10.0;
+  else if (debtRatio >= 0.85) premium = 7.0;
+  else if (debtRatio >= 0.7) premium = 5.0;
   else if (debtRatio >= 0.5) premium = 3.0;
   else if (debtRatio >= 0.3) premium = 1.5;
 
@@ -1539,14 +1541,28 @@ export function effectiveBorrowingRate(team: Team, baseRatePct: number): number 
 }
 
 export function quarterlyInterestUsd(team: Team, baseRatePct: number): number {
-  const rate = effectiveBorrowingRate(team, baseRatePct);
-  return team.totalDebtUsd * (rate / 100) / 4;
+  const fallbackRate = effectiveBorrowingRate(team, baseRatePct);
+  const tracked = (team.loans ?? []).reduce((acc, loan) => {
+    const principal = Math.max(0, loan.remainingPrincipal ?? 0);
+    const rate = Number.isFinite(loan.ratePct) ? loan.ratePct : fallbackRate;
+    return {
+      principal: acc.principal + principal,
+      interest: acc.interest + principal * (rate / 100) / 4,
+    };
+  }, { principal: 0, interest: 0 });
+  const untrackedDebt = Math.max(0, team.totalDebtUsd - tracked.principal);
+  return tracked.interest + untrackedDebt * (fallbackRate / 100) / 4;
 }
 
 export function maxBorrowingUsd(team: Team): number {
-  // Against book equity, not brand-multiplied valuation
-  const v = computeNetEquityUsdSafe(team);
-  return Math.max(0, v * 0.6 - team.totalDebtUsd);
+  // Borrowing headroom is the strictest of book-equity and
+  // player-facing value covenants. This keeps brand-inflated airline
+  // value from turning debt into a free expansion exploit.
+  const bookEquity = computeNetEquityUsdSafe(team);
+  const airlineValue = computeAirlineValue(team);
+  const bookCap = Math.max(0, bookEquity * 0.45);
+  const valueCap = Math.max(0, airlineValue * 0.40);
+  return Math.max(0, Math.min(bookCap, valueCap) - team.totalDebtUsd);
 }
 
 /** Forward declaration used before computeNetEquityUsd exists in the file. */

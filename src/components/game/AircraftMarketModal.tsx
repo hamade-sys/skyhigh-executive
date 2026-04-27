@@ -12,14 +12,15 @@ import {
 } from "@/lib/pre-orders";
 import { useGame, selectPlayer } from "@/store/game";
 import { cn } from "@/lib/cn";
-import { Plane, ChevronDown, ChevronUp, GitCompare, X, Info } from "lucide-react";
+import { Plane, ChevronDown, ChevronUp, GitCompare, X } from "lucide-react";
 import type { AircraftSpec, SecondHandListing } from "@/types/game";
 import { AircraftCompareModal } from "@/components/game/AircraftCompareModal";
 import {
-  canLeaseSpec,
-  leaseFleetRatio,
-  wouldExceedLeaseCap,
-  LEASE_FLEET_RATIO_CAP,
+  leaseEligibleSpecIds,
+  LEASE_DEPOSIT_PCT,
+  LEASE_PER_QUARTER_PCT,
+  LEASE_TERM_QUARTERS,
+  LEASE_BUYOUT_RESIDUAL_PCT,
   LEASE_ELIGIBLE_PASSENGER_TOP_N,
   LEASE_ELIGIBLE_CARGO_TOP_N,
 } from "@/lib/lease";
@@ -63,7 +64,7 @@ type ManufacturerTab =
   | "comac"
   | "bombardier"
   | "other";
-type Tab = ManufacturerTab | "secondary";
+type Tab = ManufacturerTab | "secondary" | "lease";
 type Subfamily = "passenger" | "cargo";
 
 /** Detect the manufacturer for a given aircraft spec from its id/name.
@@ -241,11 +242,12 @@ export function AircraftMarketModal({
               New-build orders by manufacturer, plus a secondary market for used aircraft.
             </p>
           </div>
-          {/* Compare + secondary toggles pinned top-right. Compare is a
-              modal-stay action (lets the player tick boxes inline);
-              secondary swaps the entire list. */}
-          <div className="shrink-0 flex items-center gap-2">
-            {tab !== "secondary" && (
+          {/* Compare + lease + secondary toggles pinned top-right.
+              Compare is a modal-stay action (tick boxes inline); the
+              lease and secondary toggles swap the entire list to a
+              specialised view. */}
+          <div className="shrink-0 flex items-center gap-2 flex-wrap justify-end">
+            {tab !== "secondary" && tab !== "lease" && (
               <button
                 onClick={() => {
                   setCompareMode((on) => !on);
@@ -270,6 +272,21 @@ export function AircraftMarketModal({
               </button>
             )}
             <button
+              onClick={() => changeTab(tab === "lease" ? "boeing" : "lease")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-[0.75rem] font-medium border transition-colors flex items-center gap-1.5",
+                tab === "lease"
+                  ? "border-accent text-accent bg-[var(--accent-soft)]"
+                  : "border-line text-ink-muted hover:bg-surface-hover",
+              )}
+              title="Lease aircraft from a third-party lessor — top-stock specs only"
+            >
+              Lease
+              <span className="text-[0.6875rem] tabular font-mono opacity-80">
+                {LEASE_ELIGIBLE_PASSENGER_TOP_N + LEASE_ELIGIBLE_CARGO_TOP_N}
+              </span>
+            </button>
+            <button
               onClick={() => changeTab(tab === "secondary" ? "boeing" : "secondary")}
               className={cn(
                 "rounded-md px-3 py-1.5 text-[0.75rem] font-medium border transition-colors flex items-center gap-1.5",
@@ -286,8 +303,9 @@ export function AircraftMarketModal({
           </div>
         </div>
 
-        {/* Manufacturer tab strip — only shown when not on secondary. */}
-        {tab !== "secondary" && (
+        {/* Manufacturer tab strip — only shown when on a manufacturer
+            tab (i.e. not lease, not secondary). */}
+        {tab !== "secondary" && tab !== "lease" && (
           <nav className="mt-3 flex items-center gap-1 border-b border-line -mb-3 overflow-x-auto">
             {visibleTabs.map((m) => {
               const active = tab === m;
@@ -318,7 +336,7 @@ export function AircraftMarketModal({
       </ModalHeader>
 
       <ModalBody className="max-h-[34rem] overflow-auto space-y-3">
-        {tab !== "secondary" && (
+        {tab !== "secondary" && tab !== "lease" && (
           <>
             {/* Pax / Cargo sub-tab inside manufacturer */}
             <div className="flex items-center gap-1 rounded-md border border-line p-0.5 w-fit">
@@ -430,6 +448,17 @@ export function AircraftMarketModal({
             listings={secondHandListings}
             onBuy={onBuySecondHand}
             currentQuarter={currentQuarter}
+          />
+        )}
+
+        {tab === "lease" && (
+          <LeaseMarket
+            currentQuarter={currentQuarter}
+            expandedSpecId={expandedSpecId}
+            onToggleExpand={(id) =>
+              setExpandedSpecId((cur) => (cur === id ? null : id))
+            }
+            onOrder={(specId, prefill) => onOrder(specId, "lease", prefill)}
           />
         )}
 
@@ -618,21 +647,9 @@ function AircraftRow({
           <span className="tabular font-mono text-[0.875rem] font-semibold text-ink">
             {fmtMoney(spec.buyPriceUsd)}
           </span>
-          {/* Row-level lease subtitle reflects spec-level eligibility
-              only (the 50% fleet-cap check needs quantity context, so
-              we evaluate that inside the configurator). When the spec
-              isn't leasable from any lessor, hide the lease price hint
-              entirely so the row doesn't promise an option that
-              doesn't exist on expand. */}
-          {canLeaseSpec(spec, AIRCRAFT, currentQuarter) ? (
-            <span className="text-[0.6875rem] tabular text-ink-muted">
-              or {fmtMoney(spec.leasePerQuarterUsd)}/Q lease
-            </span>
-          ) : (
-            <span className="text-[0.6875rem] tabular text-ink-muted italic">
-              buy only
-            </span>
-          )}
+          <span className="text-[0.6875rem] tabular text-ink-muted">
+            or {fmtMoney(spec.leasePerQuarterUsd)}/Q lease
+          </span>
           {/* Inventory + pre-order signal — visible without expanding.
               Three states:
                 Pre-order (announcement window, not yet released)
@@ -674,30 +691,19 @@ function AircraftRow({
  *  forwards those values as a prefill to PurchaseOrderModal which
  *  handles seat-class allocation and final confirmation. */
 function ExpandedConfigurator({
-  spec, onOrder,
+  spec, onOrder, leaseOnly,
 }: {
   spec: AircraftSpec;
   onOrder: (type: "buy" | "lease", prefill?: OrderPrefill) => void;
+  /** When true (Lease tab), the configurator hides the Buy controls
+   *  and renders only the Lease side. The Buy tab uses the default
+   *  (mixed buy + lease) layout. */
+  leaseOnly?: boolean;
 }) {
   const imgSrc = planeImagePath(spec.id);
   const [quantity, setQuantity] = useState(1);
   const [engine, setEngine] = useState<EngineKind>("none");
   const [fuselage, setFuselage] = useState(false);
-
-  // ── Lease eligibility — surface here so the Lease button doesn't
-  //    silently fail. Two distinct ineligibility reasons we need to
-  //    show separately so the player knows what to do:
-  //
-  //    1. Spec-level: not in the top-N production-stock list.
-  //       Permanent for this spec until it climbs in the rankings.
-  //    2. Fleet-level: 50% leased-fleet ratio cap would be breached.
-  //       Resolvable by buying or selling planes to rebalance.
-  const currentQuarter = useGame((g) => g.currentQuarter);
-  const player = useGame(selectPlayer);
-  const leaseSpecEligible = canLeaseSpec(spec, AIRCRAFT, currentQuarter);
-  const leaseRatioBreached = !!player && wouldExceedLeaseCap(player, quantity);
-  const currentLeaseRatio = player ? leaseFleetRatio(player) * 100 : 0;
-  const leaseEligible = leaseSpecEligible && !leaseRatioBreached;
 
   const fuelUpgradeCost = engineCost(spec.buyPriceUsd, "fuel");
   const powerUpgradeCost = engineCost(spec.buyPriceUsd, "power");
@@ -883,73 +889,38 @@ function ExpandedConfigurator({
       {/* Live totals + advance buttons */}
       <div className="rounded-md border border-line bg-surface px-3 py-2.5 flex items-center justify-between gap-3">
         <div className="text-[0.75rem] text-ink-muted leading-tight">
-          <div>
-            Buy total{" "}
-            <span className="text-ink font-mono font-semibold">{fmtMoney(buyTotal)}</span>
-            {quantity > 1 && (
-              <span className="text-ink-muted">
-                {" "}({fmtMoney(buyPerPlane)} × {quantity})
-              </span>
-            )}
-          </div>
-          {leaseEligible && (
-            <div className="mt-0.5">
-              Lease total{" "}
-              <span className="text-ink font-mono font-semibold">{fmtMoney(leaseTotal)}/Q</span>
-              <span className="text-ink-muted"> · seat config on next screen</span>
+          {!leaseOnly && (
+            <div>
+              Buy total{" "}
+              <span className="text-ink font-mono font-semibold">{fmtMoney(buyTotal)}</span>
+              {quantity > 1 && (
+                <span className="text-ink-muted">
+                  {" "}({fmtMoney(buyPerPlane)} × {quantity})
+                </span>
+              )}
             </div>
           )}
-        </div>
-        <div className="flex flex-col gap-1.5 shrink-0">
-          <Button size="sm" variant="primary" onClick={() => go("buy")}>
-            Buy →
-          </Button>
-          {leaseEligible ? (
-            <Button size="sm" variant="secondary" onClick={() => go("lease")}>
-              Lease →
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Lease availability explainer — replaces the old silently-failing
-          button when this spec or fleet state isn't lease-eligible. We
-          show the SPECIFIC reason + what to do about it instead of just
-          dropping the button (or worse, leaving it active to fail). */}
-      {!leaseEligible && (
-        <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[0.75rem] text-ink-2 leading-snug flex items-start gap-2">
-          <Info size={13} className="text-ink-muted shrink-0 mt-0.5" />
-          <div className="min-w-0">
-            <div className="font-semibold text-ink mb-0.5">
-              Lease unavailable for this aircraft
-            </div>
-            {!leaseSpecEligible && (
-              <div>
-                Lessors only underwrite the highest-volume airframes —
-                top {LEASE_ELIGIBLE_PASSENGER_TOP_N} passenger and top
-                {" "}{LEASE_ELIGIBLE_CARGO_TOP_N} cargo specs by current
-                production stock. <strong className="text-ink">{spec.name}</strong>
-                {" "}isn&apos;t in that ranking right now.
-                <span className="text-ink-muted">
-                  {" "}It may become leasable later if production caps shift,
-                  or pick a more common airframe to lease.
-                </span>
-              </div>
-            )}
-            {leaseSpecEligible && leaseRatioBreached && (
-              <div>
-                You&apos;re at <strong className="text-ink">{currentLeaseRatio.toFixed(0)}%</strong>
-                {" "}leased fleet — adding {quantity} more would push you past
-                the {(LEASE_FLEET_RATIO_CAP * 100).toFixed(0)}% cap.
-                <span className="text-ink-muted">
-                  {" "}Buy this airframe instead, or sell / let leases expire to
-                  free up headroom before leasing again.
-                </span>
-              </div>
-            )}
+          <div className={leaseOnly ? "" : "mt-0.5"}>
+            Lease total{" "}
+            <span className="text-ink font-mono font-semibold">{fmtMoney(leaseTotal)}/Q</span>
+            <span className="text-ink-muted"> · seat config on next screen</span>
           </div>
         </div>
-      )}
+        <div className="flex flex-col gap-1.5 shrink-0">
+          {!leaseOnly && (
+            <Button size="sm" variant="primary" onClick={() => go("buy")}>
+              Buy →
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={leaseOnly ? "primary" : "secondary"}
+            onClick={() => go("lease")}
+          >
+            Lease →
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1021,6 +992,236 @@ function UpgradePick({
         {sub}
       </div>
     </button>
+  );
+}
+
+/**
+ * LeaseMarket — dedicated tab listing only the top-7 passenger and
+ * top-3 cargo specs that lessors are actually willing to underwrite.
+ *
+ * Header surfaces the player's remaining lease capacity under the 50%
+ * fleet-ratio cap so they know how many more aircraft they can lease
+ * before having to rebalance via buy or release. Each row reuses the
+ * standard ExpandedConfigurator with the `leaseOnly` flag, which
+ * hides the Buy controls so the Lease button is the single primary
+ * action.
+ *
+ * Why a separate tab: lease eligibility is a real game restriction,
+ * not a UI quirk. Showing buy + lease side-by-side on every spec
+ * (and silently failing on ineligible ones) was confusing. Carving
+ * out the leasable subset into its own surface makes it obvious
+ * what's available, what the constraint is, and how many you can
+ * still bring in.
+ */
+function LeaseMarket({
+  currentQuarter, expandedSpecId, onToggleExpand, onOrder,
+}: {
+  currentQuarter: number;
+  expandedSpecId: string | null;
+  onToggleExpand: (specId: string) => void;
+  onOrder: (specId: string, prefill?: OrderPrefill) => void;
+}) {
+  const player = useGame(selectPlayer);
+  if (!player) return null;
+
+  // Resolve the leasable-spec sets at this quarter.
+  const eligible = leaseEligibleSpecIds(AIRCRAFT, currentQuarter);
+  const passengerSpecs = AIRCRAFT
+    .filter((s) => eligible.passenger.has(s.id))
+    .sort((a, b) => a.buyPriceUsd - b.buyPriceUsd);
+  const cargoSpecs = AIRCRAFT
+    .filter((s) => eligible.cargo.has(s.id))
+    .sort((a, b) => a.buyPriceUsd - b.buyPriceUsd);
+
+  // ── Lease capacity remaining (50% fleet-ratio cap).
+  //    A leased plane is counted vs total active+ordered fleet. The
+  //    binding constraint: leased / (total + addedLeased) <= 0.5.
+  //    Rearranging: addedLeased <= total - 2×leased  (when leased = 0,
+  //    addedLeased = total; when leased = total, addedLeased = 0).
+  //    We clamp at zero so the badge never goes negative.
+  const eligibleFleet = player.fleet.filter(
+    (f) => f.status === "active" || f.status === "ordered",
+  );
+  const totalEligible = eligibleFleet.length;
+  const leasedCount = eligibleFleet.filter(
+    (f) => f.acquisitionType === "lease",
+  ).length;
+  // To keep leased/(total+x) <= 0.5: x <= total - 2×leased
+  const remainingLeaseCapacity = Math.max(0, totalEligible - 2 * leasedCount);
+  const currentRatioPct = totalEligible === 0 ? 0 : (leasedCount / totalEligible) * 100;
+
+  return (
+    <div className="space-y-3">
+      {/* Capacity header — single source of truth for "how many more
+          can I lease before I'm forced to rebalance". */}
+      <div className="rounded-md border border-accent bg-[var(--accent-soft)] px-3 py-2.5">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-[0.625rem] uppercase tracking-wider text-accent font-semibold">
+              Lease capacity
+            </div>
+            <div className="font-display text-[1.5rem] tabular leading-none mt-0.5 text-ink">
+              {remainingLeaseCapacity === 0
+                ? "0 — at cap"
+                : `${remainingLeaseCapacity} more plane${remainingLeaseCapacity === 1 ? "" : "s"}`}
+            </div>
+          </div>
+          <div className="text-[0.6875rem] text-ink-2 leading-snug max-w-[28ch] text-right">
+            <div>
+              {leasedCount} of {totalEligible} fleet leased
+              {" "}<span className="tabular font-mono">({currentRatioPct.toFixed(0)}%)</span>
+            </div>
+            <div className="text-ink-muted">
+              50% cap — sell or buy to free more headroom.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Passenger section */}
+      <div>
+        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          Passenger · top {LEASE_ELIGIBLE_PASSENGER_TOP_N} by production stock
+        </div>
+        {passengerSpecs.length === 0 ? (
+          <div className="text-[0.8125rem] text-ink-muted italic py-3 text-center">
+            No passenger specs are leasable yet — production cap rankings
+            haven&apos;t resolved.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {passengerSpecs.map((spec) => (
+              <LeaseRow
+                key={spec.id}
+                spec={spec}
+                expanded={expandedSpecId === spec.id}
+                onToggleExpand={() => onToggleExpand(spec.id)}
+                onOrder={(prefill) => onOrder(spec.id, prefill)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Cargo section */}
+      <div>
+        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 mt-3">
+          Cargo · top {LEASE_ELIGIBLE_CARGO_TOP_N} by production stock
+        </div>
+        {cargoSpecs.length === 0 ? (
+          <div className="text-[0.8125rem] text-ink-muted italic py-3 text-center">
+            No cargo specs are leasable yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {cargoSpecs.map((spec) => (
+              <LeaseRow
+                key={spec.id}
+                spec={spec}
+                expanded={expandedSpecId === spec.id}
+                onToggleExpand={() => onToggleExpand(spec.id)}
+                onOrder={(prefill) => onOrder(spec.id, prefill)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="text-[0.6875rem] text-ink-muted leading-relaxed pt-2 border-t border-line">
+        Lease terms: {(LEASE_DEPOSIT_PCT * 100).toFixed(0)}% deposit, {(LEASE_PER_QUARTER_PCT * 100).toFixed(1)}% per quarter,
+        {" "}{LEASE_TERM_QUARTERS}-quarter term. End of term: aircraft
+        returns to lessor unless you exercise the {(LEASE_BUYOUT_RESIDUAL_PCT * 100).toFixed(0)}% buy-out.
+      </div>
+    </div>
+  );
+}
+
+/** Compact lease-only row — leaner than the full AircraftRow because
+ *  buy economics are off the table here. The expanded body uses the
+ *  same configurator as the buy flow with the leaseOnly flag set. */
+function LeaseRow({
+  spec, expanded, onToggleExpand, onOrder,
+}: {
+  spec: AircraftSpec;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onOrder: (prefill?: OrderPrefill) => void;
+}) {
+  const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
+  const imgSrc = planeImagePath(spec.id);
+  const terms = {
+    depositUsd: Math.round(spec.buyPriceUsd * LEASE_DEPOSIT_PCT),
+    perQuarterUsd: Math.round(spec.buyPriceUsd * LEASE_PER_QUARTER_PCT),
+  };
+  return (
+    <div
+      className={cn(
+        "rounded-md border bg-surface transition-all",
+        expanded
+          ? "border-primary shadow-[var(--shadow-1)]"
+          : "border-line hover:bg-surface-hover",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggleExpand}
+        aria-expanded={expanded}
+        className="w-full text-left p-3 flex items-start gap-3"
+      >
+        <div className="shrink-0 w-20 h-14 rounded-md bg-surface-2/50 border border-line/60 flex items-center justify-center overflow-hidden">
+          {imgSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imgSrc}
+              alt={`${spec.name} 3-view illustration`}
+              loading="lazy"
+              className="max-w-full max-h-full object-contain p-1"
+            />
+          ) : (
+            <Plane size={20} className="text-ink-muted" strokeWidth={1.25} />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="font-semibold text-ink text-[0.9375rem]">{spec.name}</span>
+            <span
+              className={cn(
+                "text-[0.5625rem] uppercase tracking-wider font-medium",
+                spec.family === "cargo" ? "text-warning" : "text-ink-muted",
+              )}
+            >
+              {spec.family}
+            </span>
+          </div>
+          <div className="text-[0.75rem] text-ink-muted mt-0.5 font-mono tabular">
+            {spec.family === "passenger"
+              ? `${seats} seats · ${spec.rangeKm.toLocaleString()} km`
+              : `${spec.cargoTonnes ?? 0}T cargo · ${spec.rangeKm.toLocaleString()} km`}
+          </div>
+        </div>
+
+        <div className="flex flex-col items-end gap-0.5 shrink-0">
+          <span className="tabular font-mono text-[0.875rem] font-semibold text-ink">
+            {fmtMoney(terms.perQuarterUsd)}<span className="text-ink-muted text-[0.6875rem] font-normal">/Q</span>
+          </span>
+          <span className="text-[0.6875rem] tabular text-ink-muted">
+            {fmtMoney(terms.depositUsd)} deposit
+          </span>
+          <span className="mt-1 inline-flex items-center gap-1 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold">
+            {expanded ? "Hide" : "Configure"}
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </span>
+        </div>
+      </button>
+      {expanded && (
+        <ExpandedConfigurator
+          spec={spec}
+          leaseOnly
+          onOrder={(_, prefill) => onOrder(prefill)}
+        />
+      )}
+    </div>
   );
 }
 
