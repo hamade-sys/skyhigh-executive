@@ -88,7 +88,10 @@ export default function Onboarding() {
         </div>
       </header>
 
-      <div className="flex-1 flex items-center justify-center px-8 py-12">
+      {/* overflow-y-auto here so tall steps (doctrine, hub list) are
+          scrollable even though the body has overflow-hidden */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="min-h-full flex items-center justify-center px-8 py-12">
         <div className="w-full max-w-3xl">
           {/* Real progressbar role so screen readers announce progress
               instead of just rendering 9 anonymous decorative bars. */}
@@ -494,7 +497,8 @@ export default function Onboarding() {
             )}
           </div>
         </div>
-      </div>
+        </div>{/* end min-h-full centering wrapper */}
+      </div>{/* end overflow-y-auto scroll area */}
     </main>
   );
 }
