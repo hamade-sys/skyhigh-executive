@@ -5183,6 +5183,10 @@ export const useGame = create<GameStore>()(
         // delivery batches and cancel-penalty paths run safely.
         if (!state.preOrders) state.preOrders = [];
         if (!state.productionCapOverrides) state.productionCapOverrides = {};
+        // Airport bids (regulator approval flow) are post-Sprint-12.
+        // Older saves get an empty array so the bid inbox doesn't
+        // crash on `airportBids?.filter(...)` paths.
+        if (!state.airportBids) state.airportBids = [];
         if (!state.worldCupHostCode || !state.olympicHostCode) {
           const allTeamHubs = new Set<string>();
           for (const t of state.teams ?? []) {

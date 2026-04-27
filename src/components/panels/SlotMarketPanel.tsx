@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
+import { useUi } from "@/store/ui";
 import { CITIES } from "@/data/cities";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { BASE_SLOT_PRICE_BY_TIER } from "@/lib/slots";
 import { toast } from "@/store/toasts";
 import { cn } from "@/lib/cn";
 import type { CityTier } from "@/types/game";
-import { Search, Calendar, ChevronRight, ChevronDown } from "lucide-react";
+import { Search, Calendar, ChevronRight, ChevronDown, ExternalLink } from "lucide-react";
 
 /**
  * Slot Market — redesigned per PRD update.
@@ -33,6 +34,11 @@ export function SlotMarketPanel() {
 
   const [query, setQuery] = useState("");
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  // Keyboard-friendly entry point to the AirportDetailModal — click
+  // the small "Detail" affordance to open the same modal that map
+  // double-click opens. Backed by the UI store so opening is identical
+  // regardless of entry point.
+  const setAirportDetailCode = useUi((u) => u.setAirportDetailCode);
 
   // Total recurring slot expense (header summary)
   const totalQuarterlySlotFees = useMemo(() => {
@@ -148,15 +154,34 @@ export function SlotMarketPanel() {
           const isSecondary = player.secondaryHubCodes.includes(c.code);
 
           return (
-            <div key={c.code} className="border-b border-line last:border-0">
+            <div
+              key={c.code}
+              className={cn(
+                "border-b border-line last:border-0 relative",
+                isOwnHub && "bg-[var(--accent-soft)]/30",
+                isSecondary && !isOwnHub && "bg-[var(--info-soft)]/30",
+                expanded && "bg-surface-2",
+              )}
+            >
+              {/* Sibling "Detail" affordance — small icon button placed
+                  on the row, opens the AirportDetailModal as a keyboard
+                  parallel to map double-click. Sits inside the row but
+                  visually right of the bid/expand area. Stops propagation
+                  so it doesn't toggle the bid expander. */}
+              <button
+                type="button"
+                onClick={() => setAirportDetailCode(c.code)}
+                aria-label={`Open ${c.name} (${c.code}) airport detail`}
+                className="absolute right-1 top-1 w-7 h-7 rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface z-10"
+                title="Open airport detail (slot bidders, ownership, capacity, government upgrades)"
+              >
+                <ExternalLink size={12} aria-hidden="true" />
+              </button>
               <button
                 onClick={() => setExpandedCode(expanded ? null : c.code)}
                 className={cn(
-                  "w-full grid grid-cols-12 gap-2 px-3 py-2.5 text-left transition-colors text-[0.8125rem]",
+                  "w-full grid grid-cols-12 gap-2 pl-3 pr-9 py-2.5 text-left transition-colors text-[0.8125rem]",
                   "hover:bg-surface-hover",
-                  isOwnHub && "bg-[var(--accent-soft)]/30",
-                  isSecondary && !isOwnHub && "bg-[var(--info-soft)]/30",
-                  expanded && "bg-surface-2",
                 )}
               >
                 {/* Airport */}

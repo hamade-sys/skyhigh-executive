@@ -38,6 +38,12 @@ interface UiStore {
    *  banner or selects their own airline from the switcher. */
   viewingTeamId: string | null;
   setViewingTeamId(id: string | null): void;
+  /** IATA code of the airport whose AirportDetailModal should be open.
+   *  Set by clicking a marker on the WorldMap (mouse path) OR by the
+   *  "Detail" button in SlotMarketPanel (keyboard path). The canvas
+   *  watches this and renders the modal. Null = closed. */
+  airportDetailCode: string | null;
+  setAirportDetailCode(code: string | null): void;
 }
 
 /**
@@ -56,4 +62,6 @@ export const useUi = create<UiStore>((set, get) => ({
   setFocusedRouteId: (id) => set({ focusedRouteId: id }),
   viewingTeamId: null,
   setViewingTeamId: (id) => set({ viewingTeamId: id }),
+  airportDetailCode: null,
+  setAirportDetailCode: (code) => set({ airportDetailCode: code }),
 }));

@@ -34,6 +34,7 @@ import { Toaster } from "@/components/game/Toaster";
 import { useShallow } from "zustand/react/shallow";
 import { useGame, selectPlayer, selectRivals } from "@/store/game";
 import type { City } from "@/types/game";
+import { CITIES } from "@/data/cities";
 import { Button } from "@/components/ui";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -85,8 +86,14 @@ function CanvasInner() {
   // Route setup state (lifted up to share between map + modal)
   const [origin, setOrigin] = useState<string | null>(null);
   const [dest, setDest] = useState<string | null>(null);
-  // Double-click on an airport opens a detail popup with slot/airline data.
-  const [airportDetail, setAirportDetail] = useState<City | null>(null);
+  // Airport detail modal — backed by the UI store so other panels
+  // (e.g. SlotMarketPanel "Detail" button) can open the same modal as
+  // a keyboard-friendly entry point parallel to map double-click.
+  const airportDetailCode = useUi((u) => u.airportDetailCode);
+  const setAirportDetailCode = useUi((u) => u.setAirportDetailCode);
+  const airportDetail = airportDetailCode
+    ? CITIES.find((c) => c.code === airportDetailCode) ?? null
+    : null;
   const [isCargo, setIsCargo] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
 
@@ -239,7 +246,7 @@ function CanvasInner() {
           currentQuarter={currentQuarter}
           selectedOriginCode={origin}
           onCityClick={handleCityClick}
-          onCityDoubleClick={(c) => setAirportDetail(c)}
+          onCityDoubleClick={(c) => setAirportDetailCode(c.code)}
           onClearSelection={() => { setOrigin(null); setDest(null); }}
         />
       </div>
@@ -283,7 +290,7 @@ function CanvasInner() {
       {/* Airport detail popup — opened by double-clicking a city on the map */}
       <AirportDetailModal
         city={airportDetail}
-        onClose={() => setAirportDetail(null)}
+        onClose={() => setAirportDetailCode(null)}
       />
 
       {/* Quarter close modal */}
