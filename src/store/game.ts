@@ -361,6 +361,18 @@ export interface GameStore extends GameState {
   advanceToNext(): void;
   resetGame(): void;
 
+  /** Toggle this team's ready-for-next-quarter flag. In self-guided
+   *  multiplayer the engine auto-advances when every active human
+   *  team is ready; in facilitated mode the facilitator still drives
+   *  the close but can see who's submitted. Solo runs ignore this —
+   *  the existing Next Quarter button advances directly. */
+  setActiveTeamReady(ready: boolean): void;
+
+  /** True when every active human team has marked ready. Self-guided
+   *  quarter-close gate. Always false in solo runs (one team only,
+   *  but the player advances via Next Quarter, not ready-flag). */
+  allActiveTeamsReady(): boolean;
+
   /** Quarter-versioned saves. The auto-save fires at the start of every
    *  new round; the facilitator can also trigger saves manually. Each
    *  snapshot carries the entire persisted game state so a restore
@@ -975,6 +987,11 @@ export const useGame = create<GameStore>()(
           baseInterestRatePct: 5.5, // Q1 2015 baseline (BASE_RATE_BY_QUARTER)
           teams: [player, ...rivals],
           playerTeamId: player.id,
+          // Multiplayer-aware "you" binding. selectActiveTeam reads
+          // activeTeamId first, falling back to playerTeamId for
+          // legacy save compat. Solo runs get the same id in both
+          // fields so panels can branch on whichever they prefer.
+          activeTeamId: player.id,
           lastCloseResult: null,
           airportSlots: makeInitialAirportSlots(),
           airportBids: [],
@@ -4615,6 +4632,8 @@ export const useGame = create<GameStore>()(
           baseInterestRatePct: 5.5, // Q1 2015 baseline (BASE_RATE_BY_QUARTER)
           teams: [],
           playerTeamId: null,
+          activeTeamId: null,
+          session: null,
           lastCloseResult: null,
           quarterTimerSecondsRemaining: null,
           quarterTimerPaused: false,
@@ -4628,6 +4647,33 @@ export const useGame = create<GameStore>()(
           preOrders: [],
           productionCapOverrides: {},
         });
+      },
+
+      // ── Multiplayer-aware ready flag ─────────────────────────
+      // In self-guided runs each team flips this when they're done
+      // configuring the next quarter. The engine advances when
+      // allActiveTeamsReady() returns true. In facilitated runs the
+      // flag is informational — facilitator console reads it to see
+      // who's submitted but the close button still drives.
+      setActiveTeamReady: (ready) => {
+        const s = get();
+        const meId = s.activeTeamId ?? s.playerTeamId;
+        if (!meId) return;
+        set({
+          teams: s.teams.map((t) =>
+            t.id === meId ? { ...t, readyForNextQuarter: ready } : t,
+          ),
+        });
+      },
+
+      allActiveTeamsReady: () => {
+        const s = get();
+        // Only humans count for the ready-gate. Bots fill empty
+        // seats but don't have a "ready" decision to make — they
+        // act in their own quarter-close hook.
+        const humans = s.teams.filter((t) => t.controlledBy === "human");
+        if (humans.length === 0) return false;
+        return humans.every((t) => t.readyForNextQuarter === true);
       },
 
       // ── Quarter snapshots (V1.5: rollback + reconnect resync) ──
@@ -5792,10 +5838,53 @@ export const useGame = create<GameStore>()(
 );
 
 // ─── Selectors ──────────────────────────────────────────────
+
+/** Legacy "the player team" selector — works when there's a single
+ *  human at the table (solo runs). In multiplayer-aware code prefer
+ *  `selectActiveTeam` which returns the team this BROWSER controls,
+ *  not "the team flagged isPlayer at any point in the run."
+ *
+ *  Kept until Step 7 of the multiplayer rollout migrates the 30+
+ *  callsites that still read it. */
 export function selectPlayer(s: GameStore): Team | null {
   return s.teams.find((t) => t.id === s.playerTeamId) ?? null;
 }
 
+/** "You" — the team the local browser controls. In solo runs this
+ *  matches selectPlayer(). In multiplayer it's whichever team the
+ *  user claimed at /games/[id]/lobby (bound via activeTeamId).
+ *  Falls back to the legacy playerTeamId if activeTeamId hasn't
+ *  been set yet, so existing single-browser solo runs keep working
+ *  without a save migration. */
+export function selectActiveTeam(s: GameStore): Team | null {
+  const id = s.activeTeamId ?? s.playerTeamId;
+  if (!id) return null;
+  return s.teams.find((t) => t.id === id) ?? null;
+}
+
+/** "The other teams" from this browser's perspective. Replaces
+ *  `selectRivals` for multiplayer surfaces — in a 4-player lobby
+ *  with one bot, this returns 3 teams (humans + bot), all of which
+ *  are rivals from THIS browser's seat. Legacy `selectRivals`
+ *  filtered on `!isPlayer` and worked only because exactly one
+ *  team had isPlayer=true; in multiplayer every claimed seat is
+ *  isPlayer-ish. */
+export function selectOtherTeams(s: GameStore): Team[] {
+  const meId = s.activeTeamId ?? s.playerTeamId;
+  if (!meId) return s.teams;
+  return s.teams.filter((t) => t.id !== meId);
+}
+
+/** @deprecated Use selectOtherTeams. Kept until Step 7 sweeps the
+ *  TopBar / LeaderboardPanel / RoutesPanel call sites. */
 export function selectRivals(s: GameStore): Team[] {
   return s.teams.filter((t) => !t.isPlayer);
+}
+
+/** True when the given team is "you" — single source of truth for
+ *  badges, highlights, and write gates. Replaces `team.isPlayer`
+ *  in multiplayer-aware UI. */
+export function isActiveTeam(s: GameStore, teamId: string): boolean {
+  const id = s.activeTeamId ?? s.playerTeamId;
+  return id !== null && id === teamId;
 }

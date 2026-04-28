@@ -52,8 +52,37 @@ export function DecisionsPanel() {
   const submit = useGame((g) => g.submitDecision);
   if (!player) return null;
 
+  // Self-guided multiplayer disables Board Decisions — the boardroom
+  // scenarios assume a discussion partner that doesn't exist when no
+  // facilitator is at the table. Read the new session.boardDecisions
+  // Enabled gate; null session (legacy solo) keeps decisions enabled
+  // by default. The check is a single field read so future modes
+  // ("facilitated + AI auto-resolve") can flip it independently.
+  const boardDecisionsEnabled = s.session?.boardDecisionsEnabled ?? true;
+
   const currentScenarios = SCENARIOS_BY_QUARTER[s.currentQuarter] ?? [];
   const pastDecisions = [...player.decisions].sort((a, b) => b.quarter - a.quarter);
+
+  if (!boardDecisionsEnabled) {
+    return (
+      <div className="space-y-4">
+        <div className="py-12 px-6 text-center rounded-xl border border-dashed border-line bg-surface-2/30">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-surface text-ink-muted mb-3">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+          <p className="text-sm font-semibold text-ink mb-1.5">
+            Board decisions are disabled in self-guided games.
+          </p>
+          <p className="text-xs text-ink-muted max-w-sm mx-auto leading-relaxed">
+            Boardroom scenarios run in facilitated cohorts where a moderator
+            walks the team through trade-offs. In self-guided runs the
+            engine auto-resolves with a balanced default — your strategy
+            still shows up via fleet, routes, sliders, and slot bids.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

@@ -106,13 +106,21 @@ export function NavRail() {
     return () => clearInterval(id);
   }, [currentQuarter]);
 
-  const pendingDecisions =
-    (SCENARIOS_BY_QUARTER[currentQuarter] ?? []).filter(
-      (sc) =>
-        !player?.decisions.some(
-          (d) => d.scenarioId === sc.id && d.quarter === currentQuarter,
-        ),
-    ) ?? [];
+  // Self-guided multiplayer disables Board Decisions — the boardroom
+  // scenarios assume a discussion partner that doesn't exist when no
+  // facilitator is at the table. When disabled, the Decisions tab in
+  // the rail no longer shows a pending-count badge (since there's
+  // nothing for the player to act on). The DecisionsPanel itself
+  // surfaces a clear "Disabled in self-guided" empty state.
+  const boardDecisionsEnabled = useGame((s) => s.session?.boardDecisionsEnabled ?? true);
+  const pendingDecisions = boardDecisionsEnabled
+    ? ((SCENARIOS_BY_QUARTER[currentQuarter] ?? []).filter(
+        (sc) =>
+          !player?.decisions.some(
+            (d) => d.scenarioId === sc.id && d.quarter === currentQuarter,
+          ),
+      ) ?? [])
+    : [];
 
   // World news = current + past quarters only (most recent first)
   const newsItems: NewsItem[] = [];
