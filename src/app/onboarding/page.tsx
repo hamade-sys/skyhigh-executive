@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CITIES } from "@/data/cities";
-import { DOCTRINES } from "@/data/doctrines";
+import { DOCTRINES, DOCTRINE_ICON_TINT } from "@/data/doctrines";
 import { fmtMoney } from "@/lib/format";
 import { Badge, Button, Card, CardBody, Input } from "@/components/ui";
 import { useGame } from "@/store/game";
@@ -163,6 +163,7 @@ export default function Onboarding() {
               >
                 {DOCTRINES.map((d) => {
                   const active = doctrine === d.id;
+                  const tint = DOCTRINE_ICON_TINT[d.iconAccent];
                   return (
                     <button
                       key={d.id}
@@ -179,8 +180,14 @@ export default function Onboarding() {
                       )}
                     >
                       <div className="flex items-center gap-3 mb-2">
-                        <span aria-hidden="true" className="font-display text-[1.5rem] text-primary">
-                          {d.icon}
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "shrink-0 inline-flex w-10 h-10 rounded-xl ring-4 items-center justify-center",
+                            tint,
+                          )}
+                        >
+                          <d.Icon className="w-5 h-5" strokeWidth={1.75} />
                         </span>
                         <span className="font-semibold text-ink">{d.name}</span>
                       </div>

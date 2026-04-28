@@ -1,8 +1,24 @@
 import type { DoctrineId } from "@/types/game";
+import {
+  Zap, Gem, PackageCheck, Globe2, type LucideIcon,
+} from "lucide-react";
 
 export interface Doctrine {
   id: DoctrineId;
-  icon: string;
+  /** Lucide icon component for the doctrine card. Each pick is meant
+   *  to read at-a-glance for the strategy:
+   *    - Budget Airline      → Zap          (speed + lean cost-efficiency)
+   *    - Premium Airline     → Gem          (luxury, high-yield positioning)
+   *    - Cargo Dominance     → PackageCheck (freight, parcel handling)
+   *    - Global Network      → Globe2       (interconnected world map)
+   *  Renderers wrap the icon in a tinted ring tile (ICAN brand
+   *  pattern: 4px ring + 50-tone fill + 700-tone stroke). */
+  Icon: LucideIcon;
+  /** Hex/CSS color for the icon's tint pad. Drives the ring + fill.
+   *  Pulled from the project's existing accent palette so the
+   *  doctrine cards stay visually cohesive with the rest of the
+   *  game UI. */
+  iconAccent: "amber" | "violet" | "emerald" | "cyan";
   name: string;
   tagline: string;
   description: string;
@@ -20,7 +36,8 @@ type VisibleDoctrineId = Exclude<DoctrineId, "safety-first">;
 export const DOCTRINES: Array<Doctrine & { id: VisibleDoctrineId }> = [
   {
     id: "budget-expansion",
-    icon: "↘",
+    Icon: Zap,
+    iconAccent: "amber",
     name: "Budget Airline",
     tagline: "Fast turns, lean costs, wider reach.",
     description:
@@ -35,7 +52,8 @@ export const DOCTRINES: Array<Doctrine & { id: VisibleDoctrineId }> = [
   },
   {
     id: "premium-service",
-    icon: "★",
+    Icon: Gem,
+    iconAccent: "violet",
     name: "Premium Airline",
     tagline: "Protect yield and loyalty.",
     description:
@@ -49,7 +67,8 @@ export const DOCTRINES: Array<Doctrine & { id: VisibleDoctrineId }> = [
   },
   {
     id: "cargo-dominance",
-    icon: "☐",
+    Icon: PackageCheck,
+    iconAccent: "emerald",
     name: "Cargo Dominance",
     tagline: "Make the network move freight.",
     description:
@@ -63,7 +82,8 @@ export const DOCTRINES: Array<Doctrine & { id: VisibleDoctrineId }> = [
   },
   {
     id: "global-network",
-    icon: "◉",
+    Icon: Globe2,
+    iconAccent: "cyan",
     name: "Global Network Airline",
     tagline: "Connectivity compounds demand.",
     description:
@@ -76,6 +96,18 @@ export const DOCTRINES: Array<Doctrine & { id: VisibleDoctrineId }> = [
     ],
   },
 ];
+
+/** Tailwind class strings for the icon pad (background fill + ring +
+ *  stroke color). Resolves the doctrine's `iconAccent` to the actual
+ *  classes used by the renderers. Centralised here so both the
+ *  onboarding card and the OverviewPanel review modal pick up the
+ *  same palette without copy-pasting class strings. */
+export const DOCTRINE_ICON_TINT: Record<Doctrine["iconAccent"], string> = {
+  amber:   "bg-amber-50 text-amber-700 ring-amber-100",
+  violet:  "bg-violet-50 text-violet-700 ring-violet-100",
+  emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+  cyan:    "bg-cyan-50 text-cyan-700 ring-cyan-100",
+};
 
 const visibleDoctrines = DOCTRINES.reduce(
   (acc, d) => {

@@ -6,7 +6,7 @@ import { fmtMoney, fmtPct } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { computeAirlineValue, fleetCount, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
-import { DOCTRINES, DOCTRINE_BY_ID } from "@/data/doctrines";
+import { DOCTRINES, DOCTRINE_BY_ID, DOCTRINE_ICON_TINT } from "@/data/doctrines";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { useUi, type PanelId } from "@/store/ui";
 import { SecondaryHubModal } from "@/components/game/SecondaryHubModal";
@@ -552,6 +552,7 @@ export function OverviewPanel() {
         >
           {DOCTRINES.map((d) => {
             const active = draftDoctrine === d.id;
+            const tint = DOCTRINE_ICON_TINT[d.iconAccent];
             return (
               <button
                 key={d.id}
@@ -565,8 +566,14 @@ export function OverviewPanel() {
                 )}
               >
                 <div className="flex items-start gap-3">
-                  <span aria-hidden="true" className="font-display text-[1.375rem] text-primary">
-                    {d.icon}
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "shrink-0 inline-flex w-10 h-10 rounded-xl ring-4 items-center justify-center",
+                      tint,
+                    )}
+                  >
+                    <d.Icon className="w-5 h-5" strokeWidth={1.75} />
                   </span>
                   <div className="min-w-0">
                     <div className="font-semibold text-ink">{d.name}</div>
