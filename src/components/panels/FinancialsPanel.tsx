@@ -52,16 +52,16 @@ export function FinancialsPanel() {
 
   // Loan covenant signals based on debt ratio.
   const covenant: { tone: "info" | "warn" | "neg" | null; label: string; detail: string } =
-    debtRatio < 30
+    debtRatio < 25
       ? { tone: null, label: "", detail: "" }
-      : debtRatio < 50
+      : debtRatio < 35
         ? { tone: "info", label: "Leverage building",
-            detail: "Borrowing rate has a +1.5pp premium. Plenty of headroom; just don't ratchet further." }
-        : debtRatio < 70
+            detail: "Borrowing rate is carrying a credit premium. Growth debt is still usable, but headroom is tightening." }
+        : debtRatio < 45
           ? { tone: "warn", label: "High leverage",
-              detail: "Borrowing rate has a +3pp premium and lenders are watching. Consider refinancing or repaying." }
+              detail: "Lenders are close to the borrowing cap. More debt may be blocked until equity or cash flow improves." }
           : { tone: "neg", label: "Covenant breach",
-              detail: "Debt > 70% of airline value. Borrowing rate +5pp, board is uncomfortable. Repay or refi to lower." };
+              detail: "Debt is beyond the safe covenant band. New borrowing is likely blocked and refinancing will price at distressed rates." };
 
   // ── Cash runway: how many quarters of cash at current burn rate.
   //    Burn rate = max(0, last quarter's cost − revenue). If the
@@ -1009,8 +1009,8 @@ function TrendRow({
 
 /**
  * Visual covenant gauge — renders the debt ratio as a horizontal bar
- * with shaded threshold zones (0-30 ok / 30-50 caution / 50-70 high /
- * 70+ breach) and a marker at the current position. Replaces the
+ * with shaded threshold zones (0-25 ok / 25-35 caution / 35-45 high /
+ * 45+ breach) and a marker at the current position. Replaces the
  * older text-only block so the player sees the slope toward breach.
  */
 function CovenantGauge({
@@ -1041,10 +1041,10 @@ function CovenantGauge({
       {/* Threshold-zoned bar. Each segment colored with the same tone
           the lender's covenant signal would emit at that debt ratio. */}
       <div className="relative h-2 rounded-full bg-surface-2 overflow-hidden">
-        <div className="absolute inset-y-0 left-0 right-[70%] bg-positive/30" />
-        <div className="absolute inset-y-0 left-[30%] right-[50%] bg-accent/30" />
-        <div className="absolute inset-y-0 left-[50%] right-[30%] bg-warning/40" />
-        <div className="absolute inset-y-0 left-[70%] right-0 bg-negative/40" />
+        <div className="absolute inset-y-0 left-0 right-[75%] bg-positive/30" />
+        <div className="absolute inset-y-0 left-[25%] right-[65%] bg-accent/30" />
+        <div className="absolute inset-y-0 left-[35%] right-[55%] bg-warning/40" />
+        <div className="absolute inset-y-0 left-[45%] right-0 bg-negative/40" />
         {/* Position marker. */}
         <div
           className="absolute top-[-2px] bottom-[-2px] w-[3px] bg-ink rounded-sm"
@@ -1053,9 +1053,9 @@ function CovenantGauge({
       </div>
       <div className="flex justify-between text-[0.5625rem] tabular font-mono text-ink-muted mt-1 px-[1px]">
         <span>0%</span>
-        <span>30%</span>
-        <span>50%</span>
-        <span>70%</span>
+        <span>25%</span>
+        <span>35%</span>
+        <span>45%</span>
         <span>100%</span>
       </div>
       {label && (

@@ -2171,7 +2171,54 @@ export function runQuarterClose(
   const prevOpsPts = team.opsPts;
   const prevLoyalty = team.customerLoyaltyPct;
   const prevBrandValue = computeBrandValue(team);
-  const milestonesBefore = new Set(team.milestones ?? []);
+  // Milestones-before baseline. The diff at the bottom of this fn
+  // (`milestonesEarnedThisQuarter = next.milestones.filter(!before)`)
+  // depends on this being correct.
+  //
+  // Defensive backstop: if `team.milestones` somehow shows up empty
+  // BUT the team has previously closed a quarter (financialsByQuarter
+  // has more than just the Q1 backfill), it's a near-certainty that
+  // milestones were silently dropped somewhere upstream — every other
+  // state field in financialsByQuarter rows persists fine. Rather
+  // than hand the player a "you just earned First Cargo Route" toast
+  // for the eighth time, we reconstruct the baseline from the team's
+  // current state so already-true milestones are pre-seeded into
+  // milestonesBefore. The UI ledger in QuarterCloseModal is a
+  // separate safety net; this guard kills the bug at the source.
+  const reconstructIfDropped = (): Set<string> => {
+    const persisted = new Set(team.milestones ?? []);
+    const prevClosedCount = (team.financialsByQuarter ?? []).filter(
+      (q) => q.quarter < ctx.quarter && q.revenue > 0,
+    ).length;
+    if (persisted.size > 0 || prevClosedCount === 0) return persisted;
+    // We've closed quarters before but milestones is empty — derive
+    // the obvious state-based milestones from current fleet/routes
+    // so the diff filter doesn't paint them as "freshly earned" this
+    // quarter. Conservative subset: just the milestones whose earn()
+    // condition is fully satisfiable from state we can read here.
+    const reconstructed = new Set<string>();
+    const activeRoutes = team.routes.filter((r) => r.status === "active");
+    const activeFleet = team.fleet.filter((f) => f.status === "active");
+    if (activeRoutes.some((r) => r.isCargo)) reconstructed.add("First Cargo Route");
+    if (activeRoutes.length >= 10) reconstructed.add("10 Active Routes");
+    if (activeRoutes.length >= 25) reconstructed.add("25 Active Routes");
+    if (activeRoutes.length >= 50) reconstructed.add("Network Builder");
+    if (activeFleet.length >= 10) reconstructed.add("Fleet of 10");
+    if (activeFleet.length >= 25) reconstructed.add("Fleet of 25");
+    // Cross-region routes → International Network
+    const regions = new Set<string>();
+    for (const r of activeRoutes) {
+      const o = CITIES_BY_CODE[r.originCode];
+      const d = CITIES_BY_CODE[r.destCode];
+      if (o) regions.add(o.region);
+      if (d) regions.add(d.region);
+    }
+    if (regions.size >= 3) reconstructed.add("International Network");
+    if ((team.secondaryHubCodes?.length ?? 0) >= 3) reconstructed.add("Hub & Spoke");
+    if ((team.customerLoyaltyPct ?? 0) >= 80) reconstructed.add("Loyal Following");
+    return reconstructed;
+  };
+  const milestonesBefore = reconstructIfDropped();
 
   const next: Team = {
     ...team,

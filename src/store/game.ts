@@ -2900,6 +2900,16 @@ export const useGame = create<GameStore>()(
         const s = get();
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player team" };
+        if (!Number.isFinite(amount) || amount < 1_000_000) {
+          return { ok: false, error: "Minimum borrowing is $1M" };
+        }
+        const headroom = maxBorrowingUsd(player);
+        if (amount > headroom) {
+          return {
+            ok: false,
+            error: `Borrowing cap is ${fmtMoneyPlain(headroom)}. Repay debt or rebuild equity before taking more.`,
+          };
+        }
         // Borrowing rate honours the team's covenant pressure +
         // brand premium (effectiveBorrowingRate). Earlier this used
         // the bare baseRate, so high-debt airlines silently borrowed
@@ -3009,7 +3019,7 @@ export const useGame = create<GameStore>()(
         if (!player) return { ok: false, error: "No player team" };
         const loan = player.loans.find((l) => l.id === loanId);
         if (!loan) return { ok: false, error: "Loan not found" };
-        const newRate = s.baseInterestRatePct;
+        const newRate = effectiveBorrowingRate(player, s.baseInterestRatePct);
         if (newRate >= loan.ratePct - 0.25)
           return { ok: false, error: "New rate isn't enough lower (need ≥0.25% saving)" };
         const fee = loan.remainingPrincipal * 0.01;  // 1% refi fee
