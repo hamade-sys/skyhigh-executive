@@ -29,7 +29,7 @@ export default function Endgame() {
 
   if (!player) {
     return (
-      <main className="flex-1 flex items-center justify-center">
+      <main className="flex-1 min-h-0 flex items-center justify-center overflow-y-auto">
         <div className="text-ink-muted">No active game. <Link href="/onboarding" className="underline">Start a new simulation</Link></div>
       </main>
     );
@@ -72,8 +72,15 @@ export default function Endgame() {
   }
 
   return (
-    <main className="flex-1 flex flex-col">
-      <header className="px-8 py-5 border-b border-line flex items-center justify-between">
+    // The root layout's body has overflow-hidden (so the in-game map
+    // doesn't push the page around). Endgame is a long scrollable
+    // surface — give the main column min-h-0 + overflow-y-auto so
+    // its content scrolls inside the flex column instead of being
+    // clipped at the viewport. Sticky header keeps "Final scoring"
+    // visible while the player scrolls through podium / awards /
+    // milestones / decisions / rankings.
+    <main className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+      <header className="sticky top-0 z-10 px-8 py-5 border-b border-line bg-bg/95 backdrop-blur-md flex items-center justify-between">
         <div className="flex items-baseline gap-3">
           <span className="font-display text-xl text-ink">SkyForce</span>
           <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
@@ -82,7 +89,7 @@ export default function Endgame() {
         </div>
       </header>
 
-      <section className="flex-1 px-8 py-12 max-w-5xl mx-auto w-full">
+      <section className="flex-1 px-8 py-12 pb-24 max-w-5xl mx-auto w-full">
         {/* ── Podium — celebratory gold/silver/bronze for the top 3.
             Renders only when there are 3+ teams (otherwise the
             standings table below is enough). The player's tile gets
