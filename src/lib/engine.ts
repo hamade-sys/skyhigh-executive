@@ -46,12 +46,14 @@ function isDoctrine(team: { doctrine?: DoctrineId }, doctrine: ActiveDoctrineId)
 }
 
 /** Real-world Jet A1 sits in the $0.55–$0.85 / L range over the
- *  campaign's 2015–2024 window. The simulator uses $0.65/L at
- *  fuelIndex=100 (baseline). Earlier the passenger path was at $0.18/L
- *  while the cargo path was at $0.55/L — passenger fuel landed ~3×
- *  too cheap, which is why a 16-widebody fleet showed only $22.5M in
- *  fuel against $1.7B revenue. Both paths now share this constant. */
-export const FUEL_BASELINE_USD_PER_L = 0.65;
+ *  campaign's 2015–2024 window. The simulator uses $0.85/L at
+ *  fuelIndex=100 (baseline) — the upper end of the band, which keeps
+ *  fuel as a meaningful cost category against payroll & maintenance.
+ *  Earlier the passenger path was at $0.18/L while the cargo path was
+ *  at $0.55/L — passenger fuel landed ~3× too cheap, which is why a
+ *  16-widebody fleet showed only $22.5M in fuel against $1.7B revenue.
+ *  Both paths now share this constant. */
+export const FUEL_BASELINE_USD_PER_L = 0.85;
 
 /** Discontinued-type maintenance escalation (master ref Update 5).
  *  Once an aircraft type passes its `cutoffRound`, every still-flying
@@ -913,16 +915,134 @@ export function streakMultiplier(quartersAtLevel: number): number {
   return 1.0;
 }
 
-// ─── Staff cost (A3) ───────────────────────────────────────
+// ─── Staff cost (A3) — rebuilt to your spec ───────────────
+// Old formula was `fleetSize × $180K + routes × $45K + hub × $800K
+// + $2M HQ`, which pinned a 40-aircraft / 40-route airline at ~$11M/Q
+// payroll on $2.3B/Q revenue (~0.5%). Real airlines run 18-25% of
+// revenue on labour. The new formula scales by:
+//   1. number of hubs (primary + secondaries)
+//   2. number of aircraft AND aircraft-type/capacity (regional /
+//      narrow / wide / heavy-cargo) — bigger planes need bigger crews
+//   3. weekly flight volume (ground crew + dispatch)
+//   4. passenger volume + cargo tonnage offered (cabin + handling)
+//   5. fleet-variety overhead (each unique type past 3 adds training,
+//      parts certification, type-rated pilot pools)
+//   6. cross-slider multipliers — service (heavy), customer-service,
+//      and marketing all flex headcount in their domains.
+// Plus the existing staff-slider STAFF_MULTIPLIER + doctrine + S14
+// recurring surcharge applied at the engine call site.
+//
+// Calibration target: ~18% of revenue ±5% guardrail at steady state.
 export function baselineStaffCostUsd(team: Team): number {
-  const fleetSize = team.fleet.filter((f) => f.status === "active").length;
-  const activeRoutes = team.routes.filter((r) => r.status === "active").length;
-  const hubCount = 1; // secondary hubs not yet modeled
-  return (
-    fleetSize * 180_000 +
-    activeRoutes * 45_000 +
-    hubCount * 800_000 +
-    2_000_000 // HQ minimum
+  const activeFleet = team.fleet.filter((f) => f.status === "active");
+  const activeRoutes = team.routes.filter((r) => r.status === "active");
+  const passengerRoutes = activeRoutes.filter((r) => !r.isCargo);
+  const cargoRoutes = activeRoutes.filter((r) => r.isCargo);
+
+  // 1. Hub overhead — primary HQ + per-secondary station ops.
+  const primaryHubCost = 4_000_000;     // HQ + primary hub combined
+  const secondaryHubCost = 1_500_000;   // per secondary hub
+  const secondaries = team.secondaryHubCodes?.length ?? 0;
+  const hubBaseline = primaryHubCost + secondaryHubCost * secondaries;
+
+  // 2. Aircraft staffing — pilots + cabin + per-tail maintenance crew.
+  //    Tier-weighted: regional < narrow < wide < heavy-cargo.
+  //    Numbers are per-aircraft per-quarter. A 200-seat A320 carries
+  //    pilots, cabin crew, and dedicated mx techs — that runs in the
+  //    low millions per quarter at scale, not the $180K previously.
+  const aircraftBaseline = activeFleet.reduce((sum, f) => {
+    const spec = AIRCRAFT_BY_ID[f.specId];
+    if (!spec) return sum;
+    let factor: number;
+    if (spec.family === "cargo") {
+      const t = spec.cargoTonnes ?? 0;
+      factor = t > 80 ? 1.3 : t > 40 ? 0.95 : 0.6;
+    } else {
+      const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
+      factor = seats < 100 ? 0.45 : seats < 250 ? 0.95 : 1.7;
+    }
+    return sum + 2_400_000 * factor;
+  }, 0);
+
+  // 3. Route ops — passenger and cargo route managers, plus per-flight
+  //    ground crew that scales with weekly schedule density.
+  const totalWeeklySchedules = activeRoutes.reduce(
+    (sum, r) => sum + r.dailyFrequency * 7,
+    0,
+  );
+  const routeOpsBaseline =
+    passengerRoutes.length * 250_000 +
+    cargoRoutes.length * 200_000 +
+    totalWeeklySchedules * 12_000;
+
+  // 4. Passenger-volume staffing — cabin crew, gate, check-in. Driven
+  //    by the QUARTERLY pax CAPACITY (not realized pax, since we run
+  //    payroll on the schedule, not the load factor) at an assumed
+  //    80% planning load factor.
+  let totalPaxCapacityPerQ = 0;
+  for (const r of passengerRoutes) {
+    const planes = r.aircraftIds
+      .map((id) => team.fleet.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => !!p);
+    if (planes.length === 0) continue;
+    const seatsPerFlight = planes.reduce((s, p) => {
+      const spec = AIRCRAFT_BY_ID[p.specId];
+      const sm = p.customSeats ?? spec?.seats;
+      return s + ((sm?.first ?? 0) + (sm?.business ?? 0) + (sm?.economy ?? 0));
+    }, 0) / planes.length;
+    totalPaxCapacityPerQ += seatsPerFlight * r.dailyFrequency * QUARTER_DAYS;
+  }
+  const expectedPaxQ = totalPaxCapacityPerQ * 0.80;
+  const paxStaffBaseline = expectedPaxQ * 6.5;  // ~$6.50/pax served
+
+  // 5. Cargo handling — warehouse + ramp staff per tonne moved.
+  let totalCargoTonnesPerQ = 0;
+  for (const r of cargoRoutes) {
+    const planes = r.aircraftIds
+      .map((id) => team.fleet.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => !!p);
+    if (planes.length === 0) continue;
+    const tonnesPerFlight = planes.reduce((s, p) => {
+      const spec = AIRCRAFT_BY_ID[p.specId];
+      return s + (spec?.cargoTonnes ?? 0);
+    }, 0) / planes.length;
+    totalCargoTonnesPerQ += tonnesPerFlight * r.dailyFrequency * QUARTER_DAYS;
+  }
+  const cargoStaffBaseline = totalCargoTonnesPerQ * 0.80 * 90;  // ~$90/tonne handled
+
+  const operationalBaseline =
+    hubBaseline +
+    aircraftBaseline +
+    routeOpsBaseline +
+    paxStaffBaseline +
+    cargoStaffBaseline;
+
+  // 6. Fleet-variety overhead — every unique active aircraft type
+  //    past the 3rd adds training / parts / type-rating costs. Caps
+  //    at +20% so a balanced 7-type fleet doesn't 2× payroll.
+  const uniqueTypes = new Set(activeFleet.map((f) => f.specId)).size;
+  const varietyOverheadPct = Math.min(0.20, Math.max(0, uniqueTypes - 3) * 0.05);
+
+  // 7. Cross-slider multipliers — these capture "more service / more
+  //    marketing / more office capacity = more headcount in those
+  //    departments". The staff slider STAFF_MULTIPLIER stacks on top
+  //    at the engine call site and represents the player's wages /
+  //    hours lever. Service is the heaviest because cabin crew + IFE
+  //    + lounges scale headcount fast.
+  const serviceLevel = team.sliders.service ?? 2;
+  const serviceMult = [0.85, 0.92, 1.00, 1.12, 1.28, 1.50][serviceLevel] ?? 1.0;
+  const marketingLevel = team.sliders.marketing ?? 2;
+  const marketingMult = [0.96, 0.98, 1.00, 1.04, 1.08, 1.13][marketingLevel] ?? 1.0;
+  const csLevel = team.sliders.customerService ?? 2;
+  const csMult = [0.93, 0.97, 1.00, 1.06, 1.13, 1.22][csLevel] ?? 1.0;
+
+  return Math.max(
+    1_500_000, // floor — even a 1-aircraft startup has minimum ops staff
+    operationalBaseline *
+      (1 + varietyOverheadPct) *
+      serviceMult *
+      marketingMult *
+      csMult,
   );
 }
 
