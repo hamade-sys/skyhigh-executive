@@ -75,8 +75,8 @@ export default function Onboarding() {
   }
 
   return (
-    <main className="flex-1 flex flex-col">
-      <header className="px-8 py-5 border-b border-line flex items-center justify-between">
+    <main className="flex-1 min-h-0 flex flex-col">
+      <header className="px-8 py-5 border-b border-line flex items-center justify-between shrink-0">
         <div className="flex items-baseline gap-3">
           <span className="font-display text-xl text-ink">SkyForce</span>
           <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
@@ -88,10 +88,10 @@ export default function Onboarding() {
         </div>
       </header>
 
-      {/* overflow-y-auto here so tall steps (doctrine, hub list) are
-          scrollable even though the body has overflow-hidden */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="min-h-full flex items-center justify-center px-4 py-8 md:px-8 md:py-12">
+      {/* Scrollable content — nav buttons live outside this so they're
+          always visible regardless of how tall the step content is */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex justify-center px-4 py-8 md:px-8 md:py-12">
         <div className="w-full max-w-3xl">
           {/* Real progressbar role so screen readers announce progress
               instead of just rendering 9 anonymous decorative bars. */}
@@ -475,30 +475,32 @@ export default function Onboarding() {
             </Step>
           )}
 
-          <div className="sticky bottom-0 z-10 -mx-4 mt-10 flex items-center justify-between border-t border-line bg-bg/95 px-4 py-4 backdrop-blur md:-mx-8 md:px-8">
-            <Button
-              variant="ghost"
-              onClick={() => (step === 0 ? router.push("/") : setStep(step - 1))}
-            >
-              ← {step === 0 ? "Back to landing" : "Back"}
-            </Button>
-            {step < STEP_COUNT - 1 ? (
-              <Button
-                variant="primary"
-                disabled={!canAdvance}
-                onClick={() => setStep(step + 1)}
-              >
-                Continue →
-              </Button>
-            ) : (
-              <Button variant="primary" onClick={finish}>
-                Launch airline →
-              </Button>
-            )}
-          </div>
         </div>
-        </div>{/* end min-h-full centering wrapper */}
+        </div>{/* end centering wrapper */}
       </div>{/* end overflow-y-auto scroll area */}
+
+      {/* Nav bar — outside the scroll area so it's always visible */}
+      <div className="shrink-0 flex items-center justify-between border-t border-line bg-bg/95 px-4 py-4 backdrop-blur md:px-8">
+        <Button
+          variant="ghost"
+          onClick={() => (step === 0 ? router.push("/") : setStep(step - 1))}
+        >
+          ← {step === 0 ? "Back to landing" : "Back"}
+        </Button>
+        {step < STEP_COUNT - 1 ? (
+          <Button
+            variant="primary"
+            disabled={!canAdvance}
+            onClick={() => setStep(step + 1)}
+          >
+            Continue →
+          </Button>
+        ) : (
+          <Button variant="primary" onClick={finish}>
+            Launch airline →
+          </Button>
+        )}
+      </div>
     </main>
   );
 }
