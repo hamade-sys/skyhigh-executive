@@ -618,8 +618,23 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                   route's family is set. Mixed cargo+passenger on a
                   single route makes no sense — different revenue
                   models, different capacity units. The off-family
-                  planes grey out below. */}
-              {idlePlanes.map((p) => {
+                  planes grey out below.
+
+                  Sort order: in-range aircraft first, out-of-range
+                  pushed to the bottom. Family-mismatch is NOT used
+                  as a sort key because the locked family changes
+                  with selection, and reshuffling the list on every
+                  click would jump the UI under the player's
+                  pointer. Sort is stable on player.fleet insertion
+                  order within each range tier. */}
+              {[...idlePlanes].sort((a, b) => {
+                const specA = AIRCRAFT_BY_ID[a.specId];
+                const specB = AIRCRAFT_BY_ID[b.specId];
+                const reachA = !!specA && effectiveRangeKm(specA, a.engineUpgrade ?? null) >= dist;
+                const reachB = !!specB && effectiveRangeKm(specB, b.engineUpgrade ?? null) >= dist;
+                if (reachA !== reachB) return reachA ? -1 : 1;
+                return 0;
+              }).map((p) => {
                 const spec = AIRCRAFT_BY_ID[p.specId];
                 if (!spec) return null;
                 const canReach = effectiveRangeKm(spec, p.engineUpgrade ?? null) >= dist;
