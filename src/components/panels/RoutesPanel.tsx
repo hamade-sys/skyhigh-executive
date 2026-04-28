@@ -61,12 +61,18 @@ export function RoutesPanel() {
   // clicked an existing route's endpoints on the map), auto-open it once.
   const focusedRouteId = useUi((u) => u.focusedRouteId);
   const setFocusedRouteId = useUi((u) => u.setFocusedRouteId);
+  // Consume the cross-component "focus this route" signal from
+  // GameCanvas. setState-in-effect is intentional — we're syncing
+  // local panel state against an external store value, then clearing
+  // the signal. Not a render cascade.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (focusedRouteId) {
       setActiveRouteId(focusedRouteId);
       setFocusedRouteId(null);  // consume the signal
     }
   }, [focusedRouteId, setFocusedRouteId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const rows = useMemo(() => {
     if (!player) return [];
@@ -930,6 +936,11 @@ function RouteDetailModal({
     ? maxRouteDailyFrequency(clampSpecIds, route.distanceKm, clampAircraftForPhysics)
     : 0;
   const clampMaxWeekly = Math.round(clampMaxDaily * 7);
+  // Clamp weeklyFreq when the engine-derived ceiling shifts (aircraft
+  // selection / range / cargo belly all change clampMaxWeekly). The
+  // setState here is intentional — sync against derived data, not a
+  // cascading render.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (clampMaxWeekly === 0 && weeklyFreq !== 0) {
       setWeeklyFreq(0);
@@ -937,6 +948,7 @@ function RouteDetailModal({
       setWeeklyFreq(clampMaxWeekly);
     }
   }, [clampMaxWeekly, weeklyFreq]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!player) return null;
 

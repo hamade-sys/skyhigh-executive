@@ -584,37 +584,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function EngineOption({
-  active, label, detail, cost, onClick,
-}: {
-  kind: EngineKind;
-  active: boolean;
-  label: string;
-  detail: string;
-  cost: number;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "rounded-md border px-3 py-2.5 text-left transition-colors",
-        active
-          ? "border-primary bg-[rgba(20,53,94,0.04)]"
-          : "border-line hover:bg-surface-hover",
-      )}
-    >
-      <div className="flex items-baseline justify-between gap-2 mb-0.5">
-        <span className="font-medium text-ink text-[0.8125rem]">{label}</span>
-        <span className="text-[0.75rem] tabular font-mono text-ink-2">
-          {cost === 0 ? "free" : `+${fmtMoney(cost)}`}
-        </span>
-      </div>
-      <div className="text-[0.6875rem] text-ink-muted">{detail}</div>
-    </button>
-  );
-}
-
 function RatioSlider({
   label, tone, percent, onChange, seats, readOnly = false,
 }: {

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
 import { fmtMoney, fmtPct, fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
-import { computeAirlineValue, fleetCount, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
+import { computeAirlineValue, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { Award, TrendingUp, TrendingDown, Trophy, Sparkles } from "lucide-react";

@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Badge, Button, Card, CardBody, Input } from "@/components/ui";
 import { useGame } from "@/store/game";
 import { CITIES } from "@/data/cities";
-import { cn } from "@/lib/cn";
 
 /**
  * Player entry point for facilitated sessions. The facilitator generates

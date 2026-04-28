@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 // Leaflet hits `window` on import, so the map can't render on the server.
@@ -80,8 +80,13 @@ function CanvasInner() {
   const currentPanel = useUi((s) => s.panel);
   const railExpanded = useUi((s) => s.railExpanded);
 
-  // Hydration-aware
+  // Hydration-aware — flips a flag once after first client paint so we
+  // can render store-dependent UI without SSR/CSR mismatch warnings.
+  // setState-in-effect is the canonical hydration pattern; the lint
+  // rule's "cascading renders" concern doesn't apply because the effect
+  // runs once with empty deps.
   const [hydrated, setHydrated] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setHydrated(true), []);
 
   // Route setup state (lifted up to share between map + modal)
@@ -288,8 +293,6 @@ function CanvasInner() {
       <RouteLaunchBar
         origin={origin}
         dest={dest}
-        isCargo={isCargo}
-        setIsCargo={setIsCargo}
         onCancel={() => { setOrigin(null); setDest(null); setIsCargo(false); }}
         onLaunch={() => setLaunchOpen(true)}
       />
