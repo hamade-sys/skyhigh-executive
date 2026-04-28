@@ -2803,77 +2803,16 @@ export function runQuarterClose(
     }
   }
 
-  // ─ System-level plot twists (reveal at specific quarters) ──
-  // These depend on the player's prior decision, not on queued events.
-  if (ctx.quarter === 4) {
-    // S4 Oil Gamble twist: OPEC drop
-    const s4 = team.decisions.find((d) => d.scenarioId === "S4");
-    if (s4) {
-      let twistDelta = 0;
-      let twistNote = "";
-      if (s4.optionId === "A") { twistDelta = -60 * M; twistNote = "S4 OPEC drop — locked high (−$60M)"; }
-      else if (s4.optionId === "C") { twistDelta = 60 * M; twistNote = "S4 OPEC drop — open market wins (+$60M)"; }
-      else if (s4.optionId === "D") { twistDelta = 30 * M; twistNote = "S4 OPEC drop — structured 50/50 (+$30M)"; }
-      if (twistDelta !== 0) {
-        newCashUsd += twistDelta;
-        notes.push(twistNote);
-      }
-    }
-  }
-  if (ctx.quarter === 11) {
-    // S16 Moscow Signal twist: false alarm — summer surge
-    const s16 = team.decisions.find((d) => d.scenarioId === "S16");
-    if (s16) {
-      const lock = s16.lockInQuarters ?? 1;
-      let twistDelta = 0;
-      let twistLoyalty = 0;
-      const surgeBasis = Math.max(revenue, scaledCashBasisUsd(next, "lastRevenueQ"));
-      if (s16.optionId === "A" || s16.optionId === "B") {
-        // PRD: missed revenue per locked quarter over 1
-        if (lock > 1) {
-          const missedPerQuarter = clamp(20 * M, 180 * M, surgeBasis * 0.12);
-          twistDelta = -missedPerQuarter * (lock - 1);
-          twistLoyalty = -4 * (lock - 1);
-          notes.push(`S16 false alarm — locked ${lock}Q missed summer surge`);
-        }
-      } else if (s16.optionId === "D") {
-        twistDelta = clamp(15 * M, 120 * M, surgeBasis * 0.08);
-        notes.push(`S16 counter-position captured competitor bookings (+$${(twistDelta / 1e6).toFixed(1)}M)`);
-      }
-      if (twistDelta !== 0) newCashUsd += twistDelta;
-      if (twistLoyalty !== 0)
-        next.customerLoyaltyPct = clamp(0, 100, next.customerLoyaltyPct + twistLoyalty);
-    }
-  }
-  if (ctx.quarter === 16) {
-    // S15 Recession Gamble twist: recession ends early
-    const s15 = team.decisions.find((d) => d.scenarioId === "S15");
-    if (s15) {
-      if (s15.optionId === "A") {
-        newCashUsd -= 80 * M;
-        next.flags.add("talent_shortage");
-        next.opsPts = Math.max(0, next.opsPts - 10);
-        notes.push("S15 twist — mass redundancy rehire cost $80M, talent shortage flag");
-      } else if (s15.optionId === "D") {
-        newCashUsd += 120 * M;
-        notes.push("S15 twist — counter-cyclical advantage +$120M");
-      }
-    }
-  }
-  if (ctx.quarter === 18) {
-    // S12 Brand Grenade twist: ambassador cleared
-    const s12 = team.decisions.find((d) => d.scenarioId === "S12");
-    if (s12) {
-      if (s12.optionId === "A") {
-        next.brandPts = Math.max(0, next.brandPts - 22);
-        notes.push("S12 twist — ambassador cleared, A terminate looks reactive (−22 Brand)");
-      } else if (s12.optionId === "D") {
-        next.brandPts = Math.max(0, next.brandPts + 15);
-        notes.push("S12 twist — redemption arc pays off (+15 Brand)");
-      }
-    }
-  }
-
+  // ─ System-level plot twists ────────────────────────────────
+  // Previously a stack of hard-coded `if (ctx.quarter === N)` blocks
+  // for S4/S16/S15/S12. Those quarter constants drifted out of sync
+  // with the 40-round campaign — some twists fired BEFORE the player
+  // had even seen the scenario, others never fired. The consequences
+  // now live as `deferred` entries on each scenario option in
+  // `data/scenarios.ts` with `lagQuarters` (relative to the decision
+  // quarter), and resolve through the standard deferred-event loop
+  // above. Self-heals if scenarios move; one place to author the
+  // narrative; no engine code per twist.
   // ─ Resolve deferred events targeting this quarter ──────
   const triggeredEvents: QuarterCloseResult["triggeredEvents"] = [];
   const remainingDeferred: DeferredEvent[] = [];

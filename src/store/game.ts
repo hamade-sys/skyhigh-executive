@@ -2879,14 +2879,23 @@ export const useGame = create<GameStore>()(
         // Enqueue deferred event if the option has one
         if (option.effect.deferred) {
           const d = option.effect.deferred;
+          // Resolve target quarter — `lagQuarters` (relative to the
+          // decision quarter) is preferred over absolute `quarter`
+          // because it self-heals if the scenario quarter moves.
+          // Hard-coded plot twists at engine.ts:2806 used absolute
+          // quarters that drifted out of sync with the 40-round
+          // campaign; this is the correct architecture.
+          const targetQuarter = typeof d.lagQuarters === "number"
+            ? s.currentQuarter + d.lagQuarters
+            : (d.quarter ?? s.currentQuarter + 1);
           const ev: DeferredEvent = {
             id: mkId("ev"),
             sourceScenario: scenarioId as ScenarioDecision["scenarioId"],
             sourceOption: optionId,
-            targetQuarter: d.quarter,
+            targetQuarter,
             probability: d.probability ?? 1,
             effectJson: serializeEffect(d.effect),
-            noteAtQueue: `${scenario.title} · Option ${optionId}`,
+            noteAtQueue: d.note ?? `${scenario.title} · Option ${optionId}`,
           };
           updated.deferredEvents = [...(updated.deferredEvents ?? []), ev];
         }
@@ -5401,16 +5410,20 @@ export const useGame = create<GameStore>()(
         ];
         if (option.effect.deferred) {
           const d = option.effect.deferred;
+          // Match submitDecision's lag/quarter resolution rules.
+          const targetQuarter = typeof d.lagQuarters === "number"
+            ? s.currentQuarter + d.lagQuarters
+            : (d.quarter ?? s.currentQuarter + 1);
           updated.deferredEvents = [
             ...(updated.deferredEvents ?? []),
             {
               id: mkId("ev"),
               sourceScenario: scenarioId as ScenarioDecision["scenarioId"],
               sourceOption: newOptionId,
-              targetQuarter: d.quarter,
+              targetQuarter,
               probability: d.probability ?? 1,
               effectJson: serializeEffect(d.effect),
-              noteAtQueue: `${scenario.title} · Option ${newOptionId} (admin override)`,
+              noteAtQueue: d.note ?? `${scenario.title} · Option ${newOptionId} (admin override)`,
             },
           ];
         }

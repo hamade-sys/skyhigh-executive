@@ -415,7 +415,12 @@ function ConsequenceCard({ option, player }: { option: ScenarioOption; player: T
       {deferred && (
         <div className="mt-2 rounded-md border border-warning bg-[var(--warning-soft)] px-3 py-2">
           <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-warning font-semibold mb-1">
-            <AlertTriangle size={11} /> Deferred consequence · {fmtQuarter(deferred.quarter)}
+            <AlertTriangle size={11} /> Deferred consequence
+            {typeof deferred.quarter === "number"
+              ? ` · ${fmtQuarter(deferred.quarter)}`
+              : typeof deferred.lagQuarters === "number"
+                ? ` · in ${deferred.lagQuarters}Q`
+                : ""}
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[0.8125rem]">
             {deferred.probability !== undefined && deferred.probability < 1 && (
