@@ -1,242 +1,162 @@
 "use client";
 
 /**
- * `/` — game entry surface.
+ * `/` — game entry. Replaces the bare GameCanvas mount with a
+ * unified picker that routes to the right surface:
  *
- * Behavior:
- *   - phase === "idle" (no saved game) → render GameCanvas, which
- *     shows the existing pre-game lobby ("Begin Q1 brand building").
- *   - phase === "playing" / "onboarding" / "quarter-closing" → there's
- *     a saved run. Show a "Continue" / "End game & start over" picker
- *     so the player isn't silently dropped into mid-quarter state with
- *     no exit. Continuing renders the canvas as before.
- *   - phase === "endgame" → show a resume-or-reset picker that links
- *     to the final-scoring page; prevents the dead-end where players
- *     who finished a run keep getting bounced into the canvas with no
- *     visible way to start over.
+ *    - Solo practice          → /onboarding (existing flow)
+ *    - Create game            → /games/new
+ *    - Join public lobby      → /lobby
+ *    - Join with code         → /join
+ *    - Facilitator console    → /facilitator
  *
- * Why this exists: the persisted Zustand store reloads whatever
- * mid-game state the player last left, and the canvas itself has no
- * "Exit / start over" affordance from the entry route. Players who
- * finished a game and tried to revisit `/` were getting dropped at
- * Q33 of an old run with no path forward. Reset wiring also lives
- * inside the running game (TopBar → kebab → "End game & start over"),
- * so the player can always escape from anywhere.
+ * Backwards compat: if the local Zustand store already has a run
+ * in progress (phase != 'idle'), we render GameCanvas directly so
+ * existing solo players don't get bounced to a picker.
  */
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, Play, RotateCcw, Trophy } from "lucide-react";
-import { useGame, selectPlayer } from "@/store/game";
+import {
+  ArrowRight, Plus, Globe2, KeyRound, User, ClipboardList, Sparkles,
+} from "lucide-react";
+import { useGame } from "@/store/game";
 import { GameCanvas } from "@/components/game/GameCanvas";
-import { Button } from "@/components/ui";
-import { fmtMoney, fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
 
 export default function Home() {
   const phase = useGame((s) => s.phase);
-  const currentQuarter = useGame((s) => s.currentQuarter);
-  const player = useGame(selectPlayer);
-  const resetGame = useGame((g) => g.resetGame);
-  const router = useRouter();
-
-  // Hydration gate — wait one client paint so the persisted store
-  // is loaded before deciding which surface to render. Without this
-  // the picker briefly flashes for returning players.
   const [hydrated, setHydrated] = useState(false);
-  // After the user clicks "Continue", skip the chooser and render
-  // the canvas directly. Lives in component state because there's
-  // no `/play` route (yet); the canvas is mounted at this URL.
-  const [continued, setContinued] = useState(false);
+  // Wait for client-side hydration so we read the persisted store
+  // accurately. Without this gate the picker briefly flashes for
+  // returning solo players whose run is mid-quarter.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
 
   if (!hydrated) {
-    return <div className="flex-1 bg-surface" aria-hidden />;
-  }
-
-  // No saved game — let GameCanvas's existing pre-game UI handle
-  // the empty state. It already shows "Begin Q1 brand building" /
-  // "Play demo round" buttons.
-  if (phase === "idle") {
-    return <GameCanvas />;
-  }
-
-  // Endgame — show a finished-run picker. Direct link to the
-  // /endgame page (final scoring) so players can re-read the
-  // standings, plus an explicit reset.
-  if (phase === "endgame") {
     return (
-      <ResumeChooser
-        kind="endgame"
-        currentQuarter={currentQuarter}
-        playerName={player?.name ?? null}
-        playerCash={player?.cashUsd ?? 0}
-        onContinue={() => router.push("/endgame")}
-        onReset={() => {
-          resetGame();
-          // After reset, phase flips to idle so the next render lands
-          // on the GameCanvas pre-game UI naturally — no nav needed.
-        }}
-      />
+      <div className="min-h-screen bg-slate-50" aria-hidden />
     );
   }
 
-  // Live game — render the chooser by default, render the canvas
-  // once the user clicks Continue. The TopBar's GameMenu has an
-  // "End game & start over" item so the player can also escape
-  // from inside the running canvas.
-  if (continued) {
+  // Active solo run — drop into the game canvas straight away.
+  if (phase === "playing" || phase === "onboarding" || phase === "quarter-closing" || phase === "endgame") {
     return <GameCanvas />;
   }
 
+  // Otherwise: clean picker.
+  return <EntryPicker />;
+}
+
+function EntryPicker() {
   return (
-    <ResumeChooser
-      kind="playing"
-      currentQuarter={currentQuarter}
-      playerName={player?.name ?? null}
-      playerCash={player?.cashUsd ?? 0}
-      onContinue={() => setContinued(true)}
-      onReset={() => {
-        resetGame();
-        // phase flips to idle; next render shows GameCanvas pre-game UI.
-      }}
-    />
+    <div className="min-h-screen bg-slate-50">
+      <main className="max-w-5xl mx-auto px-6 py-16 md:py-24">
+        <div className="text-center mb-12 md:mb-16">
+          <p className="text-xs font-semibold uppercase tracking-widest text-cyan-600 mb-3">
+            SkyForce
+          </p>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-slate-900 mb-4 leading-[1.05]">
+            Run an airline.
+            <br />
+            <span className="text-slate-500">For 40 quarters.</span>
+          </h1>
+          <p className="text-base md:text-lg text-slate-500 max-w-xl mx-auto leading-relaxed">
+            Pick how you want to play. Solo, in a public lobby, in a facilitated
+            cohort, or with a private code from your instructor.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <EntryCard
+            href="/onboarding"
+            icon={<User className="w-5 h-5" />}
+            title="Solo practice"
+            description="One human, AI rivals. The fastest path to learning the game."
+            accent="cyan"
+            primary
+          />
+          <EntryCard
+            href="/games/new"
+            icon={<Plus className="w-5 h-5" />}
+            title="Create game"
+            description="Set up a public or private run. Self-guided or facilitated."
+            accent="violet"
+          />
+          <EntryCard
+            href="/lobby"
+            icon={<Globe2 className="w-5 h-5" />}
+            title="Join public lobby"
+            description="Pick from open games anyone is hosting right now."
+            accent="emerald"
+          />
+          <EntryCard
+            href="/join"
+            icon={<KeyRound className="w-5 h-5" />}
+            title="Join with code"
+            description="Got a 4-digit code from your facilitator? Enter it here."
+            accent="amber"
+          />
+          <EntryCard
+            href="/facilitator"
+            icon={<ClipboardList className="w-5 h-5" />}
+            title="Facilitator console"
+            description="Run a classroom or workshop session. Includes board decisions."
+            accent="slate"
+          />
+          <EntryCard
+            href="/onboarding?demo=1"
+            icon={<Sparkles className="w-5 h-5" />}
+            title="Tutorial run"
+            description="Guided walkthrough of the first three quarters. Skippable any time."
+            accent="cyan"
+            tone="dim"
+          />
+        </div>
+      </main>
+    </div>
   );
 }
 
-function ResumeChooser({
-  kind, currentQuarter, playerName, playerCash, onContinue, onReset,
+function EntryCard({
+  href, icon, title, description, accent, primary, tone,
 }: {
-  kind: "playing" | "endgame";
-  currentQuarter: number;
-  playerName: string | null;
-  playerCash: number;
-  onContinue: () => void;
-  onReset: () => void;
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  accent: "cyan" | "violet" | "emerald" | "amber" | "slate";
+  primary?: boolean;
+  tone?: "dim";
 }) {
-  const [confirming, setConfirming] = useState(false);
-
+  const ring = {
+    cyan: "bg-cyan-50 text-cyan-700 ring-cyan-100",
+    violet: "bg-violet-50 text-violet-700 ring-violet-100",
+    emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    amber: "bg-amber-50 text-amber-700 ring-amber-100",
+    slate: "bg-slate-100 text-slate-700 ring-slate-200",
+  }[accent];
   return (
-    <main className="flex-1 min-h-0 overflow-y-auto flex items-center justify-center p-6">
-      <div className="max-w-lg w-full">
-        <p className="text-[0.6875rem] uppercase tracking-[0.22em] text-accent font-bold mb-3 text-center">
-          SkyForce
-        </p>
-        <h1 className="font-display text-3xl md:text-4xl text-ink leading-tight mb-2 text-center">
-          {kind === "endgame"
-            ? "Your last run finished."
-            : "You have a game in progress."}
-        </h1>
-        <p className="text-ink-2 text-[0.9375rem] leading-relaxed text-center mb-8">
-          {kind === "endgame"
-            ? "View the final scoring screen to see how it ended, or wipe the saved run and start a new game."
-            : `Pick up where you left off, or end this run and start fresh.`}
-        </p>
-
-        {/* Saved-run summary card */}
-        {playerName && (
-          <div className="rounded-xl border border-line bg-surface p-5 mb-6">
-            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
-              Saved run
-            </div>
-            <div className="flex items-baseline justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-display text-lg text-ink truncate">
-                  {playerName}
-                </div>
-                <div className="text-[0.8125rem] text-ink-muted">
-                  {fmtQuarter(currentQuarter)} · Quarter {currentQuarter} of{" "}
-                  {TOTAL_GAME_ROUNDS}
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="font-mono tabular text-base font-semibold text-ink">
-                  {fmtMoney(playerCash)}
-                </div>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-                  Cash on hand
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Primary action — Continue (or View results) */}
-        <div className="space-y-3">
-          <Button
-            variant="primary"
-            size="lg"
-            className="w-full justify-center"
-            onClick={onContinue}
-          >
-            {kind === "endgame" ? (
-              <>
-                <Trophy size={16} className="mr-2" />
-                View final scoring
-              </>
-            ) : (
-              <>
-                <Play size={16} className="mr-2" />
-                Continue game
-              </>
-            )}
-            <ArrowRight size={16} className="ml-2" />
-          </Button>
-
-          {/* Secondary action — End game & start over */}
-          {!confirming ? (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className="w-full text-center text-[0.875rem] text-ink-muted hover:text-ink py-2 transition-colors"
-            >
-              End game & start over
-            </button>
-          ) : (
-            <div className="rounded-lg border border-warning/40 bg-warning/5 p-4">
-              <p className="text-[0.875rem] text-ink mb-3 text-center">
-                This wipes the saved run. There&rsquo;s no undo.
-              </p>
-              <div className="flex items-center justify-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConfirming(false)}
-                >
-                  Cancel
-                </Button>
-                <Button variant="primary" size="sm" onClick={onReset}>
-                  <RotateCcw size={13} className="mr-1.5" />
-                  Yes, end & restart
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Other entry options */}
-        <div className="mt-10 pt-6 border-t border-line text-center">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2.5">
-            Or jump elsewhere
-          </div>
-          <div className="flex items-center justify-center gap-4 text-[0.8125rem]">
-            <Link href="/onboarding" className="text-ink-2 hover:text-ink">
-              New solo game
-            </Link>
-            <span className="text-ink-muted">·</span>
-            <Link href="/facilitator" className="text-ink-2 hover:text-ink">
-              Facilitator console
-            </Link>
-            <span className="text-ink-muted">·</span>
-            <Link href="/join" className="text-ink-2 hover:text-ink">
-              Join with code
-            </Link>
-          </div>
-        </div>
+    <Link
+      href={href}
+      className={
+        "group rounded-2xl border bg-white p-6 transition-all " +
+        (primary
+          ? "border-slate-900 ring-2 ring-slate-900/10 hover:shadow-md"
+          : tone === "dim"
+            ? "border-slate-200 opacity-80 hover:opacity-100 hover:border-slate-300"
+            : "border-slate-200 hover:border-slate-300 hover:shadow-sm")
+      }
+    >
+      <div className={"inline-flex items-center justify-center w-11 h-11 rounded-xl ring-4 mb-4 " + ring}>
+        {icon}
       </div>
-    </main>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-slate-700 transition-colors" />
+      </div>
+      <p className="text-sm text-slate-500 leading-relaxed">{description}</p>
+    </Link>
   );
 }
