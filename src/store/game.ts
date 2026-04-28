@@ -13,6 +13,7 @@ import {
   effectiveBorrowingRate,
   maxBorrowingUsd,
   maxRouteDailyFrequency,
+  odKey,
   runQuarterClose,
   serializeEffect,
   type QuarterCloseResult,
@@ -3768,6 +3769,33 @@ export const useGame = create<GameStore>()(
         // believably without us simulating their full network.
         const fuelStress = Math.max(0, (s.fuelIndex - 100) / 100);  // 0 at index 100, 0.5 at 150
         const quarterMaturity = Math.min(1, (s.currentQuarter - 1) / 12);  // ramps up over Y1-Y3
+
+        // ── Wave 3.3 — Rivals' hybrid economics ────────────
+        // Earlier rival revenue was pure procedural (doctrine baseline ×
+        // brand × maturity × noise) — completely decoupled from the
+        // player's network. So if the player carpet-bombed every rival
+        // hub with overlapping routes, the rival's leaderboard line
+        // didn't twitch.
+        //
+        // Now we couple two ways:
+        //   (a) Network overlap pressure  — a rival flying the same
+        //       OD as the player loses revenue (player+rival split the
+        //       OD pool). Endpoint-only overlap is a weaker signal.
+        //   (b) Hub-slot dominance        — the more slots the player
+        //       holds at the rival's primary hub, the more the rival
+        //       gets squeezed at home base.
+        const playerTeamForRivals = s.teams.find((t) => t.isPlayer);
+        const playerActiveRoutes = playerTeamForRivals?.routes.filter(
+          (rt) => rt.status === "active",
+        ) ?? [];
+        const playerOdSet = new Set<string>();
+        const playerEndpointSet = new Set<string>();
+        for (const rt of playerActiveRoutes) {
+          playerOdSet.add(odKey(rt.originCode, rt.destCode));
+          playerEndpointSet.add(rt.originCode);
+          playerEndpointSet.add(rt.destCode);
+        }
+
         const rivals = s.teams.filter((t) => !t.isPlayer).map((r) => {
           // Stable per-team noise so the rival has a "personality" curve
           const seed = (r.id.charCodeAt(0) * 31 + s.currentQuarter * 7) % 100;
@@ -3795,7 +3823,48 @@ export const useGame = create<GameStore>()(
           // Brand pts amplify revenue (50 brand = 1.0x, 80 = 1.15x, 100 = 1.25x)
           const brandMul = 0.85 + (r.brandPts / 100) * 0.4;
           const maturityMul = 1 + quarterMaturity * 0.45;
-          const revenue = baseRevenue * brandMul * maturityMul * (1 + personalityNoise);
+
+          // Network overlap signals — bind procedural revenue to the
+          // rival's actual route list against the player's actual
+          // routes. Skipped if the rival has no recorded routes (early
+          // game / save migration).
+          const rivalActiveRoutes = r.routes.filter((rt) => rt.status === "active");
+          let directOverlap = 0;     // rival flies same OD as player
+          let endpointOverlap = 0;   // rival just touches a player city
+          for (const rt of rivalActiveRoutes) {
+            const k = odKey(rt.originCode, rt.destCode);
+            if (playerOdSet.has(k)) directOverlap += 1;
+            else if (playerEndpointSet.has(rt.originCode) || playerEndpointSet.has(rt.destCode)) {
+              endpointOverlap += 1;
+            }
+          }
+          const totalRivalRoutes = Math.max(1, rivalActiveRoutes.length);
+          const directShare = directOverlap / totalRivalRoutes;
+          const endpointShare = endpointOverlap / totalRivalRoutes;
+          // Direct overlap = strong pressure, endpoint = weak.
+          // Capped so a player-everywhere strategy can't zero a rival.
+          const overlapPenalty = Math.max(
+            0.78,
+            1 - directShare * 0.10 - endpointShare * 0.04,
+          );
+
+          // Hub-slot dominance — when the player holds more slots at
+          // the rival's primary hub than the rival does themselves,
+          // the rival gets squeezed at home (gates lost, peak waves
+          // skewed). Capped at −12% even at 100% player dominance.
+          let hubPenalty = 1.0;
+          if (playerTeamForRivals && r.hubCode) {
+            const playerSlots = playerTeamForRivals.airportLeases?.[r.hubCode]?.slots ?? 0;
+            const rivalSlots = r.airportLeases?.[r.hubCode]?.slots ?? 0;
+            const totalSlots = playerSlots + rivalSlots;
+            if (totalSlots > 0) {
+              const playerShare = playerSlots / totalSlots;
+              hubPenalty = 1 - Math.min(0.12, playerShare * 0.20);
+            }
+          }
+
+          const revenue = baseRevenue * brandMul * maturityMul *
+            (1 + personalityNoise) * overlapPenalty * hubPenalty;
           const fuelDrag = fuelStress * fuelSensitivity * revenue * 0.18;
           const adjustedMargin = marginPct - fuelStress * 0.04;
           const netProfit = revenue * adjustedMargin - fuelDrag;
