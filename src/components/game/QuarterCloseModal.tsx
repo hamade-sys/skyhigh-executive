@@ -289,6 +289,47 @@ export function QuarterCloseModal() {
               </div>
             )}
 
+            {/* Deferred event resolutions — surface on Headline so the
+                player sees plot-twist outcomes (S5 government walk-away,
+                S4 OPEC drop, etc.) without burying them in the Notes
+                tab. Triggered events render with their effect; missed
+                ones still show so the player knows the dice rolled. */}
+            {result.triggeredEvents.length > 0 && (
+              <div className="rounded-md border border-warning bg-[var(--warning-soft)] px-3 py-2 space-y-1.5">
+                <div className="flex items-center gap-2 text-warning text-[0.6875rem] uppercase tracking-wider font-semibold">
+                  Earlier decision · resolved this quarter
+                </div>
+                {result.triggeredEvents.map((e) => (
+                  <div key={e.id} className="text-[0.8125rem] text-ink-2">
+                    <span className="font-mono text-primary mr-2">{e.scenario}</span>
+                    {e.note}
+                    <span
+                      className={cn(
+                        "ml-2 font-semibold",
+                        e.outcome === "triggered"
+                          ? (typeof e.cashDelta === "number" && e.cashDelta < 0)
+                            ? "text-negative"
+                            : "text-positive"
+                          : "text-ink-muted",
+                      )}
+                    >
+                      · {e.outcome === "triggered" ? "fired" : "missed"}
+                    </span>
+                    {typeof e.cashDelta === "number" && e.cashDelta !== 0 && (
+                      <span
+                        className={cn(
+                          "ml-1 tabular font-mono",
+                          e.cashDelta > 0 ? "text-positive" : "text-negative",
+                        )}
+                      >
+                        {e.cashDelta > 0 ? "+" : ""}{fmtMoney(e.cashDelta)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {result.newRcfBalance > 0 && (
               <div className="text-[0.8125rem] rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)] text-warning px-3 py-2">
                 Revolving Credit Facility drawn: <span className="tabular font-mono font-semibold">{fmtMoney(result.newRcfBalance)}</span>. Interest at 2× base rate applies next quarter.

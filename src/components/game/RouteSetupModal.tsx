@@ -778,21 +778,20 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
         )}
 
         {isCargo && (
-          <Section step={3} title="Cargo" disabled={!hasAircraft}>
-            <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-[0.8125rem] text-ink-2 space-y-1.5">
-              <p>
-                <strong className="text-ink">Cargo route.</strong> Daily demand
-                = the lower of origin and destination business demand (in
-                tonnes), adjusted by news cargo modifiers and your market-focus
-                doctrine.
-              </p>
-              <p>
-                Cost stack: <strong className="text-ink">airport slot fees</strong>{" "}
-                (same auction system as passenger — cargo flights occupy slots)
-                <strong className="text-ink"> + warehousing storage fees</strong>{" "}
-                at both endpoints. Rate per tonne scales by haul distance and
-                Pricing Tier; you can override per route below.
-              </p>
+          <Section
+            step={3}
+            title="Cargo"
+            disabled={!hasAircraft}
+            help={
+              "Cargo route economics:\n\n" +
+              "• Daily demand = the lower of origin and destination business demand (in tonnes), adjusted by news cargo modifiers and your market-focus doctrine.\n\n" +
+              "• Cost stack: airport slot fees (same auction system as passenger — cargo flights occupy slots) plus warehousing storage fees at both endpoints.\n\n" +
+              "• Rate per tonne scales by haul distance and Pricing Tier; you can override per route on the next step."
+            }
+          >
+            <div className="text-[0.8125rem] text-ink-2 italic">
+              Set frequency and pricing tier above. Slot bids on the next
+              step if you don&apos;t hold enough capacity at either airport.
             </div>
           </Section>
         )}
@@ -1074,11 +1073,15 @@ export function BidRow({
 }
 
 function Section({
-  step, title, disabled = false, children,
+  step, title, disabled = false, help, children,
 }: {
   step: number;
   title: string;
   disabled?: boolean;
+  /** Optional explainer text. Renders as a (?) icon next to the
+   *  title with a hover tooltip — keeps the section header tidy
+   *  while still surfacing detail for players who want it. */
+  help?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -1095,6 +1098,15 @@ function Section({
         <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
           {title}
         </span>
+        {help && (
+          <span
+            className="ml-auto inline-flex w-4 h-4 rounded-full items-center justify-center text-[0.625rem] font-semibold text-ink-muted bg-surface-2 cursor-help"
+            title={help}
+            aria-label="Help"
+          >
+            ?
+          </span>
+        )}
       </div>
       {children}
     </section>

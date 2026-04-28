@@ -277,6 +277,9 @@ function CanvasInner() {
         origin={origin}
         dest={dest}
         hubCode={player.hubCode}
+        activeRouteCount={
+          player.routes.filter((r) => r.status !== "closed").length
+        }
         compact={!!currentPanel}
       />
 

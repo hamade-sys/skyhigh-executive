@@ -315,9 +315,21 @@ export const SCENARIOS: Scenario[] = [
         },
         effectTags: ["+$300M next quarter", "Service LOS + CMN · 2 yrs", "Fine -$50M/qtr per missed city"] },
       { id: "B", label: "Negotiate lighter terms",
-        description: "30% chance government walks away.",
-        effect: { setFlags: ["negotiating_gov"] },
-        effectTags: ["+$300M next quarter if success"] },
+        description: "70% chance the government still injects $300M next quarter; 30% chance they walk away and you get nothing.",
+        effect: {
+          setFlags: ["negotiating_gov"],
+          // 70% chance the negotiation succeeds → +$300M next quarter.
+          // 30% miss → zero cash, no obligation. Resolution outcome
+          // is surfaced in the next quarter close digest so the
+          // player isn't left wondering.
+          deferred: {
+            lagQuarters: 1,
+            probability: 0.7,
+            effect: { cash: 300_000_000 },
+            note: "Government lifeline · negotiation result",
+          },
+        },
+        effectTags: ["70% chance +$300M next quarter", "30% gov walks"] },
       { id: "C", label: "Private markets",
         description: "Slower, costlier, no strings.",
         effect: { cash: -8 * M },
