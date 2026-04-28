@@ -95,8 +95,8 @@ export function MapCommandHud({ origin, dest, hubCode, compact }: MapCommandHudP
           done={false}
           label={
             stage === 3
-              ? "Choose Passenger or Cargo in the bar above, then tap Launch →"
-              : "Choose Passenger or Cargo, then launch"
+              ? "Tap Launch → in the bar above to open route setup"
+              : "Then tap Launch to configure the route"
           }
         />
       </ol>

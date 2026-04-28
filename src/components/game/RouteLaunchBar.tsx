@@ -1,11 +1,10 @@
 "use client";
 
-import { Plane, Package, X, ArrowRight } from "lucide-react";
+import { X, ArrowRight } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { useGame, selectPlayer } from "@/store/game";
 import { distanceBetween } from "@/lib/engine";
-import { fmtMoney } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 export interface RouteLaunchBarProps {
@@ -87,13 +86,6 @@ export function RouteLaunchBar({
   if (!o || !d) return null;
 
   const distKm = distanceBetween(origin, dest);
-  // Reasonable cargo-storage setup estimate for UI preview
-  const storageCostByTier = (tier: 1 | 2 | 3 | 4) =>
-    tier === 1 ? 8_000_000 : tier === 2 ? 4_000_000 : tier === 3 ? 2_000_000 : 800_000;
-  const cargoSetupCost = isCargo
-    ? (player.cargoStorageActivations.includes(o.code) ? 0 : storageCostByTier(o.tier)) +
-      (player.cargoStorageActivations.includes(d.code) ? 0 : storageCostByTier(d.tier))
-    : 0;
 
   return (
     <div className="pointer-events-none fixed top-[4.25rem] left-1/2 -translate-x-1/2 z-50">
@@ -114,39 +106,7 @@ export function RouteLaunchBar({
           {Math.round(distKm).toLocaleString()} km
         </span>
 
-        {/* Pax / Cargo toggle */}
-        <div className="flex items-center gap-0.5 rounded-md border border-line p-0.5">
-          <button
-            onClick={() => setIsCargo(false)}
-            className={cn(
-              "px-2 py-1 rounded-sm text-[0.75rem] flex items-center gap-1.5",
-              !isCargo
-                ? "bg-primary text-primary-fg font-medium"
-                : "text-ink-2 hover:text-ink",
-            )}
-          >
-            <Plane size={13} /> Passenger
-          </button>
-          <button
-            onClick={() => setIsCargo(true)}
-            className={cn(
-              "px-2 py-1 rounded-sm text-[0.75rem] flex items-center gap-1.5",
-              isCargo
-                ? "bg-primary text-primary-fg font-medium"
-                : "text-ink-2 hover:text-ink",
-            )}
-          >
-            <Package size={13} /> Cargo
-          </button>
-        </div>
-
-        {isCargo && cargoSetupCost > 0 && (
-          <Badge tone="warning">
-            Cargo storage setup {fmtMoney(cargoSetupCost)}
-          </Badge>
-        )}
-
-        <Button size="sm" variant="primary" onClick={() => onLaunch({ isCargo })}>
+        <Button size="sm" variant="primary" onClick={() => onLaunch({ isCargo: false })}>
           Launch route →
         </Button>
         <button
