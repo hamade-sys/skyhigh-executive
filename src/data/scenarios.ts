@@ -102,11 +102,23 @@ export interface OptionEffect {
     fineScaled?: ScaledCashEffect;
     label: string;
   };
-  // simplified — real engine should schedule these at targetQuarter:
+  // Deferred consequence resolved at a future quarter close.
+  // Use `lagQuarters` (relative to the decision quarter) to insulate
+  // against scenario-quarter drift; `quarter` is kept for legacy
+  // entries with absolute targets.
   deferred?: {
-    quarter: number;
+    /** Absolute target quarter (legacy). Use `lagQuarters` instead
+     *  for new entries so the consequence stays aligned with the
+     *  decision even if the scenario moves. */
+    quarter?: number;
+    /** Quarters AFTER the decision quarter that the consequence
+     *  resolves. Computed at submit time → currentQuarter + lag.
+     *  Wins over `quarter` if both are present. */
+    lagQuarters?: number;
     probability?: number;     // 0..1; if undefined treat as 1
     effect: OptionEffect;
+    /** Optional one-line note shown in the close digest. */
+    note?: string;
   };
 }
 
@@ -239,7 +251,18 @@ export const SCENARIOS: Scenario[] = [
     options: [
       { id: "A", label: "12-month full hedge",
         description: "Annual fuel cost locked at $240M. Max protection.",
-        effect: { opsPts: 5, setFlags: ["hedged_12m"] },
+        effect: {
+          opsPts: 5, setFlags: ["hedged_12m"],
+          // OPEC drop reveal — locked-high carriers are stuck overpaying
+          // when the spot market collapses (~3 quarters after the
+          // hedge is set). Lag relative to decision so it tracks even
+          // if the scenario quarter moves.
+          deferred: {
+            lagQuarters: 3,
+            effect: { cash: -60_000_000 },
+            note: "OPEC drop · locked-high hedge overpays (−$60M)",
+          },
+        },
         effectTags: ["Locked $240M/yr", "Ops +5"] },
       { id: "B", label: "6-month partial hedge",
         description: "Annual fuel cost $205M projected.",
@@ -247,14 +270,29 @@ export const SCENARIOS: Scenario[] = [
         effectTags: ["Locked $205M/yr"] },
       { id: "C", label: "Open market",
         description: "Ride spot prices. Highest upside, highest downside.",
-        effect: { opsPts: -5 }, effectTags: ["Ops -5", "Spot exposure"] },
+        effect: {
+          opsPts: -5,
+          // OPEC drop rewards the open-market position.
+          deferred: {
+            lagQuarters: 3,
+            effect: { cash: 60_000_000 },
+            note: "OPEC drop · spot-market position wins (+$60M)",
+          },
+        }, effectTags: ["Ops -5", "Spot exposure"] },
       { id: "D", label: "50/50 structured",
         description: "Hybrid hedge with structured-risk framework.",
-        effect: { opsPts: 3, setFlags: ["hedged_50_50"] },
+        effect: {
+          opsPts: 3, setFlags: ["hedged_50_50"],
+          deferred: {
+            lagQuarters: 3,
+            effect: { cash: 30_000_000 },
+            note: "OPEC drop · 50/50 captures partial upside (+$30M)",
+          },
+        },
         effectTags: ["Locked $220M/yr", "Ops +3"] },
     ],
     autoSubmitOptionId: "C",
-    notes: "OPEC drop plot twist reveals at Q4 close.",
+    notes: "OPEC drop plot twist reveals 3 quarters after decision.",
   },
   {
     id: "S5", title: "The Government Lifeline", quarter: 11, severity: "MEDIUM", timeLimitMinutes: 30,
@@ -277,9 +315,21 @@ export const SCENARIOS: Scenario[] = [
         },
         effectTags: ["+$300M next quarter", "Service LOS + CMN · 2 yrs", "Fine -$50M/qtr per missed city"] },
       { id: "B", label: "Negotiate lighter terms",
-        description: "30% chance government walks away.",
-        effect: { setFlags: ["negotiating_gov"] },
-        effectTags: ["+$300M next quarter if success"] },
+        description: "70% chance the government still injects $300M next quarter; 30% chance they walk away and you get nothing.",
+        effect: {
+          setFlags: ["negotiating_gov"],
+          // 70% chance the negotiation succeeds → +$300M next quarter.
+          // 30% miss → zero cash, no obligation. Resolution outcome
+          // is surfaced in the next quarter close digest so the
+          // player isn't left wondering.
+          deferred: {
+            lagQuarters: 1,
+            probability: 0.7,
+            effect: { cash: 300_000_000 },
+            note: "Government lifeline · negotiation result",
+          },
+        },
+        effectTags: ["70% chance +$300M next quarter", "30% gov walks"] },
       { id: "C", label: "Private markets",
         description: "Slower, costlier, no strings.",
         effect: { cash: -8 * M },
@@ -530,7 +580,16 @@ export const SCENARIOS: Scenario[] = [
     options: [
       { id: "A", label: "Terminate ambassador",
         description: "Corporate reflex. May backfire post-twist.",
-        effect: { cash: -10 * M, brandPts: 5, loyaltyDelta: -12 },
+        effect: {
+          cash: -10 * M, brandPts: 5, loyaltyDelta: -12,
+          // Ambassador is later cleared. Termination looked reactive
+          // and damages the brand retrospectively.
+          deferred: {
+            lagQuarters: 4,
+            effect: { brandPts: -22 },
+            note: "Ambassador cleared · termination reads as reactive (Brand −22)",
+          },
+        },
         effectTags: ["-$10M", "Brand +5", "Loyalty -12%"] },
       { id: "B", label: "Join the joke",
         description: "Bold embrace. Loyalty gates the outcome.",
@@ -542,12 +601,21 @@ export const SCENARIOS: Scenario[] = [
         effectTags: ["Brand +10", "Loyalty +6%"] },
       { id: "D", label: "Redemption arc",
         description: "Long-game narrative, earned media.",
-        effect: { cash: -8 * M, loyaltyDelta: 15 },
+        effect: {
+          cash: -8 * M, loyaltyDelta: 15,
+          // Long-arc storytelling pays off when the original incident
+          // gets re-litigated and the brand is the redemption story.
+          deferred: {
+            lagQuarters: 4,
+            effect: { brandPts: 15 },
+            note: "Ambassador cleared · redemption arc lands (+Brand 15)",
+          },
+        },
         effectTags: ["-$8M", "Brand +38 over 2Q", "Loyalty +15%"] },
       { id: "E", label: "Silence",
         description: "Wait for the cycle to pass. 30% chance it doesn't.",
         effect: { brandPts: -5, loyaltyDelta: -5,
-          deferred: { quarter: 37, probability: 0.3, effect: { brandPts: -18 } } },
+          deferred: { lagQuarters: 2, probability: 0.3, effect: { brandPts: -18 } } },
         effectTags: ["Brand -5", "Loyalty -5%", "30% downside"] },
     ],
     autoSubmitOptionId: "A",
@@ -644,7 +712,20 @@ export const SCENARIOS: Scenario[] = [
     options: [
       { id: "A", label: "Mass redundancy",
         description: "Cut deep — release ~50% of payroll for two quarters. Brand and loyalty take major hits.",
-        effect: { staffSavingsPct: 0.5, brandPts: -20, loyaltyDelta: -10 },
+        effect: {
+          staffSavingsPct: 0.5, brandPts: -20, loyaltyDelta: -10,
+          // Recession ends earlier than expected — mass-redundancy
+          // teams have to hire back at premium and earn the talent-
+          // shortage flag, which weighs on ops downstream.
+          deferred: {
+            lagQuarters: 5,
+            effect: {
+              cash: -80_000_000, opsPts: -10,
+              setFlags: ["talent_shortage"],
+            },
+            note: "Recession ends · forced rehire at premium (−$80M, ops penalty)",
+          },
+        },
         effectTags: ["Savings ≈ 50% of 2Q staff cost"],
         blockedByFlags: ["gov_board_card", "redundancy_freeze"] },
       { id: "B", label: "Temporary measures",
@@ -657,7 +738,17 @@ export const SCENARIOS: Scenario[] = [
         effectTags: [] },
       { id: "D", label: "Counter-cyclical",
         description: "Invest while rivals retreat. Future upside if demand snaps back.",
-        effect: { cash: -30 * M, brandPts: 15, loyaltyDelta: 8 },
+        effect: {
+          cash: -30 * M, brandPts: 15, loyaltyDelta: 8,
+          // Counter-cyclical pays off when recession ends and demand
+          // snaps back — capacity built during the dip captures the
+          // recovery premium.
+          deferred: {
+            lagQuarters: 5,
+            effect: { cash: 120_000_000, brandPts: 5 },
+            note: "Recession ends · counter-cyclical capacity captures recovery (+$120M)",
+          },
+        },
         effectTags: ["−$30M", "Future upside"] },
     ],
     autoSubmitOptionId: "A",
@@ -674,11 +765,30 @@ export const SCENARIOS: Scenario[] = [
         effect: {
           scaledCash: { basis: "lastRevenueQ", multiplier: 0.06, min: 12 * M, max: 90 * M },
           opsPts: -2,
+          // False-alarm reveal: aggressive cutters miss the summer
+          // surge. Penalty scales with revenue.
+          deferred: {
+            lagQuarters: 4,
+            effect: {
+              scaledCash: { basis: "lastRevenueQ", multiplier: -0.10, min: -180 * M, max: -20 * M },
+              loyaltyDelta: -4,
+            },
+            note: "False alarm · over-locked, missed summer surge (loyalty −4)",
+          },
         }, effectTags: ["Savings scale with revenue", "Lock-in 1-4 quarters"] },
       { id: "B", label: "Moderate — partial",
         description: "Trim exposure without fully walking away from demand.",
         effect: {
           scaledCash: { basis: "lastRevenueQ", multiplier: 0.03, min: 6 * M, max: 50 * M },
+          // Partial lock — moderate-cut teams also miss some upside.
+          deferred: {
+            lagQuarters: 4,
+            effect: {
+              scaledCash: { basis: "lastRevenueQ", multiplier: -0.05, min: -90 * M, max: -10 * M },
+              loyaltyDelta: -2,
+            },
+            note: "False alarm · partial lock missed summer surge",
+          },
         }, effectTags: ["Savings scale with revenue", "Lock-in 1-4 quarters"] },
       { id: "C", label: "Invest in protocols",
         description: "Prepare operations without cutting demand. Protocol cost scales with fleet size.",
@@ -694,11 +804,20 @@ export const SCENARIOS: Scenario[] = [
           scaledCash: { basis: "lastRevenueQ", multiplier: -0.025, min: -45 * M, max: -5 * M },
           brandPts: 15,
           loyaltyDelta: 8,
+          // Counter-position carriers absorbed the summer surge that
+          // aggressive cutters left on the table.
+          deferred: {
+            lagQuarters: 4,
+            effect: {
+              scaledCash: { basis: "lastRevenueQ", multiplier: 0.08, min: 15 * M, max: 120 * M },
+            },
+            note: "False alarm · counter-position captured competitor bookings",
+          },
         },
         effectTags: ["Marketing push scales with revenue"] },
     ],
     autoSubmitOptionId: "A",
-    notes: "False alarm reveal two quarters later. Lock-in teams miss the summer surge.",
+    notes: "False alarm reveal four quarters later. Lock-in teams miss the summer surge.",
   },
   {
     id: "S17", title: "The Green Ultimatum", quarter: 33, severity: "MEDIUM", timeLimitMinutes: 30,

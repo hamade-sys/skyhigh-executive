@@ -99,7 +99,7 @@ export interface FleetAircraft {
   /** Optional fuselage coating retrofit at purchase: -10% fuel burn (stacks). */
   fuselageUpgrade?: boolean;
   routeId: string | null;        // assigned route or null
-  /** Quarter at which the aircraft retires (purchaseQuarter + 16 for passenger). */
+  /** Quarter at which the aircraft retires (newly purchased airframes use +28Q). */
   retirementQuarter: number;
   /** Accumulated maintenance deficit from low Ops slider (PRD B2/C4). */
   maintenanceDeficit: number;

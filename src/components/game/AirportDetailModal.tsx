@@ -483,7 +483,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           {tenants.length > 0 && (
             <div className="rounded-md border border-line bg-surface overflow-hidden">
               <div className="px-3 py-2 border-b border-line text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted bg-surface-2/40">
-                Who's paying this rate · {tenants.length} tenant{tenants.length === 1 ? "" : "s"}
+                Who&rsquo;s paying this rate · {tenants.length} tenant{tenants.length === 1 ? "" : "s"}
               </div>
               <table className="w-full text-[0.75rem]">
                 <thead>

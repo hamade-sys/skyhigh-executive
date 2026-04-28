@@ -12,17 +12,19 @@ export interface RouteLaunchBarProps {
   dest: string | null;
   onCancel: () => void;
   onLaunch: (args: { isCargo: boolean }) => void;
-  isCargo: boolean;
-  setIsCargo: (v: boolean) => void;
 }
 
 /**
  * Compact top-center toolbar that appears once the user has picked both
  * endpoints. It shows the pair + a Launch button — the big detail modal only
  * opens when Launch is clicked, so the destination city stays visible.
+ *
+ * Cargo flag is now derived inside RouteSetupModal from the selected
+ * aircraft (commit 6300e08 removed the explicit toggle from the launch
+ * bar and HUD). Callers still pass `forceCargo` to the setup modal.
  */
 export function RouteLaunchBar({
-  origin, dest, onCancel, onLaunch, isCargo, setIsCargo,
+  origin, dest, onCancel, onLaunch,
 }: RouteLaunchBarProps) {
   const player = useGame(selectPlayer);
   if (!player) return null;

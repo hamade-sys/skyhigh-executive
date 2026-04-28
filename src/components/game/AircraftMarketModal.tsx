@@ -561,6 +561,19 @@ function AircraftRow({
     : 0;
   const isPreOrderOnly = announcementOpen && !released;
 
+  // Count of this spec already in the player's fleet (excluding
+  // retired). Surfaced as a badge so the player knows at a glance
+  // whether they're scaling an existing fleet line or opening a new
+  // type — relevant for fleet-variety maintenance overhead, training,
+  // and the Global-Network doctrine penalty.
+  const ownedCount = useGame((s) => {
+    const player = s.teams.find((t) => t.id === s.playerTeamId);
+    if (!player) return 0;
+    return player.fleet.filter(
+      (f) => f.specId === spec.id && f.status !== "retired",
+    ).length;
+  });
+
   return (
     <div
       className={cn(
@@ -648,7 +661,7 @@ function AircraftRow({
             {fmtMoney(spec.buyPriceUsd)}
           </span>
           <span className="text-[0.6875rem] tabular text-ink-muted">
-            or {fmtMoney(spec.leasePerQuarterUsd)}/Q lease
+            list price
           </span>
           {/* Inventory + pre-order signal — visible without expanding.
               Three states:
@@ -656,6 +669,16 @@ function AircraftRow({
                 Available N · queue M (released, partial inventory)
                 Sold out · queue M (released, all this round's slots taken)
               */}
+          {/* Owned-count badge — appears whenever the player already
+              has at least one of this airframe in their fleet. Helps
+              them see whether a click here scales an existing fleet
+              line vs. introduces a new aircraft type (which carries
+              fleet-variety maintenance + crew training overhead). */}
+          {ownedCount > 0 && (
+            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-primary bg-[rgba(20,53,94,0.08)] px-1.5 py-0.5 rounded">
+              You own {ownedCount}
+            </span>
+          )}
           {isPreOrderOnly ? (
             <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
               Pre-order · unlocks {fmtQuarter(spec.unlockQuarter)}
@@ -786,7 +809,21 @@ function ExpandedConfigurator({
                   : `${spec.cargoTonnes ?? 0}T`
               }
             />
-            <Stat label="List price" value={fmtMoney(spec.buyPriceUsd)} />
+            {/* Per-aircraft price — reflects engine + fuselage retrofits
+                live so the player sees Super-engine's +$23M land here
+                instead of having to advance to the next screen. The
+                delta column below shows the upgrade premium when
+                non-zero. */}
+            <Stat
+              label={leaseOnly ? "Lease / Q" : "Per aircraft"}
+              value={leaseOnly
+                ? fmtMoney(leasePerPlanePerQ)
+                : fmtMoney(buyPerPlane)}
+              delta={!leaseOnly && upgradePerPlane > 0
+                ? `+${fmtMoney(upgradePerPlane)} retrofit`
+                : undefined}
+              positive={false}
+            />
           </div>
         );
       })()}
@@ -889,7 +926,13 @@ function ExpandedConfigurator({
       {/* Live totals + advance buttons */}
       <div className="rounded-md border border-line bg-surface px-3 py-2.5 flex items-center justify-between gap-3">
         <div className="text-[0.75rem] text-ink-muted leading-tight">
-          {!leaseOnly && (
+          {leaseOnly ? (
+            <div>
+              Lease total{" "}
+              <span className="text-ink font-mono font-semibold">{fmtMoney(leaseTotal)}/Q</span>
+              <span className="text-ink-muted"> · seat config on next screen</span>
+            </div>
+          ) : (
             <div>
               Buy total{" "}
               <span className="text-ink font-mono font-semibold">{fmtMoney(buyTotal)}</span>
@@ -898,26 +941,22 @@ function ExpandedConfigurator({
                   {" "}({fmtMoney(buyPerPlane)} × {quantity})
                 </span>
               )}
+              <span className="text-ink-muted"> · seat config on next screen</span>
             </div>
           )}
-          <div className={leaseOnly ? "" : "mt-0.5"}>
-            Lease total{" "}
-            <span className="text-ink font-mono font-semibold">{fmtMoney(leaseTotal)}/Q</span>
-            <span className="text-ink-muted"> · seat config on next screen</span>
-          </div>
         </div>
         <div className="flex flex-col gap-1.5 shrink-0">
-          {!leaseOnly && (
-            <Button size="sm" variant="primary" onClick={() => go("buy")}>
-              Buy →
-            </Button>
-          )}
+          {/* Buy section is buy-only. Lease lives entirely in the
+              dedicated Lease tab now — having both options on the same
+              row was creating a class of "I clicked Lease and nothing
+              happened" bugs because not every spec is lease-eligible.
+              Single primary action per surface = no silent failures. */}
           <Button
             size="sm"
-            variant={leaseOnly ? "primary" : "secondary"}
-            onClick={() => go("lease")}
+            variant="primary"
+            onClick={() => go(leaseOnly ? "lease" : "buy")}
           >
-            Lease →
+            {leaseOnly ? "Lease →" : "Buy →"}
           </Button>
         </div>
       </div>

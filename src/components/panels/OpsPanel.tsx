@@ -187,6 +187,13 @@ export function OpsPanel() {
         </div>
       )}
 
+      {/* Aircraft insurance — recurring quarterly cost, lives here
+          alongside the spend sliders rather than buried in Fleet panel.
+          Premium is paid each quarter as % of fleet market value. On
+          mandatory retirement, insurance pays out coverage × 75% of
+          book value. */}
+      <InsurancePicker />
+
       {pendingDecisions.length > 0 && (
         <div className="rounded-md border border-line bg-surface-2/50 p-3 text-[0.8125rem] text-ink-2">
           {pendingDecisions.length} board decision{pendingDecisions.length > 1 ? "s" : ""} still open this quarter — handle them in the
@@ -234,6 +241,56 @@ export function OpsPanel() {
           </Button>
         </ModalFooter>
       </Modal>
+    </div>
+  );
+}
+
+function InsurancePicker() {
+  const player = useGame(selectPlayer);
+  const setInsurancePolicy = useGame((g) => g.setInsurancePolicy);
+  if (!player) return null;
+  const insuranceMeta = {
+    none:   { coverage: "0%",  premium: "0%/Q" },
+    low:    { coverage: "30%", premium: "0.15%/Q" },
+    medium: { coverage: "50%", premium: "0.30%/Q" },
+    high:   { coverage: "80%", premium: "0.50%/Q" },
+  };
+  return (
+    <div className="rounded-md border border-line bg-surface p-3">
+      <div className="flex items-baseline justify-between mb-2">
+        <div>
+          <div className="font-semibold text-ink text-[0.9375rem]">Aircraft insurance</div>
+          <div className="text-[0.75rem] text-ink-muted">
+            Premium paid quarterly as % of fleet market value
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {(["none", "low", "medium", "high"] as const).map((lvl) => {
+          const m = insuranceMeta[lvl];
+          const active = player.insurancePolicy === lvl;
+          return (
+            <button
+              key={lvl}
+              onClick={() => setInsurancePolicy(lvl)}
+              className={cn(
+                "rounded-md border px-2 py-1.5 capitalize transition-colors",
+                active
+                  ? "border-primary bg-[rgba(20,53,94,0.06)] text-ink font-medium"
+                  : "border-line text-ink-2 hover:bg-surface-hover",
+              )}
+            >
+              <div className="text-[0.75rem] font-medium">{lvl}</div>
+              <div className="text-[0.625rem] text-ink-muted">
+                {m.premium} · {m.coverage}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
+        On mandatory retirement, insurance pays out coverage × 75% of book value.
+      </div>
     </div>
   );
 }

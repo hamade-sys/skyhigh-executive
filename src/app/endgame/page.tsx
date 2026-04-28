@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
 import { fmtMoney, fmtPct, fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
-import { computeAirlineValue, fleetCount, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
+import { computeAirlineValue, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { Award, TrendingUp, TrendingDown, Trophy, Sparkles } from "lucide-react";
@@ -404,7 +404,7 @@ export default function Endgame() {
         {(() => {
           type Highlight = {
             quarter: number;
-            kind: "peak-bv" | "best-q" | "worst-q" | "milestone" | "first-route";
+            kind: "peak-bv" | "best-q" | "worst-q" | "milestone" | "first-route" | "comeback" | "debt-stress" | "near-collapse";
             title: string;
             detail: string;
             tone: "pos" | "neg" | "info";
@@ -435,6 +435,74 @@ export default function Endgame() {
                 tone: "neg",
               });
             }
+          }
+
+          // ── Biggest comeback — find the longest run-up in airline
+          //    value (or cash) starting from a trough. We walk the
+          //    quarterly cash series, track the lowest cash position,
+          //    and report the largest peak-to-trough recovery if it's
+          //    meaningful (>$50M and spans >= 2Q).
+          const cashSeries = player.financialsByQuarter
+            .map((q) => ({ q: q.quarter, c: q.cash }));
+          if (cashSeries.length >= 3) {
+            let troughIdx = 0;
+            let bestComeback = { from: 0, to: 0, gain: 0 };
+            for (let i = 1; i < cashSeries.length; i++) {
+              if (cashSeries[i].c < cashSeries[troughIdx].c) troughIdx = i;
+              const gain = cashSeries[i].c - cashSeries[troughIdx].c;
+              if (gain > bestComeback.gain) {
+                bestComeback = { from: troughIdx, to: i, gain };
+              }
+            }
+            if (bestComeback.gain >= 50_000_000 && bestComeback.to > bestComeback.from) {
+              const span = bestComeback.to - bestComeback.from;
+              highlights.push({
+                quarter: cashSeries[bestComeback.to].q,
+                kind: "comeback",
+                title: "Biggest comeback",
+                detail: `Recovered ${fmtMoney(bestComeback.gain)} of cash in ${span}Q (from ${fmtQuarter(cashSeries[bestComeback.from].q)})`,
+                tone: "pos",
+              });
+            }
+          }
+
+          // ── Highest debt-stress moment — peak debt-to-airline-value
+          //    ratio. Only worth surfacing when it crossed the
+          //    "covenant pressure" zone (≥50%).
+          const stressSeries = player.financialsByQuarter
+            .map((q) => {
+              // Approximate airline value from cash-debt+brandValue.
+              // computeAirlineValue would be more accurate but needs
+              // the team object; this is close enough for retrospect.
+              const av = q.cash - q.debt + q.brandValue * 1_000_000;
+              return { q: q.quarter, ratio: av > 0 ? q.debt / av : 0 };
+            });
+          if (stressSeries.length > 0) {
+            const peak = stressSeries.reduce((acc, x) => x.ratio > acc.ratio ? x : acc, stressSeries[0]);
+            if (peak.ratio >= 0.5) {
+              highlights.push({
+                quarter: peak.q,
+                kind: "debt-stress",
+                title: "Highest debt stress",
+                detail: `Debt ratio peaked at ${(peak.ratio * 100).toFixed(0)}% — covenant zone`,
+                tone: "neg",
+              });
+            }
+          }
+
+          // ── Near-collapse — any quarter where cash went deeply
+          //    negative (RCF drawn aggressively).
+          const negativeCashLow = cashSeries
+            .filter((x) => x.c < -50_000_000)
+            .sort((a, b) => a.c - b.c)[0];
+          if (negativeCashLow) {
+            highlights.push({
+              quarter: negativeCashLow.q,
+              kind: "near-collapse",
+              title: "Cash crisis",
+              detail: `Cash bottomed out at ${fmtMoney(negativeCashLow.c)} — overdraft territory`,
+              tone: "neg",
+            });
           }
 
           // Peak brand value quarter

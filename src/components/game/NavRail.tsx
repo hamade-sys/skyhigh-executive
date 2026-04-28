@@ -91,6 +91,10 @@ export function NavRail() {
   // happening this quarter. Resets when the quarter changes.
   const [tickerIndex, setTickerIndex] = useState(0);
   useEffect(() => {
+    // Reset ticker when the quarter changes — intentional state
+    // sync against an external value (the game clock), not a
+    // cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTickerIndex(0);
   }, [currentQuarter]);
   useEffect(() => {

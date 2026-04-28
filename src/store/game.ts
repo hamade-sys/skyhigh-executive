@@ -13,6 +13,7 @@ import {
   effectiveBorrowingRate,
   maxBorrowingUsd,
   maxRouteDailyFrequency,
+  odKey,
   runQuarterClose,
   serializeEffect,
   type QuarterCloseResult,
@@ -72,6 +73,10 @@ import {
   wouldExceedLeaseCap,
 } from "@/lib/lease";
 import { pickLenderName } from "@/lib/bank-names";
+import {
+  hubPriceUsd,
+  ONBOARDING_TOTAL_BUDGET_USD,
+} from "@/lib/hub-pricing";
 import type {
   AirportBid,
   AirportLease,
@@ -117,7 +122,10 @@ export interface GameStore extends GameState {
     code: string;
     doctrine: DoctrineId;
     hubCode: string;
-    teamCount?: number;        // 2..10, default 5
+    /** Number of rival bots to seed alongside the player. Defaults
+     *  to 5. Facilitator-only setting now — not exposed in player
+     *  onboarding UI. */
+    teamCount?: number;
 
     // Optional Q1 Brand Building profile (defaults applied if omitted)
     tagline?: string;
@@ -127,9 +135,6 @@ export interface GameStore extends GameState {
     salaryPhilosophy?: "below" | "at" | "above";
     marketingLevel?: "low" | "medium" | "high" | "aggressive";
     csrTheme?: "environment" | "community" | "employees" | "none";
-
-    /** Simulated L0 rank (1-5) → cash injection + brand multiplier. */
-    l0Rank?: 1 | 2 | 3 | 4 | 5;
   }): void;
 
   setSliders(sliders: Partial<Sliders>): void;
@@ -748,7 +753,7 @@ export const useGame = create<GameStore>()(
         const {
           airlineName, code, doctrine, hubCode, teamCount = 5,
           tagline, marketFocus, geographicPriority, pricingPhilosophy,
-          salaryPhilosophy, marketingLevel, csrTheme, l0Rank,
+          salaryPhilosophy, marketingLevel, csrTheme,
         } = args;
 
         const player = makeStartingTeam({
@@ -770,21 +775,17 @@ export const useGame = create<GameStore>()(
             : salaryPhilosophy === "above" ? 3 : 2;
         }
 
-        // PRD §13.2 L0 cash injection based on presentation rank (1-5)
-        // 1st = +$80M, 2nd = +$60M, 3rd = +$40M, 4th = +$20M, 5th = +$0
-        const cashInjection = l0Rank === 1 ? 80_000_000
-          : l0Rank === 2 ? 60_000_000
-          : l0Rank === 3 ? 40_000_000
-          : l0Rank === 4 ? 20_000_000
-          : 0;
-        player.cashUsd = 150_000_000 + cashInjection;
-        // Brand pts multiplier: 10× / 7× / 5× / 3× / 2× baseline 50 (scaled down)
-        const brandBonus = l0Rank === 1 ? 20
-          : l0Rank === 2 ? 14
-          : l0Rank === 3 ? 10
-          : l0Rank === 4 ? 6
-          : 4;
-        player.brandPts = 50 + brandBonus;
+        // Hub-cost deduction. Player gets ONBOARDING_TOTAL_BUDGET ($350M
+        // = $150M base + $200M onboarding capital) and pays for their
+        // hub from that pool. Premium gateways (LHR/CDG/JFK/SFO/DXB)
+        // cost $300M; T1 hubs $200M; T2 $100M; T3 $50M. Replaces the
+        // old L0 presentation-rank scoring system entirely — that
+        // mechanic is now facilitator-driven via direct cash/brand
+        // adjustments from the admin panel if a session wants it.
+        const hubCity = CITIES_BY_CODE[hubCode];
+        const hubCost = hubCity ? hubPriceUsd(hubCity) : 0;
+        player.cashUsd = ONBOARDING_TOTAL_BUDGET_USD - hubCost;
+        player.brandPts = 50;
 
         // Seed: give player 2× A320 to start. Onboarding *is* the PRD's Q1
         // brand-building phase — the player commits to doctrine, market focus,
@@ -1014,17 +1015,12 @@ export const useGame = create<GameStore>()(
           olympicHostCode,
         });
 
-        if (l0Rank && l0Rank <= 3) {
+        // Welcome toast — surface the hub purchase + remaining cash
+        // so the player understands the trade-off they just made.
+        if (hubCity) {
           toast.accent(
-            `L0 Brand Building · Rank ${l0Rank}`,
-            `Cash injection +${fmtMoneyPlain(cashInjection)} · Brand +${brandBonus}`,
-          );
-        } else if (l0Rank) {
-          toast.info(
-            `L0 Brand Building · Rank ${l0Rank}`,
-            cashInjection > 0
-              ? `Cash injection +${fmtMoneyPlain(cashInjection)}`
-              : "No cash injection — make your Q2 decisions count.",
+            `${hubCity.name} (${hubCity.code}) hub secured`,
+            `Hub cost ${fmtMoneyPlain(hubCost)} · ${fmtMoneyPlain(player.cashUsd)} cash to operate.`,
           );
         }
       },
@@ -2551,11 +2547,28 @@ export const useGame = create<GameStore>()(
 
       closeRoute: (routeId) => {
         const s = get();
+        // Preserve closed-route history. Earlier this dropped the
+        // route from the team's array entirely, so reports / endgame /
+        // analytics lost any record of routes that ever existed.
+        // Now we set status: "closed" and unlink the aircraft. Active-
+        // route filters across the codebase already exclude
+        // status === "closed", so this is a no-op for live calculations
+        // — but the row stays in financialsByQuarter and can be shown
+        // in retro views.
         set({
           teams: s.teams.map((t) =>
             t.id !== s.playerTeamId ? t : {
               ...t,
-              routes: t.routes.filter((r) => r.id !== routeId),
+              routes: t.routes.map((r) =>
+                r.id === routeId
+                  ? {
+                      ...r,
+                      status: "closed" as const,
+                      aircraftIds: [],
+                      dailyFrequency: 0,
+                    }
+                  : r,
+              ),
               fleet: t.fleet.map((f) => f.routeId === routeId
                 ? { ...f, status: "active", routeId: null } : f),
             },
@@ -2879,14 +2892,23 @@ export const useGame = create<GameStore>()(
         // Enqueue deferred event if the option has one
         if (option.effect.deferred) {
           const d = option.effect.deferred;
+          // Resolve target quarter — `lagQuarters` (relative to the
+          // decision quarter) is preferred over absolute `quarter`
+          // because it self-heals if the scenario quarter moves.
+          // Hard-coded plot twists at engine.ts:2806 used absolute
+          // quarters that drifted out of sync with the 40-round
+          // campaign; this is the correct architecture.
+          const targetQuarter = typeof d.lagQuarters === "number"
+            ? s.currentQuarter + d.lagQuarters
+            : (d.quarter ?? s.currentQuarter + 1);
           const ev: DeferredEvent = {
             id: mkId("ev"),
             sourceScenario: scenarioId as ScenarioDecision["scenarioId"],
             sourceOption: optionId,
-            targetQuarter: d.quarter,
+            targetQuarter,
             probability: d.probability ?? 1,
             effectJson: serializeEffect(d.effect),
-            noteAtQueue: `${scenario.title} · Option ${optionId}`,
+            noteAtQueue: d.note ?? `${scenario.title} · Option ${optionId}`,
           };
           updated.deferredEvents = [...(updated.deferredEvents ?? []), ev];
         }
@@ -3515,7 +3537,12 @@ export const useGame = create<GameStore>()(
           worldCupHostCode: s.worldCupHostCode,
           olympicHostCode: s.olympicHostCode,
           allTeams: s.teams,
-          airportSlots: s.airportSlots,
+          // P0 fix: thread the post-early-auction slot pool. Earlier this
+          // was `s.airportSlots` (the pre-auction state), so slots
+          // awarded in the early auction were invisible here AND to the
+          // late auction below — capacity could be sold twice within
+          // the same quarter close.
+          airportSlots: slotsAfterEarlyAuction,
         });
 
         // Decrement remaining quarters on each contract; drop expired
@@ -3742,6 +3769,33 @@ export const useGame = create<GameStore>()(
         // believably without us simulating their full network.
         const fuelStress = Math.max(0, (s.fuelIndex - 100) / 100);  // 0 at index 100, 0.5 at 150
         const quarterMaturity = Math.min(1, (s.currentQuarter - 1) / 12);  // ramps up over Y1-Y3
+
+        // ── Wave 3.3 — Rivals' hybrid economics ────────────
+        // Earlier rival revenue was pure procedural (doctrine baseline ×
+        // brand × maturity × noise) — completely decoupled from the
+        // player's network. So if the player carpet-bombed every rival
+        // hub with overlapping routes, the rival's leaderboard line
+        // didn't twitch.
+        //
+        // Now we couple two ways:
+        //   (a) Network overlap pressure  — a rival flying the same
+        //       OD as the player loses revenue (player+rival split the
+        //       OD pool). Endpoint-only overlap is a weaker signal.
+        //   (b) Hub-slot dominance        — the more slots the player
+        //       holds at the rival's primary hub, the more the rival
+        //       gets squeezed at home base.
+        const playerTeamForRivals = s.teams.find((t) => t.isPlayer);
+        const playerActiveRoutes = playerTeamForRivals?.routes.filter(
+          (rt) => rt.status === "active",
+        ) ?? [];
+        const playerOdSet = new Set<string>();
+        const playerEndpointSet = new Set<string>();
+        for (const rt of playerActiveRoutes) {
+          playerOdSet.add(odKey(rt.originCode, rt.destCode));
+          playerEndpointSet.add(rt.originCode);
+          playerEndpointSet.add(rt.destCode);
+        }
+
         const rivals = s.teams.filter((t) => !t.isPlayer).map((r) => {
           // Stable per-team noise so the rival has a "personality" curve
           const seed = (r.id.charCodeAt(0) * 31 + s.currentQuarter * 7) % 100;
@@ -3769,7 +3823,48 @@ export const useGame = create<GameStore>()(
           // Brand pts amplify revenue (50 brand = 1.0x, 80 = 1.15x, 100 = 1.25x)
           const brandMul = 0.85 + (r.brandPts / 100) * 0.4;
           const maturityMul = 1 + quarterMaturity * 0.45;
-          const revenue = baseRevenue * brandMul * maturityMul * (1 + personalityNoise);
+
+          // Network overlap signals — bind procedural revenue to the
+          // rival's actual route list against the player's actual
+          // routes. Skipped if the rival has no recorded routes (early
+          // game / save migration).
+          const rivalActiveRoutes = r.routes.filter((rt) => rt.status === "active");
+          let directOverlap = 0;     // rival flies same OD as player
+          let endpointOverlap = 0;   // rival just touches a player city
+          for (const rt of rivalActiveRoutes) {
+            const k = odKey(rt.originCode, rt.destCode);
+            if (playerOdSet.has(k)) directOverlap += 1;
+            else if (playerEndpointSet.has(rt.originCode) || playerEndpointSet.has(rt.destCode)) {
+              endpointOverlap += 1;
+            }
+          }
+          const totalRivalRoutes = Math.max(1, rivalActiveRoutes.length);
+          const directShare = directOverlap / totalRivalRoutes;
+          const endpointShare = endpointOverlap / totalRivalRoutes;
+          // Direct overlap = strong pressure, endpoint = weak.
+          // Capped so a player-everywhere strategy can't zero a rival.
+          const overlapPenalty = Math.max(
+            0.78,
+            1 - directShare * 0.10 - endpointShare * 0.04,
+          );
+
+          // Hub-slot dominance — when the player holds more slots at
+          // the rival's primary hub than the rival does themselves,
+          // the rival gets squeezed at home (gates lost, peak waves
+          // skewed). Capped at −12% even at 100% player dominance.
+          let hubPenalty = 1.0;
+          if (playerTeamForRivals && r.hubCode) {
+            const playerSlots = playerTeamForRivals.airportLeases?.[r.hubCode]?.slots ?? 0;
+            const rivalSlots = r.airportLeases?.[r.hubCode]?.slots ?? 0;
+            const totalSlots = playerSlots + rivalSlots;
+            if (totalSlots > 0) {
+              const playerShare = playerSlots / totalSlots;
+              hubPenalty = 1 - Math.min(0.12, playerShare * 0.20);
+            }
+          }
+
+          const revenue = baseRevenue * brandMul * maturityMul *
+            (1 + personalityNoise) * overlapPenalty * hubPenalty;
           const fuelDrag = fuelStress * fuelSensitivity * revenue * 0.18;
           const adjustedMargin = marginPct - fuelStress * 0.04;
           const netProfit = revenue * adjustedMargin - fuelDrag;
@@ -3881,7 +3976,11 @@ export const useGame = create<GameStore>()(
         // from airportSlots (old save migration gap), seed it with a
         // fresh tier-default pool so the bid actually resolves instead
         // of being silently skipped by resolveSlotAuctions.
-        const slotsForAuction = { ...(s.airportSlots ?? {}) };
+        //
+        // P0 fix: start the late-auction pool from `slotsAfterEarlyAuction`
+        // not `s.airportSlots`. Otherwise capacity awarded in the early
+        // auction is still "available" here and gets re-awarded.
+        const slotsForAuction = { ...(slotsAfterEarlyAuction ?? {}) };
         const fresh = makeInitialAirportSlots();
         for (const code of Object.keys(bidsByAirport)) {
           if (!slotsForAuction[code] && fresh[code]) {
@@ -5392,16 +5491,20 @@ export const useGame = create<GameStore>()(
         ];
         if (option.effect.deferred) {
           const d = option.effect.deferred;
+          // Match submitDecision's lag/quarter resolution rules.
+          const targetQuarter = typeof d.lagQuarters === "number"
+            ? s.currentQuarter + d.lagQuarters
+            : (d.quarter ?? s.currentQuarter + 1);
           updated.deferredEvents = [
             ...(updated.deferredEvents ?? []),
             {
               id: mkId("ev"),
               sourceScenario: scenarioId as ScenarioDecision["scenarioId"],
               sourceOption: newOptionId,
-              targetQuarter: d.quarter,
+              targetQuarter,
               probability: d.probability ?? 1,
               effectJson: serializeEffect(d.effect),
-              noteAtQueue: `${scenario.title} · Option ${newOptionId} (admin override)`,
+              noteAtQueue: d.note ?? `${scenario.title} · Option ${newOptionId} (admin override)`,
             },
           ];
         }

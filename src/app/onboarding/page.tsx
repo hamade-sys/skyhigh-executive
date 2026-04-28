@@ -1,18 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CITIES } from "@/data/cities";
 import { DOCTRINES } from "@/data/doctrines";
 import { fmtMoney } from "@/lib/format";
 import { Badge, Button, Card, CardBody, Input } from "@/components/ui";
 import { useGame } from "@/store/game";
 import { cn } from "@/lib/cn";
+import {
+  hubPickableCities,
+  hubPriceUsd,
+  hubTierLabel,
+  ONBOARDING_TOTAL_BUDGET_USD,
+  PREMIUM_HUB_CODES,
+} from "@/lib/hub-pricing";
 import type { DoctrineId, Team } from "@/types/game";
 
-const TIER1_HUBS = CITIES
-  .filter((c) => c.tier === 1)
-  .sort((a, b) => a.name.localeCompare(b.name));
+// L0 presentation rank + team count are facilitator-only now —
+// removed from the player onboarding so the eight player-driven
+// strategic choices stand on their own without simulation framing.
+// teamCount defaults via store (5); facilitator dashboard tunes it.
 
 const STEP_COUNT = 9;
 
@@ -28,28 +36,25 @@ export default function Onboarding() {
   const startNewGame = useGame((s) => s.startNewGame);
 
   const [step, setStep] = useState(0);
-  // Step 1
+  // Step 1 — airline identity
   const [airlineName, setAirlineName] = useState("");
   const [code, setCode] = useState("");
   const [tagline, setTagline] = useState("");
-  // Step 2
+  // Step 2 — doctrine
   const [doctrine, setDoctrine] = useState<DoctrineId>("premium-service");
-  // Step 3
+  // Step 3 — hub (now with cost-tier deduction)
   const [hubCode, setHubCode] = useState("LHR");
-  // Step 4
+  // Step 4 — strategy declaration (market + geo)
   const [marketFocus, setMarketFocus] = useState<MarketFocus>("balanced");
   const [geoPriority, setGeoPriority] = useState<GeographicPriority>("global");
-  // Step 5
+  // Step 5 — pricing
   const [pricing, setPricing] = useState<PricingPhilosophy>("standard");
-  // Step 6
+  // Step 6 — salary
   const [salary, setSalary] = useState<SalaryPhilosophy>("at");
-  // Step 7
+  // Step 7 — marketing
   const [marketing, setMarketing] = useState<MarketingLevel>("medium");
-  // Step 8
+  // Step 8 — CSR + final review (combined; L0/teamCount removed)
   const [csr, setCsr] = useState<CsrTheme>("none");
-  // Step 9
-  const [teamCount, setTeamCount] = useState(5);
-  const [presentationRank, setPresentationRank] = useState<1 | 2 | 3 | 4 | 5>(3);
 
   const canAdvance =
     (step === 0 && airlineName.trim().length > 2 && code.trim().length >= 2) ||
@@ -61,7 +66,6 @@ export default function Onboarding() {
       code: code.trim().toUpperCase(),
       doctrine,
       hubCode,
-      teamCount,
       tagline: tagline.trim(),
       marketFocus,
       geographicPriority: geoPriority,
@@ -69,7 +73,6 @@ export default function Onboarding() {
       salaryPhilosophy: salary,
       marketingLevel: marketing,
       csrTheme: csr,
-      l0Rank: presentationRank,
     });
     router.push("/");
   }
@@ -202,46 +205,10 @@ export default function Onboarding() {
           )}
 
           {step === 2 && (
-            <Step title="Pick your hub" sub="Tier-1 airports. +18% attractiveness on all routes through this airport.">
-              <Card>
-                <CardBody
-                  role="radiogroup"
-                  aria-label="Hub airport"
-                  className="max-h-96 overflow-auto grid grid-cols-1 md:grid-cols-2 gap-2 p-3"
-                >
-                  {TIER1_HUBS.map((city) => {
-                    const active = hubCode === city.code;
-                    return (
-                      <button
-                        key={city.code}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        aria-label={`${city.name} (${city.code}), ${city.regionName}, attractiveness ×${city.amplifier.toFixed(1)}`}
-                        onClick={() => setHubCode(city.code)}
-                        className={cn(
-                          "flex items-center justify-between rounded-md border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
-                          active
-                            ? "border-primary bg-[rgba(20,53,94,0.04)]"
-                            : "border-line hover:bg-surface-hover",
-                        )}
-                      >
-                        <div>
-                          <div className="font-medium text-ink text-[0.9375rem]">{city.name}</div>
-                          <div className="text-[0.75rem] text-ink-muted">{city.regionName}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-mono text-[0.8125rem] text-primary">{city.code}</div>
-                          <div className="text-[0.6875rem] text-ink-muted tabular">
-                            ×{city.amplifier.toFixed(1)}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </CardBody>
-              </Card>
-            </Step>
+            <HubPickerStep
+              hubCode={hubCode}
+              setHubCode={setHubCode}
+            />
           )}
 
           {step === 3 && (
@@ -302,10 +269,10 @@ export default function Onboarding() {
                 className="grid grid-cols-2 md:grid-cols-4 gap-2"
               >
                 {([
-                  { v: "budget",   lbl: "Budget",          sub: "−20% fares, volume play" },
+                  { v: "budget",   lbl: "Budget",          sub: "Lower fares · volume play" },
                   { v: "standard", lbl: "Standard",        sub: "Market rate" },
-                  { v: "premium",  lbl: "Premium",         sub: "+25% fares, lower volume" },
-                  { v: "ultra",    lbl: "Ultra-premium",   sub: "+60% fares, luxury routes" },
+                  { v: "premium",  lbl: "Premium",         sub: "Above-market fares · brand-led" },
+                  { v: "ultra",    lbl: "Ultra-premium",   sub: "Top-of-market positioning" },
                 ] as const).map((p) => (
                   <PillButton
                     key={p.v}
@@ -329,9 +296,9 @@ export default function Onboarding() {
                 className="grid grid-cols-3 gap-2"
               >
                 {([
-                  { v: "below", lbl: "Below market",  sub: "−25% wages · risk" },
-                  { v: "at",    lbl: "At market",     sub: "Baseline" },
-                  { v: "above", lbl: "Above market",  sub: "+10% wages · stability" },
+                  { v: "below", lbl: "Below market",  sub: "Cheaper · higher attrition risk" },
+                  { v: "at",    lbl: "At market",     sub: "Industry standard" },
+                  { v: "above", lbl: "Above market",  sub: "Premium pay · loyal workforce" },
                 ] as const).map((p) => (
                   <PillButton
                     key={p.v}
@@ -355,10 +322,10 @@ export default function Onboarding() {
                 className="grid grid-cols-2 md:grid-cols-4 gap-2"
               >
                 {([
-                  { v: "low",        lbl: "Low",         sub: "3% of revenue" },
-                  { v: "medium",     lbl: "Medium",      sub: "6% of revenue" },
-                  { v: "high",       lbl: "High",        sub: "10% of revenue" },
-                  { v: "aggressive", lbl: "Aggressive",  sub: "15% of revenue" },
+                  { v: "low",        lbl: "Low",         sub: "Tactical, brand grows slowly" },
+                  { v: "medium",     lbl: "Medium",      sub: "Steady brand build" },
+                  { v: "high",       lbl: "High",        sub: "Brand-led growth" },
+                  { v: "aggressive", lbl: "Aggressive",  sub: "Maximum brand velocity" },
                 ] as const).map((p) => (
                   <PillButton
                     key={p.v}
@@ -402,12 +369,22 @@ export default function Onboarding() {
           )}
 
           {step === 8 && (
-            <Step title="Final board review" sub="L0 presentation outcome + simulation scale.">
+            <Step
+              title="Final review"
+              sub="Confirm the strategic profile your airline launches with. Cash on day one is what's left of your $350M budget after the hub purchase."
+            >
               <Card className="mb-5">
                 <CardBody>
                   <Row k="Airline" v={`${airlineName} (${code})${tagline ? ` · "${tagline}"` : ""}`} />
                   <Row k="Doctrine" v={DOCTRINES.find((d) => d.id === doctrine)?.name ?? ""} />
-                  <Row k="Hub" v={`${CITIES.find((c) => c.code === hubCode)?.name} · ${hubCode}`} />
+                  <Row
+                    k="Hub"
+                    v={(() => {
+                      const hubCity = CITIES.find((c) => c.code === hubCode);
+                      if (!hubCity) return "—";
+                      return `${hubCity.name} · ${hubCity.code} (${hubTierLabel(hubCity)} · ${fmtMoney(hubPriceUsd(hubCity))})`;
+                    })()}
+                  />
                   <Row k="Market focus" v={marketFocus} />
                   <Row k="Geography" v={geoPriority.replace("-", " ")} />
                   <Row k="Pricing" v={pricing} />
@@ -417,60 +394,22 @@ export default function Onboarding() {
                 </CardBody>
               </Card>
 
-              <div className="mb-5">
-                <SubLabel id="l0-rank-label">L0 Brand Building — presentation rank</SubLabel>
-                <div
-                  role="radiogroup"
-                  aria-labelledby="l0-rank-label"
-                  className="grid grid-cols-5 gap-1.5"
-                >
-                  {([1, 2, 3, 4, 5] as const).map((r) => {
-                    const injections = ["+$80M", "+$60M", "+$40M", "+$20M", "$0"];
-                    const ord = r === 1 ? "1st" : r === 2 ? "2nd" : r === 3 ? "3rd" : r === 4 ? "4th" : "5th";
-                    return (
-                      <PillButton
-                        key={r}
-                        active={presentationRank === r}
-                        onClick={() => setPresentationRank(r)}
-                        ariaLabel={`${ord} place, ${injections[r - 1]} injection`}
-                      >
-                        <div className="font-display text-[1.125rem]">{r}<span aria-hidden="true" className="text-[0.625rem] text-ink-muted ml-1">
-                          {r === 1 ? "st" : r === 2 ? "nd" : r === 3 ? "rd" : "th"}
-                        </span></div>
-                        <div className="text-[0.6875rem] text-ink-muted mt-0.5">{injections[r - 1]}</div>
-                      </PillButton>
-                    );
-                  })}
+              <div className="rounded-md border border-line bg-surface-2/40 px-4 py-3 text-[0.8125rem] text-ink-2 leading-relaxed">
+                <div className="font-semibold text-ink mb-1">Starting position</div>
+                <div>
+                  Operating cash:{" "}
+                  <span className="tabular font-mono text-ink font-semibold">
+                    {(() => {
+                      const hubCity = CITIES.find((c) => c.code === hubCode);
+                      const cost = hubCity ? hubPriceUsd(hubCity) : 0;
+                      return fmtMoney(ONBOARDING_TOTAL_BUDGET_USD - cost);
+                    })()}
+                  </span>
+                  {" "}· 2× A320 starter aircraft · Brand 50.
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted mt-2">
-                  Rank by facilitator judgement of your Q1 presentation. In a live SkyForce session, this is set by the scoring panel; set it honestly here to calibrate your Q2 start.
+                <div className="text-[0.6875rem] text-ink-muted mt-1">
+                  Total budget {fmtMoney(ONBOARDING_TOTAL_BUDGET_USD)} less hub purchase cost. Rivals and tournament hosts are seeded by the facilitator.
                 </div>
-              </div>
-
-              <div>
-                <SubLabel id="team-count-label">Number of teams in simulation</SubLabel>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={2}
-                    max={10}
-                    value={teamCount}
-                    onChange={(e) => setTeamCount(parseInt(e.target.value, 10))}
-                    aria-labelledby="team-count-label"
-                    aria-valuemin={2}
-                    aria-valuemax={10}
-                    aria-valuenow={teamCount}
-                    aria-valuetext={`${teamCount} team${teamCount === 1 ? "" : "s"}`}
-                    className="flex-1 accent-primary"
-                  />
-                  <span aria-hidden="true" className="tabular font-mono text-ink text-[0.9375rem] w-6 text-right">{teamCount}</span>
-                </div>
-              </div>
-
-              <div className="mt-6 text-[0.75rem] text-ink-muted">
-                Starting capital: {fmtMoney(150_000_000)} seed +{" "}
-                {presentationRank === 1 ? "$80M" : presentationRank === 2 ? "$60M"
-                  : presentationRank === 3 ? "$40M" : presentationRank === 4 ? "$20M" : "$0"} L0 injection · 2× A320s
               </div>
             </Step>
           )}
@@ -575,6 +514,219 @@ function Row({ k, v }: { k: string; v: string }) {
     <div className="flex items-baseline justify-between py-2 border-b border-line last:border-0">
       <span className="text-[0.8125rem] uppercase tracking-wider text-ink-muted">{k}</span>
       <span className="text-ink font-medium capitalize text-right truncate max-w-[60%]">{v}</span>
+    </div>
+  );
+}
+
+/**
+ * Hub picker step — replaces the old tier-1-only list with a global
+ * hub marketplace organised by region, with explicit pricing tiers
+ * and a live cash-budget readout.
+ *
+ * Pricing model:
+ *   $300M — Premium gateways (LHR / CDG / JFK / SFO / DXB)
+ *   $200M — Tier-1 hubs
+ *   $100M — Tier-2 hubs
+ *    $50M — Tier-3 hubs
+ *
+ * Player budget = $350M total ($150M base + $200M onboarding capital).
+ * Selected hub price is deducted; remaining cash funds Q1-Q2 ops. The
+ * trade-off: bigger hub = bigger market but less cash to operate;
+ * smaller hub = thinner market but more runway.
+ *
+ * Multipliers (×1.4 etc.) intentionally NOT shown — qualitative
+ * "Premium gateway / Tier 1 / Tier 2 / Tier 3" labels only, matching
+ * the doctrine-card style.
+ */
+function HubPickerStep({
+  hubCode, setHubCode,
+}: {
+  hubCode: string;
+  setHubCode: (code: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const pickable = useMemo(() => hubPickableCities(CITIES), []);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return pickable;
+    return pickable.filter(
+      (c) =>
+        c.code.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        c.regionName.toLowerCase().includes(q),
+    );
+  }, [query, pickable]);
+  // Group by region for the collapsed view, with premium gateways
+  // pulled out into their own section first.
+  const grouped = useMemo(() => {
+    const premium = filtered.filter((c) => PREMIUM_HUB_CODES.has(c.code));
+    const others = filtered.filter((c) => !PREMIUM_HUB_CODES.has(c.code));
+    const byRegion = new Map<string, typeof others>();
+    for (const c of others) {
+      const list = byRegion.get(c.regionName) ?? [];
+      list.push(c);
+      byRegion.set(c.regionName, list);
+    }
+    // Sort each region by tier asc then name
+    for (const list of byRegion.values()) {
+      list.sort((a, b) => {
+        if (a.tier !== b.tier) return a.tier - b.tier;
+        return a.name.localeCompare(b.name);
+      });
+    }
+    const regions = Array.from(byRegion.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return { premium, regions };
+  }, [filtered]);
+
+  const selected = pickable.find((c) => c.code === hubCode);
+  const selectedCost = selected ? hubPriceUsd(selected) : 0;
+  const remainingCash = ONBOARDING_TOTAL_BUDGET_USD - selectedCost;
+
+  return (
+    <Step
+      title="Pick your hub"
+      sub="Your home airport. Bigger hubs win on market size; smaller hubs leave more cash to operate Q1-Q2."
+    >
+      {/* Live cash budget at the top — updates as the player picks. */}
+      <div className="rounded-md border border-primary bg-[rgba(20,53,94,0.04)] px-4 py-3 mb-4">
+        <div className="flex items-baseline justify-between flex-wrap gap-2">
+          <div>
+            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+              Total budget
+            </div>
+            <div className="font-display text-[1.5rem] tabular text-ink leading-none mt-0.5">
+              {fmtMoney(ONBOARDING_TOTAL_BUDGET_USD)}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+              Hub cost
+            </div>
+            <div
+              className={cn(
+                "font-display text-[1.5rem] tabular leading-none mt-0.5",
+                selectedCost > 0 ? "text-negative" : "text-ink-muted",
+              )}
+            >
+              −{fmtMoney(selectedCost)}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+              Remaining cash
+            </div>
+            <div className="font-display text-[1.5rem] tabular text-positive leading-none mt-0.5">
+              {fmtMoney(remainingCash)}
+            </div>
+          </div>
+        </div>
+        {selected && (
+          <div className="text-[0.6875rem] text-ink-2 mt-2">
+            <strong className="text-ink">{selected.name}</strong> ({selected.code})
+            {" · "}{hubTierLabel(selected)}
+            {" · "}{selected.regionName}
+          </div>
+        )}
+      </div>
+
+      <Input
+        placeholder="Search by airport code, city, or region…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className="mb-3"
+      />
+
+      <div className="max-h-[28rem] overflow-auto space-y-4 pb-2">
+        {/* Premium gateways always lead */}
+        {grouped.premium.length > 0 && (
+          <RegionGroup
+            label="Premium gateways"
+            sub="$300M · global business benchmarks"
+            cities={grouped.premium}
+            hubCode={hubCode}
+            onPick={setHubCode}
+          />
+        )}
+        {grouped.regions.map(([regionName, cities]) => (
+          <RegionGroup
+            key={regionName}
+            label={regionName}
+            cities={cities}
+            hubCode={hubCode}
+            onPick={setHubCode}
+          />
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-center text-[0.8125rem] text-ink-muted py-8 italic">
+            No airports match that search.
+          </div>
+        )}
+      </div>
+    </Step>
+  );
+}
+
+function RegionGroup({
+  label, sub, cities, hubCode, onPick,
+}: {
+  label: string;
+  sub?: string;
+  cities: typeof CITIES;
+  hubCode: string;
+  onPick: (code: string) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline gap-2 mb-1.5">
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+          {label}
+        </div>
+        {sub && (
+          <div className="text-[0.625rem] text-ink-muted">{sub}</div>
+        )}
+      </div>
+      <div
+        role="radiogroup"
+        aria-label={`Hub airports — ${label}`}
+        className="grid grid-cols-1 md:grid-cols-2 gap-1.5"
+      >
+        {cities.map((city) => {
+          const active = hubCode === city.code;
+          const price = hubPriceUsd(city);
+          return (
+            <button
+              key={city.code}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={`${city.name} (${city.code}), ${city.regionName}, ${hubTierLabel(city)}, ${fmtMoney(price)}`}
+              onClick={() => onPick(city.code)}
+              className={cn(
+                "flex items-center justify-between rounded-md border px-3 py-2 text-left transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+                active
+                  ? "border-primary bg-[rgba(20,53,94,0.04)]"
+                  : "border-line hover:bg-surface-hover",
+              )}
+            >
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono text-[0.8125rem] text-primary">{city.code}</span>
+                  <span className="font-medium text-ink text-[0.875rem] truncate">{city.name}</span>
+                </div>
+                <div className="text-[0.6875rem] text-ink-muted truncate">
+                  {hubTierLabel(city)}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="tabular font-mono text-[0.875rem] text-ink font-semibold">
+                  {fmtMoney(price)}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

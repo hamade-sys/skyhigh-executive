@@ -71,7 +71,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
 
   const isOpen = open && !!(origin && dest);
 
-  // Reset + auto-pick a viable plane when the modal opens
+  // Reset + auto-pick a viable plane when the modal opens. All the
+  // setState calls below are an intentional sync against the modal's
+  // open transition (an external trigger), not a render-cascading
+  // pattern — the effect only fires on isOpen / origin / dest change.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!isOpen || !player || !origin || !dest) return;
     const dist = distanceBetween(origin, dest);
@@ -115,6 +119,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     setBidPrices({});
     setBidSlots({});
   }, [isOpen, origin, dest, forceCargo, player]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Cap frequency to the engine-computed max as soon as aircraft selection
   // changes, so the slider can never exceed the physics-derived ceiling.
@@ -147,6 +152,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     ? maxRouteDailyFrequency(specIds, dist, aircraftWithUpgrades)
     : 0;
   const maxWeeklyFreq = Math.round(maxDailyFreq * 7);
+  // Clamp weeklyFreq when the engine-derived ceiling shifts (aircraft
+  // selection / range / cargo belly all change maxWeeklyFreq). Sync
+  // against derived state, not a render cascade.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (maxWeeklyFreq === 0) {
       if (weeklyFreq !== 0) setWeeklyFreq(0);
@@ -158,7 +167,8 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     }
     if (weeklyFreq > maxWeeklyFreq) setWeeklyFreq(maxWeeklyFreq);
     if (weeklyFreq < 1) setWeeklyFreq(maxWeeklyFreq);
-  }, [maxWeeklyFreq, weeklyFreq, freqTouched]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [maxWeeklyFreq, weeklyFreq, freqTouched]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Cabin availability from selected planes — must honor per-instance
   // customSeats (set at purchase via the Purchase Order modal), not just
@@ -217,6 +227,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   // MUST run before any conditional return so React hook order stays
   // identical between "no player yet" and "player loaded" renders —
   // otherwise React throws a hooks-order error mid-route-setup.
+  // Bidirectional tier-detection: when per-class fares change, recompute
+  // which tier preset the AVERAGE matches. setState-in-effect is the
+  // canonical pattern for "derive controlled UI from related controlled
+  // UI"; the effect ignores no-op updates.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isCargo) return;
     const entries: Array<{ base: number; value: number }> = [];
@@ -228,6 +243,47 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [econFare, busFare, firstFare, isCargo, hasBusiness, hasFirst,
       econRange?.base, busRange?.base, firstRange?.base]);
+
+  // Synchronise bidPrices with the visible default on first paint —
+  // this guarantees confirmRoute reads a real number for every shortfall
+  // airport even if the BidRow's own onMount prime hasn't fired yet.
+  // MUST run before the early return below so hook order stays stable
+  // across renders. Inline-computes shortfall against player state
+  // because we can't reach the post-early-return shortfall closure.
+  useEffect(() => {
+    if (!player || !origin || !dest || selectedPlaneIds.length === 0 || weeklyFreq < 1) return;
+    const usedAtO = player.routes
+      .filter((r) =>
+        r.status === "active" &&
+        (r.originCode === origin || r.destCode === origin),
+      )
+      .reduce((sum, r) => sum + r.dailyFrequency * 7, 0);
+    const usedAtD = player.routes
+      .filter((r) =>
+        r.status === "active" &&
+        (r.originCode === dest || r.destCode === dest),
+      )
+      .reduce((sum, r) => sum + r.dailyFrequency * 7, 0);
+    const slotsO = player.airportLeases?.[origin]?.slots ?? 0;
+    const slotsD = player.airportLeases?.[dest]?.slots ?? 0;
+    const shortAtO = Math.max(0, usedAtO + weeklyFreq - slotsO);
+    const shortAtD = Math.max(0, usedAtD + weeklyFreq - slotsD);
+    if (shortAtO === 0 && shortAtD === 0) return;
+    const updates: Record<string, number> = {};
+    if (shortAtO > 0 && bidPrices[origin] === undefined) {
+      const t = (CITIES_BY_CODE[origin]?.tier ?? 1) as CityTier;
+      updates[origin] = BASE_SLOT_PRICE_BY_TIER[t];
+    }
+    if (shortAtD > 0 && bidPrices[dest] === undefined) {
+      const t = (CITIES_BY_CODE[dest]?.tier ?? 1) as CityTier;
+      updates[dest] = BASE_SLOT_PRICE_BY_TIER[t];
+    }
+    if (Object.keys(updates).length > 0) {
+      setBidPrices((prev) => ({ ...prev, ...updates }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player, origin, dest, weeklyFreq, selectedPlaneIds.length]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!player) return null;
 
@@ -375,14 +431,19 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   })();
   const hasShortfall = shortfall.atOrigin > 0 || shortfall.atDest > 0;
 
-  // The button is enabled only when the user has explicitly set a bid for
-  // every airport with a shortfall. Without explicit confirmation we
-  // would be auto-bidding on the player's behalf, and the player could
-  // get outbid silently. Force a deliberate price entry.
-  const allBidsSet = !hasShortfall || (
-    (shortfall.atOrigin === 0 || (origin !== null && bidPrices[origin] !== undefined)) &&
-    (shortfall.atDest === 0   || (dest   !== null && bidPrices[dest]   !== undefined))
-  );
+  // The button is enabled when every shortfall airport has SOME bid in
+  // place. We auto-prime each BidRow's price to the tier minimum on
+  // mount, so an unset entry should never persist past the first
+  // render — but if the parent's reset effect clears bidPrices in
+  // response to a player ref change, BidRow's empty-deps useEffect
+  // doesn't re-fire and the entry stays undefined. The slider is still
+  // visibly showing minPrice though, so treating undefined as
+  // "implicit minimum bid" matches what the player sees and prevents
+  // the Submit button from getting stuck disabled.
+  const allBidsSet = !hasShortfall;
+  // (bid-price prime useEffect lives above the early return — see the
+  // hook ordering note further up. We can't safely keep it here because
+  // it would render conditionally on `if (!player) return null;`.)
 
   function confirmRoute() {
     if (!origin || !dest) return;
@@ -757,21 +818,20 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
         )}
 
         {isCargo && (
-          <Section step={3} title="Cargo" disabled={!hasAircraft}>
-            <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-[0.8125rem] text-ink-2 space-y-1.5">
-              <p>
-                <strong className="text-ink">Cargo route.</strong> Daily demand
-                = the lower of origin and destination business demand (in
-                tonnes), adjusted by news cargo modifiers and your market-focus
-                doctrine.
-              </p>
-              <p>
-                Cost stack: <strong className="text-ink">airport slot fees</strong>{" "}
-                (same auction system as passenger — cargo flights occupy slots)
-                <strong className="text-ink"> + warehousing storage fees</strong>{" "}
-                at both endpoints. Rate per tonne scales by haul distance and
-                Pricing Tier; you can override per route below.
-              </p>
+          <Section
+            step={3}
+            title="Cargo"
+            disabled={!hasAircraft}
+            help={
+              "Cargo route economics:\n\n" +
+              "• Daily demand = the lower of origin and destination business demand (in tonnes), adjusted by news cargo modifiers and your market-focus doctrine.\n\n" +
+              "• Cost stack: airport slot fees (same auction system as passenger — cargo flights occupy slots) plus warehousing storage fees at both endpoints.\n\n" +
+              "• Rate per tonne scales by haul distance and Pricing Tier; you can override per route on the next step."
+            }
+          >
+            <div className="text-[0.8125rem] text-ink-2 italic">
+              Set frequency and pricing tier above. Slot bids on the next
+              step if you don&apos;t hold enough capacity at either airport.
             </div>
           </Section>
         )}
@@ -830,27 +890,60 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
           </Section>
         )}
 
-        {/* Live projection — passenger uses pax/seats, cargo uses tonnes. */}
-        {projection && (
-          <div className={cn(
-            "rounded-md border px-3 py-2.5 text-[0.8125rem]",
-            projection.tone === "neg" && "border-negative bg-[var(--negative-soft)] text-negative",
-            projection.tone === "warn" && "border-warning bg-[var(--warning-soft)] text-warning",
-            projection.tone === "pos" && "border-positive bg-[var(--positive-soft)] text-positive",
-          )}>
-            <div className="font-semibold uppercase tracking-wider text-[0.6875rem] mb-0.5">
-              Projected occupancy · {(projection.occupancy * 100).toFixed(0)}%
+        {/* Live projection — passenger uses pax/seats, cargo uses tonnes.
+            Shows BOTH daily and weekly figures so the player can sanity-
+            check against the weekly frequency they entered (24/wk) and
+            doesn't have to mentally divide by 7 to read the daily
+            capacity. */}
+        {projection && (() => {
+          const weeklyDemand = projection.demand * 7;
+          const weeklyCapacity = projection.capacity * 7;
+          const unitShort = projection.kind === "cargo" ? "T" : "pax";
+          const capUnit = projection.kind === "cargo" ? "T" : "seats";
+          return (
+            <div className={cn(
+              "rounded-md border px-3 py-2.5 text-[0.8125rem]",
+              projection.tone === "neg" && "border-negative bg-[var(--negative-soft)] text-negative",
+              projection.tone === "warn" && "border-warning bg-[var(--warning-soft)] text-warning",
+              projection.tone === "pos" && "border-positive bg-[var(--positive-soft)] text-positive",
+            )}>
+              <div className="font-semibold uppercase tracking-wider text-[0.6875rem] mb-1.5">
+                Projected occupancy · {(projection.occupancy * 100).toFixed(0)}%
+              </div>
+              {/* Two-column daily/weekly breakdown so units are explicit. */}
+              <div className="grid grid-cols-2 gap-2 text-[0.75rem] mb-1.5">
+                <div className="rounded-md bg-surface/50 px-2 py-1.5">
+                  <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                    Per day
+                  </div>
+                  <div className="tabular font-mono text-ink mt-0.5">
+                    {Math.round(projection.demand).toLocaleString()} {unitShort} demand
+                  </div>
+                  <div className="tabular font-mono text-ink-2 text-[0.6875rem]">
+                    {Math.round(projection.capacity).toLocaleString()} {capUnit} capacity
+                  </div>
+                </div>
+                <div className="rounded-md bg-surface/50 px-2 py-1.5">
+                  <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                    Per week
+                  </div>
+                  <div className="tabular font-mono text-ink mt-0.5">
+                    {Math.round(weeklyDemand).toLocaleString()} {unitShort} demand
+                  </div>
+                  <div className="tabular font-mono text-ink-2 text-[0.6875rem]">
+                    {Math.round(weeklyCapacity).toLocaleString()} {capUnit} capacity
+                  </div>
+                </div>
+              </div>
+              <div className="text-[0.6875rem] text-ink-2 leading-snug">
+                {projection.kind === "cargo" && "Cargo demand before market-focus + news modifiers. "}
+                {projection.tone === "neg" && "Route is unlikely to be profitable at this configuration."}
+                {projection.tone === "warn" && "Consider lowering frequency or adjusting fares."}
+                {projection.tone === "pos" && "Strong occupancy projected."}
+              </div>
             </div>
-            <div className="text-ink-2 text-[0.75rem]">
-              {projection.kind === "cargo"
-                ? `Daily demand ${Math.round(projection.demand)} T vs capacity ${Math.round(projection.capacity)} T (before market-focus + news modifiers).`
-                : `Daily demand ${Math.round(projection.demand)} pax vs capacity ${Math.round(projection.capacity)} seats.`}
-              {projection.tone === "neg" && " Route is unlikely to be profitable at this configuration."}
-              {projection.tone === "warn" && " Consider lowering frequency or adjusting fares."}
-              {projection.tone === "pos" && " Strong occupancy projected."}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {error && (
           <div className="text-negative text-[0.875rem] rounded-md border border-[var(--negative-soft)] bg-[var(--negative-soft)] px-3 py-2">
@@ -1020,11 +1113,15 @@ export function BidRow({
 }
 
 function Section({
-  step, title, disabled = false, children,
+  step, title, disabled = false, help, children,
 }: {
   step: number;
   title: string;
   disabled?: boolean;
+  /** Optional explainer text. Renders as a (?) icon next to the
+   *  title with a hover tooltip — keeps the section header tidy
+   *  while still surfacing detail for players who want it. */
+  help?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -1041,6 +1138,15 @@ function Section({
         <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
           {title}
         </span>
+        {help && (
+          <span
+            className="ml-auto inline-flex w-4 h-4 rounded-full items-center justify-center text-[0.625rem] font-semibold text-ink-muted bg-surface-2 cursor-help"
+            title={help}
+            aria-label="Help"
+          >
+            ?
+          </span>
+        )}
       </div>
       {children}
     </section>

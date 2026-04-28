@@ -61,12 +61,18 @@ export function RoutesPanel() {
   // clicked an existing route's endpoints on the map), auto-open it once.
   const focusedRouteId = useUi((u) => u.focusedRouteId);
   const setFocusedRouteId = useUi((u) => u.setFocusedRouteId);
+  // Consume the cross-component "focus this route" signal from
+  // GameCanvas. setState-in-effect is intentional — we're syncing
+  // local panel state against an external store value, then clearing
+  // the signal. Not a render cascade.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (focusedRouteId) {
       setActiveRouteId(focusedRouteId);
       setFocusedRouteId(null);  // consume the signal
     }
   }, [focusedRouteId, setFocusedRouteId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const rows = useMemo(() => {
     if (!player) return [];
@@ -584,27 +590,53 @@ function NewRoutePicker({
   const [search, setSearch] = useState("");
   const [picking, setPicking] = useState<"origin" | "dest" | null>(null);
 
+  // When picking destination AND we have an origin, sort by distance
+  // ascending so the player can see "what's nearby". Otherwise (origin
+  // picker, no origin yet) keep the network-first / tier+name fallback.
+  const sortRef = picking === "dest" ? origin : null;
   const sortedCities = useMemo(
     () =>
-      [...CITIES].sort((a, b) => {
-        const aOwn = ownedCodes.has(a.code) ? 0 : 1;
-        const bOwn = ownedCodes.has(b.code) ? 0 : 1;
+      [...CITIES].map((c) => ({
+        city: c,
+        distance: sortRef ? distanceBetween(sortRef, c.code) : 0,
+      })).sort((a, b) => {
+        // Owned (network) cities still float to the top — saves
+        // hunting for hub/secondary in long lists.
+        const aOwn = ownedCodes.has(a.city.code) ? 0 : 1;
+        const bOwn = ownedCodes.has(b.city.code) ? 0 : 1;
         if (aOwn !== bOwn) return aOwn - bOwn;
-        return a.tier - b.tier || a.name.localeCompare(b.name);
+        if (sortRef) return a.distance - b.distance;
+        return a.city.tier - b.city.tier || a.city.name.localeCompare(b.city.name);
       }),
-    [ownedCodes],
+    [ownedCodes, sortRef],
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return sortedCities;
     return sortedCities.filter(
-      (c) =>
+      ({ city: c }) =>
         c.code.toLowerCase().includes(q) ||
         c.name.toLowerCase().includes(q) ||
         c.regionName.toLowerCase().includes(q),
     );
   }, [sortedCities, search]);
+
+  // Group filtered cities by region for the collapsed view. Owned
+  // ("Your network") cities pulled out to the top. Within each
+  // region: keep the parent sort order (distance asc when from-origin).
+  const grouped = useMemo(() => {
+    const network = filtered.filter((x) => ownedCodes.has(x.city.code));
+    const others = filtered.filter((x) => !ownedCodes.has(x.city.code));
+    const byRegion = new Map<string, typeof others>();
+    for (const x of others) {
+      const list = byRegion.get(x.city.regionName) ?? [];
+      list.push(x);
+      byRegion.set(x.city.regionName, list);
+    }
+    const regions = Array.from(byRegion.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return { network, regions };
+  }, [filtered, ownedCodes]);
 
   const dist =
     origin && dest && origin !== dest ? distanceBetween(origin, dest) : 0;
@@ -695,35 +727,36 @@ function NewRoutePicker({
               onChange={(e) => setSearch(e.target.value)}
               className="mb-2 h-9 text-[0.875rem]"
             />
-            <div className="max-h-[280px] overflow-y-auto rounded-md border border-line bg-surface">
+            <div className="max-h-[320px] overflow-y-auto rounded-md border border-line bg-surface">
               {filtered.length === 0 ? (
                 <div className="py-6 text-center text-[0.8125rem] text-ink-muted">
                   No cities match.
                 </div>
               ) : (
-                filtered.slice(0, 80).map((c) => (
-                  <button
-                    key={c.code}
-                    onClick={() => pick(c.code)}
-                    disabled={picking === "dest" && c.code === origin}
-                    className={cn(
-                      "w-full flex items-baseline gap-2 px-3 py-1.5 text-left text-[0.8125rem]",
-                      "hover:bg-surface-hover transition-colors border-b border-line last:border-0",
-                      picking === "dest" && c.code === origin && "opacity-40 cursor-not-allowed",
-                    )}
-                  >
-                    <span className="font-mono font-semibold text-ink shrink-0 w-10">
-                      {c.code}
-                    </span>
-                    <span className="text-ink-2 flex-1 truncate">{c.name}</span>
-                    {ownedCodes.has(c.code) && (
-                      <Badge tone="primary">Network</Badge>
-                    )}
-                    <span className="text-[0.6875rem] text-ink-muted tabular shrink-0">
-                      Tier {c.tier}
-                    </span>
-                  </button>
-                ))
+                <div>
+                  {/* Network section — owned cities first if any */}
+                  {grouped.network.length > 0 && (
+                    <RegionSection
+                      label="Your network"
+                      entries={grouped.network}
+                      sortRef={sortRef}
+                      origin={origin}
+                      picking={picking}
+                      onPick={pick}
+                    />
+                  )}
+                  {grouped.regions.map(([regionName, entries]) => (
+                    <RegionSection
+                      key={regionName}
+                      label={regionName}
+                      entries={entries}
+                      sortRef={sortRef}
+                      origin={origin}
+                      picking={picking}
+                      onPick={pick}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -903,6 +936,11 @@ function RouteDetailModal({
     ? maxRouteDailyFrequency(clampSpecIds, route.distanceKm, clampAircraftForPhysics)
     : 0;
   const clampMaxWeekly = Math.round(clampMaxDaily * 7);
+  // Clamp weeklyFreq when the engine-derived ceiling shifts (aircraft
+  // selection / range / cargo belly all change clampMaxWeekly). The
+  // setState here is intentional — sync against derived data, not a
+  // cascading render.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (clampMaxWeekly === 0 && weeklyFreq !== 0) {
       setWeeklyFreq(0);
@@ -910,6 +948,7 @@ function RouteDetailModal({
       setWeeklyFreq(clampMaxWeekly);
     }
   }, [clampMaxWeekly, weeklyFreq]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!player) return null;
 
@@ -1997,6 +2036,70 @@ function TournamentBanner() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Collapsible region section for the route-pick city list. Header
+ *  shows the region name + entry count; body lists each city with
+ *  code, name, distance (when sorting by distance from origin), and
+ *  a "Network" badge when in player's owned set. No tier label. */
+function RegionSection({
+  label, entries, sortRef, origin, picking, onPick,
+}: {
+  label: string;
+  entries: Array<{ city: import("@/types/game").City; distance: number }>;
+  sortRef: string | null;
+  origin: string | null;
+  picking: "origin" | "dest" | null;
+  onPick: (code: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="border-b border-line last:border-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-baseline justify-between px-3 py-1.5 bg-surface-2/40 hover:bg-surface-hover text-left"
+      >
+        <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+          {label}
+        </span>
+        <span className="text-[0.625rem] tabular text-ink-muted">
+          {entries.length} {open ? "▾" : "▸"}
+        </span>
+      </button>
+      {open && (
+        <div>
+          {entries.slice(0, 50).map(({ city: c, distance }) => (
+            <button
+              key={c.code}
+              onClick={() => onPick(c.code)}
+              disabled={picking === "dest" && c.code === origin}
+              className={cn(
+                "w-full flex items-baseline gap-2 px-3 py-1.5 text-left text-[0.8125rem]",
+                "hover:bg-surface-hover transition-colors border-t border-line/40",
+                picking === "dest" && c.code === origin && "opacity-40 cursor-not-allowed",
+              )}
+            >
+              <span className="font-mono font-semibold text-ink shrink-0 w-10">
+                {c.code}
+              </span>
+              <span className="text-ink-2 flex-1 truncate">{c.name}</span>
+              {sortRef && distance > 0 && (
+                <span className="text-[0.6875rem] text-ink-muted tabular shrink-0">
+                  {Math.round(distance).toLocaleString()} km
+                </span>
+              )}
+            </button>
+          ))}
+          {entries.length > 50 && (
+            <div className="px-3 py-1 text-[0.625rem] text-ink-muted italic border-t border-line/40">
+              + {entries.length - 50} more — refine the search above
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

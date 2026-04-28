@@ -211,15 +211,6 @@ export function FleetPanel() {
     setError(null);
   }
 
-  // Insurance details (PRD E5)
-  const insuranceMeta = {
-    none:   { coverage: "0%", premium: "0%/Q", tone: "neutral" as const },
-    low:    { coverage: "30%", premium: "0.15%/Q", tone: "info" as const },
-    medium: { coverage: "50%", premium: "0.30%/Q", tone: "primary" as const },
-    high:   { coverage: "80%", premium: "0.50%/Q", tone: "positive" as const },
-  };
-  const insMeta = insuranceMeta[player.insurancePolicy];
-
   // Operational state breakdown for the top-of-panel summary cards
   // (recommendation #B8). Counts by status — every aircraft falls
   // into exactly one bucket. "Aging" is a sub-bucket of active that
@@ -302,47 +293,9 @@ export function FleetPanel() {
           Collapsed by default so the active fleet stays the focus. */}
       <RetiredHistory />
 
-      {/* Insurance policy — directly editable from Fleet panel */}
-      <div className="rounded-md border border-line bg-surface p-3">
-        <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-            Aircraft insurance
-          </div>
-          <div className="flex items-center gap-2 text-[0.6875rem] tabular text-ink-muted">
-            <span>Premium {insMeta.premium}</span>
-            <span>·</span>
-            <span className="text-ink font-semibold">Coverage {insMeta.coverage}</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {(["none", "low", "medium", "high"] as const).map((lvl) => {
-            const m = insuranceMeta[lvl];
-            const active = player.insurancePolicy === lvl;
-            return (
-              <button
-                key={lvl}
-                onClick={() => s.setInsurancePolicy(lvl)}
-                className={cn(
-                  "rounded-md border px-2 py-1.5 capitalize transition-colors",
-                  active
-                    ? "border-primary bg-[rgba(20,53,94,0.06)] text-ink font-medium"
-                    : "border-line text-ink-2 hover:bg-surface-hover",
-                )}
-              >
-                <div className="text-[0.75rem] font-medium">{lvl}</div>
-                <div className="text-[0.625rem] text-ink-muted">
-                  {m.premium} · {m.coverage}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-        <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
-          Premium is paid each quarter as % of fleet market value. On
-          mandatory retirement (16Q lifespan), insurance pays out
-          coverage × 75% of book value.
-        </div>
-      </div>
+      {/* Insurance policy moved to the Ops form (Quarterly ops panel)
+          — alongside the spend sliders, since insurance premium IS a
+          recurring quarterly cost just like staff/marketing/maint. */}
 
       {groups.length === 0 ? (
         <div className="py-12 text-center text-ink-muted text-[0.875rem] rounded-lg border border-dashed border-line">
