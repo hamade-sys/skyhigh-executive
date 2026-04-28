@@ -71,7 +71,7 @@ export default function NewGamePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link

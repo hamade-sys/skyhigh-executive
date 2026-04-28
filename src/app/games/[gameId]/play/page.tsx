@@ -156,7 +156,7 @@ export default function GamePlayPage({
 
 function CenteredMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50 flex items-center justify-center p-6">
       <div className="flex flex-col items-center text-center">{children}</div>
     </div>
   );

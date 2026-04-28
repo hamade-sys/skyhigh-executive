@@ -148,7 +148,7 @@ export default function GameLobbyPage({
   const seatsRemaining = Math.max(0, game.max_teams - seatsClaimed);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link
@@ -357,7 +357,7 @@ function LockedBadge() {
 
 function CenteredMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50 flex items-center justify-center p-6">
       <div className="flex flex-col items-center text-center">{children}</div>
     </div>
   );
