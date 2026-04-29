@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Badge, Button, Card, CardBody, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer } from "@/store/game";
@@ -8,7 +9,7 @@ import { AdminPanel } from "@/components/panels/AdminPanel";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { computeAirlineValue, brandRating, fleetCount } from "@/lib/engine";
 import { cn } from "@/lib/cn";
-import { ArrowLeft, Plane, Users, Settings2, Trophy, Key, Mic, Save, Download, Upload, RotateCcw, Trash2, Lock, Unlock, Building, Check, X } from "lucide-react";
+import { ArrowLeft, Plane, Users, Settings2, Trophy, Key, Mic, Save, Download, Upload, RotateCcw, Trash2, Lock, Unlock, Building, Check, X, Loader2, AlertCircle } from "lucide-react";
 import { CITIES } from "@/data/cities";
 import {
   listSnapshots,
@@ -18,23 +19,142 @@ import {
 } from "@/lib/snapshots";
 import { toast } from "@/store/toasts";
 import { LiveSimForm } from "@/components/game/LiveSimForm";
+import { useLocalSessionId } from "@/lib/games/session";
 import type { Team } from "@/types/game";
 
 /**
  * Facilitator console — separate from the player UI.
  *
- * In production this would be auth-gated as a distinct role and would
- * communicate with player sessions via a backend. In this single-player
- * demo it shares the same Zustand store: switching the active team
- * pivots the game store's `playerTeamId` so the facilitator can see
- * each airline's view in isolation. A clear "Currently viewing"
- * indicator and a TEAM_SWITCHER warn the user that this is a host
- * tool, not a player surface.
+ * Two binding modes:
+ *
+ * 1. Solo / local mode (default — when no ?gameId is in the URL):
+ *    The page reads the local Zustand store directly. Switching the
+ *    active team pivots `playerTeamId` so the facilitator can see
+ *    each airline's view in isolation. Same behavior as before.
+ *
+ * 2. Multiplayer mode (?gameId=X in the URL):
+ *    The page first fetches the server-authoritative state via
+ *    /api/games/load and hydrates the local store via
+ *    `hydrateFromServerState`. Once hydrated, the existing console
+ *    UI renders unchanged. Until Step 9 lands the facilitator's
+ *    edits stay in the local store; with realtime sync those
+ *    edits will broadcast to every player browser.
+ *
+ * A clear "Currently viewing" indicator + the team switcher warn
+ * the user that this is a host tool, not a player surface.
  */
 export default function FacilitatorPage() {
+  // Suspense wrapper required because useSearchParams() inside the
+  // inner component opts the route into client-side rendering, and
+  // Next 16 needs an explicit boundary so the framework can stream
+  // the suspending tree without bailing out of static rendering of
+  // adjacent UI.
+  return (
+    <Suspense
+      fallback={
+        <main className="flex-1 min-h-0 flex flex-col items-center justify-center bg-surface-2/30">
+          <Loader2 className="w-6 h-6 text-ink-muted animate-spin mb-3" />
+          <p className="text-[0.875rem] text-ink-muted">Loading facilitator console…</p>
+        </main>
+      }
+    >
+      <FacilitatorPageInner />
+    </Suspense>
+  );
+}
+
+function FacilitatorPageInner() {
+  const search = useSearchParams();
+  const gameId = search.get("gameId");
+  const sessionId = useLocalSessionId();
+  const hydrateFromServerState = useGame((g) => g.hydrateFromServerState);
+  const [hydrateState, setHydrateState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >(gameId ? "loading" : "ready");
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
+
+  // Multiplayer hydrate path — fires once when ?gameId is present.
+  // Without gameId we skip and the local store renders directly.
+  useEffect(() => {
+    if (!gameId || !sessionId || hydrateState !== "loading") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
+          { cache: "no-store" },
+        );
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setHydrateError(json.error ?? "Game not found.");
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setHydrateState("error");
+          return;
+        }
+        if (!json.state) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setHydrateError("Game state not seeded yet — start the game from the lobby first.");
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setHydrateState("error");
+          return;
+        }
+        const result = hydrateFromServerState({
+          stateJson: json.state.state_json,
+          mySessionId: sessionId,
+        });
+        if (cancelled) return;
+        if (!result.ok) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setHydrateError(result.error ?? "Could not hydrate facilitator console.");
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setHydrateState("error");
+          return;
+        }
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setHydrateState("ready");
+      } catch (e) {
+        if (cancelled) return;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setHydrateError(e instanceof Error ? e.message : "Network error");
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setHydrateState("error");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [gameId, sessionId, hydrateState, hydrateFromServerState]);
+
   const s = useGame();
   const player = selectPlayer(s);
   const setActiveTeam = useGame((g) => g.setActiveTeam);
+
+  if (hydrateState === "loading") {
+    return (
+      <main className="flex-1 min-h-0 flex flex-col items-center justify-center bg-surface-2/30">
+        <Loader2 className="w-6 h-6 text-ink-muted animate-spin mb-3" />
+        <p className="text-[0.875rem] text-ink-muted">Loading game state…</p>
+      </main>
+    );
+  }
+  if (hydrateState === "error") {
+    return (
+      <main className="flex-1 min-h-0 flex flex-col items-center justify-center bg-surface-2/30 p-6">
+        <div className="max-w-md w-full rounded-xl border border-rose-200 bg-rose-50 p-6 text-center">
+          <AlertCircle className="w-8 h-8 text-rose-600 mx-auto mb-3" />
+          <p className="text-base font-semibold text-rose-900 mb-2">Couldn&rsquo;t load game</p>
+          <p className="text-sm text-rose-700 mb-4">{hydrateError ?? "Unknown error."}</p>
+          <Link
+            href="/lobby"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Back to lobby
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   const [section, setSection] = useState<"teams" | "admin" | "leaderboard" | "session" | "livesims" | "saves" | "airports">("session");
   // Auto-jump the facilitator to the Airports section if a new bid
