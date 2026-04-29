@@ -24,7 +24,7 @@ import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowRight, Lock, Unlock, Copy, Sparkles, Globe2,
-  Loader2, AlertCircle, Users, Play,
+  Loader2, AlertCircle, Play,
 } from "lucide-react";
 import { useLocalSessionId } from "@/lib/games/session";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
@@ -73,8 +73,14 @@ export default function GameLobbyPage({
   }, [gameId, router]);
 
   useEffect(() => {
+    // load() is async — its setState calls fire after the await, not
+    // synchronously inside the effect body. The lint rule flags it
+    // anyway via static analysis, so we explicitly silence it for
+    // this pattern. Step 9 replaces the polling with Supabase
+    // Realtime + tanstack-query; until then this is the right
+    // pattern for "fetch on mount + poll while in lobby".
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-    // Poll every 5s while in lobby — Step 9 replaces with realtime.
     const id = setInterval(load, 5_000);
     return () => clearInterval(id);
   }, [load]);

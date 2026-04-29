@@ -4608,8 +4608,17 @@ export const useGame = create<GameStore>()(
           );
         }
 
+        // Clear every team's readyForNextQuarter flag — the cohort is
+        // now in a fresh round, so the next auto-advance gate has to
+        // be re-met from scratch. Without this, multiplayer self-guided
+        // games would auto-fire closeQuarter again on the very next
+        // setActiveTeamReady() call (since flags would still be true).
+        const teamsWithReadyCleared = teamsWithPendingResolved.map((t) =>
+          t.readyForNextQuarter ? { ...t, readyForNextQuarter: false } : t,
+        );
+
         set({
-          teams: teamsWithPendingResolved,
+          teams: teamsWithReadyCleared,
           currentQuarter: nextQ,
           phase: "playing",
           lastCloseResult: null,
@@ -4918,6 +4927,14 @@ export const useGame = create<GameStore>()(
       // allActiveTeamsReady() returns true. In facilitated runs the
       // flag is informational — facilitator console reads it to see
       // who's submitted but the close button still drives.
+      //
+      // Auto-advance: if THIS flip is the one that completes the cohort
+      // (every human team now ready) AND the run is in self_guided
+      // mode, fire closeQuarter() so the round advances without anyone
+      // having to press a separate button. Solo runs skip the auto
+      // path entirely (only one human team — they already pressed Next
+      // Quarter to flip ready). Facilitated runs also skip — the
+      // facilitator drives close.
       setActiveTeamReady: (ready) => {
         const s = get();
         const meId = s.activeTeamId ?? s.playerTeamId;
@@ -4927,6 +4944,22 @@ export const useGame = create<GameStore>()(
             t.id === meId ? { ...t, readyForNextQuarter: ready } : t,
           ),
         });
+        // Re-evaluate after the set so allActiveTeamsReady reads the
+        // fresh team list. Only fire auto-advance when:
+        //   - the flip was a "true" (player marked ready, not unmarked)
+        //   - the game is multiplayer self-guided (session.mode)
+        //   - more than one human team exists (solo doesn't auto-advance)
+        //   - all human teams are now ready
+        if (!ready) return;
+        const after = get();
+        const session = after.session;
+        if (!session || session.mode !== "self_guided") return;
+        const humans = after.teams.filter((t) => t.controlledBy === "human");
+        if (humans.length < 2) return;
+        if (!humans.every((t) => t.readyForNextQuarter === true)) return;
+        // All humans ready — auto-close. The engine handles the rest
+        // of the round close (procedural rivals, slot auctions, etc).
+        get().closeQuarter();
       },
 
       allActiveTeamsReady: () => {

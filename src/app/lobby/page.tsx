@@ -60,6 +60,10 @@ export default function LobbyPage() {
   }
 
   useEffect(() => {
+    // loadGames() is async — its setState calls fire after the await,
+    // not synchronously inside the effect body. React 19's
+    // set-state-in-effect rule flags this via static analysis anyway.
+    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
     loadGames();
   }, []);
 

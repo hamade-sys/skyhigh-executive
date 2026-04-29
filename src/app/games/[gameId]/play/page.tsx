@@ -83,6 +83,10 @@ export default function GamePlayPage({
   // Step 2 — hydrate the local Zustand store once we have a state
   // payload. Guarded to fire exactly once per gameId+sessionId so a
   // remount (e.g. dev-mode StrictMode) doesn't re-hydrate twice.
+  // The setState calls here are guarded by the early-return checks
+  // above so they only fire when we actually have new data; React 19's
+  // set-state-in-effect rule flags this anyway via static analysis,
+  // hence the disable.
   useEffect(() => {
     if (!data || !sessionId || hydrated) return;
     if (data.game.status !== "playing") return;
@@ -90,6 +94,7 @@ export default function GamePlayPage({
       // Game row says "playing" but state row missing — probably a
       // half-seeded run. Surface a friendly error instead of trying
       // to hydrate from undefined.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError("Game state missing on the server. Try refreshing in a moment.");
       return;
     }
@@ -98,9 +103,11 @@ export default function GamePlayPage({
       mySessionId: sessionId,
     });
     if (!result.ok) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(result.error ?? "Couldn't hydrate game state.");
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, [data, sessionId, hydrated, hydrateFromServerState]);
 

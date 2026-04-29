@@ -44,19 +44,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const supa = getBrowserClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Loading is only meaningful when Supabase is configured. When it's
+  // not, there's nothing to wait for — the AuthState lands in its
+  // permanent "not signed in, not loading" state on the first render.
+  // Deriving the initial loading flag from `supa` (instead of using
+  // an effect to flip it false) avoids the React 19
+  // set-state-in-effect cascading-render warning.
+  const [loading, setLoading] = useState(supa !== null);
   const router = useRouter();
   const authConfigured = supa !== null;
 
   useEffect(() => {
-    if (!supa) {
-      setLoading(false);
-      return;
-    }
+    if (!supa) return; // initial loading was already false
     let mounted = true;
     supa.auth.getSession().then(({ data }) => {
       if (!mounted) return;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSession(data.session);
       setUser(data.session?.user ?? null);
       setLoading(false);

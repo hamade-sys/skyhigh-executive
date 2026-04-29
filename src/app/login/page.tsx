@@ -28,7 +28,11 @@ function LoginInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Surface auth errors from /auth/callback redirects
+  // Surface auth errors from /auth/callback redirects. The setError
+  // is guarded by the `if (authError)` check so it only fires when
+  // there's actually an error to show. React 19's set-state-in-effect
+  // rule flags it via static analysis; for a one-time URL-param read
+  // this is the right pattern.
   useEffect(() => {
     const authError = search.get("error");
     if (authError) {
@@ -36,6 +40,7 @@ function LoginInner() {
         missing_code: "Sign-in was interrupted. Please try again.",
         auth_not_configured: "Sign-in isn't configured yet. You can still play anonymously.",
       };
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(msgs[authError] ?? authError);
     }
   }, [search]);

@@ -25,11 +25,11 @@
  */
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowRight, Loader2, Lock, Globe2, Sparkles,
-  CheckSquare, Users, Plus, X, Trash2, User, Bot,
+  CheckSquare, Plus, Trash2, User, Bot,
 } from "lucide-react";
 import { useLocalSessionId } from "@/lib/games/session";
 import { useAuth } from "@/lib/auth-context";
@@ -78,16 +78,19 @@ export default function CreateGamePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Mirror the GM-toggle into Board Decisions default — facilitated
-  // sessions usually want decisions on; turning GM off doesn't force
-  // decisions off, but turning GM on and never touching decisions
-  // gives the expected default.
-  useEffect(() => {
-    if (beGameMaster && !boardDecisionsEnabled) {
-      setBoardDecisionsEnabled(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beGameMaster]);
+  // GM-toggle nudge for the Board Decisions default. The convention:
+  // turning GM ON usually means "I want a facilitated game with all
+  // the decisions surfaced" — so we default Board Decisions to ON
+  // unless the user explicitly turned it off afterwards. Done in
+  // the click handler (not a useEffect) per React 19 guidance —
+  // useEffect cascades would re-render twice on every toggle.
+  function toggleGameMaster() {
+    setBeGameMaster((wasOn) => {
+      const nowOn = !wasOn;
+      if (nowOn) setBoardDecisionsEnabled(true);
+      return nowOn;
+    });
+  }
 
   function addSlot(type: SeatType) {
     if (slots.length >= 8) return;
@@ -247,7 +250,7 @@ export default function CreateGamePage() {
           <Field label="Game Master role">
             <Toggle
               active={beGameMaster}
-              onClick={() => setBeGameMaster((v) => !v)}
+              onClick={toggleGameMaster}
               icon={<Sparkles className="w-5 h-5" />}
               title="Yes, I'll be the Game Master"
               description="One Game Master per game (or none). Drives quarter close, runs board decisions, has admin overrides. Only the creator can claim this role."
