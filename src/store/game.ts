@@ -5153,11 +5153,21 @@ export const useGame = create<GameStore>()(
             (t) => t.claimedBySessionId === mySessionId,
           );
           const activeTeamId = claimed?.id ?? null;
+          // Mirror activeTeamId into playerTeamId so the 75+ panel
+          // surfaces that still read selectPlayer (legacy) resolve
+          // to the same team. This is safe in multiplayer because
+          // playerTeamId only drives "you" highlighting from THIS
+          // browser's perspective; other browsers hydrate with their
+          // own claim. Step 7 sweep migrated the critical surfaces
+          // (TopBar, leaderboard, admin) but the panels still rely
+          // on the legacy field.
+          const playerTeamId = activeTeamId ?? restored.playerTeamId ?? null;
 
           set({
             ...restored,
             teams,
             activeTeamId,
+            playerTeamId,
             // Reset transient UI — a fresh hydrate is a hard reload
             // of the campaign, not a continuation of a paused close.
             lastCloseResult: null,
