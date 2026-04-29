@@ -3914,6 +3914,51 @@ export const useGame = create<GameStore>()(
         // Replace s.teams reference for downstream rival processing
         Object.assign(s, { teams: teamsAfterBotScenarios });
 
+        // ── Rival activity toast ─────────────────────────────
+        // Help the player FEEL the bots — surface the single most
+        // notable new rival route this quarter as a toast. Notable =
+        // touches the player's hub or one of their secondary hubs
+        // (head-on competition); falls back to the highest-demand
+        // brand-new route if no head-on overlap. Limited to one toast
+        // per quarter to avoid noise. Skipped in pure-solo runs (no
+        // bot rivals).
+        const playerForToast = s.teams.find((t) => t.isPlayer);
+        if (playerForToast) {
+          const playerHubs = new Set([
+            playerForToast.hubCode,
+            ...(playerForToast.secondaryHubCodes ?? []),
+          ]);
+          type Notable = { rival: Team; route: Route; score: number };
+          const notable: Notable[] = [];
+          for (const t of teamsAfterBotScenarios) {
+            if (!t.botDifficulty) continue;
+            for (const r of t.routes) {
+              if (r.openQuarter !== s.currentQuarter) continue;
+              if (r.status !== "active") continue;
+              const headOn = playerHubs.has(r.originCode) || playerHubs.has(r.destCode);
+              const dist = r.distanceKm;
+              // Score: head-on competition wins; longer distances win
+              // tiebreakers (more visible on map, more revenue impact).
+              const score = (headOn ? 1_000_000 : 0) + dist;
+              notable.push({ rival: t, route: r, score });
+            }
+          }
+          notable.sort((a, b) => b.score - a.score);
+          const top = notable[0];
+          if (top) {
+            const headOn =
+              playerHubs.has(top.route.originCode) ||
+              playerHubs.has(top.route.destCode);
+            const weeklyFreq = Math.round(top.route.dailyFrequency * 7);
+            // accent for head-on (tactical signal); info for routine
+            const fn = headOn ? toast.accent : toast.info;
+            fn(
+              `${top.rival.name} opened ${top.route.originCode}↔${top.route.destCode}`,
+              `${weeklyFreq}/wk · ${headOn ? "competing on your hub" : "expanding their network"}`,
+            );
+          }
+        }
+
         // Strategy-driven rival quarter-close.
         // Each rival has a doctrine that shapes their revenue model:
         //   budget-expansion → high-volume low-margin
@@ -5128,7 +5173,6 @@ export const useGame = create<GameStore>()(
       },
 
       rebroadcastSessionCode: () => {
-        const s = get();
         // Generate a fresh 4-digit code — keeps the seat list intact
         // so disconnected players can rebind by company name without
         // losing their team data.
