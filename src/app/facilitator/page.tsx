@@ -473,6 +473,18 @@ function TeamsView({
                         the legacy isPlayer flag (which only tags one
                         seat in solo runs). */}
                     {t.controlledBy === "human" && <Badge tone="accent">Player</Badge>}
+                    {/* Ready chip — visible when the team has flipped
+                        the readyForNextQuarter flag. Self-guided games
+                        gate the auto-advance on every human team being
+                        ready; in facilitated games this is just a
+                        visual signal that the seat finished their
+                        submission flow (board decisions + ops sliders +
+                        any pending route bids). Bots don't have a
+                        ready state — they act in their own quarter
+                        close hook. */}
+                    {t.controlledBy === "human" && t.readyForNextQuarter && (
+                      <Badge tone="positive">Ready</Badge>
+                    )}
                   </div>
                   <div className="text-[0.75rem] text-ink-muted font-mono">
                     Hub {t.hubCode} · {t.doctrine}
