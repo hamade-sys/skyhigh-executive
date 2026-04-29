@@ -165,7 +165,7 @@ function LoginInner() {
         {/* Skip / signup links */}
         <div className="mt-8 text-center text-sm text-slate-500 space-y-2">
           <div>
-            New to SkyForce?{" "}
+            New to ICAN Simulations?{" "}
             <Link href="/signup" className="text-cyan-700 hover:text-cyan-800 font-medium underline underline-offset-2">
               Create an account
             </Link>

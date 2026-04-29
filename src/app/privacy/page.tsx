@@ -2,7 +2,7 @@
 
 /**
  * /privacy — minimum-viable privacy page so footer links resolve.
- * Honest, scoped to what SkyForce actually collects (very little).
+ * Honest, scoped to what ICAN Simulations actually collect (very little).
  * Update with the real legal review when ICAN signs off.
  */
 
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
           Privacy
         </p>
         <h1 className="text-3xl md:text-4xl font-display font-bold text-slate-900 mb-6 leading-tight">
-          What SkyForce keeps about you.
+          What ICAN Simulations keeps about you.
         </h1>
         <p className="text-sm text-slate-500 mb-10">
           Last updated: {new Date().toLocaleDateString("en-AE", { month: "long", year: "numeric" })}
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
         <div className="prose prose-slate max-w-none space-y-6">
           <Section title="Anonymous play by default">
             <p>
-              SkyForce doesn&rsquo;t require an account. Solo runs save to your
+              ICAN Simulations don&rsquo;t require an account. Solo runs save to your
               browser&rsquo;s <code>localStorage</code> only — nothing leaves
               your device. Multiplayer lobbies use a per-browser session id
               (a random UUID stored in localStorage) so you can reconnect to
@@ -85,7 +85,7 @@ export default function PrivacyPage() {
           </Section>
           <Section title="Questions">
             <p>
-              SkyForce is a product of ICAN MENA, based in Dubai. Reach us at{" "}
+              ICAN Simulations are products of ICAN MENA, based in Dubai. Reach us at{" "}
               <a className="text-cyan-700 underline" href="mailto:info@icanmena.com">
                 info@icanmena.com
               </a>

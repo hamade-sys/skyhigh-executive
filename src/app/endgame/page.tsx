@@ -82,7 +82,7 @@ export default function Endgame() {
     <main className="flex-1 min-h-0 flex flex-col overflow-y-auto">
       <header className="sticky top-0 z-10 px-8 py-5 border-b border-line bg-bg/95 backdrop-blur-md flex items-center justify-between">
         <div className="flex items-baseline gap-3">
-          <span className="font-display text-xl text-ink">SkyForce</span>
+          <span className="font-display text-xl text-ink">ICAN Simulations</span>
           <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
             Final scoring · Q4 2024 closed
           </span>

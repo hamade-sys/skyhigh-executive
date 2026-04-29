@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SkyForce marketing top bar — ican-crm-style.
+ * ICAN Simulations marketing top bar — ican-crm-style.
  *
  * Sticky, backdrop-blurred, auth-aware. Renders on every public
  * surface above the hero. Brand teal `#00C2CB` for the primary
@@ -14,7 +14,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
-import { Plane, ArrowRight, Menu, X, LogOut, User as UserIcon } from "lucide-react";
+import { Layers, ArrowRight, Menu, X, LogOut, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth-context";
 
@@ -69,7 +69,7 @@ export function MarketingHeader({ current, variant = "default" }: Props) {
       >
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Brand */}
-          <Link href="/" className="flex items-center gap-2 group" aria-label="SkyForce home">
+          <Link href="/" className="flex items-center gap-2 group" aria-label="ICAN Simulations home">
             <div
               className={cn(
                 "w-7 h-7 rounded-lg flex items-center justify-center transition-colors",
@@ -78,7 +78,7 @@ export function MarketingHeader({ current, variant = "default" }: Props) {
                   : "bg-cyan-50 ring-2 ring-cyan-100",
               )}
             >
-              <Plane className={cn("w-3.5 h-3.5", isDark ? "text-cyan-300" : "text-cyan-700")} />
+              <Layers className={cn("w-3.5 h-3.5", isDark ? "text-cyan-300" : "text-cyan-700")} />
             </div>
             <span
               className={cn(
@@ -86,7 +86,7 @@ export function MarketingHeader({ current, variant = "default" }: Props) {
                 isDark ? "text-white" : "text-slate-900",
               )}
             >
-              SkyForce
+              ICAN <span className="font-medium opacity-80">Simulations</span>
             </span>
           </Link>
 

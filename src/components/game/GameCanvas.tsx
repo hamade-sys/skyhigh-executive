@@ -170,17 +170,16 @@ function CanvasInner() {
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="max-w-2xl text-center">
           <div className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent mb-4">
-            SkyForce · Executive Simulation
+            ICAN Simulations · Airline
           </div>
           <h1 className="font-display text-4xl md:text-5xl text-ink leading-tight mb-4">
-            Run a global airline for ten years.
+            Run a global airline.
           </h1>
           <p className="text-ink-2 text-[0.9375rem] leading-relaxed mb-2">
-            SkyForce is a 40-round executive simulation covering 2015–2024.
-            Open routes across 380+ cities, build a fleet from 40+ commercial
-            aircraft, navigate 18 board-level scenarios, and steer through real
-            macro events — World Cup, Olympics, fuel shocks, talent wars,
-            recession, and the carbon-levy ultimatum.
+            An executive simulation by ICAN MENA. Open routes across hundreds
+            of cities, build a fleet from a deep aircraft catalogue, navigate
+            board-level scenarios, and steer through real macro events — fuel
+            shocks, talent wars, recession, and regulatory ultimatums.
           </p>
           <p className="text-ink-muted text-[0.8125rem] mb-8">
             You begin with $150M seed capital. Q1 Brand Building sets your

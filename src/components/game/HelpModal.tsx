@@ -16,7 +16,7 @@ export function HelpModal({ open, onClose }: Props) {
     <Modal open={open} onClose={onClose} className="max-w-2xl">
       <ModalHeader>
         <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
-          SkyForce reference
+          ICAN Simulations reference
         </span>
         <h2 className="font-display text-[1.5rem] text-ink leading-tight mt-1">
           Quick-reference cheat sheet

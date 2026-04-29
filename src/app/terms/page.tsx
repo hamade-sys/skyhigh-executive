@@ -35,7 +35,7 @@ export default function TermsPage() {
         <div className="space-y-7">
           <Section title="It's a simulation">
             <p>
-              SkyForce is a strategic simulation. Aircraft, airlines, cities,
+              ICAN Simulations are strategic simulations. Aircraft, airlines, cities,
               fares, board scenarios, and crisis events are stylized for
               learning. Don&rsquo;t make actual investment, hiring, or
               regulatory decisions based on what happens here.
@@ -56,12 +56,12 @@ export default function TermsPage() {
               <a className="text-cyan-700 underline" href="mailto:info@icanmena.com">
                 info@icanmena.com
               </a>{" "}
-              if you&rsquo;re running a paid workshop using SkyForce.
+              if you&rsquo;re running a paid workshop using ICAN Simulations.
             </p>
           </Section>
           <Section title="No warranty">
             <p>
-              SkyForce is provided as-is. We aim for correctness in the
+              ICAN Simulations are provided as-is. We aim for correctness in the
               engine — if you find a bug, please report it — but the platform
               is offered without warranty of any kind for any specific
               outcome of play.

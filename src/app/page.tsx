@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * `/` — SkyForce marketing landing page.
+ * `/` — ICAN Simulations marketing landing page.
  *
  * Three audiences land here:
  *   1. First-time visitors (no saved game) → marketing-grade hero,
@@ -15,7 +15,7 @@
  *      same canvas mount, the canvas itself routes them to /endgame.
  *
  * The marketing surface is what we'd hand to a board / HR head /
- * facilitator considering SkyForce for a workshop or classroom.
+ * facilitator considering ICAN Simulations for a workshop.
  * Every CTA leads somewhere real (no "coming soon" links).
  */
 
@@ -24,7 +24,8 @@ import Link from "next/link";
 import {
   ArrowRight, Sparkles, Plane, Trophy, MapPin, Wallet, Users,
   Zap, Gem, PackageCheck, Globe2, ClipboardList,
-  Calendar, Clock,
+  Clock, Landmark, Hotel, Wheat, Building2, Stethoscope,
+  type LucideIcon,
 } from "lucide-react";
 import { useGame } from "@/store/game";
 import { GameCanvas } from "@/components/game/GameCanvas";
@@ -115,12 +116,12 @@ function Hero() {
           </h1>
 
           <p className="text-lg text-slate-400 max-w-2xl leading-relaxed mb-10">
-            ICAN&rsquo;s executive simulations put senior leaders in the chair
-            of an entire industry — pricing, capital, talent, regulation, and
-            rival pressure all moving at once.
-            {" "}<strong className="text-white font-semibold">SkyForce</strong>,
-            our airline simulation, is the first to ship. Banking, Hospitality,
-            Agriculture, Real Estate, and Healthcare are next.
+            ICAN Simulations puts senior leaders in the chair of an entire
+            industry — pricing, capital, talent, regulation, and rival
+            pressure all moving at once. The{" "}
+            <strong className="text-white font-semibold">Airline</strong>{" "}
+            simulation is live. Banking, Hospitality, Agriculture, Real
+            Estate, and Healthcare are next.
           </p>
 
           <div className="flex items-center gap-3 flex-wrap mb-4">
@@ -184,15 +185,24 @@ function SocialProof() {
   );
 }
 
-// ─── Industry portfolio (SkyForce + roadmap) ─────────────────
+// ─── Industry portfolio ──────────────────────────────────────
 function Portfolio() {
-  const industries = [
+  interface IndustryCard {
+    name: string;
+    industry: string;
+    status: "live" | "next";
+    desc: string;
+    accent: "cyan" | "violet" | "emerald" | "amber" | "rose" | "sky";
+    Icon: LucideIcon;
+  }
+  const industries: IndustryCard[] = [
     {
-      name: "SkyForce",
-      industry: "Airline",
+      name: "Airline",
+      industry: "Aviation",
       status: "live",
-      desc: "Network, fleet, pricing, board scenarios. The live product.",
+      desc: "Network, fleet, pricing, slot auctions, fuel hedging, board scenarios.",
       accent: "cyan",
+      Icon: Plane,
     },
     {
       name: "Banking",
@@ -200,6 +210,7 @@ function Portfolio() {
       status: "next",
       desc: "Lending, treasury, capital ratios, regulatory pressure.",
       accent: "violet",
+      Icon: Landmark,
     },
     {
       name: "Hospitality",
@@ -207,34 +218,40 @@ function Portfolio() {
       status: "next",
       desc: "Property portfolio, RevPAR, brand, demand cycles.",
       accent: "emerald",
+      Icon: Hotel,
     },
     {
       name: "Agriculture",
-      industry: "Agriculture",
+      industry: "Agribusiness",
       status: "next",
       desc: "Land, commodities, weather risk, supply chain.",
       accent: "amber",
+      Icon: Wheat,
     },
     {
       name: "Real Estate",
       industry: "Real Estate",
       status: "next",
       desc: "Acquisition, development, leasing, capital structure.",
-      accent: "violet",
+      accent: "rose",
+      Icon: Building2,
     },
     {
       name: "Healthcare",
-      industry: "Healthcare",
+      industry: "Healthcare Systems",
       status: "next",
-      desc: "Capacity, payor mix, outcomes, regulatory landscape.",
-      accent: "emerald",
+      desc: "Capacity, payor mix, clinical outcomes, regulatory landscape.",
+      accent: "sky",
+      Icon: Stethoscope,
     },
-  ] as const;
-  const ring: Record<typeof industries[number]["accent"], string> = {
+  ];
+  const ring: Record<IndustryCard["accent"], string> = {
     cyan: "bg-cyan-50 text-cyan-700 ring-cyan-100",
     violet: "bg-violet-50 text-violet-700 ring-violet-100",
     emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
     amber: "bg-amber-50 text-amber-700 ring-amber-100",
+    rose: "bg-rose-50 text-rose-700 ring-rose-100",
+    sky: "bg-sky-50 text-sky-700 ring-sky-100",
   };
   return (
     <section
@@ -256,32 +273,41 @@ function Portfolio() {
             clients lead. Each one models the operating reality of its sector —
             not a generic management game with the names changed.
           </p>
+          <Link
+            href="/simulations"
+            className="inline-flex items-center gap-1.5 mt-6 text-sm font-semibold text-slate-900 hover:text-slate-700"
+          >
+            Explore the full portfolio <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {industries.map((it) => (
-            <div
+            <Link
               key={it.name}
+              href={it.status === "live" ? "/lobby" : `/simulations#${it.name.toLowerCase().replace(/\s+/g, "-")}`}
               className={
-                "rounded-2xl border bg-white p-5 transition-all relative " +
+                "block rounded-2xl border bg-white p-5 transition-all relative hover:shadow-md " +
                 (it.status === "live"
                   ? "border-slate-900 ring-2 ring-slate-900/10"
-                  : "border-slate-200")
+                  : "border-slate-200 hover:border-slate-300")
               }
             >
-              <div className="flex items-center justify-between mb-3">
-                <div className={`inline-flex items-center justify-center w-9 h-9 rounded-lg ring-4 ${ring[it.accent]}`}>
-                  <span className="text-xs font-mono font-bold">
-                    {it.industry.slice(0, 1)}
-                  </span>
+              <div className="flex items-center justify-between mb-4">
+                <div className={`inline-flex items-center justify-center w-11 h-11 rounded-xl ring-4 ${ring[it.accent]}`}>
+                  <it.Icon className="w-5 h-5" strokeWidth={1.75} />
                 </div>
                 <span
                   className={
-                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider " +
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider " +
                     (it.status === "live"
                       ? "bg-emerald-50 text-emerald-700"
                       : "bg-slate-100 text-slate-500")
                   }
                 >
+                  <span className={
+                    "w-1.5 h-1.5 rounded-full " +
+                    (it.status === "live" ? "bg-emerald-500" : "bg-slate-400")
+                  } />
                   {it.status === "live" ? "Live now" : "Coming"}
                 </span>
               </div>
@@ -294,7 +320,7 @@ function Portfolio() {
               <p className="text-sm text-slate-500 leading-relaxed">
                 {it.desc}
               </p>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
@@ -309,7 +335,7 @@ function Features() {
       <div className="max-w-6xl mx-auto px-6">
         <div className="max-w-2xl mb-16">
           <p className="text-xs font-semibold text-cyan-600 uppercase tracking-widest mb-3">
-            Inside SkyForce — our airline simulation
+            Inside the Airline simulation
           </p>
           <h2 className="text-4xl md:text-5xl font-display font-bold text-slate-900 tracking-tight mb-6 leading-[1.1]">
             Every lever the executive
@@ -499,7 +525,7 @@ function HowItWorks() {
           </p>
         </div>
         <ol className="space-y-6">
-          <Step n={1} title="Make industry decisions" desc="In SkyForce: open and price routes, pick aircraft, bid for scarce slots. In Banking: write loans, set capital ratios. In Hospitality: set property mix and rate. Each simulation models its sector's real moves." />
+          <Step n={1} title="Make industry decisions" desc="In the Airline simulation: open and price routes, pick aircraft, bid for scarce slots. In Banking: write loans, set capital ratios. In Hospitality: set property mix and rate. Each simulation models its sector's real moves." />
           <Step n={2} title="Tune the operating sliders" desc="Six universal dials — staff, marketing, service, rewards, ops, customer service. Each tick shapes payroll, brand, loyalty, and cost discipline downstream." />
           <Step n={3} title="Resolve any board scenarios" desc="Some rounds carry a boardroom decision. Cyber breach response. Hedge timing. Government deals. Each option is a real trade-off — one outcome wins this round, costs next." />
           <Step n={4} title="Advance the round" desc="The engine settles markets, demand, costs, debt service, brand drift, milestones — and then writes the executive digest." />

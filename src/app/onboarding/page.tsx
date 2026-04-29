@@ -81,7 +81,7 @@ export default function Onboarding() {
     <main className="flex-1 min-h-0 flex flex-col">
       <header className="px-8 py-5 border-b border-line flex items-center justify-between shrink-0">
         <div className="flex items-baseline gap-3">
-          <span className="font-display text-xl text-ink">SkyForce</span>
+          <span className="font-display text-xl text-ink">ICAN Simulations</span>
           <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
             Q1 Brand Building · L0
           </span>

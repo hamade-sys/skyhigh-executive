@@ -1,21 +1,20 @@
 "use client";
 
 /**
- * SkyForce marketing footer.
+ * ICAN Simulations marketing footer.
  *
  * Surface lives at the bottom of every public/marketing page (`/`,
  * `/lobby`, `/games/new`, `/join`, `/about`, etc.). Five-column
  * layout collapses to two columns on tablets and a single stack on
- * phones. Brand block carries the SkyForce wordmark + a one-liner;
- * link columns route to product / play / company / legal surfaces.
+ * phones. Brand block carries the ICAN Simulations wordmark + a
+ * one-liner; link columns route to product / play / company / legal.
  *
  * Design: dark `slate-950` panel that contrasts with the
- * light page bodies above. Brand teal `#3FA9D6`-ish hover for
- * link interactions matches the rest of the SkyForce game UI.
+ * light page bodies above. Brand teal `#00C2CB` for hover.
  */
 
 import Link from "next/link";
-import { Plane } from "lucide-react";
+import { Layers } from "lucide-react";
 
 const COLUMNS = [
   {
@@ -41,7 +40,7 @@ const COLUMNS = [
     links: [
       { label: "Facilitator console", href: "/facilitator" },
       { label: "Run a workshop", href: "/about#facilitators" },
-      { label: "Cohort licensing", href: "mailto:info@icanmena.com?subject=SkyForce%20cohort%20licensing" },
+      { label: "Cohort licensing", href: "mailto:info@icanmena.com?subject=ICAN%20Simulations%20cohort%20licensing" },
     ],
   },
   {
@@ -64,14 +63,14 @@ export function MarketingFooter() {
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-7 h-7 rounded-lg bg-cyan-500/15 ring-2 ring-cyan-500/20 flex items-center justify-center">
-                <Plane className="w-3.5 h-3.5 text-cyan-300" />
+                <Layers className="w-3.5 h-3.5 text-cyan-300" />
               </div>
               <span className="font-display text-xl font-bold text-white tracking-tight">
-                SkyForce
+                ICAN <span className="font-medium opacity-80">Simulations</span>
               </span>
             </div>
             <p className="text-xs leading-relaxed text-slate-500 max-w-[220px] mb-5">
-              Executive simulations by ICAN MENA. SkyForce (airline) is live.
+              Executive simulations by ICAN MENA. The Airline simulation is live.
               Banking, Hospitality, Agriculture, Real Estate, and Healthcare
               are next.
             </p>
