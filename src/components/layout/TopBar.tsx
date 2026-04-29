@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useGame, selectPlayer, selectRivals } from "@/store/game";
+import { useGame, selectPlayer, selectRivals, selectActiveTeam, selectOtherTeams } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { fmtMoney, fmtQuarter, fmtQuarterShort } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -17,8 +17,19 @@ import { useShallow } from "zustand/react/shallow";
 
 export function TopBar() {
   // Fine-grained subscriptions so unrelated store writes don't re-render this.
-  const player = useGame(selectPlayer);
-  const rivals = useGame(useShallow(selectRivals));
+  // "Player" here means "the team this browser is bound to" — in solo runs
+  // that's selectPlayer (legacy playerTeamId); in multiplayer it's
+  // selectActiveTeam (the seat claimed by this browser's session). Falls
+  // back to selectPlayer when no active claim exists so older saves keep
+  // working without re-claiming.
+  const activeTeam = useGame(selectActiveTeam);
+  const legacyPlayer = useGame(selectPlayer);
+  const player = activeTeam ?? legacyPlayer;
+  // Same logic for "rivals" — in multiplayer that's every team that ISN'T
+  // you (other humans + bots); in solo it's every non-isPlayer team.
+  const otherTeams = useGame(useShallow(selectOtherTeams));
+  const legacyRivals = useGame(useShallow(selectRivals));
+  const rivals = activeTeam ? otherTeams : legacyRivals;
   const currentQuarter = useGame((state) => state.currentQuarter);
   const viewingTeamId = useUi((u) => u.viewingTeamId);
   const setViewingTeamId = useUi((u) => u.setViewingTeamId);
@@ -192,7 +203,11 @@ function LeaderboardButton() {
 function CloseQuarterButton() {
   const closeQuarter = useGame((s) => s.closeQuarter);
   const currentQuarter = useGame((s) => s.currentQuarter);
-  const player = useGame(selectPlayer);
+  // "Player" = the team this browser controls. selectActiveTeam in
+  // multiplayer; selectPlayer fallback for solo + legacy saves.
+  const activeTeam = useGame(selectActiveTeam);
+  const legacyPlayer = useGame(selectPlayer);
+  const player = activeTeam ?? legacyPlayer;
   const openPanel = useUi((u) => u.openPanel);
   // Multiplayer-aware ready flag wiring — when in self-guided mode
   // with ≥2 humans, the Next Quarter button becomes a Ready toggle
