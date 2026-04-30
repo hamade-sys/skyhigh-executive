@@ -30,10 +30,19 @@ let client: ReturnType<typeof createBrowserClient> | null = null;
 export function getBrowserClient() {
   if (client) return client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // Support both the legacy anon key and the new publishable key env var names
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
   if (!url || !key) return null;
-  client = createBrowserClient(url, key);
-  return client;
+  try {
+    client = createBrowserClient(url, key);
+    return client;
+  } catch (e) {
+    // Key format rejected by SDK — log clearly so it shows in Vercel logs
+    console.error("[Supabase] Failed to initialise browser client:", e);
+    return null;
+  }
 }
 
 /** True when the lobby/multiplayer surface is available — i.e. the
@@ -41,10 +50,13 @@ export function getBrowserClient() {
  *  before navigating to /lobby or /games/new and surface a clear
  *  "multiplayer not configured" empty state when false. */
 export function isMultiplayerAvailable(): boolean {
-  return (
+  const hasUrl =
     typeof process.env.NEXT_PUBLIC_SUPABASE_URL === "string" &&
-    process.env.NEXT_PUBLIC_SUPABASE_URL.length > 0 &&
-    typeof process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY === "string" &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.length > 0
-  );
+    process.env.NEXT_PUBLIC_SUPABASE_URL.length > 0;
+  const hasKey =
+    (typeof process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY === "string" &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.length > 0) ||
+    (typeof process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY === "string" &&
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY.length > 0);
+  return hasUrl && hasKey;
 }
