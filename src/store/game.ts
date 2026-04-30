@@ -400,6 +400,16 @@ export interface GameStore extends GameState {
     stateJson: unknown;
     mySessionId: string;
   }): { ok: boolean; error?: string };
+
+  /** Multiplayer write-back. POSTs the current local state to
+   *  /api/games/state-update with optimistic concurrency (sends
+   *  expectedVersion = session.version, bumps locally on success).
+   *  Solo runs and runs without session.gameId skip silently.
+   *  Fire-and-forget — never blocks the local engine; logs warnings
+   *  on failure but doesn't unwind. Caller passes the eventType
+   *  string + optional payload that lands in game_events for the
+   *  audit trail. */
+  pushStateToServer(eventType: string, eventPayload?: unknown): void;
   /** Re-issue the session code without creating a new game state.
    *  Players reconnecting use the new code; existing saved snapshots
    *  are preserved. Useful after a facilitator restores a snapshot. */
@@ -1054,13 +1064,29 @@ export const useGame = create<GameStore>()(
       reviseDoctrineAtR20: (doctrine) => {
         const s = get();
         if (!s.playerTeamId) return { ok: false, error: "No player team" };
-        if (s.currentQuarter !== 20) {
-          return { ok: false, error: "Doctrine review opens only in Quarter 20" };
+        // Mid-campaign trigger scales with the configured round count.
+        // 40 rounds → midRound 20 (preserves legacy behavior). Shorter
+        // cohort formats: 24 → 12, 16 → 8, 8 → 4. Function name kept
+        // as `reviseDoctrineAtR20` to avoid breaking persisted UI bindings,
+        // but the gate is now dynamic.
+        const totalRounds = s.session?.totalRounds ?? 40;
+        const midRound = Math.floor(totalRounds / 2);
+        if (s.currentQuarter !== midRound) {
+          return {
+            ok: false,
+            error: `Doctrine review only opens at round ${midRound}`,
+          };
         }
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player team" };
-        if (player.flags.has("doctrine_revised_r20")) {
-          return { ok: false, error: "Doctrine already revised in Quarter 20" };
+        // Both legacy (doctrine_revised_r20) + new (doctrine_revised_midgame)
+        // flags lock out a second revision. Existing 40-round saves
+        // from before the dynamic-mid-round change still gate correctly.
+        if (
+          player.flags.has("doctrine_revised_midgame") ||
+          player.flags.has("doctrine_revised_r20")
+        ) {
+          return { ok: false, error: "Doctrine already revised this campaign" };
         }
         set({
           teams: s.teams.map((t) => {
@@ -1068,11 +1094,14 @@ export const useGame = create<GameStore>()(
             return {
               ...t,
               doctrine,
-              flags: new Set([...(t.flags ?? []), "doctrine_revised_r20"]),
+              flags: new Set([
+                ...(t.flags ?? []),
+                "doctrine_revised_midgame",
+              ]),
             };
           }),
         });
-        toast.accent("Doctrine revised", "Your Quarter 20 operating model is now active.");
+        toast.accent("Doctrine revised", "Your new operating model is active starting this round.");
         return { ok: true };
       },
 
@@ -4692,6 +4721,21 @@ export const useGame = create<GameStore>()(
           );
         }
 
+        // ── Multiplayer state write-back ─────────────────────
+        // When the game is bound to a server-side gameId, push the
+        // freshly-advanced state to /api/games/state-update with
+        // optimistic concurrency. The server stores the new state
+        // JSON + bumps the row's version atomically. On stale-state
+        // conflict (someone else's close landed first) we log a
+        // warning and rely on the next /api/games/load to bring this
+        // browser back in sync — the engine doesn't unwind the
+        // local close. Solo runs and runs without session.gameId
+        // skip this entirely.
+        get().pushStateToServer("game.quarterClosed", {
+          fromQuarter: s.currentQuarter,
+          toQuarter: nextQ,
+        });
+
         // Player-facing label: "Round 13/40" headline with the calendar
         // quarter as the detail line. Internal round numbers are 1..40;
         // calendar quarters are Q1 2015..Q4 2024 derived from that.
@@ -5180,6 +5224,118 @@ export const useGame = create<GameStore>()(
             error: err instanceof Error ? err.message : "Hydrate failed",
           };
         }
+      },
+
+      pushStateToServer: (eventType, eventPayload) => {
+        const s = get();
+        const session = s.session;
+        // Solo runs (no session) and runs that haven't been bound to a
+        // server-side gameId skip the write-back entirely. Returning
+        // here is a no-op — the local engine has already advanced.
+        if (!session?.gameId) return;
+        // Read the per-browser session id from localStorage directly
+        // — the value lives outside the Zustand store (lib/games/session
+        // owns it) but we need it here to satisfy the API's
+        // actorSessionId requirement. SSR / no-window path bails.
+        if (typeof window === "undefined") return;
+        let sessionId: string | null = null;
+        try {
+          sessionId = window.localStorage.getItem("skyforce:sessionId:v1");
+        } catch {
+          // localStorage blocked — skip write-back; the local engine
+          // already advanced.
+          return;
+        }
+        if (!sessionId) return;
+        const actorTeamId = s.activeTeamId ?? s.playerTeamId ?? undefined;
+
+        // Build a partialize-compatible payload mirroring the persist
+        // shape so a downstream `hydrateFromServerState` re-load lands
+        // byte-equivalent. Sets are serialized as arrays (JSON-safe).
+        const stateJson = {
+          phase: s.phase,
+          currentQuarter: s.currentQuarter,
+          fuelIndex: s.fuelIndex,
+          baseInterestRatePct: s.baseInterestRatePct,
+          teams: s.teams.map((t) => ({
+            ...t,
+            flags: Array.from(t.flags) as unknown as Set<string>,
+          })),
+          playerTeamId: s.playerTeamId,
+          activeTeamId: s.activeTeamId,
+          quarterTimerSecondsRemaining: s.quarterTimerSecondsRemaining,
+          quarterTimerPaused: s.quarterTimerPaused,
+          secondHandListings: s.secondHandListings,
+          cargoContracts: s.cargoContracts,
+          airportSlots: s.airportSlots,
+          airportBids: s.airportBids,
+          worldCupHostCode: s.worldCupHostCode,
+          olympicHostCode: s.olympicHostCode,
+          sessionCode: s.sessionCode,
+          sessionLocked: s.sessionLocked,
+          sessionSlots: s.sessionSlots,
+          preOrders: s.preOrders,
+          productionCapOverrides: s.productionCapOverrides,
+          // Mirror the session block forward so subsequent hydrates
+          // pick up the bumped version + any session metadata changes.
+          session: { ...session, version: session.version + 1 },
+        };
+
+        // Fire-and-forget. Errors get logged + a soft toast on the
+        // facilitator/host side, but the local engine doesn't unwind
+        // — the next /api/games/load brings this browser back in sync
+        // if the server rejected the write.
+        if (typeof fetch === "undefined") return;
+        const expectedVersion = session.version;
+        const gameId = session.gameId;
+        fetch("/api/games/state-update", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            gameId,
+            expectedVersion,
+            newState: stateJson,
+            actorSessionId: sessionId,
+            actorTeamId,
+            eventType,
+            eventPayload,
+          }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              // Bump the local session.version to match the server's
+              // new row so the NEXT write-back uses the fresh CAS
+              // baseline. Other state already reflects the close.
+              const cur = get();
+              if (cur.session?.gameId === gameId) {
+                set({
+                  session: { ...cur.session, version: cur.session.version + 1 },
+                });
+              }
+              return;
+            }
+            const json = await res.json().catch(() => ({}));
+            if (res.status === 409) {
+              // Stale state: someone else's close landed first. Log
+              // and let the next /api/games/load resync this browser.
+              console.warn(
+                `[state-update] stale write — server rejected event ${eventType}. ` +
+                  `Refresh the page to pull the authoritative state.`,
+              );
+              toast.warning(
+                "Game state out of sync",
+                "Another player advanced the round before your write landed. Refresh the page to resync.",
+              );
+              return;
+            }
+            console.warn(
+              `[state-update] failed (${res.status}) on event ${eventType}:`,
+              json.error,
+            );
+          })
+          .catch((err) => {
+            console.warn(`[state-update] network error on event ${eventType}:`, err);
+          });
       },
 
       rebroadcastSessionCode: () => {
