@@ -149,8 +149,17 @@ export default function GameLobbyPage({
 
   const game = data.game;
   const isHost = sessionId === game.created_by_session_id;
-  const isFacilitator = sessionId !== null && sessionId === game.facilitator_session_id;
-  const seatsClaimed = data.members.filter((m) => m.role !== "spectator").length;
+  // Also check member role — covers the case where facilitator_session_id
+  // was written before localStorage was fully hydrated (e.g. SSR race).
+  const myMember = data.members.find((m) => m.session_id === sessionId);
+  const isFacilitator =
+    (sessionId !== null && sessionId === game.facilitator_session_id) ||
+    myMember?.role === "facilitator";
+  // Exclude facilitator from the seat count — they manage the game,
+  // they don't occupy a player seat.
+  const seatsClaimed = data.members.filter(
+    (m) => m.role !== "spectator" && m.role !== "facilitator"
+  ).length;
   const seatsRemaining = Math.max(0, game.max_teams - seatsClaimed);
 
   return (
