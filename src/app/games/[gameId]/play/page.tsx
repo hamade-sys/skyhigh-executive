@@ -28,6 +28,7 @@ import Link from "next/link";
 import { useEffect, useState, use } from "react";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { useLocalSessionId } from "@/lib/games/session";
+import { useAuth } from "@/lib/auth-context";
 import { useGame } from "@/store/game";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { GameCanvas } from "@/components/game/GameCanvas";
@@ -45,7 +46,10 @@ export default function GamePlayPage({
   params: Promise<{ gameId: string }>;
 }) {
   const { gameId } = use(params);
-  const sessionId = useLocalSessionId();
+  const localSessionId = useLocalSessionId();
+  const { user } = useAuth();
+  // Must match what the lobby/create-game sends: user?.id ?? localSessionId
+  const sessionId = user?.id ?? localSessionId;
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
   const phase = useGame((s) => s.phase);
   const teamsCount = useGame((s) => s.teams.length);

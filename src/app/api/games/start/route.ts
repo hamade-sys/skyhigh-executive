@@ -71,10 +71,21 @@ export async function POST(req: NextRequest) {
       : [];
 
     if (existingTeams.length === 0 && stateJson) {
-      // Human players (members who joined — exclude facilitator/spectator/host)
-      const humanMembers = members.filter(
-        (m) => m.role !== "facilitator" && m.role !== "spectator"
-      );
+      // All members who will play (include facilitators who also want a team,
+      // exclude pure spectators). Facilitators in a self-guided game typically
+      // play too — only exclude them if they're in a facilitated game mode.
+      const gameMode = (stateJson.session as Record<string, unknown> | undefined)?.mode;
+      const humanMembers = members.filter((m) => {
+        if (m.role === "spectator") return false;
+        // In facilitated mode the facilitator runs the game; exclude them from player teams
+        if (gameMode === "facilitated" && m.role === "facilitator") return false;
+        return true;
+      });
+
+      // Player setups saved from the lobby form
+      const playerSetups = (stateJson.playerSetups as Record<string, {
+        airlineName: string; code: string; hub: string; doctrine: string;
+      }> | undefined) ?? {};
 
       const plannedSeats = (
         ((stateJson.session as Record<string, unknown> | undefined)?.plannedSeats as Array<{ type: string; botDifficulty?: string }>) ?? []
@@ -90,13 +101,15 @@ export async function POST(req: NextRequest) {
       for (let i = 0; i < humanMembers.length; i++) {
         const member = humanMembers[i];
         const defaults = HUMAN_DEFAULTS[i % HUMAN_DEFAULTS.length];
+        // Use setup saved from lobby form if available, otherwise use defaults
+        const setup = playerSetups[member.session_id];
         const team = createInitializedTeamFromOnboarding({
-          airlineName: member.display_name
+          airlineName: setup?.airlineName ?? (member.display_name
             ? `${member.display_name}'s Airline`
-            : defaults.name,
-          code: defaults.code,
-          doctrine: defaults.doctrine as DoctrineId,
-          hubCode: defaults.hub,
+            : defaults.name),
+          code: setup?.code ?? defaults.code,
+          doctrine: (setup?.doctrine as DoctrineId) ?? defaults.doctrine,
+          hubCode: setup?.hub ?? defaults.hub,
           color: defaults.color,
           controlledBy: "human",
           claimedBySessionId: member.session_id,

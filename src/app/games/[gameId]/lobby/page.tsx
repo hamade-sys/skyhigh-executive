@@ -24,11 +24,33 @@ import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowRight, Lock, Unlock, Copy, Sparkles, Globe2,
-  Loader2, AlertCircle, Play, Trash2,
+  Loader2, AlertCircle, Play, Trash2, CheckCircle2, Plane,
 } from "lucide-react";
 import { useLocalSessionId } from "@/lib/games/session";
 import { useAuth } from "@/lib/auth-context";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
+
+type DoctrineId = "premium-service" | "budget-expansion" | "cargo-dominance" | "global-network";
+
+const DOCTRINES: { id: DoctrineId; label: string; desc: string }[] = [
+  { id: "premium-service",  label: "Premium",     desc: "Higher fares, loyal business travellers" },
+  { id: "budget-expansion", label: "Budget",       desc: "High volume, secondary markets" },
+  { id: "cargo-dominance",  label: "Cargo",        desc: "Freight focus, resilient in downturns" },
+  { id: "global-network",   label: "Global Network", desc: "Breadth pays — routes compound" },
+];
+
+const POPULAR_HUBS = [
+  { code: "IST", name: "Istanbul" },
+  { code: "LHR", name: "London Heathrow" },
+  { code: "DXB", name: "Dubai" },
+  { code: "FRA", name: "Frankfurt" },
+  { code: "AMS", name: "Amsterdam" },
+  { code: "CDG", name: "Paris CDG" },
+  { code: "NRT", name: "Tokyo Narita" },
+  { code: "SIN", name: "Singapore" },
+  { code: "HKG", name: "Hong Kong" },
+  { code: "JFK", name: "New York JFK" },
+];
 
 interface LobbyResponse {
   game: GameRow;
@@ -53,6 +75,15 @@ export default function GameLobbyPage({
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [copyHint, setCopyHint] = useState(false);
+
+  // ── Airline setup state (for non-facilitator players) ─────────────────
+  const [airlineName, setAirlineName] = useState("");
+  const [airlineCode, setAirlineCode] = useState("");
+  const [airlineHub, setAirlineHub] = useState("IST");
+  const [airlineDoctrine, setAirlineDoctrine] = useState<DoctrineId>("premium-service");
+  const [setupSaved, setSetupSaved] = useState(false);
+  const [setupSaving, setSetupSaving] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -124,6 +155,33 @@ export default function GameLobbyPage({
       setError(e instanceof Error ? e.message : "Network error");
     } finally {
       setActionPending(false);
+    }
+  }
+
+  async function handleSaveSetup() {
+    if (!sessionId || !airlineName.trim() || !airlineCode.trim()) return;
+    setSetupSaving(true);
+    setSetupError(null);
+    try {
+      const res = await fetch("/api/games/player-setup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          gameId,
+          sessionId,
+          airlineName: airlineName.trim(),
+          code: airlineCode.trim(),
+          hub: airlineHub,
+          doctrine: airlineDoctrine,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setSetupError(json.error ?? "Save failed."); }
+      else { setSetupSaved(true); }
+    } catch (e) {
+      setSetupError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setSetupSaving(false);
     }
   }
 
@@ -224,6 +282,114 @@ export default function GameLobbyPage({
               router.replace("/lobby");
             }}
           />
+        )}
+
+        {/* Airline setup — shown to every non-facilitator player */}
+        {!isFacilitator && myMember && game.status === "lobby" && (
+          <section className="mt-8">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
+              Set up your airline
+            </h2>
+            {setupSaved ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-emerald-900">
+                    {airlineName} ({airlineCode}) · Hub {airlineHub}
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    Saved! The game master will start shortly.
+                    <button
+                      onClick={() => setSetupSaved(false)}
+                      className="ml-2 underline text-emerald-700 hover:text-emerald-900"
+                    >
+                      Edit
+                    </button>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-1">
+                  <Plane className="w-4 h-4 text-cyan-500" />
+                  Brand your airline before the game starts
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Airline name *</label>
+                    <input
+                      type="text"
+                      value={airlineName}
+                      onChange={(e) => setAirlineName(e.target.value)}
+                      placeholder="e.g. SkyForce Airlines"
+                      maxLength={40}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">IATA code (2–3 letters) *</label>
+                    <input
+                      type="text"
+                      value={airlineCode}
+                      onChange={(e) => setAirlineCode(e.target.value.toUpperCase().slice(0, 3))}
+                      placeholder="e.g. SKF"
+                      maxLength={3}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-400 font-mono uppercase"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Home hub airport</label>
+                  <select
+                    value={airlineHub}
+                    onChange={(e) => setAirlineHub(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-400"
+                  >
+                    {POPULAR_HUBS.map((h) => (
+                      <option key={h.code} value={h.code}>{h.code} — {h.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-2">Strategy doctrine</label>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {DOCTRINES.map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setAirlineDoctrine(d.id)}
+                        className={
+                          "text-left rounded-lg border p-3 text-xs transition-all " +
+                          (airlineDoctrine === d.id
+                            ? "border-cyan-400 bg-cyan-50 ring-2 ring-cyan-200"
+                            : "border-slate-200 bg-slate-50 hover:border-slate-300")
+                        }
+                      >
+                        <div className="font-semibold text-slate-800 mb-0.5">{d.label}</div>
+                        <div className="text-slate-500">{d.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {setupError && (
+                  <p className="text-xs text-rose-600">{setupError}</p>
+                )}
+
+                <button
+                  onClick={handleSaveSetup}
+                  disabled={setupSaving || !airlineName.trim() || airlineCode.trim().length < 2}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#00C2CB] text-white text-sm font-semibold hover:bg-[#00a9b1] disabled:opacity-50 transition-colors"
+                >
+                  {setupSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Save my airline
+                </button>
+              </div>
+            )}
+          </section>
         )}
 
         {/* Seats */}
