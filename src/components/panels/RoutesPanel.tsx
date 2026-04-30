@@ -77,10 +77,18 @@ export function RoutesPanel() {
   const rows = useMemo(() => {
     if (!player) return [];
     const q = query.trim().toUpperCase();
+    // Sort by DIRECT contribution (revenue minus the costs the route
+    // itself drives — fuel + slot), NOT fully-loaded profit. Reasoning:
+    // a 100%-load Tier-1 trunk route can show negative Q profit only
+    // because it's absorbing its revenue-share of company overhead;
+    // operationally it's healthy. Sorting by fully-loaded would push
+    // strong direct performers to the bottom and steer players to
+    // close them, which is the wrong action — the right action is
+    // either upsize the aircraft (if sold out) or cut overhead. The
+    // network-wide KPI strip below still uses the fully-loaded number
+    // so it reconciles with the team P&L.
     const profitOf = (r: typeof player.routes[number]) =>
-      r.quarterlyAllocatedCost !== undefined
-        ? r.quarterlyRevenue - r.quarterlyAllocatedCost
-        : r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost;
+      r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost;
     return player.routes
       // Include pending routes too — they're awaiting auction resolution
       // and the player needs to see them.
@@ -134,17 +142,25 @@ export function RoutesPanel() {
     ? player.routes.find((r) => r.id === activeRouteId) ?? null
     : null;
 
-  // Network-wide KPIs across active routes. Use allocated cost when
-  // available (route revenue minus its share of all team-level costs)
-  // so this number reconciles with the player's financials. Falls back
-  // to revenue − fuel − slot for any pre-allocation save.
+  // Two profit views, two purposes:
+  //   • routeProfit (direct contribution = revenue − fuel − slot) is
+  //     the per-route operational signal. This drives the row display
+  //     in the route list and the streak basis for "Losing 2Q+".
+  //   • routeNetProfit (revenue − allocated overhead share) is the
+  //     accounting view. Sums across the network to the team's net
+  //     profit so the KPI strip reconciles with the financials panel.
+  // Surfacing both prevents the "100% load Tier-1 trunk reads as a
+  // bad route" trap — players were closing strong direct performers
+  // because the fully-loaded number went red.
   const activeRoutes = player.routes.filter((r) => r.status === "active");
   const routeProfit = (r: typeof activeRoutes[number]) =>
+    r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost;
+  const routeNetProfit = (r: typeof activeRoutes[number]) =>
     r.quarterlyAllocatedCost !== undefined
       ? r.quarterlyRevenue - r.quarterlyAllocatedCost
       : r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost;
   const totalQRev = activeRoutes.reduce((s, r) => s + r.quarterlyRevenue, 0);
-  const totalQProfit = activeRoutes.reduce((s, r) => s + routeProfit(r), 0);
+  const totalQProfit = activeRoutes.reduce((s, r) => s + routeNetProfit(r), 0);
   const avgLoad = activeRoutes.length > 0
     ? activeRoutes.reduce((s, r) => s + r.avgOccupancy, 0) / activeRoutes.length
     : 0;
@@ -260,7 +276,12 @@ export function RoutesPanel() {
                 <Th className="text-right w-[80px]">Occupancy</Th>
                 <Th className="text-right w-[80px]">Freq</Th>
                 <Th className="text-right w-[120px]">Q revenue</Th>
-                <Th className="text-right w-[120px]">Q profit</Th>
+                <Th
+                  className="text-right w-[140px]"
+                  title="Direct contribution: revenue minus fuel and slot costs for this route. Excludes the route's share of company overhead (staff, marketing, maintenance, depreciation, interest, taxes), which is shown in the route detail modal as 'Net after overhead'."
+                >
+                  Direct profit
+                </Th>
                 <Th className="text-right w-[100px]">Status</Th>
               </tr>
             </thead>
@@ -858,10 +879,14 @@ function KpiCard({
 }
 
 function Th({
-  children, className,
+  children, className, title,
 }: {
   children?: React.ReactNode;
   className?: string;
+  /** Native HTML title attribute — surfaces a tooltip on hover. Used to
+   *  explain non-obvious column semantics (e.g. "Direct profit"
+   *  excludes allocated overhead). */
+  title?: string;
 }) {
   return (
     <th
@@ -869,6 +894,7 @@ function Th({
         "text-left px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted",
         className,
       )}
+      title={title}
     >
       {children}
     </th>
@@ -954,10 +980,22 @@ function RouteDetailModal({
 
   const origin = CITIES_BY_CODE[route.originCode];
   const dest = CITIES_BY_CODE[route.destCode];
-  const profit =
+  // Two profit numbers, two purposes:
+  //   directContribution = revenue − fuel − slot lease for THIS route.
+  //     This is the operational signal: did the route itself cover
+  //     the costs the route itself drove? Used as the headline number
+  //     and as the streak basis for the "Losing 2Q+" filter.
+  //   fullyLoadedNet = revenue − route's allocated share of every
+  //     team-level cost (staff, marketing, maintenance, depreciation,
+  //     interest, taxes, hub fees, slot leases, etc). Used as the
+  //     accounting view so the route grid reconciles to the team P&L
+  //     net profit.
+  const directContribution =
+    route.quarterlyRevenue - route.quarterlyFuelCost - route.quarterlySlotCost;
+  const fullyLoadedNet =
     route.quarterlyAllocatedCost !== undefined
       ? route.quarterlyRevenue - route.quarterlyAllocatedCost
-      : route.quarterlyRevenue - route.quarterlyFuelCost - route.quarterlySlotCost;
+      : directContribution;
   const econRange = classFareRangeForDoctrine(route.distanceKm, "econ", player.doctrine);
   const busRange = classFareRangeForDoctrine(route.distanceKm, "bus", player.doctrine);
   const firstRange = classFareRangeForDoctrine(route.distanceKm, "first", player.doctrine);
@@ -1177,32 +1215,44 @@ function RouteDetailModal({
         )}
       </ModalHeader>
       <ModalBody className="space-y-5 max-h-[60vh] overflow-auto">
-        {/* Performance snapshot — Q costs uses the fully-loaded allocated
-            number (route's revenue-share of every team-level cost) so
-            Revenue − Costs = Profit reconciles cleanly. The direct-only
-            fuel+slot view can lie by 80%+ on routes that ride high
-            allocated overhead (slot leases, staff, maintenance, etc). */}
-        <div className="grid grid-cols-4 gap-3">
-          {(() => {
-            const fullyLoadedCosts =
-              route.quarterlyAllocatedCost !== undefined
-                ? route.quarterlyAllocatedCost
-                : route.quarterlyFuelCost + route.quarterlySlotCost;
-            return (
-              <>
-                <MiniStat
-                  label={route.isCargo ? "Cargo occupancy" : "Occupancy"}
-                  value={fmtPct(route.avgOccupancy * 100, 0)}
-                  tone={route.avgOccupancy > 0.7 ? "pos" : route.avgOccupancy > 0 && route.avgOccupancy < 0.5 ? "neg" : undefined}
-                  sub={route.isCargo ? "tonnes shipped / capacity" : "pax / seats"}
-                />
-                <MiniStat label="Q revenue" value={fmtMoney(route.quarterlyRevenue)} />
-                <MiniStat label="Q costs" value={fmtMoney(fullyLoadedCosts)} tone="neg"
-                  sub={`fuel ${fmtMoney(route.quarterlyFuelCost)} + share of overhead`} />
-                <MiniStat label="Q profit" value={fmtMoney(profit)} tone={profit >= 0 ? "pos" : "neg"} />
-              </>
-            );
-          })()}
+        {/* Performance snapshot — split into TWO profit views so a
+            healthy route doesn't read as a bad one just because it's
+            absorbing its share of company overhead.
+              • Direct contribution = revenue − fuel − slot. The
+                operational signal: did this route cover the costs it
+                directly drove? Drives the streak + the "Losing 2Q+"
+                filter.
+              • Net after overhead = revenue − route's allocated share
+                of every team-level cost (staff, marketing, maintenance,
+                depreciation, interest, taxes, hub fees, lease totals).
+                The accounting view; reconciles to team P&L.
+            On Tier-1 trunk routes with sold-out load, direct contribution
+            is the right number to act on; net after overhead is purely
+            informational. */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MiniStat
+            label={route.isCargo ? "Cargo occupancy" : "Occupancy"}
+            value={fmtPct(route.avgOccupancy * 100, 0)}
+            tone={route.avgOccupancy > 0.7 ? "pos" : route.avgOccupancy > 0 && route.avgOccupancy < 0.5 ? "neg" : undefined}
+            sub={route.isCargo ? "tonnes shipped / capacity" : "pax / seats"}
+          />
+          <MiniStat
+            label="Q revenue"
+            value={fmtMoney(route.quarterlyRevenue)}
+            sub={`fuel ${fmtMoney(route.quarterlyFuelCost)} · slot ${fmtMoney(route.quarterlySlotCost)}`}
+          />
+          <MiniStat
+            label="Direct contribution"
+            value={fmtMoney(directContribution)}
+            tone={directContribution >= 0 ? "pos" : "neg"}
+            sub="revenue − fuel − slot"
+          />
+          <MiniStat
+            label="Net after overhead"
+            value={fmtMoney(fullyLoadedNet)}
+            tone={fullyLoadedNet >= 0 ? "pos" : "neg"}
+            sub="after share of company costs"
+          />
         </div>
 
         {/* ── Demand vs capacity projection — restored. Tells the player
@@ -1274,6 +1324,85 @@ function RouteDetailModal({
             </div>
           </div>
         )}
+
+        {/* ── Sold-out + under-served right-sizing hint ─────────────
+            Triggers when the route is operationally sold out AND the
+            engine-modelled demand significantly exceeds the current
+            capacity. This is the case the playtest report surfaced:
+            a 100%-load Tier-1 trunk reads as "losing money" only
+            because it's covering a fraction of available demand AND
+            absorbing fully-loaded overhead. The right action is
+            upsize / add frequency — NOT close the route. We show it
+            below the demand block so the player sees the shape of the
+            problem before the recommendation. */}
+        {(() => {
+          if (route.isCargo) return null;
+          if (!projection || projection.kind !== "passenger") return null;
+          const liveOcc = route.avgOccupancy ?? 0;
+          const projectedCoverage =
+            projection.demand > 0
+              ? Math.min(1, projection.capacity / projection.demand)
+              : 1;
+          const soldOut = liveOcc >= 0.95;
+          const underServed = projectedCoverage < 0.67;
+          if (!soldOut || !underServed) return null;
+          const o = CITIES_BY_CODE[route.originCode];
+          const d = CITIES_BY_CODE[route.destCode];
+          const tier1Trunk = o?.tier === 1 && d?.tier === 1;
+          // Cabin-mismatch check: any aircraft assigned to this route
+          // with 0 first AND 0 business seats while the OD has Tier-1
+          // business demand on at least one endpoint = premium demand
+          // is bleeding to rivals.
+          const hasNoPremium = (route.aircraftIds ?? []).every((id) => {
+            const p = player.fleet.find((f) => f.id === id);
+            if (!p) return false;
+            const spec = AIRCRAFT_BY_ID[p.specId];
+            const seats = p.customSeats ?? spec?.seats;
+            if (!seats) return false;
+            return (seats.first ?? 0) === 0 && (seats.business ?? 0) === 0;
+          });
+          const businessHeavy =
+            (o?.tier ?? 4) <= 2 && (d?.tier ?? 4) <= 2;
+          const cabinMismatch = hasNoPremium && businessHeavy;
+          const coveragePct = Math.round(projectedCoverage * 100);
+          return (
+            <div className="rounded-md border border-warning/50 bg-[var(--warning-soft)]/60 px-3 py-2.5">
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-warning">
+                  Sold out · only {coveragePct}% of demand served
+                </span>
+              </div>
+              <p className="text-[0.8125rem] text-ink-2 leading-relaxed">
+                Every flight on this route is full, but you&apos;re leaving
+                {" "}
+                <strong className="text-ink">
+                  {Math.max(0, Math.round(projection.demand - projection.capacity))} pax/day
+                </strong>{" "}
+                on the table. Add frequency, upsize the aircraft, or both.
+                {tier1Trunk && (
+                  <> {o?.code}↔{d?.code} is a Tier-1 trunk — under-capacity
+                  here is where competitors take share fastest.</>
+                )}
+              </p>
+              {cabinMismatch && (
+                <p className="text-[0.8125rem] text-ink-2 leading-relaxed mt-2 pt-2 border-t border-warning/30">
+                  <strong className="text-warning">Premium demand unserved:</strong>{" "}
+                  the assigned aircraft has zero business or first seats
+                  while both endpoints carry significant business demand.
+                  A two- or three-cabin airframe (e.g. A321, A330, B777)
+                  would unlock higher-yield seats without burning more fuel.
+                </p>
+              )}
+              <p className="text-[0.6875rem] text-ink-muted leading-snug mt-2">
+                Note: the &ldquo;Net after overhead&rdquo; figure above
+                can read negative on healthy direct contributors when the
+                airline carries heavy company overhead. Watch{" "}
+                <strong className="text-ink-2">Direct contribution</strong>
+                {" "}as the operational signal.
+              </p>
+            </div>
+          );
+        })()}
 
         {/* ── 1. Aircraft assigned — moved to first config step. The route
             economics flow from this choice (frequency cap, cabin classes,
@@ -1690,12 +1819,13 @@ function CompetitorsTable({
             </tr>
           </thead>
           <tbody>
-            {/* Always include the player's own row at the top for comparison */}
+            {/* Always include the player's own row at the top for comparison.
+                Uses direct contribution (revenue − fuel − slot) so the
+                head-to-head comparison against rivals stays apples-to-apples
+                — rivals don't have an allocated overhead figure on file. */}
             {(() => {
               const playerProfit =
-                route.quarterlyAllocatedCost !== undefined
-                  ? route.quarterlyRevenue - route.quarterlyAllocatedCost
-                  : route.quarterlyRevenue - route.quarterlyFuelCost - route.quarterlySlotCost;
+                route.quarterlyRevenue - route.quarterlyFuelCost - route.quarterlySlotCost;
               return (
                 <tr className="border-t border-line bg-[var(--accent-soft)]/30">
                   <td className="px-2 py-1.5">
@@ -1734,12 +1864,11 @@ function CompetitorsTable({
             {rivals.map(({ team, route: r }) => {
               const planeId = r.aircraftIds[0];
               const plane = planeId ? team.fleet.find((f) => f.id === planeId) : undefined;
-              // Rivals don't have allocated cost yet (their close ran for
-              // their team) so fall back to revenue − direct route costs.
+              // Direct contribution — apples-to-apples with the player
+              // row above. Rivals don't carry the allocated-overhead
+              // breakdown anyway (overhead allocation runs per-team).
               const profit =
-                r.quarterlyAllocatedCost !== undefined
-                  ? r.quarterlyRevenue - r.quarterlyAllocatedCost
-                  : r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost;
+                r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost;
               return (
                 <tr key={team.id} className="border-t border-line">
                   <td className="px-2 py-1.5">
