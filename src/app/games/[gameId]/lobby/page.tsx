@@ -218,10 +218,11 @@ export default function GameLobbyPage({
   const isFacilitator =
     (sessionId !== null && sessionId === game.facilitator_session_id) ||
     myMember?.role === "facilitator";
-  // Exclude facilitator from the seat count — they manage the game,
-  // they don't occupy a player seat.
+  // Count all non-spectator members as seat holders — including the game master
+  // who now gets their own team (previously they were excluded which caused them
+  // to fall back to local state and not see other players).
   const seatsClaimed = data.members.filter(
-    (m) => m.role !== "spectator" && m.role !== "facilitator"
+    (m) => m.role !== "spectator"
   ).length;
   const seatsRemaining = Math.max(0, game.max_teams - seatsClaimed);
 
@@ -284,8 +285,8 @@ export default function GameLobbyPage({
           />
         )}
 
-        {/* Airline setup — shown to every non-facilitator player */}
-        {!isFacilitator && myMember && game.status === "lobby" && (
+        {/* Airline setup — shown to every participant including game master */}
+        {myMember && myMember.role !== "spectator" && game.status === "lobby" && (
           <section className="mt-8">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
               Set up your airline
@@ -298,7 +299,7 @@ export default function GameLobbyPage({
                     {airlineName} ({airlineCode}) · Hub {airlineHub}
                   </p>
                   <p className="text-xs text-emerald-700 mt-0.5">
-                    Saved! The game master will start shortly.
+                    {isFacilitator ? "Saved! You can start the game when everyone is ready." : "Saved! The game master will start shortly."}
                     <button
                       onClick={() => setSetupSaved(false)}
                       className="ml-2 underline text-emerald-700 hover:text-emerald-900"

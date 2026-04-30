@@ -71,16 +71,11 @@ export async function POST(req: NextRequest) {
       : [];
 
     if (existingTeams.length === 0 && stateJson) {
-      // All members who will play (include facilitators who also want a team,
-      // exclude pure spectators). Facilitators in a self-guided game typically
-      // play too — only exclude them if they're in a facilitated game mode.
-      const gameMode = (stateJson.session as Record<string, unknown> | undefined)?.mode;
-      const humanMembers = members.filter((m) => {
-        if (m.role === "spectator") return false;
-        // In facilitated mode the facilitator runs the game; exclude them from player teams
-        if (gameMode === "facilitated" && m.role === "facilitator") return false;
-        return true;
-      });
+      // ALL non-spectator members get a team — including the game master /
+      // facilitator. Previously excluding the facilitator caused their browser
+      // to fall back to local Zustand state (solo onboarding) while other
+      // browsers hydrated from server state, producing mismatched team lists.
+      const humanMembers = members.filter((m) => m.role !== "spectator");
 
       // Player setups saved from the lobby form
       const playerSetups = (stateJson.playerSetups as Record<string, {
@@ -91,9 +86,16 @@ export async function POST(req: NextRequest) {
         ((stateJson.session as Record<string, unknown> | undefined)?.plannedSeats as Array<{ type: string; botDifficulty?: string }>) ?? []
       );
 
-      const botSeatsCount = plannedSeats.filter((s) => s.type === "bot").length;
-      // Use at least 1 bot if no bot seats planned, so the game isn't empty
-      const botsToSeed = Math.max(botSeatsCount, humanMembers.length === 0 ? 3 : 0);
+      // Real human players consume planned seats from left to right; bots only
+      // fill whatever capacity remains. If 4 seats were planned (1 human + 3 bots)
+      // and 3 real players joined, only 1 bot slot is left → seed 1 bot.
+      // If more humans joined than planned, all bot seats are displaced → 0 bots.
+      // Edge case: no planned seats at all → fall back to 3 bots so the game
+      // isn't empty (e.g. facilitator-only test with no members).
+      const totalPlanned = plannedSeats.length;
+      const botsToSeed = totalPlanned === 0
+        ? (humanMembers.length === 0 ? 3 : 0)
+        : Math.max(0, totalPlanned - humanMembers.length);
 
       const seededTeams: unknown[] = [];
 
