@@ -71,12 +71,6 @@ export async function POST(req: NextRequest) {
       : [];
 
     if (existingTeams.length === 0 && stateJson) {
-      // Only actual players get teams. The facilitator/game master manages the
-      // session but does not compete — they see all teams in admin/spectator view.
-      const humanMembers = members.filter(
-        (m) => m.role !== "spectator" && m.role !== "facilitator",
-      );
-
       // Player setups saved from the lobby form
       const playerSetups = (stateJson.playerSetups as Record<string, {
         airlineName: string; code: string; hub: string; doctrine: string;
@@ -85,6 +79,16 @@ export async function POST(req: NextRequest) {
       const plannedSeats = (
         ((stateJson.session as Record<string, unknown> | undefined)?.plannedSeats as Array<{ type: string; botDifficulty?: string }>) ?? []
       );
+
+      // Only actual players get teams. The facilitator/game master manages the
+      // session but does not compete — they see all teams in admin/spectator view.
+      // Cap to the number of planned human seats so that duplicate member rows
+      // (e.g. same person joined anonymously then authenticated, creating two
+      // game_member entries with different session IDs) don't produce phantom teams.
+      const plannedHumanCount = plannedSeats.filter((s) => s.type === "human").length;
+      const humanMembers = members
+        .filter((m) => m.role !== "spectator" && m.role !== "facilitator")
+        .slice(0, plannedHumanCount > 0 ? plannedHumanCount : members.length);
 
       // Only seed bots for seats that were explicitly configured as "bot" in the
       // lobby form. Never fill empty human seats with bots — if someone didn't

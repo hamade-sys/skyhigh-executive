@@ -37,12 +37,26 @@ import { useAuth } from "@/lib/auth-context";
 export default function Home() {
   const phase = useGame((s) => s.phase);
   const [hydrated, setHydrated] = useState(false);
+  const [hasCode, setHasCode] = useState(false);
   useEffect(() => {
+    // Detect ?code= in URL — someone was given a join link.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHasCode(new URLSearchParams(window.location.search).has("code"));
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, []);
 
   if (!hydrated) {
+    return <div className="flex-1 min-h-0 bg-slate-50" aria-hidden />;
+  }
+
+  // If the URL has ?code=..., the visitor is trying to join a multiplayer game.
+  // Redirect them to /lobby regardless of any local solo state so they don't
+  // accidentally land in their own cached solo canvas instead of the game room.
+  if (hasCode) {
+    if (typeof window !== "undefined") {
+      window.location.replace("/lobby");
+    }
     return <div className="flex-1 min-h-0 bg-slate-50" aria-hidden />;
   }
 
