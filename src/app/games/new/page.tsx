@@ -81,11 +81,10 @@ export default function CreateGamePage() {
   const [beGameMaster, setBeGameMaster] = useState(false);
   const [boardDecisionsEnabled, setBoardDecisionsEnabled] = useState(false);
   const [totalRounds, setTotalRounds] = useState(40);
+  // Default: 2 human slots, no bots. Users can add AI bots manually if wanted.
   const [slots, setSlots] = useState<SlotDraft[]>([
     { id: mkSlotId(), type: "human" },
-    { id: mkSlotId(), type: "bot", difficulty: "medium" },
-    { id: mkSlotId(), type: "bot", difficulty: "medium" },
-    { id: mkSlotId(), type: "bot", difficulty: "medium" },
+    { id: mkSlotId(), type: "human" },
   ]);
 
   const [submitting, setSubmitting] = useState(false);

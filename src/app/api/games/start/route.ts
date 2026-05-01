@@ -86,16 +86,13 @@ export async function POST(req: NextRequest) {
         ((stateJson.session as Record<string, unknown> | undefined)?.plannedSeats as Array<{ type: string; botDifficulty?: string }>) ?? []
       );
 
-      // Real human players consume planned seats from left to right; bots only
-      // fill whatever capacity remains. If 4 seats were planned (1 human + 3 bots)
-      // and 3 real players joined, only 1 bot slot is left → seed 1 bot.
-      // If more humans joined than planned, all bot seats are displaced → 0 bots.
-      // Edge case: no planned seats at all → fall back to 3 bots so the game
-      // isn't empty (e.g. facilitator-only test with no members).
-      const totalPlanned = plannedSeats.length;
-      const botsToSeed = totalPlanned === 0
-        ? (humanMembers.length === 0 ? 3 : 0)
-        : Math.max(0, totalPlanned - humanMembers.length);
+      // Only seed bots for seats that were explicitly configured as "bot" in the
+      // lobby form. Never fill empty human seats with bots — if someone didn't
+      // join, the game runs with fewer players. This prevents phantom AI teams
+      // appearing when the game master configured 2 player slots but the bot
+      // default slots were left in from the new-game form.
+      const botSeatsCount = plannedSeats.filter((s) => s.type === "bot").length;
+      const botsToSeed = botSeatsCount;
 
       const seededTeams: unknown[] = [];
 
@@ -158,7 +155,7 @@ export async function POST(req: NextRequest) {
       };
 
       const currentVersion = state?.version ?? 1;
-      await submitStateMutation({
+      const seedResult = await submitStateMutation({
         gameId,
         expectedVersion: currentVersion,
         newState: newStateJson,
@@ -169,6 +166,14 @@ export async function POST(req: NextRequest) {
           botCount: botsToSeed,
         },
       });
+      // If the write fails (e.g. version conflict from a concurrent player-setup
+      // save), bail out now so the game doesn't start with 0 teams.
+      if (!seedResult.ok) {
+        return NextResponse.json(
+          { error: `Failed to seed teams: ${seedResult.error}. Please try starting again.` },
+          { status: 409 },
+        );
+      }
     }
 
     // ── Advance status to "playing" ────────────────────────────────────────

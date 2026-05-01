@@ -178,7 +178,12 @@ export default function GameLobbyPage({
       });
       const json = await res.json();
       if (!res.ok) { setSetupError(json.error ?? "Save failed."); }
-      else { setSetupSaved(true); }
+      else {
+        setSetupSaved(true);
+        // Refresh lobby data immediately so all seat badges flip to "✓ Ready"
+        // without waiting for the 5-second poll cycle.
+        await load();
+      }
     } catch (e) {
       setSetupError(e instanceof Error ? e.message : "Network error");
     } finally {
