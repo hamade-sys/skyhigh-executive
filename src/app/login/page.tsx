@@ -29,7 +29,9 @@ function LoginInner() {
   const [password, setPassword] = useState("");
 
   // Where to send the user after a successful sign-in.
-  const nextPath = search.get("next") || "/lobby";
+  // Default to home page so the active-membership check there can
+  // redirect returning players straight back into their active game.
+  const nextPath = search.get("next") || "/";
 
   // Surface auth errors from /auth/callback redirects.
   useEffect(() => {

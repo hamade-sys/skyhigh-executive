@@ -20,7 +20,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight, Plus, RefreshCw, Users, Lock, Sparkles, Globe2, Play,
-  KeyRound, Loader2,
+  KeyRound, Loader2, RotateCcw,
 } from "lucide-react";
 import { isMultiplayerAvailable } from "@/lib/supabase/browser";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
@@ -30,10 +30,13 @@ import type { GameRow } from "@/lib/supabase/types";
 
 export default function LobbyPage() {
   const router = useRouter();
-  const { sessionId } = useMultiplayerSession();
+  const { sessionId, authReady } = useMultiplayerSession();
   const [games, setGames] = useState<GameRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Active game for the signed-in player — shown as a "Resume" card
+  const [activeGame, setActiveGame] = useState<{ id: string; status: string; name: string } | null>(null);
 
   const [code, setCode] = useState("");
   const [joining, setJoining] = useState(false);
@@ -66,6 +69,25 @@ export default function LobbyPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
     loadGames();
   }, []);
+
+  // Check if the signed-in player has an active game they can resume.
+  // Fires once auth is ready and a session ID is available.
+  useEffect(() => {
+    if (!authReady || !sessionId) return;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/games/active-membership?sessionId=${encodeURIComponent(sessionId)}`,
+          { cache: "no-store" },
+        );
+        const json = await res.json();
+        if (json?.game) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setActiveGame(json.game);
+        }
+      } catch { /* ignore — non-critical */ }
+    })();
+  }, [authReady, sessionId]);
 
   async function handleJoinByCode(e: React.FormEvent) {
     e.preventDefault();
@@ -123,6 +145,37 @@ export default function LobbyPage() {
             Create game
           </Link>
         </div>
+
+        {/* ── Resume active game banner ───────────────────────── */}
+        {activeGame && (
+          <div className="mb-6 rounded-2xl border border-cyan-200 bg-cyan-50 p-5 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-widest text-cyan-700 mb-0.5">
+                  Active game
+                </p>
+                <p className="text-sm font-semibold text-slate-900 truncate">
+                  {activeGame.name}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {activeGame.status === "playing" ? "In progress — pick up where you left off" : "Lobby open — waiting to start"}
+                </p>
+              </div>
+            </div>
+            <Link
+              href={activeGame.status === "playing"
+                ? `/games/${activeGame.id}/play`
+                : `/games/${activeGame.id}/lobby`}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors shrink-0"
+            >
+              {activeGame.status === "playing" ? "Resume game" : "Back to lobby"}
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
 
         <form
           onSubmit={handleJoinByCode}

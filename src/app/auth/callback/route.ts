@@ -18,7 +18,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") || "/lobby";
+  // Default to home page so returning players get smart-redirected
+  // to their active game via the active-membership check there.
+  const next = url.searchParams.get("next") || "/";
   if (!code) {
     return NextResponse.redirect(new URL("/login?error=missing_code", url.origin));
   }
