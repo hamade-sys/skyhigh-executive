@@ -407,6 +407,10 @@ export interface GameStore extends GameState {
   hydrateFromServerState(args: {
     stateJson: unknown;
     mySessionId: string;
+    /** Anonymous session id to try if mySessionId doesn't match any
+     *  claimed team — covers the case where the player joined the lobby
+     *  before logging in (localSessionId) and is now authenticated (user.id). */
+    fallbackSessionId?: string | null;
   }): { ok: boolean; error?: string };
 
   /** Multiplayer write-back. POSTs the current local state to
@@ -5186,7 +5190,7 @@ export const useGame = create<GameStore>()(
       // sessionId`; if no claim is found we leave activeTeamId null
       // and the player lands in spectator-y view-only mode (still
       // valuable for facilitators dropping in mid-game).
-      hydrateFromServerState: ({ stateJson, mySessionId }) => {
+      hydrateFromServerState: ({ stateJson, mySessionId, fallbackSessionId }) => {
         if (!stateJson || typeof stateJson !== "object") {
           return { ok: false, error: "Empty or invalid state payload." };
         }
@@ -5212,13 +5216,13 @@ export const useGame = create<GameStore>()(
             ),
           })) as Team[];
 
-          // Bind activeTeamId to whichever team this session has
-          // claimed. Falls back to the legacy playerTeamId if no
-          // claim is found (e.g. host watching a game they didn't
-          // join as a player), so single-browser solo continues to
-          // work without explicit re-claim.
+          // Bind activeTeamId to whichever team this session has claimed.
+          // Also try fallbackSessionId (the anonymous localSessionId) so a
+          // player who joined before logging in still binds to their team.
           const claimed = teams.find(
-            (t) => t.claimedBySessionId === mySessionId,
+            (t) =>
+              t.claimedBySessionId === mySessionId ||
+              (fallbackSessionId && t.claimedBySessionId === fallbackSessionId),
           );
           const activeTeamId = claimed?.id ?? null;
           // Mirror activeTeamId into playerTeamId so the 75+ panel

@@ -234,7 +234,12 @@ export default function GameLobbyPage({
   const isHost = sessionId === game.created_by_session_id;
   // Also check member role — covers the case where facilitator_session_id
   // was written before localStorage was fully hydrated (e.g. SSR race).
-  const myMember = data.members.find((m) => m.session_id === sessionId);
+  // Check both the current session ID and the anonymous localSessionId —
+  // a player who joined before logging in will have a member row keyed
+  // to their anonymous ID, and we must still recognise them.
+  const myMember = data.members.find(
+    (m) => m.session_id === sessionId || (localSessionId && m.session_id === localSessionId),
+  );
   const isFacilitator =
     (sessionId !== null && sessionId === game.facilitator_session_id) ||
     myMember?.role === "facilitator";
@@ -431,12 +436,22 @@ export default function GameLobbyPage({
             Seats
           </h2>
           <div className="grid sm:grid-cols-2 gap-3">
-            {Array.from({ length: game.max_teams }).map((_, i) => {
-              const member = data.members[i];
-              const isMe = member?.session_id === sessionId;
-              const hasSetup = member ? member.session_id in playerSetups : false;
-              return <SeatCard key={i} index={i + 1} member={member ?? null} isMe={isMe} hasSetup={hasSetup} />;
-            })}
+            {(() => {
+              // Only show player seats — exclude facilitator/spectator so
+              // the game master doesn't appear as one of the player seats.
+              const playerMembers = data.members.filter(
+                (m) => m.role !== "spectator" && m.role !== "facilitator",
+              );
+              return Array.from({ length: game.max_teams }).map((_, i) => {
+                const member = playerMembers[i];
+                const isMe = member
+                  ? member.session_id === sessionId ||
+                    (localSessionId != null && member.session_id === localSessionId)
+                  : false;
+                const hasSetup = member ? member.session_id in playerSetups : false;
+                return <SeatCard key={i} index={i + 1} member={member ?? null} isMe={isMe} hasSetup={hasSetup} />;
+              });
+            })()}
           </div>
           {seatsRemaining > 0 && game.locked && (
             <p className="text-xs text-amber-700 mt-4 inline-flex items-center gap-1">

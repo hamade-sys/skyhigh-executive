@@ -117,6 +117,10 @@ export default function GamePlayPage({
     const result = hydrateFromServerState({
       stateJson: data.state.state_json,
       mySessionId: sessionId,
+      // If player joined anonymously (localSessionId) before logging in,
+      // their team's claimedBySessionId may still hold the anonymous id.
+      // Pass it as a fallback so they still bind to their team.
+      fallbackSessionId: localSessionId,
     });
     if (!result.ok) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
