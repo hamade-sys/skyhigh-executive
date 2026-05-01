@@ -860,11 +860,9 @@ export interface GameState {
    *  single human). */
   activeTeamId: string | null;
 
-  /** Stable per-browser id, generated lazily from crypto.randomUUID()
-   *  and persisted in localStorage. Used to bind a seat in
-   *  `team.claimedBySessionId`, so a refresh reconnects to the same
-   *  team. NOT the same as a Supabase auth user — the lobby system
-   *  intentionally allows anonymous play. */
+  /** @deprecated No longer used. Identity is now always Supabase user.id
+   *  (real or anonymous auth). Kept in the type so old persisted state
+   *  shapes don't cause a TS error on rehydration. */
   localSessionId: string | null;
 
   /** @deprecated Use `state.session?.joinCode`. Kept as a shadow during

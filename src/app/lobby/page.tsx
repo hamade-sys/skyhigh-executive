@@ -23,14 +23,14 @@ import {
   KeyRound, Loader2,
 } from "lucide-react";
 import { isMultiplayerAvailable } from "@/lib/supabase/browser";
-import { useLocalSessionId } from "@/lib/games/session";
+import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import type { GameRow } from "@/lib/supabase/types";
 
 export default function LobbyPage() {
   const router = useRouter();
-  const sessionId = useLocalSessionId();
+  const sessionId = useMultiplayerSession();
   const [games, setGames] = useState<GameRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

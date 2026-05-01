@@ -26,8 +26,7 @@ import {
   ArrowLeft, ArrowRight, Lock, Unlock, Copy, Sparkles, Globe2,
   Loader2, AlertCircle, Play, Trash2, CheckCircle2, Plane,
 } from "lucide-react";
-import { useLocalSessionId } from "@/lib/games/session";
-import { useAuth } from "@/lib/auth-context";
+import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 
 type DoctrineId = "premium-service" | "budget-expansion" | "cargo-dominance" | "global-network";
@@ -66,11 +65,9 @@ export default function GameLobbyPage({
   // Next 16 unwraps async params via React.use()
   const { gameId } = use(params);
   const router = useRouter();
-  const localSessionId = useLocalSessionId();
-  const { user } = useAuth();
-  // Use Supabase user ID when signed in — must match what create-game
-  // sends as hostSessionId (user?.id ?? sessionId).
-  const sessionId = user?.id ?? localSessionId;
+  // Stable server-side identity — Supabase user.id (real or anonymous auth).
+  // Never a localStorage UUID: those break cross-device multiplayer.
+  const sessionId = useMultiplayerSession();
   const [data, setData] = useState<LobbyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,11 +106,9 @@ export default function GameLobbyPage({
     }
   }, [gameId, router]);
 
-  // Clear any stale "active game" redirect key from localStorage the
-  // moment a lobby page loads. The lobby is always the entry point
-  // before a game starts, so if the player is here they haven't
-  // entered the new game yet. The play page will write the fresh key
-  // once the game actually starts and server state is hydrated.
+  // Clear any stale active-game redirect key so the home page doesn't
+  // bounce the player back into a game that is still in the lobby phase.
+  // The play page re-writes the key once server state is hydrated.
   useEffect(() => {
     try { localStorage.removeItem("skyforce:activeGame"); } catch { /* ignore */ }
   }, [gameId]);
@@ -132,15 +127,11 @@ export default function GameLobbyPage({
   }, [load]);
 
   // Claim a seat as soon as we have a session id and the game is in lobby.
-  // The join API is idempotent so re-running is safe.
-  // We also check localSessionId so a user who joined anonymously and then
-  // logged in doesn't create a second member row (which would produce a
-  // phantom team at game-start).
+  // The join API is idempotent — re-joining with the same session id is
+  // the reconnect path and only updates last_seen_at.
   useEffect(() => {
     if (!sessionId || !data) return;
-    const alreadyJoined = data.members.some(
-      (m) => m.session_id === sessionId || (localSessionId && m.session_id === localSessionId),
-    );
+    const alreadyJoined = data.members.some((m) => m.session_id === sessionId);
     if (alreadyJoined) return;
     if (data.game.status !== "lobby") return;
     fetch("/api/games/join", {
@@ -149,7 +140,7 @@ export default function GameLobbyPage({
       body: JSON.stringify({ gameId, sessionId }),
     }).then(load).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, localSessionId, data?.game.id, data?.game.status]);
+  }, [sessionId, data?.game.id, data?.game.status]);
 
   async function action(path: string, body: unknown) {
     if (!sessionId) return;
@@ -232,14 +223,10 @@ export default function GameLobbyPage({
 
   const game = data.game;
   const isHost = sessionId === game.created_by_session_id;
-  // Also check member role — covers the case where facilitator_session_id
-  // was written before localStorage was fully hydrated (e.g. SSR race).
-  // Check both the current session ID and the anonymous localSessionId —
-  // a player who joined before logging in will have a member row keyed
-  // to their anonymous ID, and we must still recognise them.
-  const myMember = data.members.find(
-    (m) => m.session_id === sessionId || (localSessionId && m.session_id === localSessionId),
-  );
+  // sessionId is always user.id (real or anonymous Supabase auth) —
+  // no localStorage fallback needed because signInAnonymously() runs
+  // before the join call, so the member row is always keyed to user.id.
+  const myMember = data.members.find((m) => m.session_id === sessionId);
   const isFacilitator =
     (sessionId !== null && sessionId === game.facilitator_session_id) ||
     myMember?.role === "facilitator";
@@ -444,10 +431,7 @@ export default function GameLobbyPage({
               );
               return Array.from({ length: game.max_teams }).map((_, i) => {
                 const member = playerMembers[i];
-                const isMe = member
-                  ? member.session_id === sessionId ||
-                    (localSessionId != null && member.session_id === localSessionId)
-                  : false;
+                const isMe = member ? member.session_id === sessionId : false;
                 const hasSetup = member ? member.session_id in playerSetups : false;
                 return <SeatCard key={i} index={i + 1} member={member ?? null} isMe={isMe} hasSetup={hasSetup} />;
               });

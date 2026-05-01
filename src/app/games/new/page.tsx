@@ -31,7 +31,6 @@ import {
   ArrowLeft, ArrowRight, Loader2, Lock, Globe2, Sparkles,
   CheckSquare, Plus, Trash2, User, Bot,
 } from "lucide-react";
-import { useLocalSessionId } from "@/lib/games/session";
 import { useAuth } from "@/lib/auth-context";
 import { isMultiplayerAvailable } from "@/lib/supabase/browser";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
@@ -59,7 +58,6 @@ function mkSlotId() {
 
 export default function CreateGamePage() {
   const router = useRouter();
-  const sessionId = useLocalSessionId();
   const { user, loading: authLoading } = useAuth();
   const mpAvailable = isMultiplayerAvailable();
 
@@ -133,8 +131,8 @@ export default function CreateGamePage() {
       setError("At least one seat is required.");
       return;
     }
-    if (!sessionId) {
-      setError("Browser session not ready — please refresh.");
+    if (!user?.id) {
+      setError("Not signed in — please refresh and sign in first.");
       return;
     }
 
@@ -152,7 +150,7 @@ export default function CreateGamePage() {
           boardDecisionsEnabled,
           beGameMaster,
           plannedSeats: slots,
-          hostSessionId: user?.id ?? sessionId,
+          hostSessionId: user.id,
           // Initial state placeholder — the host's airline-branding
           // happens after seat-claim. For now we ship a minimal
           // skeleton; the engine fills it in at start.
@@ -383,7 +381,7 @@ export default function CreateGamePage() {
             </Link>
             <button
               onClick={handleSubmit}
-              disabled={submitting || !mpAvailable || !sessionId}
+              disabled={submitting || !mpAvailable || !user?.id}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#00C2CB] hover:bg-[#00a9b1] text-white text-sm font-semibold disabled:opacity-50 transition-colors"
             >
               {submitting ? (

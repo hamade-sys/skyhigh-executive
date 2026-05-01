@@ -26,8 +26,7 @@
 import Link from "next/link";
 import { useEffect, useState, useRef, use } from "react";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
-import { useLocalSessionId } from "@/lib/games/session";
-import { useAuth } from "@/lib/auth-context";
+import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import { useGame } from "@/store/game";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
@@ -46,10 +45,8 @@ export default function GamePlayPage({
   params: Promise<{ gameId: string }>;
 }) {
   const { gameId } = use(params);
-  const localSessionId = useLocalSessionId();
-  const { user } = useAuth();
-  // Must match what the lobby/create-game sends: user?.id ?? localSessionId
-  const sessionId = user?.id ?? localSessionId;
+  // Stable server-side identity — Supabase user.id (real or anonymous auth).
+  const sessionId = useMultiplayerSession();
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
   const phase = useGame((s) => s.phase);
   const teamsCount = useGame((s) => s.teams.length);
@@ -117,10 +114,6 @@ export default function GamePlayPage({
     const result = hydrateFromServerState({
       stateJson: data.state.state_json,
       mySessionId: sessionId,
-      // If player joined anonymously (localSessionId) before logging in,
-      // their team's claimedBySessionId may still hold the anonymous id.
-      // Pass it as a fallback so they still bind to their team.
-      fallbackSessionId: localSessionId,
     });
     if (!result.ok) {
       // eslint-disable-next-line react-hooks/set-state-in-effect

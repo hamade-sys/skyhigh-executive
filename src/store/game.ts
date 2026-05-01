@@ -407,10 +407,6 @@ export interface GameStore extends GameState {
   hydrateFromServerState(args: {
     stateJson: unknown;
     mySessionId: string;
-    /** Anonymous session id to try if mySessionId doesn't match any
-     *  claimed team — covers the case where the player joined the lobby
-     *  before logging in (localSessionId) and is now authenticated (user.id). */
-    fallbackSessionId?: string | null;
   }): { ok: boolean; error?: string };
 
   /** Multiplayer write-back. POSTs the current local state to
@@ -833,10 +829,9 @@ export const useGame = create<GameStore>()(
       // `activeTeamId` binds THIS browser to one team for the run;
       // panels/HUD branch on it instead of `team.isPlayer` so the
       // same engine state can render correctly for any human team.
-      // `localSessionId` is the per-browser id we set on first paint.
       session: null,
       activeTeamId: null,
-      localSessionId: null,
+      localSessionId: null, // kept for backwards-compat with saved state shapes
       preOrders: [],
       productionCapOverrides: {},
       isMultiplayerSession: false,
@@ -5190,7 +5185,7 @@ export const useGame = create<GameStore>()(
       // sessionId`; if no claim is found we leave activeTeamId null
       // and the player lands in spectator-y view-only mode (still
       // valuable for facilitators dropping in mid-game).
-      hydrateFromServerState: ({ stateJson, mySessionId, fallbackSessionId }) => {
+      hydrateFromServerState: ({ stateJson, mySessionId }) => {
         if (!stateJson || typeof stateJson !== "object") {
           return { ok: false, error: "Empty or invalid state payload." };
         }
@@ -5217,12 +5212,10 @@ export const useGame = create<GameStore>()(
           })) as Team[];
 
           // Bind activeTeamId to whichever team this session has claimed.
-          // Also try fallbackSessionId (the anonymous localSessionId) so a
-          // player who joined before logging in still binds to their team.
+          // sessionId is always user.id (Supabase auth — real or anonymous),
+          // so a single equality check is sufficient.
           const claimed = teams.find(
-            (t) =>
-              t.claimedBySessionId === mySessionId ||
-              (fallbackSessionId && t.claimedBySessionId === fallbackSessionId),
+            (t) => t.claimedBySessionId === mySessionId,
           );
           const activeTeamId = claimed?.id ?? null;
           // Mirror activeTeamId into playerTeamId so the 75+ panel
