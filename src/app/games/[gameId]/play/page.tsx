@@ -72,16 +72,8 @@ export default function GamePlayPage({
         if (cancelled) return;
         if (!res.ok) {
           setError(json.error ?? "Game not found.");
-          // Game is gone or inaccessible — clear the redirect key so the
-          // home page stops bouncing the player back to a dead game URL.
-          try { localStorage.removeItem("skyforce:activeGame"); } catch { /* ignore */ }
         } else {
           setData(json);
-          // Also clear the key if the game has ended so returning visitors
-          // land on the marketing page rather than a finished-game error.
-          if (json.game?.status === "ended") {
-            try { localStorage.removeItem("skyforce:activeGame"); } catch { /* ignore */ }
-          }
         }
       } catch (e) {
         if (cancelled) return;
@@ -120,9 +112,8 @@ export default function GamePlayPage({
       setError(result.error ?? "Couldn't hydrate game state.");
       return;
     }
-    // Persist the active game ID so the home page can redirect returning
-    // visitors back here instead of showing the stale solo canvas.
-    try { localStorage.setItem("skyforce:activeGame", gameId); } catch { /* ignore */ }
+    // Hydration succeeded — the database is the source of truth for
+    // which game this player belongs to; no localStorage key needed.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, [data, sessionId, hydrated, hydrateFromServerState]);

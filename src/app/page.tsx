@@ -38,8 +38,10 @@ export default function Home() {
   const phase = useGame((s) => s.phase);
   const [hydrated, setHydrated] = useState(false);
   const [redirect, setRedirect] = useState<string | null>(null);
+  const { user, loading: authLoading } = useAuth();
+
   useEffect(() => {
-    // ?code= → join lobby
+    // ?code= → join lobby (invitation link flow)
     if (new URLSearchParams(window.location.search).has("code")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRedirect("/lobby");
@@ -47,23 +49,42 @@ export default function Home() {
       setHydrated(true);
       return;
     }
-    // Active multiplayer game → send player back to the play page so they
-    // don't land on their stale solo canvas. The key is written by the play
-    // page after successful server-state hydration and cleared when the
-    // player deliberately leaves via the lobby.
-    try {
-      const activeGame = localStorage.getItem("skyforce:activeGame");
-      if (activeGame) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setRedirect(`/games/${activeGame}/play`);
+    // Wait for auth to settle before checking for an active game.
+    if (authLoading) return;
+
+    // Signed-in player → query the database (not localStorage) to find
+    // which active game they belong to. Works across devices and browsers
+    // because the lookup is keyed by Supabase user.id, not a local UUID.
+    if (user?.id) {
+      (async () => {
+        try {
+          const res = await fetch(
+            `/api/games/active-membership?sessionId=${encodeURIComponent(user.id)}`,
+            { cache: "no-store" },
+          );
+          const json = await res.json();
+          const game = json?.game as { id: string; status: string } | null;
+          if (game) {
+            const dest = game.status === "playing"
+              ? `/games/${game.id}/play`
+              : `/games/${game.id}/lobby`;
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setRedirect(dest);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setHydrated(true);
+            return;
+          }
+        } catch { /* network error — fall through to landing */ }
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setHydrated(true);
-        return;
-      }
-    } catch { /* localStorage blocked */ }
+      })();
+      return;
+    }
+
+    // Not signed in — show landing page.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
-  }, []);
+  }, [authLoading, user?.id]);
 
   if (!hydrated) {
     return <div className="flex-1 min-h-0 bg-slate-50" aria-hidden />;

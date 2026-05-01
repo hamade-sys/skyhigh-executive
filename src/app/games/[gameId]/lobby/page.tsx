@@ -22,6 +22,7 @@
 import Link from "next/link";
 import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
+import { getBrowserClient } from "@/lib/supabase/browser";
 import {
   ArrowLeft, ArrowRight, Lock, Unlock, Copy, Sparkles, Globe2,
   Loader2, AlertCircle, Play, Trash2, CheckCircle2, Plane,
@@ -106,25 +107,50 @@ export default function GameLobbyPage({
     }
   }, [gameId, router]);
 
-  // Clear any stale active-game redirect key so the home page doesn't
-  // bounce the player back into a game that is still in the lobby phase.
-  // The play page re-writes the key once server state is hydrated.
-  useEffect(() => {
-    try { localStorage.removeItem("skyforce:activeGame"); } catch { /* ignore */ }
-  }, [gameId]);
+  // Initial fetch on mount.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); }, [load]);
 
+  // Supabase Realtime — live updates for all lobby events.
+  // Three channels cover every change that matters in the lobby:
+  //   1. game_members — someone joins or leaves
+  //   2. games        — game locked/unlocked, or status flips to "playing"
+  //   3. game_state   — a player saves their airline setup
+  // Each event re-fetches fresh data so every participant's screen
+  // stays in sync without polling.
   useEffect(() => {
-    // load() is async — its setState calls fire after the await, not
-    // synchronously inside the effect body. The lint rule flags it
-    // anyway via static analysis, so we explicitly silence it for
-    // this pattern. Step 9 replaces the polling with Supabase
-    // Realtime + tanstack-query; until then this is the right
-    // pattern for "fetch on mount + poll while in lobby".
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-    const id = setInterval(load, 5_000);
-    return () => clearInterval(id);
-  }, [load]);
+    const supa = getBrowserClient();
+    if (!supa) {
+      // Supabase not configured — fall back to 5-second polling
+      // so the lobby still works in local dev without env vars.
+      const id = setInterval(load, 5_000);
+      return () => clearInterval(id);
+    }
+
+    const channel = supa
+      .channel(`lobby:${gameId}`)
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        "postgres_changes" as any,
+        { event: "*", schema: "public", table: "game_members", filter: `game_id=eq.${gameId}` },
+        () => { load(); },
+      )
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        "postgres_changes" as any,
+        { event: "UPDATE", schema: "public", table: "games", filter: `id=eq.${gameId}` },
+        () => { load(); },
+      )
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        "postgres_changes" as any,
+        { event: "UPDATE", schema: "public", table: "game_state", filter: `game_id=eq.${gameId}` },
+        () => { load(); },
+      )
+      .subscribe();
+
+    return () => { supa.removeChannel(channel); };
+  }, [gameId, load]);
 
   // Claim a seat as soon as we have a session id and the game is in lobby.
   // The join API is idempotent — re-joining with the same session id is
@@ -270,9 +296,6 @@ export default function GameLobbyPage({
         <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link
             href="/lobby"
-            onClick={() => {
-              try { localStorage.removeItem("skyforce:activeGame"); } catch { /* ignore */ }
-            }}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -321,9 +344,6 @@ export default function GameLobbyPage({
             onStart={() => action("/api/games/start", { gameId })}
             onDelete={async () => {
               await action("/api/games/delete", { gameId, sessionId });
-              // Clear the active-game key so the home page doesn't keep
-              // redirecting back to a game that no longer exists.
-              try { localStorage.removeItem("skyforce:activeGame"); } catch { /* ignore */ }
               router.replace("/lobby");
             }}
           />

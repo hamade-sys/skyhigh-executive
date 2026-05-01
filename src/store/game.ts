@@ -5002,12 +5002,12 @@ export const useGame = create<GameStore>()(
         // Clear the milestone-shown ledger so a fresh game's first
         // close lights up the relevant milestones again instead of
         // suppressing them as "already seen".
+        // Clear the milestone-shown ledger so fresh milestones show again.
         if (typeof window !== "undefined") {
           try { window.localStorage.removeItem("skyforce:milestonesShown:v1"); } catch {}
-          // Also clear the multiplayer active-game redirect key so the
-          // home page goes back to the marketing landing / solo canvas.
-          try { window.localStorage.removeItem("skyforce:activeGame"); } catch {}
         }
+        // Active-game redirect is now handled via Supabase (game_members
+        // table) — no localStorage key to clear.
         set({
           phase: "idle",
           currentQuarter: 1,
