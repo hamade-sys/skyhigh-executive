@@ -8,28 +8,28 @@
  * GameCanvas. The store's `activeTeamId` is set on bind so panels/
  * HUD branch on session-team match instead of the legacy isPlayer.
  *
- * State sync model (current state of the rollout):
+ * State sync model:
  *   1. Initial paint: GET /api/games/load?gameId=X&includeState=1
  *   2. Engine state JSON is fed into the local Zustand store via
  *      `hydrateFromServerState({ stateJson, mySessionId })`.
- *   3. After hydrate, the GameCanvas paints from local store. Local
- *      mutations stay local — server-side write-through (Step 9
- *      Supabase Realtime) lands when CAS + broadcast wiring is in
- *      place. For solo/cohort playtests this is enough: every
- *      browser hydrates from the server, drives its own engine,
- *      and the facilitator console is the source of truth.
- *
- * If the server state hasn't been seeded yet (lobby still open or
- * Supabase unconfigured), we render a friendly graceful-fallback
- * card pointing back to the lobby surface.
+ *   3. After hydrate, the GameCanvas paints from local store.
+ *   4. Key player actions (routes, fleet, sliders, decisions,
+ *      quarter close) call pushStateToServer which does a CAS write
+ *      to Supabase — each game has its own game_state row keyed by
+ *      game_id, so games never affect each other's saves.
+ *   5. Supabase Realtime broadcasts every game_state update to all
+ *      subscribers. When any player pushes new state, every other
+ *      browser on that game re-hydrates automatically — players
+ *      stay in sync across devices without polling.
  */
 
 import Link from "next/link";
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useRef, use } from "react";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { useLocalSessionId } from "@/lib/games/session";
 import { useAuth } from "@/lib/auth-context";
 import { useGame } from "@/store/game";
+import { getBrowserClient } from "@/lib/supabase/browser";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { GameCanvas } from "@/components/game/GameCanvas";
 import { TopBar } from "@/components/layout/TopBar";
@@ -57,6 +57,10 @@ export default function GamePlayPage({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
+  // Ref so the Realtime callback can call the latest hydrateFromServerState
+  // without being stale-closed over an old reference.
+  const hydrateRef = useRef(hydrateFromServerState);
+  useEffect(() => { hydrateRef.current = hydrateFromServerState; }, [hydrateFromServerState]);
 
   // Step 1 — fetch the server snapshot.
   useEffect(() => {
@@ -125,6 +129,42 @@ export default function GamePlayPage({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, [data, sessionId, hydrated, hydrateFromServerState]);
+
+  // Step 3 — Supabase Realtime: re-hydrate whenever any player pushes
+  // new state for this game. Each game has its own game_state row
+  // (keyed by game_id) so this subscription is perfectly isolated —
+  // updates from other games never reach this listener.
+  useEffect(() => {
+    if (!hydrated || !sessionId) return;
+    const supa = getBrowserClient();
+    if (!supa) return; // Supabase not configured (local dev without env vars)
+
+    const channel = supa
+      .channel(`game-state:${gameId}`)
+      .on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        "postgres_changes" as any,
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "game_state",
+          filter: `game_id=eq.${gameId}`,
+        },
+        (payload: { new: { state_json: unknown; version: number } }) => {
+          // Another player pushed new state. Re-hydrate from the fresh
+          // server snapshot so this browser stays in sync. We skip if
+          // the version hasn't changed (duplicate fire safety).
+          const newState = payload.new?.state_json;
+          if (!newState) return;
+          hydrateRef.current({ stateJson: newState, mySessionId: sessionId });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supa.removeChannel(channel);
+    };
+  }, [hydrated, gameId, sessionId]);
 
   if (loading) {
     return (

@@ -1068,6 +1068,7 @@ export const useGame = create<GameStore>()(
               : t,
           ),
         });
+        get().pushStateToServer("player.savedSliders", { sliders });
       },
 
       reviseDoctrineAtR20: (doctrine) => {
@@ -1326,6 +1327,9 @@ export const useGame = create<GameStore>()(
           // earliestRound used by the toast subtitle below (silence linter).
           void earliestRound;
         }
+        get().pushStateToServer("player.orderedAircraft", {
+          specId, qty, acquisitionType,
+        });
         return { ok: true, queuedCount: queuedQty, deliveredCount: instantQty };
       },
 
@@ -2594,6 +2598,9 @@ export const useGame = create<GameStore>()(
             `Flights start running this quarter; first revenue shows at quarter close.`,
           );
         }
+        get().pushStateToServer("player.openedRoute", {
+          origin: originCode, dest: destCode,
+        });
         return { ok: true };
       },
 
@@ -2626,6 +2633,7 @@ export const useGame = create<GameStore>()(
             },
           ),
         });
+        get().pushStateToServer("player.closedRoute", { routeId });
       },
 
       cancelPendingRoute: (routeId) => {
@@ -2967,6 +2975,9 @@ export const useGame = create<GameStore>()(
 
         set({
           teams: s.teams.map((t) => t.id === player.id ? updated : t),
+        });
+        get().pushStateToServer("player.submittedDecision", {
+          scenarioId, optionId,
         });
       },
 
