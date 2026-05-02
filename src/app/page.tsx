@@ -25,7 +25,6 @@ import {
   ArrowRight, Sparkles, Plane, Trophy, MapPin, Wallet, Users,
   Zap, Gem, PackageCheck, Globe2, ClipboardList,
   Clock, Landmark, Hotel, Wheat, Building2, Stethoscope,
-  Loader2, Mail as MailIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useGame } from "@/store/game";
@@ -45,7 +44,6 @@ export default function Home() {
     if (new URLSearchParams(window.location.search).has("code")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setRedirect("/lobby");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHydrated(true);
       return;
     }
@@ -114,15 +112,41 @@ export default function Home() {
 // Marketing landing
 // ============================================================================
 
+// Industry slugs used to drive both the Portfolio "selected" state and
+// the Features content. Lifted to Landing-level state so clicking a
+// Portfolio card swaps the Features section's content without a route
+// change.
+type IndustrySlug = "airline" | "banking" | "hospitality" | "agriculture" | "real-estate" | "healthcare";
+
 function Landing() {
+  // Default to "airline" — the only live simulation. Visitors can flip
+  // to a coming-soon industry by clicking its Portfolio card; the
+  // Features block below re-renders to talk about that industry.
+  const [selectedSim, setSelectedSim] = useState<IndustrySlug>("airline");
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-white">
       <MarketingHeader current="home" variant="onDark" />
 
       <Hero />
       <SocialProof />
-      <Portfolio />
-      <Features />
+      <Portfolio
+        selectedSim={selectedSim}
+        onSelectSim={(slug) => {
+          setSelectedSim(slug);
+          // Scroll the Features section into view so the swap is
+          // visible. requestAnimationFrame ensures the state update
+          // has flushed before we measure/scroll.
+          if (typeof window !== "undefined") {
+            requestAnimationFrame(() => {
+              document
+                .getElementById("features")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          }
+        }}
+      />
+      <Features selectedSim={selectedSim} />
       <Doctrines />
       <HowItWorks />
       <FacilitatorBlock />
@@ -134,23 +158,7 @@ function Landing() {
 
 // ─── Hero ────────────────────────────────────────────────────
 function Hero() {
-  const { signInWithGoogle, signInWithMicrosoft, user, authConfigured } = useAuth();
-  const [loading, setLoading] = useState<"google" | "microsoft" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleGoogle() {
-    setError(null);
-    setLoading("google");
-    const r = await signInWithGoogle();
-    if (!r.ok) { setError(r.error); setLoading(null); }
-  }
-
-  async function handleMicrosoft() {
-    setError(null);
-    setLoading("microsoft");
-    const r = await signInWithMicrosoft();
-    if (!r.ok) { setError(r.error); setLoading(null); }
-  }
+  const { user } = useAuth();
 
   return (
     <section className="relative overflow-hidden bg-slate-950 text-white -mt-16 pt-16">
@@ -210,46 +218,10 @@ function Hero() {
               How it works
             </Link>
           </div>
-          {!user && (
-            <div className="mb-8 flex flex-col items-start gap-2">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleGoogle}
-                  disabled={!authConfigured || loading !== null}
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-sm font-medium text-white transition-colors disabled:opacity-50"
-                >
-                  {loading === "google" ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <GoogleIcon className="w-4 h-4 shrink-0" />
-                  )}
-                  Sign in with Google
-                </button>
-                <button
-                  type="button"
-                  onClick={handleMicrosoft}
-                  disabled={!authConfigured || loading !== null}
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-sm font-medium text-white transition-colors disabled:opacity-50"
-                >
-                  {loading === "microsoft" ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <MicrosoftIcon className="w-4 h-4 shrink-0" />
-                  )}
-                  Sign in with Microsoft
-                </button>
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-sm font-medium text-white transition-colors"
-                >
-                  <MailIcon className="w-4 h-4 shrink-0" />
-                  Sign in with Email
-                </Link>
-              </div>
-              {error && <p className="text-xs text-rose-400">{error}</p>}
-            </div>
-          )}
+          {/* Sign-in buttons removed from the marketing surface — the
+              header chip + /login already cover that path. The hero
+              should stay focused on the product story; the Join game
+              CTA is the single primary call-to-action. */}
           {user && (
             <div className="mb-8">
               <Link href="/lobby" className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
@@ -265,101 +237,101 @@ function Hero() {
 
 
 // ─── Social proof strip ──────────────────────────────────────
+//
+// Replaces the previous flex-wrapped chip+dot row, which fell apart on
+// mid-width viewports: 5 items would fit on one row with their dots,
+// then "Industry cohorts" wrapped to a second row dangling on its own.
+// The dot-separator pattern is fragile because it doesn't know about
+// wrap boundaries — a dot always renders after the i-th item even when
+// that item lands at the end of a row.
+//
+// Now: a single centered <p> with `·` characters embedded as natural
+// inline separators. The text wraps as a paragraph, dots wrap with
+// the words, no orphaned items, no awkward second rows.
 function SocialProof() {
+  const segments = [
+    "Boards & C-suite",
+    "Strategy teams",
+    "Operating leadership",
+    "Family-office reviews",
+    "Executive education",
+    "Industry cohorts",
+  ];
   return (
     <section className="border-b border-slate-100 bg-white">
-      <div className="max-w-6xl mx-auto px-6 py-14">
-        <p className="text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-8">
+      <div className="max-w-5xl mx-auto px-6 py-14 text-center">
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-5">
           Built for senior executives who run real industries
         </p>
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 text-slate-500">
-          {[
-            "Boards & C-suite",
-            "Strategy teams",
-            "Operating leadership",
-            "Family-office reviews",
-            "Executive education",
-            "Industry cohorts",
-          ].map((segment, i) => (
-            <div key={segment} className="flex items-center gap-x-10">
-              <span className="text-sm font-medium tracking-wide">{segment}</span>
-              {i < 5 && <span className="hidden md:inline w-1 h-1 rounded-full bg-slate-300" />}
-            </div>
+        <p className="text-sm md:text-base font-medium text-slate-600 leading-loose tracking-wide">
+          {segments.map((s, i) => (
+            <span key={s}>
+              {s}
+              {i < segments.length - 1 && (
+                <span className="mx-3 text-slate-300" aria-hidden>
+                  ·
+                </span>
+              )}
+            </span>
           ))}
-        </div>
+        </p>
       </div>
     </section>
   );
 }
 
 // ─── Industry portfolio ──────────────────────────────────────
-function Portfolio() {
-  interface IndustryCard {
-    name: string;
-    industry: string;
-    status: "live" | "next";
-    desc: string;
-    accent: "cyan" | "violet" | "emerald" | "amber" | "rose" | "sky";
-    Icon: LucideIcon;
-  }
-  const industries: IndustryCard[] = [
-    {
-      name: "Airline",
-      industry: "Aviation",
-      status: "live",
-      desc: "Network, fleet, pricing, slot auctions, fuel hedging, board scenarios.",
-      accent: "cyan",
-      Icon: Plane,
-    },
-    {
-      name: "Banking",
-      industry: "Banking & Capital Markets",
-      status: "next",
-      desc: "Lending, treasury, capital ratios, regulatory pressure.",
-      accent: "violet",
-      Icon: Landmark,
-    },
-    {
-      name: "Hospitality",
-      industry: "Hospitality",
-      status: "next",
-      desc: "Property portfolio, RevPAR, brand, demand cycles.",
-      accent: "emerald",
-      Icon: Hotel,
-    },
-    {
-      name: "Agriculture",
-      industry: "Agribusiness",
-      status: "next",
-      desc: "Land, commodities, weather risk, supply chain.",
-      accent: "amber",
-      Icon: Wheat,
-    },
-    {
-      name: "Real Estate",
-      industry: "Real Estate",
-      status: "next",
-      desc: "Acquisition, development, leasing, capital structure.",
-      accent: "rose",
-      Icon: Building2,
-    },
-    {
-      name: "Healthcare",
-      industry: "Healthcare Systems",
-      status: "next",
-      desc: "Capacity, payor mix, clinical outcomes, regulatory landscape.",
-      accent: "sky",
-      Icon: Stethoscope,
-    },
-  ];
-  const ring: Record<IndustryCard["accent"], string> = {
-    cyan: "bg-cyan-50 text-cyan-700 ring-cyan-100",
-    violet: "bg-violet-50 text-violet-700 ring-violet-100",
-    emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-    amber: "bg-amber-50 text-amber-700 ring-amber-100",
-    rose: "bg-rose-50 text-rose-700 ring-rose-100",
-    sky: "bg-sky-50 text-sky-700 ring-sky-100",
-  };
+//
+// Cards are now selectable: clicking one updates the parent's
+// `selectedSim` state and scrolls into the Features section, which
+// rerenders with that industry's content. The live Airline still
+// has a "Play now" CTA (separate link) so visitors can jump straight
+// into the lobby without losing the selection-driven Features behavior.
+interface PortfolioIndustryCard {
+  slug: IndustrySlug;
+  name: string;
+  industry: string;
+  status: "live" | "next";
+  desc: string;
+  accent: "cyan" | "violet" | "emerald" | "amber" | "rose" | "sky";
+  Icon: LucideIcon;
+}
+const PORTFOLIO_INDUSTRIES: PortfolioIndustryCard[] = [
+  { slug: "airline", name: "Airline", industry: "Aviation", status: "live",
+    desc: "Network, fleet, pricing, slot auctions, fuel hedging, board scenarios.",
+    accent: "cyan", Icon: Plane },
+  { slug: "banking", name: "Banking", industry: "Banking & Capital Markets", status: "next",
+    desc: "Lending, treasury, capital ratios, regulatory pressure.",
+    accent: "violet", Icon: Landmark },
+  { slug: "hospitality", name: "Hospitality", industry: "Hospitality", status: "next",
+    desc: "Property portfolio, RevPAR, brand, demand cycles.",
+    accent: "emerald", Icon: Hotel },
+  { slug: "agriculture", name: "Agriculture", industry: "Agribusiness", status: "next",
+    desc: "Land, commodities, weather risk, supply chain.",
+    accent: "amber", Icon: Wheat },
+  { slug: "real-estate", name: "Real Estate", industry: "Real Estate", status: "next",
+    desc: "Acquisition, development, leasing, capital structure.",
+    accent: "rose", Icon: Building2 },
+  { slug: "healthcare", name: "Healthcare", industry: "Healthcare Systems", status: "next",
+    desc: "Capacity, payor mix, clinical outcomes, regulatory landscape.",
+    accent: "sky", Icon: Stethoscope },
+];
+const PORTFOLIO_RING: Record<PortfolioIndustryCard["accent"], string> = {
+  cyan: "bg-cyan-50 text-cyan-700 ring-cyan-100",
+  violet: "bg-violet-50 text-violet-700 ring-violet-100",
+  emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+  amber: "bg-amber-50 text-amber-700 ring-amber-100",
+  rose: "bg-rose-50 text-rose-700 ring-rose-100",
+  sky: "bg-sky-50 text-sky-700 ring-sky-100",
+};
+
+function Portfolio({
+  selectedSim,
+  onSelectSim,
+}: {
+  selectedSim: IndustrySlug;
+  onSelectSim: (slug: IndustrySlug) => void;
+}) {
   return (
     <section
       id="portfolio"
@@ -380,6 +352,9 @@ function Portfolio() {
             clients lead. Each one models the operating reality of its sector —
             not a generic management game with the names changed.
           </p>
+          <p className="text-sm text-slate-400 mt-4">
+            Pick an industry to preview what the simulation models below.
+          </p>
           <Link
             href="/simulations"
             className="inline-flex items-center gap-1.5 mt-6 text-sm font-semibold text-slate-900 hover:text-slate-700"
@@ -388,47 +363,61 @@ function Portfolio() {
           </Link>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {industries.map((it) => (
-            <Link
-              key={it.name}
-              href={it.status === "live" ? "/lobby" : `/simulations#${it.name.toLowerCase().replace(/\s+/g, "-")}`}
-              className={
-                "block rounded-2xl border bg-white p-5 transition-all relative hover:shadow-md " +
-                (it.status === "live"
-                  ? "border-slate-900 ring-2 ring-slate-900/10"
-                  : "border-slate-200 hover:border-slate-300")
-              }
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div className={`inline-flex items-center justify-center w-11 h-11 rounded-xl ring-4 ${ring[it.accent]}`}>
-                  <it.Icon className="w-5 h-5" strokeWidth={1.75} />
+          {PORTFOLIO_INDUSTRIES.map((it) => {
+            const isSelected = selectedSim === it.slug;
+            return (
+              <button
+                key={it.slug}
+                type="button"
+                onClick={() => onSelectSim(it.slug)}
+                aria-pressed={isSelected}
+                className={
+                  "block w-full text-left rounded-2xl border bg-white p-5 transition-all relative hover:shadow-md " +
+                  (isSelected
+                    ? "border-cyan-400 ring-2 ring-cyan-200"
+                    : "border-slate-200 hover:border-slate-300")
+                }
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`inline-flex items-center justify-center w-11 h-11 rounded-xl ring-4 ${PORTFOLIO_RING[it.accent]}`}>
+                    <it.Icon className="w-5 h-5" strokeWidth={1.75} />
+                  </div>
+                  <span
+                    className={
+                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider " +
+                      (it.status === "live"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-100 text-slate-500")
+                    }
+                  >
+                    <span className={
+                      "w-1.5 h-1.5 rounded-full " +
+                      (it.status === "live" ? "bg-emerald-500" : "bg-slate-400")
+                    } />
+                    {it.status === "live" ? "Live now" : "Coming soon"}
+                  </span>
                 </div>
-                <span
-                  className={
-                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider " +
-                    (it.status === "live"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-slate-100 text-slate-500")
-                  }
-                >
-                  <span className={
-                    "w-1.5 h-1.5 rounded-full " +
-                    (it.status === "live" ? "bg-emerald-500" : "bg-slate-400")
-                  } />
-                  {it.status === "live" ? "Live now" : "Coming"}
-                </span>
-              </div>
-              <h3 className="text-lg font-semibold text-slate-900 mb-0.5">
-                {it.name}
-              </h3>
-              <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">
-                {it.industry}
-              </p>
-              <p className="text-sm text-slate-500 leading-relaxed">
-                {it.desc}
-              </p>
-            </Link>
-          ))}
+                <h3 className="text-lg font-semibold text-slate-900 mb-0.5">
+                  {it.name}
+                </h3>
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">
+                  {it.industry}
+                </p>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  {it.desc}
+                </p>
+                {it.status === "live" && (
+                  <Link
+                    href="/lobby"
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-700 hover:text-cyan-800"
+                  >
+                    Play now <ArrowRight className="w-3 h-3" />
+                  </Link>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -436,65 +425,203 @@ function Portfolio() {
 }
 
 // ─── Features ────────────────────────────────────────────────
-function Features() {
+//
+// Per-industry feature catalog. Each industry has 6 cards mirroring the
+// shape of the live Airline content: a flagship operational decision
+// area, a network/market layer, finance + capital, people/ops dials,
+// the board-scenario layer, and the endgame scoring formula. For
+// non-live industries the cards describe what the simulation WILL
+// model when it ships — readers see a coherent preview of every
+// upcoming sim, not just airline. Source for the sector specifics
+// is the same data we publish on /simulations.
+type FeatureAccent = "cyan" | "violet" | "emerald" | "amber" | "rose" | "sky";
+interface FeatureCardData {
+  Icon: LucideIcon;
+  accent: FeatureAccent;
+  title: string;
+  description: string;
+}
+interface FeatureBlock {
+  eyebrow: string;
+  headline: React.ReactNode;
+  intro: React.ReactNode;
+  status: "live" | "coming-soon";
+  cards: FeatureCardData[];
+}
+const INDUSTRY_FEATURES: Record<IndustrySlug, FeatureBlock> = {
+  airline: {
+    eyebrow: "Inside the Airline simulation",
+    headline: <>Every lever the executive<br /><span className="text-slate-500">actually pulls.</span></>,
+    intro:
+      "Not a board game. A complete operating model — fleet, network, pricing, slots, cabin demand, fuel hedging, debt, sliders, and board-level decisions — running on the same depth you'd review at a real strategy offsite.",
+    status: "live",
+    cards: [
+      { Icon: Plane, accent: "cyan", title: "Fleet & cabin design",
+        description: "Buy or lease across 40+ aircraft families. Custom cabin layouts. Engine upgrades, eco retrofits, fuselage coatings. Aircraft retire on schedule." },
+      { Icon: MapPin, accent: "violet", title: "Network & slot auctions",
+        description: "Open routes across 380+ cities. Bid against rivals at scarce airports. Per-class fares, frequency caps tied to physics-real schedules." },
+      { Icon: Wallet, accent: "emerald", title: "Finance & debt",
+        description: "Term loans, revolving credit, lease residuals. Fuel hedging. Dividend recap. Tax-loss carry-forward. Watch cash like a CFO." },
+      { Icon: Users, accent: "amber", title: "People & ops sliders",
+        description: "Six operational dials — staff, marketing, service, rewards, ops, customer service. Each shapes payroll, brand, and loyalty curves." },
+      { Icon: ClipboardList, accent: "violet", title: "Board scenarios",
+        description: "18 quarterly board decisions: cyber breach, fuel hedging, government deals, alliance offers. Locked-in choices ripple for years." },
+      { Icon: Trophy, accent: "cyan", title: "Endgame scoring",
+        description: "Airline value at Q40 = brand × ops × loyalty × cash position. Comeback bonuses, debt-stress callouts, legacy title earned." },
+    ],
+  },
+  banking: {
+    eyebrow: "Inside the Banking simulation",
+    headline: <>Every credit cycle the bank<br /><span className="text-slate-500">has to live through.</span></>,
+    intro:
+      "Lead a commercial bank through a full credit cycle. Set risk appetite, manage capital ratios, navigate regulator stress tests, and decide how aggressively to chase yield when the curve moves.",
+    status: "coming-soon",
+    cards: [
+      { Icon: Landmark, accent: "violet", title: "Loan book composition",
+        description: "Build the asset side: corporate, SME, mortgage, consumer. Set risk appetite per segment, watch concentration, manage non-performing-loan flow." },
+      { Icon: Wallet, accent: "emerald", title: "Treasury & balance-sheet duration",
+        description: "Match-fund, run a deliberate duration gap, or hedge it. Net interest margin moves with every shift in the curve." },
+      { Icon: ClipboardList, accent: "cyan", title: "Capital, liquidity & regulator stress",
+        description: "Basel-style capital ratios, LCR/NSFR liquidity, and quarterly stress tests. Run too thin and the regulator opens the file." },
+      { Icon: Users, accent: "amber", title: "Channel & talent mix",
+        description: "Branch footprint, digital channel investment, frontline incentives. Cost-to-income ratio is the watchword." },
+      { Icon: Sparkles, accent: "rose", title: "Board scenarios",
+        description: "Quarterly scenarios: fraud event, rate-cycle pivot, fintech challenger, sovereign exposure, regulator inquiry. Choices ripple through capital plans." },
+      { Icon: Trophy, accent: "sky", title: "Endgame scoring",
+        description: "Bank value scored on ROE, capital adequacy, asset quality, and franchise strength. Cycle-survival bonus for clean cumulative loss provisioning." },
+    ],
+  },
+  hospitality: {
+    eyebrow: "Inside the Hospitality simulation",
+    headline: <>Every property, brand, and<br /><span className="text-slate-500">tourism cycle in one room.</span></>,
+    intro:
+      "Run a hotel and resort portfolio across brand tiers and tourism cycles. Manage rate, occupancy, brand mix, and capital projects. RevPAR is the score; long-cycle CapEx is the risk.",
+    status: "coming-soon",
+    cards: [
+      { Icon: Hotel, accent: "emerald", title: "Property portfolio & brand mix",
+        description: "Acquire, develop, or franchise across luxury, upscale, midscale, economy. Brand standards drive CapEx; brand equity drives rate power." },
+      { Icon: MapPin, accent: "violet", title: "Revenue management & dynamic rate",
+        description: "Daily rate decisions across segments — corporate, leisure, group, OTA. Length-of-stay restrictions, channel mix, overbooking discipline." },
+      { Icon: Wallet, accent: "amber", title: "F&B and ancillary revenue",
+        description: "Restaurants, banqueting, spa, retail. Each property has a profit anatomy beyond rooms — neglect it and the brand softens." },
+      { Icon: Users, accent: "cyan", title: "Workforce & service quality",
+        description: "Service standards, training depth, line-staff turnover. The labour-to-quality dial drives both cost and loyalty in the same quarter." },
+      { Icon: ClipboardList, accent: "rose", title: "Board scenarios",
+        description: "Quarterly scenarios: pandemic shock, OTA contract pressure, brand-standard refresh, sustainability mandate, M&A approach." },
+      { Icon: Trophy, accent: "sky", title: "Endgame scoring",
+        description: "Portfolio value scored on RevPAR growth, brand strength, GOP margin, and capital efficiency. Loyalty-share bonus for repeat-guest expansion." },
+    ],
+  },
+  agriculture: {
+    eyebrow: "Inside the Agriculture simulation",
+    headline: <>Every commodity hedge, every<br /><span className="text-slate-500">weather cycle, every season.</span></>,
+    intro:
+      "Run a diversified agribusiness through commodity, weather, and trade-policy cycles. Set crop mix, hedge exposure, time storage, and survive the quarter the futures market turns.",
+    status: "coming-soon",
+    cards: [
+      { Icon: Wheat, accent: "amber", title: "Crop mix & rotation",
+        description: "Set the planting plan: row crops, cash crops, rotation discipline. Yield variance per field, soil-health drag, certification premia." },
+      { Icon: Globe2, accent: "emerald", title: "Land acquisition & leasing",
+        description: "Buy versus lease, irrigated versus rain-fed, region diversification. Capital tied up in land vs. equipment is the perennial trade-off." },
+      { Icon: Wallet, accent: "violet", title: "Commodity hedging & offtake",
+        description: "Futures, forwards, basis trades. Lock in margin or run open exposure. Offtake contracts smooth cash but cap upside." },
+      { Icon: PackageCheck, accent: "cyan", title: "Storage, logistics & working capital",
+        description: "Silos, terminals, in-transit inventory. Seasonal cash-flow tightness compounds when storage is short or freight blows out." },
+      { Icon: ClipboardList, accent: "rose", title: "Board scenarios",
+        description: "Quarterly scenarios: drought, tariff shock, sustainability disclosure rule, biotech adoption, port disruption." },
+      { Icon: Trophy, accent: "sky", title: "Endgame scoring",
+        description: "Business value scored on margin per hectare, cycle-adjusted returns, balance-sheet strength, and ESG positioning." },
+    ],
+  },
+  "real-estate": {
+    eyebrow: "Inside the Real Estate simulation",
+    headline: <>Every cap-rate cycle the<br /><span className="text-slate-500">portfolio has to clear.</span></>,
+    intro:
+      "Build and run a property portfolio across asset classes, debt cycles, and tenant economics. Time the acquisition window, manage the capital stack, and survive cap-rate expansion.",
+    status: "coming-soon",
+    cards: [
+      { Icon: Building2, accent: "rose", title: "Asset-class allocation",
+        description: "Office, retail, logistics, residential, hotel. Cycle exposure differs per asset; diversification dampens drawdowns but caps upside." },
+      { Icon: MapPin, accent: "violet", title: "Acquisition vs. develop vs. dispose",
+        description: "Time the cycle. Buy core when cap rates blow out, develop when construction prices favor it, dispose when valuations re-rate." },
+      { Icon: Wallet, accent: "emerald", title: "Capital stack & debt covenants",
+        description: "Senior debt, mezz, equity. LTV ratios, DSCR covenants, refi risk. The capital stack is what kills you in the down cycle." },
+      { Icon: Users, accent: "amber", title: "Lease structure & tenant mix",
+        description: "Anchor tenants, WALE management, rent-review clauses. Tenant diversification protects cash flow when single names fail." },
+      { Icon: ClipboardList, accent: "cyan", title: "Board scenarios",
+        description: "Quarterly scenarios: rate-shock revaluation, anchor tenant default, repositioning CapEx, regulatory ESG mandate, JV partner exit." },
+      { Icon: Trophy, accent: "sky", title: "Endgame scoring",
+        description: "NAV growth, cash-on-cash returns, occupancy, and capital efficiency. Cycle-survival bonus for clean LTV through the down move." },
+    ],
+  },
+  healthcare: {
+    eyebrow: "Inside the Healthcare simulation",
+    headline: <>Every payor, every clinician,<br /><span className="text-slate-500">every regulator at once.</span></>,
+    intro:
+      "Run a hospital network through workforce shortages, payor pressure, and clinical quality demands. Capacity is the constraint; mission-vs-margin is the call you make every quarter.",
+    status: "coming-soon",
+    cards: [
+      { Icon: Stethoscope, accent: "sky", title: "Service-line strategy",
+        description: "Specialty mix, surgical volume, ambulatory growth. Each service line has its own margin profile and clinician demand." },
+      { Icon: Wallet, accent: "emerald", title: "Payor contracting & revenue cycle",
+        description: "Public payor mix, commercial contract terms, denied-claim recovery. The receivable cycle is where the cash actually lives." },
+      { Icon: Users, accent: "amber", title: "Workforce & clinician retention",
+        description: "Nurse staffing ratios, physician compensation, agency reliance. Burnout signals show up in turnover before they show up in quality." },
+      { Icon: Sparkles, accent: "violet", title: "Capital projects & technology",
+        description: "OR build-outs, imaging fleet, EHR adoption, AI-assisted clinical. Long-cycle CapEx with regulatory and accreditation tails." },
+      { Icon: ClipboardList, accent: "rose", title: "Board scenarios",
+        description: "Quarterly scenarios: outbreak surge, accreditation review, clinician strike action, payor renegotiation, value-based-care mandate." },
+      { Icon: Trophy, accent: "cyan", title: "Endgame scoring",
+        description: "System value scored on outcomes, margin, mission delivery, and resilience. Quality-of-care bonus for sustained outcome improvements." },
+    ],
+  },
+};
+
+function Features({ selectedSim }: { selectedSim: IndustrySlug }) {
+  const block = INDUSTRY_FEATURES[selectedSim];
   return (
-    <section id="features" className="relative py-24 lg:py-32 bg-white">
+    <section id="features" className="relative py-24 lg:py-32 bg-white scroll-mt-20">
       <div className="max-w-6xl mx-auto px-6">
-        <div className="max-w-2xl mb-16">
-          <p className="text-xs font-semibold text-cyan-600 uppercase tracking-widest mb-3">
-            Inside the Airline simulation
+        <div className="max-w-2xl mb-12">
+          <p className={`text-xs font-semibold uppercase tracking-widest mb-3 ${block.status === "live" ? "text-cyan-600" : "text-slate-500"}`}>
+            {block.eyebrow}
           </p>
           <h2 className="text-4xl md:text-5xl font-display font-bold text-slate-900 tracking-tight mb-6 leading-[1.1]">
-            Every lever the executive
-            <br />
-            <span className="text-slate-500">actually pulls.</span>
+            {block.headline}
           </h2>
           <p className="text-lg text-slate-500 leading-relaxed">
-            Not a board game. A complete operating model — fleet, network,
-            pricing, slots, cabin demand, fuel hedging, debt, sliders, and
-            board-level decisions — running on the same depth you&rsquo;d
-            review at a real strategy offsite. Every other industry in our
-            roadmap ships with the same fidelity.
+            {block.intro}
           </p>
+          {block.status === "coming-soon" && (
+            <div className="mt-6 inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                Coming soon
+              </span>
+              <span className="text-slate-600">
+                The Airline simulation is live today.{" "}
+                <Link href="/simulations" className="font-semibold text-slate-900 underline-offset-2 hover:underline">
+                  See the full pipeline
+                </Link>{" "}
+                or{" "}
+                <a href="mailto:info@icanmena.com?subject=ICAN%20Simulations%20early%20access" className="font-semibold text-slate-900 underline-offset-2 hover:underline">
+                  ask about early access
+                </a>.
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <FeatureCard
-            icon={<Plane className="w-5 h-5" />}
-            accent="cyan"
-            title="Fleet & cabin design"
-            description="Buy or lease across 40+ aircraft families. Custom cabin layouts. Engine upgrades, eco retrofits, fuselage coatings. Aircraft retire on schedule."
-          />
-          <FeatureCard
-            icon={<MapPin className="w-5 h-5" />}
-            accent="violet"
-            title="Network & slot auctions"
-            description="Open routes across 380+ cities. Bid against rivals at scarce airports. Per-class fares, frequency caps tied to physics-real schedules."
-          />
-          <FeatureCard
-            icon={<Wallet className="w-5 h-5" />}
-            accent="emerald"
-            title="Finance & debt"
-            description="Term loans, revolving credit, lease residuals. Fuel hedging. Dividend recap. Tax-loss carry-forward. Watch cash like a CFO."
-          />
-          <FeatureCard
-            icon={<Users className="w-5 h-5" />}
-            accent="amber"
-            title="People & ops sliders"
-            description="Six operational dials — staff, marketing, service, rewards, ops, customer service. Each shapes payroll, brand, and loyalty curves."
-          />
-          <FeatureCard
-            icon={<ClipboardList className="w-5 h-5" />}
-            accent="violet"
-            title="Board scenarios"
-            description="18 quarterly board decisions: cyber breach, fuel hedging, government deals, alliance offers. Locked-in choices ripple for years."
-          />
-          <FeatureCard
-            icon={<Trophy className="w-5 h-5" />}
-            accent="cyan"
-            title="Endgame scoring"
-            description="Airline value at Q40 = brand × ops × loyalty × cash position. Comeback bonuses, debt-stress callouts, legacy title earned."
-          />
+          {block.cards.map((c) => (
+            <FeatureCard
+              key={c.title}
+              icon={<c.Icon className="w-5 h-5" />}
+              accent={c.accent}
+              title={c.title}
+              description={c.description}
+            />
+          ))}
         </div>
       </div>
     </section>
@@ -505,7 +632,7 @@ function FeatureCard({
   icon, accent, title, description,
 }: {
   icon: React.ReactNode;
-  accent: "cyan" | "violet" | "emerald" | "amber";
+  accent: FeatureAccent;
   title: string;
   description: string;
 }) {
@@ -514,6 +641,8 @@ function FeatureCard({
     violet: "bg-violet-50 text-violet-700 ring-violet-100",
     emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
     amber: "bg-amber-50 text-amber-700 ring-amber-100",
+    rose: "bg-rose-50 text-rose-700 ring-rose-100",
+    sky: "bg-sky-50 text-sky-700 ring-sky-100",
   }[accent];
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 hover:border-slate-300 transition-colors">
@@ -716,20 +845,7 @@ function FacilitatorStat({ label, value }: { label: string; value: React.ReactNo
 
 // ─── Final CTA ───────────────────────────────────────────────
 function FinalCta() {
-  const { signInWithGoogle, signInWithMicrosoft, user, authConfigured } = useAuth();
-  const [loading, setLoading] = useState<"google" | "microsoft" | null>(null);
-
-  async function handleGoogle() {
-    setLoading("google");
-    const r = await signInWithGoogle();
-    if (!r.ok) setLoading(null);
-  }
-
-  async function handleMicrosoft() {
-    setLoading("microsoft");
-    const r = await signInWithMicrosoft();
-    if (!r.ok) setLoading(null);
-  }
+  const { user } = useAuth();
 
   return (
     <section className="relative py-24 overflow-hidden bg-gradient-to-b from-white to-cyan-50/40">
@@ -741,6 +857,10 @@ function FinalCta() {
           One door in. Browse open games, drop in with a code, or start your
           own — solo, with friends, or with a facilitator.
         </p>
+        {/* Sign-in buttons removed from the marketing surface — the
+            header chip + /login already cover that path. The hero
+            should stay focused on the product story; Join game is
+            the single primary CTA on this page. */}
         <div className="flex items-center justify-center gap-3 flex-wrap">
           <Link
             href="/lobby"
@@ -749,35 +869,6 @@ function FinalCta() {
             Join game
             <ArrowRight className="w-4 h-4" />
           </Link>
-          {!user && (
-            <>
-              <button
-                type="button"
-                onClick={handleGoogle}
-                disabled={!authConfigured || loading !== null}
-                className="inline-flex items-center gap-2.5 px-5 py-3 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-700 transition-colors shadow-sm disabled:opacity-50"
-              >
-                {loading === "google" ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon className="w-4 h-4 shrink-0" />}
-                Sign in with Google
-              </button>
-              <button
-                type="button"
-                onClick={handleMicrosoft}
-                disabled={!authConfigured || loading !== null}
-                className="inline-flex items-center gap-2.5 px-5 py-3 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-700 transition-colors shadow-sm disabled:opacity-50"
-              >
-                {loading === "microsoft" ? <Loader2 className="w-4 h-4 animate-spin" /> : <MicrosoftIcon className="w-4 h-4 shrink-0" />}
-                Sign in with Microsoft
-              </button>
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2.5 px-5 py-3 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-700 transition-colors shadow-sm"
-              >
-                <MailIcon className="w-4 h-4 shrink-0" />
-                Sign in with Email
-              </Link>
-            </>
-          )}
           {user && (
             <Link href="/lobby" className="inline-flex items-center gap-1.5 px-5 py-3 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
               Go to my games →
