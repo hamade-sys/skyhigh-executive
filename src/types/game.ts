@@ -865,6 +865,12 @@ export interface GameState {
    *  as actorSessionId. Null in solo runs. Never a localStorage UUID. */
   localSessionId: string | null;
 
+  /** True when the current user is a Game Master spectating without a
+   *  claimed team. All state-mutation actions are blocked when this is
+   *  true. Set in hydrateFromServerState based on whether the session
+   *  has a claimed team row in game_members. */
+  isObserver: boolean;
+
   /** @deprecated Use `state.session?.joinCode`. Kept as a shadow during
    *  the lobby rollout; mirrored from `session.joinCode` whenever a
    *  session is active so legacy `/join` and the facilitator console

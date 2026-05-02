@@ -131,6 +131,10 @@ export interface GameStore extends GameState {
    * startNewGame / resetGame so solo play never bleeds into multiplayer saves.
    */
   isMultiplayerSession: boolean;
+  /** True when this browser is connected as a Game Master / facilitator.
+   *  All state-mutating actions check this flag and return early so the
+   *  GM can spectate freely without accidentally changing any team's state. */
+  isObserver: boolean;
 
   // ── Actions ───────────────────────────────────────────────
   startNewGame(args: {
@@ -835,6 +839,7 @@ export const useGame = create<GameStore>()(
       preOrders: [],
       productionCapOverrides: {},
       isMultiplayerSession: false,
+      isObserver: false,
 
       startNewGame: (args) => {
         const {
@@ -1059,7 +1064,7 @@ export const useGame = create<GameStore>()(
 
       setSliders: (sliders) => {
         const s = get();
-        if (!s.playerTeamId) return;
+        if (s.isObserver || !s.playerTeamId) return;
         set({
           teams: s.teams.map((t) =>
             t.id === s.playerTeamId
@@ -1120,6 +1125,7 @@ export const useGame = create<GameStore>()(
         cabinAmenities, cargoBelly,
       }) => {
         const s = get();
+        if (s.isObserver) return;
         const spec = AIRCRAFT_BY_ID[specId];
         if (!spec) return { ok: false, error: "Unknown aircraft" };
         // Pre-orders open at unlockQuarter − 2 (announcement window per
@@ -2225,6 +2231,7 @@ export const useGame = create<GameStore>()(
       },
 
       openRoute: ({ originCode: rawOrigin, destCode: rawDest, aircraftIds, dailyFrequency, pricingTier, econFare, busFare, firstFare, isCargo, slotBids }) => {
+        if (get().isObserver) return { ok: false, error: "Observer mode — no edits allowed" };
         // Cargo routes require cargo-storage activation at both endpoints (PRD C9)
         const cargoStorageCost = (code: string): number => {
           const c = CITIES_BY_CODE[code];
@@ -2605,6 +2612,7 @@ export const useGame = create<GameStore>()(
 
       closeRoute: (routeId) => {
         const s = get();
+        if (s.isObserver) return;
         // Preserve closed-route history. Earlier this dropped the
         // route from the team's array entirely, so reports / endgame /
         // analytics lost any record of routes that ever existed.
@@ -2778,6 +2786,7 @@ export const useGame = create<GameStore>()(
 
       submitDecision: ({ scenarioId, optionId, lockInQuarters }) => {
         const s = get();
+        if (s.isObserver) return;
         const scenario = SCENARIOS_BY_QUARTER[s.currentQuarter]?.find(
           (sc) => sc.id === scenarioId);
         if (!scenario) return;
@@ -3129,6 +3138,7 @@ export const useGame = create<GameStore>()(
 
       closeQuarter: () => {
         const s = get();
+        if (s.isObserver) return;
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return;
 
@@ -5018,6 +5028,7 @@ export const useGame = create<GameStore>()(
           activeTeamId: null,
           session: null,
           isMultiplayerSession: false,
+          isObserver: false,
           lastCloseResult: null,
           quarterTimerSecondsRemaining: null,
           quarterTimerPaused: false,
@@ -5049,6 +5060,7 @@ export const useGame = create<GameStore>()(
       // facilitator drives close.
       setActiveTeamReady: (ready) => {
         const s = get();
+        if (s.isObserver) return;
         const meId = s.activeTeamId ?? s.playerTeamId;
         if (!meId) return;
         set({
@@ -5245,6 +5257,10 @@ export const useGame = create<GameStore>()(
             // write to the solo save slot, so solo saves are never
             // overwritten by multiplayer state.
             isMultiplayerSession: true,
+            // No claimed team = Game Master / facilitator. All mutation
+            // actions check this flag and return early so the GM can
+            // spectate without accidentally changing any team's state.
+            isObserver: !claimed,
           } as Partial<GameStore>);
           return { ok: true };
         } catch (err) {
@@ -5257,6 +5273,8 @@ export const useGame = create<GameStore>()(
 
       pushStateToServer: (eventType, eventPayload) => {
         const s = get();
+        // Game Master is observer-only — never write state on their behalf.
+        if (s.isObserver) return;
         const session = s.session;
         // Solo runs (no session) and runs that haven't been bound to a
         // server-side gameId skip the write-back entirely. Returning
@@ -6272,6 +6290,7 @@ export const useGame = create<GameStore>()(
         // Included so the custom storage setItem can read it and decide
         // whether to skip the write. Not used by onRehydrateStorage.
         isMultiplayerSession: s.isMultiplayerSession,
+        isObserver: s.isObserver,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
