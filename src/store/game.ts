@@ -1105,12 +1105,32 @@ export const useGame = create<GameStore>()(
         ) {
           return { ok: false, error: "Doctrine already revised this campaign" };
         }
+        // Phase 5.1 — slider streaks reset on doctrine switch.
+        // The audit verified that ALL doctrine multipliers in
+        // engine.ts are live-readable from `team.doctrine`, so the
+        // multiplier swap is clean. The one persistent state that
+        // would drag old-doctrine momentum forward is sliderStreaks
+        // (the +bonus a slider earns after holding a level for 3+
+        // quarters). Resetting them on switch makes the player earn
+        // streak bonuses fresh under the new doctrine — matches the
+        // narrative intent of "a strategic reset" and prevents a
+        // premium-doctrine player from inheriting cargo-era staff
+        // discipline.
+        const SLIDER_KEYS = ["staff", "marketing", "service", "rewards", "operations", "customerService"] as const;
+        const resetStreaks = SLIDER_KEYS.reduce(
+          (acc, k) => {
+            acc[k] = { level: player.sliders[k] ?? 2, quarters: 0 };
+            return acc;
+          },
+          {} as typeof player.sliderStreaks,
+        );
         set({
           teams: s.teams.map((t) => {
             if (t.id !== player.id) return t;
             return {
               ...t,
               doctrine,
+              sliderStreaks: resetStreaks,
               flags: new Set([
                 ...(t.flags ?? []),
                 "doctrine_revised_midgame",
