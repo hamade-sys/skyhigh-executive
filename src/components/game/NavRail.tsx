@@ -158,9 +158,14 @@ export function NavRail() {
         {expanded ? <ChevronLeft size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
       </button>
 
-      {/* Top: nav buttons */}
+      {/* Top: nav buttons. Phase 7.2 — when boardDecisionsEnabled is
+          false (no-GM self-guided games skip the boardroom layer),
+          drop the "Decisions" nav item entirely instead of rendering
+          a clickable button that opens an empty-state modal. */}
       <nav aria-label="Main navigation" className="flex flex-col gap-1 px-2 pt-3">
-        {NAV.map((item) => {
+        {NAV
+          .filter((item) => item.id !== "decisions" || boardDecisionsEnabled)
+          .map((item) => {
           const active = current === item.id;
           const badge =
             item.id === "decisions" && pendingDecisions.length > 0
