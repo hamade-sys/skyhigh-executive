@@ -25,12 +25,32 @@ import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import {
   ArrowLeft, ArrowRight, Lock, Unlock, Copy, Sparkles, Globe2,
-  Loader2, AlertCircle, Play, Trash2, CheckCircle2, Plane,
+  Loader2, AlertCircle, Play, Trash2, CheckCircle2, Plane, Bot, User,
 } from "lucide-react";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 
 type DoctrineId = "premium-service" | "budget-expansion" | "cargo-dominance" | "global-network";
+type SeatType = "human" | "bot";
+type Difficulty = "easy" | "medium" | "hard";
+
+interface SeatConfig {
+  index: number;   // 0-based
+  type: SeatType;
+  difficulty: Difficulty;
+}
+
+// Names assigned to bots in seat order — mirrors BOT_DEFAULTS in the start route.
+const BOT_NAMES = [
+  "Aurora Airways",
+  "Sundial Carriers",
+  "Meridian Air",
+  "Pacific Crest",
+  "Transit Nordique",
+  "Solstice Wings",
+  "Vermilion Air",
+  "Firth Pacific",
+] as const;
 
 const DOCTRINES: { id: DoctrineId; label: string; desc: string }[] = [
   { id: "premium-service",  label: "Premium",     desc: "Higher fares, loyal business travellers" },
@@ -75,6 +95,10 @@ export default function GameLobbyPage({
   const [actionPending, setActionPending] = useState(false);
   const [copyHint, setCopyHint] = useState(false);
 
+  // ── Seat configuration (host/GM can toggle each unclaimed seat) ────────
+  const [seatConfigs, setSeatConfigs] = useState<SeatConfig[]>([]);
+  const [seatConfigSaving, setSeatConfigSaving] = useState(false);
+
   // ── Airline setup state (for non-facilitator players) ─────────────────
   const [airlineName, setAirlineName] = useState("");
   const [airlineCode, setAirlineCode] = useState("");
@@ -110,6 +134,45 @@ export default function GameLobbyPage({
   // Initial fetch on mount.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
+
+  // Initialise seatConfigs from the server's plannedSeats once data loads.
+  useEffect(() => {
+    if (!data) return;
+    const maxTeams = data.game.max_teams;
+    const planned = (
+      (data.state?.state_json as Record<string, unknown> | undefined)
+        ?.session as Record<string, unknown> | undefined
+    )?.plannedSeats as Array<{ type?: string; botDifficulty?: string }> | undefined;
+
+    setSeatConfigs(
+      Array.from({ length: maxTeams }, (_, i) => {
+        const p = planned?.[i];
+        return {
+          index: i,
+          type: (p?.type === "bot" ? "bot" : "human") as SeatType,
+          difficulty: ((p?.botDifficulty ?? "medium") as Difficulty),
+        };
+      }),
+    );
+  // Only re-init when the game data changes from the server (e.g. after reload).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.game.id, data?.state]);
+
+  async function handleSeatConfigChange(index: number, patch: Partial<SeatConfig>) {
+    const updated = seatConfigs.map((s) =>
+      s.index === index ? { ...s, ...patch } : s,
+    );
+    setSeatConfigs(updated);
+    setSeatConfigSaving(true);
+    try {
+      await fetch("/api/games/seat-config", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ gameId, seatConfigs: updated }),
+      });
+    } catch { /* non-critical — local state already updated */ }
+    finally { setSeatConfigSaving(false); }
+  }
 
   // Supabase Realtime — live updates for all lobby events.
   // Three channels cover every change that matters in the lobby:
@@ -459,9 +522,17 @@ export default function GameLobbyPage({
 
         {/* Seats */}
         <section className="mt-8">
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
-            Seats
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+              Seats
+            </h2>
+            {(isHost || isFacilitator) && seatConfigSaving && (
+              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                Saving…
+              </span>
+            )}
+          </div>
           <div className="grid sm:grid-cols-2 gap-3">
             {(() => {
               // Only show player seats — exclude facilitator/spectator so
@@ -473,7 +544,19 @@ export default function GameLobbyPage({
                 const member = playerMembers[i];
                 const isMe = member ? member.session_id === sessionId : false;
                 const hasSetup = member ? member.session_id in playerSetups : false;
-                return <SeatCard key={i} index={i + 1} member={member ?? null} isMe={isMe} hasSetup={hasSetup} />;
+                const cfg = seatConfigs[i] ?? { index: i, type: "human" as SeatType, difficulty: "medium" as Difficulty };
+                return (
+                  <SeatCard
+                    key={i}
+                    index={i + 1}
+                    member={member ?? null}
+                    isMe={isMe}
+                    hasSetup={hasSetup}
+                    seatConfig={cfg}
+                    canEditConfig={(isHost || isFacilitator) && !member && game.status === "lobby"}
+                    onConfigChange={(patch) => handleSeatConfigChange(i, patch)}
+                  />
+                );
               });
             })()}
           </div>
@@ -631,35 +714,43 @@ function HostPanel({
 }
 
 function SeatCard({
-  index, member, isMe, hasSetup,
+  index, member, isMe, hasSetup, seatConfig, canEditConfig, onConfigChange,
 }: {
   index: number;
   member: GameMemberRow | null;
   isMe: boolean;
   hasSetup: boolean;
+  seatConfig: SeatConfig;
+  canEditConfig: boolean;
+  onConfigChange: (patch: Partial<SeatConfig>) => void;
 }) {
   const claimed = !!member;
+  const isBot = !claimed && seatConfig.type === "bot";
+  const botName = BOT_NAMES[(index - 1) % BOT_NAMES.length];
+
   return (
     <div className={
-      "rounded-xl border p-4 " +
+      "rounded-xl border p-4 space-y-3 " +
       (isMe
         ? "border-cyan-300 bg-cyan-50/40"
-        : claimed
-          ? "border-slate-200 bg-white"
-          : "border-dashed border-slate-200 bg-white")
+        : isBot
+          ? "border-violet-200 bg-violet-50/30"
+          : claimed
+            ? "border-slate-200 bg-white"
+            : "border-dashed border-slate-200 bg-white")
     }>
       <div className="flex items-center gap-3">
         <div className={
-          "w-9 h-9 rounded-lg flex items-center justify-center font-mono text-xs font-bold tabular " +
-          (claimed ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-400")
+          "w-9 h-9 rounded-lg flex items-center justify-center font-mono text-xs font-bold tabular shrink-0 " +
+          (claimed ? "bg-slate-900 text-white" : isBot ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-400")
         }>
-          {index}
+          {claimed ? index : isBot ? <Bot className="w-4 h-4" /> : index}
         </div>
         <div className="flex-1 min-w-0">
           {claimed ? (
             <>
               <div className="text-sm font-semibold text-slate-900 truncate">
-                {member.display_name ?? "Anonymous player"}
+                {member.display_name ?? "Player"}
                 {isMe && <span className="ml-2 text-xs font-medium text-cyan-700">· you</span>}
               </div>
               <div className="text-xs text-slate-500 truncate">
@@ -668,9 +759,14 @@ function SeatCard({
                  member.role === "spectator" ? "Spectator" : "Player"}
               </div>
             </>
+          ) : isBot ? (
+            <>
+              <div className="text-sm font-semibold text-violet-900 truncate">{botName}</div>
+              <div className="text-xs text-violet-600">AI Bot</div>
+            </>
           ) : (
             <div className="text-sm font-medium text-slate-400 italic">
-              Open seat
+              Open seat — waiting for player
             </div>
           )}
         </div>
@@ -685,8 +781,80 @@ function SeatCard({
             {hasSetup ? "✓ Ready" : "Setting up…"}
           </div>
         )}
+        {isBot && (
+          <span className={
+            "shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full " +
+            (seatConfig.difficulty === "hard"
+              ? "bg-rose-100 text-rose-700"
+              : seatConfig.difficulty === "medium"
+                ? "bg-amber-50 text-amber-700"
+                : "bg-emerald-100 text-emerald-700")
+          }>
+            {seatConfig.difficulty === "hard" ? "Hard" : seatConfig.difficulty === "medium" ? "Medium" : "Easy"}
+          </span>
+        )}
       </div>
+
+      {/* Seat type toggle — only shown to host/GM on unclaimed seats */}
+      {canEditConfig && (
+        <div className="pt-2 border-t border-slate-100 space-y-2">
+          {/* Human / Bot toggle */}
+          <div className="inline-flex items-center rounded-lg bg-slate-100 p-0.5">
+            <SeatToggleBtn
+              active={seatConfig.type === "human"}
+              onClick={() => onConfigChange({ type: "human" })}
+              icon={<User className="w-3 h-3" />}
+              label="Human"
+            />
+            <SeatToggleBtn
+              active={seatConfig.type === "bot"}
+              onClick={() => onConfigChange({ type: "bot" })}
+              icon={<Bot className="w-3 h-3" />}
+              label="AI Bot"
+            />
+          </div>
+
+          {/* Difficulty — only when bot */}
+          {seatConfig.type === "bot" && (
+            <div className="inline-flex items-center rounded-lg bg-slate-100 p-0.5 ml-2">
+              {(["easy", "medium", "hard"] as const).map((d) => (
+                <SeatToggleBtn
+                  key={d}
+                  active={seatConfig.difficulty === d}
+                  onClick={() => onConfigChange({ difficulty: d })}
+                  label={d[0].toUpperCase() + d.slice(1)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+function SeatToggleBtn({
+  active, onClick, icon, label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon?: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors " +
+        (active
+          ? "bg-white text-slate-900 shadow-sm"
+          : "text-slate-500 hover:text-slate-900")
+      }
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

@@ -1,27 +1,11 @@
 "use client";
 
 /**
- * /games/new — comprehensive Create Game form.
+ * /games/new — Create Game form.
  *
- * Per the V1 spec the host configures everything in one screen:
- *
- *   Game name           — short label shown on /lobby and the lobby
- *   Visibility          — Public (listed in /lobby) | Private (code only)
- *   Game Master         — toggle "I want to be the Game Master" (max 1
- *                          per game, or zero). GM gets the facilitator
- *                          console + admin overrides.
- *   Board Decisions     — on/off (separate from GM)
- *   Number of rounds    — 8 / 16 / 24 / 40 (default 40, full 10 yrs)
- *   Player slots        — list of seats, each marked Player or AI Bot,
- *                          AI gets a difficulty picker. Min 1, max 8.
- *
- * V3 deferred (spec from user, NOT shipped now):
- *   - Start year (1960-2015)        → affects aircraft availability
- *   - Round unit (quarters/months)
- *
- * On submit: POST /api/games/create with the assembled config, then
- * route to /games/[id]/lobby. The host-side onboarding (brand your
- * airline) happens AFTER seat-claim in the lobby.
+ * Configures: game name, visibility, GM role, board decisions,
+ * number of rounds, and seat count. Human/bot assignment and
+ * difficulty are set per-seat in the pre-game lobby, not here.
  */
 
 import Link from "next/link";
@@ -29,39 +13,21 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, ArrowRight, Loader2, Lock, Globe2, Sparkles,
-  CheckSquare, Plus, Trash2, User, Bot,
+  CheckSquare, Minus, Plus,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { isMultiplayerAvailable } from "@/lib/supabase/browser";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 
 type Visibility = "public" | "private";
-type Difficulty = "easy" | "medium" | "hard";
-type SeatType = "human" | "bot";
-
-interface SlotDraft {
-  id: string;
-  type: SeatType;
-  difficulty?: Difficulty;
-}
 
 const ROUND_PRESETS = [
-  { value: 8, label: "8 rounds", sub: "2 years · quick session" },
+  { value: 8,  label: "8 rounds",  sub: "2 years · quick session" },
   { value: 16, label: "16 rounds", sub: "4 years · half campaign" },
   { value: 24, label: "24 rounds", sub: "6 years · medium" },
   { value: 40, label: "40 rounds", sub: "10 years · full decade" },
 ] as const;
 
-function mkSlotId() {
-  return `slot-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-// Parent component — does ONLY the auth gate. No state hooks live
-// here, so the rules-of-hooks early-return pattern is safe. Once
-// `user` is non-null, render <CreateGameForm/> which owns all the
-// form state. This split was forced by react-hooks/rules-of-hooks:
-// the previous shape called `useState` AFTER the auth-loading early
-// return, so the hook order changed when auth resolved.
 export default function CreateGamePage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -80,9 +46,6 @@ export default function CreateGamePage() {
 
 function CreateGameForm() {
   const router = useRouter();
-  // `user` is guaranteed non-null here because <CreateGameForm/> only
-  // mounts after the parent's auth gate clears. Re-reading useAuth is
-  // cheap (context lookup) and keeps the existing code body unchanged.
   const { user } = useAuth();
   const mpAvailable = isMultiplayerAvailable();
 
@@ -91,21 +54,12 @@ function CreateGameForm() {
   const [beGameMaster, setBeGameMaster] = useState(false);
   const [boardDecisionsEnabled, setBoardDecisionsEnabled] = useState(false);
   const [totalRounds, setTotalRounds] = useState(40);
-  // Default: 2 human slots, no bots. Users can add AI bots manually if wanted.
-  const [slots, setSlots] = useState<SlotDraft[]>([
-    { id: mkSlotId(), type: "human" },
-    { id: mkSlotId(), type: "human" },
-  ]);
+  // Just a seat count — human/bot config is done in the pre-game lobby
+  const [seatCount, setSeatCount] = useState(2);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // GM-toggle nudge for the Board Decisions default. The convention:
-  // turning GM ON usually means "I want a facilitated game with all
-  // the decisions surfaced" — so we default Board Decisions to ON
-  // unless the user explicitly turned it off afterwards. Done in
-  // the click handler (not a useEffect) per React 19 guidance —
-  // useEffect cascades would re-render twice on every toggle.
   function toggleGameMaster() {
     setBeGameMaster((wasOn) => {
       const nowOn = !wasOn;
@@ -114,33 +68,10 @@ function CreateGameForm() {
     });
   }
 
-  function addSlot(type: SeatType) {
-    if (slots.length >= 8) return;
-    setSlots([
-      ...slots,
-      type === "bot"
-        ? { id: mkSlotId(), type, difficulty: "medium" }
-        : { id: mkSlotId(), type },
-    ]);
-  }
-
-  function removeSlot(id: string) {
-    if (slots.length <= 1) return;
-    setSlots(slots.filter((s) => s.id !== id));
-  }
-
-  function updateSlot(id: string, patch: Partial<SlotDraft>) {
-    setSlots(slots.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  }
-
   async function handleSubmit() {
     setError(null);
     if (name.trim().length === 0) {
       setError("Game name is required.");
-      return;
-    }
-    if (slots.length < 1) {
-      setError("At least one seat is required.");
       return;
     }
     if (!user?.id) {
@@ -157,15 +88,12 @@ function CreateGameForm() {
           name: name.trim(),
           mode: beGameMaster ? "facilitated" : "self_guided",
           visibility,
-          maxTeams: slots.length,
+          maxTeams: seatCount,
           totalRounds,
           boardDecisionsEnabled,
           beGameMaster,
-          plannedSeats: slots,
+          plannedSeats: [],   // all human by default — lobby configures each seat
           hostSessionId: user.id,
-          // Initial state placeholder — the host's airline-branding
-          // happens after seat-claim. For now we ship a minimal
-          // skeleton; the engine fills it in at start.
           initialState: {
             phase: "idle",
             currentQuarter: 1,
@@ -188,9 +116,6 @@ function CreateGameForm() {
     }
   }
 
-  const humanCount = slots.filter((s) => s.type === "human").length;
-  const botCount = slots.filter((s) => s.type === "bot").length;
-
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50">
       <MarketingHeader />
@@ -211,8 +136,9 @@ function CreateGameForm() {
           Set up your run.
         </h1>
         <p className="text-sm text-slate-500 mb-10 max-w-xl">
-          Configure the seats, mode, and length. Once you create, you&rsquo;ll
-          land in the game lobby with a code to share.
+          Configure the name, mode, and length. Once you create, you&rsquo;ll
+          land in the lobby — that&rsquo;s where you set each seat to a human player
+          or an AI bot.
         </p>
 
         {!mpAvailable && (
@@ -325,55 +251,40 @@ function CreateGameForm() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-400 mt-3">
-              <span className="text-slate-500">V3 coming:</span> start year
-              picker (1960-2015) and round unit (quarter/month).
-            </p>
           </Field>
 
-          {/* 6. Player slots */}
+          {/* 6. Number of seats */}
           <Field
-            label="Player slots"
-            hint={`${slots.length} seat${slots.length === 1 ? "" : "s"} · ${humanCount} human · ${botCount} bot`}
+            label="Number of seats"
+            hint={`${seatCount} seat${seatCount === 1 ? "" : "s"}`}
           >
-            <div className="space-y-2">
-              {slots.map((slot, i) => (
-                <SlotRow
-                  key={slot.id}
-                  index={i + 1}
-                  slot={slot}
-                  canRemove={slots.length > 1}
-                  onUpdate={(patch) => updateSlot(slot.id, patch)}
-                  onRemove={() => removeSlot(slot.id)}
-                />
-              ))}
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setSeatCount((n) => Math.max(1, n - 1))}
+                disabled={seatCount <= 1}
+                aria-label="Remove a seat"
+                className="w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-700 flex items-center justify-center hover:border-slate-300 disabled:opacity-40 transition-colors"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <span className="w-8 text-center font-display text-2xl font-bold text-slate-900 tabular">
+                {seatCount}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSeatCount((n) => Math.min(8, n + 1))}
+                disabled={seatCount >= 8}
+                aria-label="Add a seat"
+                className="w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-700 flex items-center justify-center hover:border-slate-300 disabled:opacity-40 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <p className="text-xs text-slate-400">
+                1–8 seats. In the lobby you&rsquo;ll assign each seat to a
+                human player or an AI bot and pick the difficulty.
+              </p>
             </div>
-            {slots.length < 8 && (
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => addSlot("human")}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-slate-200 hover:border-slate-300 bg-white text-xs font-semibold text-slate-700 transition-colors"
-                >
-                  <Plus className="w-3 h-3" />
-                  <User className="w-3 h-3" />
-                  Add player
-                </button>
-                <button
-                  type="button"
-                  onClick={() => addSlot("bot")}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full border border-slate-200 hover:border-slate-300 bg-white text-xs font-semibold text-slate-700 transition-colors"
-                >
-                  <Plus className="w-3 h-3" />
-                  <Bot className="w-3 h-3" />
-                  Add AI bot
-                </button>
-              </div>
-            )}
-            <p className="text-xs text-slate-400 mt-3">
-              Up to 8 seats. Human seats stay open until claimed; AI bots
-              auto-fill at start.
-            </p>
           </Field>
 
           {/* Error */}
@@ -533,97 +444,6 @@ function Toggle({
           <p className="text-xs text-slate-500 leading-relaxed">{description}</p>
         </div>
       </div>
-    </button>
-  );
-}
-
-function SlotRow({
-  index, slot, canRemove, onUpdate, onRemove,
-}: {
-  index: number;
-  slot: SlotDraft;
-  canRemove: boolean;
-  onUpdate: (patch: Partial<SlotDraft>) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 flex items-center gap-3">
-      <div className="shrink-0 w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-mono text-xs font-bold tabular flex items-center justify-center">
-        {index}
-      </div>
-
-      {/* Type selector */}
-      <div className="inline-flex items-center rounded-lg bg-slate-100 p-0.5">
-        <SegBtn
-          active={slot.type === "human"}
-          onClick={() => onUpdate({ type: "human", difficulty: undefined })}
-          icon={<User className="w-3.5 h-3.5" />}
-          label="Player"
-        />
-        <SegBtn
-          active={slot.type === "bot"}
-          onClick={() => onUpdate({ type: "bot", difficulty: slot.difficulty ?? "medium" })}
-          icon={<Bot className="w-3.5 h-3.5" />}
-          label="AI bot"
-        />
-      </div>
-
-      {/* Difficulty (bot only) */}
-      {slot.type === "bot" && (
-        <div className="inline-flex items-center rounded-lg bg-slate-100 p-0.5">
-          {(["easy", "medium", "hard"] as const).map((d) => (
-            <SegBtn
-              key={d}
-              active={slot.difficulty === d}
-              onClick={() => onUpdate({ difficulty: d })}
-              label={d[0].toUpperCase() + d.slice(1)}
-            />
-          ))}
-        </div>
-      )}
-
-      {slot.type === "human" && (
-        <div className="hidden sm:block text-xs text-slate-400 italic flex-1">
-          Open seat — anyone can claim
-        </div>
-      )}
-
-      {/* Remove */}
-      {canRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={`Remove seat ${index}`}
-          className="ml-auto shrink-0 w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100 hover:text-rose-600 flex items-center justify-center"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function SegBtn({
-  active, onClick, icon, label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon?: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors " +
-        (active
-          ? "bg-white text-slate-900 shadow-sm"
-          : "text-slate-500 hover:text-slate-900")
-      }
-    >
-      {icon}
-      {label}
     </button>
   );
 }

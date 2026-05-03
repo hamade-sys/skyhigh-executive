@@ -12,7 +12,7 @@ import { NotificationCenter } from "@/components/game/NotificationCenter";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { scenariosForQuarter } from "@/data/scenarios";
 import { getTotalRounds } from "@/lib/format";
-import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X } from "lucide-react";
+import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 
@@ -32,6 +32,7 @@ export function TopBar() {
   const legacyRivals = useGame(useShallow(selectRivals));
   const rivals = activeTeam ? otherTeams : legacyRivals;
   const currentQuarter = useGame((state) => state.currentQuarter);
+  const joinCode = useGame((s) => s.session?.joinCode ?? null);
   const viewingTeamId = useUi((u) => u.viewingTeamId);
   const setViewingTeamId = useUi((u) => u.setViewingTeamId);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -143,6 +144,17 @@ export function TopBar() {
           </button>
         )}
       </div>
+
+      {/* Join code chip — lets late-joiners see the code without going back to lobby */}
+      {joinCode && (
+        <div
+          className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-line bg-surface-2 text-ink-muted font-mono text-[0.6875rem] font-semibold tracking-[0.15em] tabular shrink-0"
+          title="4-digit game code — share this so others can join"
+        >
+          <Hash size={10} aria-hidden className="shrink-0 opacity-60" />
+          {joinCode}
+        </div>
+      )}
 
       {/* Quarter + timer + Close-quarter CTA */}
       <div className="flex items-center gap-3 shrink-0 pl-4 border-l border-line h-full">
