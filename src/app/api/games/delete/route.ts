@@ -1,52 +1,64 @@
 /**
- * POST /api/games/delete — facilitator or host deletes a game.
- * Only the creator (created_by_session_id) or facilitator
- * (facilitator_session_id) may delete. Game must be in lobby or
- * ended — active games cannot be deleted mid-play.
+ * POST /api/games/delete — host or facilitator deletes a game.
+ *
+ * Body: { gameId: string }
+ *
+ * IMPORTANT (Phase 1 hardening): identity is server-derived from
+ * the cookie-bound auth session. The body parameter `sessionId` is
+ * ignored for identity. Authorization uses `assertHostOrFacilitator`.
+ *
+ * Game must be in lobby or ended — active games cannot be deleted
+ * mid-play to avoid stranding players.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { assertHostOrFacilitator } from "@/lib/games/api";
 import { getServerClient } from "@/lib/supabase/server";
+import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const { gameId, sessionId } = await req.json();
-    if (!gameId || !sessionId) {
-      return NextResponse.json({ error: "gameId and sessionId required." }, { status: 400 });
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Sign-in required to delete a game." },
+        { status: 401 },
+      );
     }
 
-    const supa = getServerClient();
+    const body = await req.json();
+    const { gameId } = body ?? {};
+    if (typeof gameId !== "string") {
+      return NextResponse.json({ error: "gameId required." }, { status: 400 });
+    }
 
-    // Load the game to verify ownership
-    const { data: game, error: loadErr } = await supa
+    const auth = await assertHostOrFacilitator(gameId, userId);
+    if (!auth.ok) {
+      const status = auth.error.includes("not found") ? 404 : 403;
+      return NextResponse.json({ error: auth.error }, { status });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supa = getServerClient() as any;
+
+    // Confirm not currently playing — we can't safely tear down a game
+    // that has players actively running quarters.
+    const { data: game } = await supa
       .from("games")
-      .select("id, status, created_by_session_id, facilitator_session_id")
+      .select("status")
       .eq("id", gameId)
-      .single() as { data: { id: string; status: string; created_by_session_id: string; facilitator_session_id: string | null } | null; error: unknown };
-
-    if (loadErr || !game) {
-      return NextResponse.json({ error: "Game not found." }, { status: 404 });
-    }
-
-    const isOwner =
-      sessionId === game.created_by_session_id ||
-      sessionId === game.facilitator_session_id;
-
-    if (!isOwner) {
-      return NextResponse.json({ error: "Not authorised to delete this game." }, { status: 403 });
-    }
-
-    if (game.status === "playing") {
+      .single();
+    if ((game as { status: string } | null)?.status === "playing") {
       return NextResponse.json(
         { error: "Cannot delete a game that is currently in progress." },
         { status: 400 },
       );
     }
 
-    // Delete members first (FK constraint), then state, then game
+    // Delete dependents first (FK constraints), then the game row.
     await supa.from("game_members").delete().eq("game_id", gameId);
     await supa.from("game_state").delete().eq("game_id", gameId);
     await supa.from("game_events").delete().eq("game_id", gameId);

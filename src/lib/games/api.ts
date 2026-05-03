@@ -39,6 +39,107 @@ import type {
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+// ─── Authorization helpers ──────────────────────────────────────
+//
+// Every server-mediated mutation (lock, start, state-update, etc.)
+// must verify that the caller is allowed to perform the action. These
+// helpers run BEFORE any data is read or written. They return
+// ApiResult so the caller can `if (!result.ok) return ...` cleanly
+// without try/catch noise.
+//
+// Phase 1 of the enterprise-readiness plan: callers MUST derive the
+// `userId` argument from `getAuthenticatedUserId()` (cookie-bound)
+// rather than a body parameter. Trusting a body parameter for
+// identity is the original vulnerability this phase fixes.
+
+/**
+ * Verify that `userId` is a member of the game. Returns the member
+ * row on success. Used by every per-team mutation (state-update,
+ * player-setup, ready, claim, mark-ready, etc.) to ensure callers
+ * can only act on games they've joined.
+ */
+export async function assertMembership(
+  gameId: string,
+  userId: string,
+): Promise<ApiResult<GameMemberRow>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supa = getServerClient() as any;
+  const { data, error } = await supa
+    .from("game_members")
+    .select("*")
+    .eq("game_id", gameId)
+    .eq("session_id", userId)
+    .maybeSingle();
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      error: "Not a member of this game.",
+    };
+  }
+  return { ok: true, data: data as GameMemberRow };
+}
+
+/**
+ * Verify that `userId` is the host (creator) or facilitator (Game
+ * Master) of the game. Used by lifecycle mutations (lock, start,
+ * delete, kick player, force-advance, etc.) where only privileged
+ * roles can act.
+ */
+export async function assertHostOrFacilitator(
+  gameId: string,
+  userId: string,
+): Promise<ApiResult<{ isHost: boolean; isFacilitator: boolean }>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supa = getServerClient() as any;
+  const { data, error } = await supa
+    .from("games")
+    .select("created_by_session_id, facilitator_session_id")
+    .eq("id", gameId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Game not found." };
+  const row = data as { created_by_session_id: string | null; facilitator_session_id: string | null };
+  const isHost = row.created_by_session_id === userId;
+  const isFacilitator = row.facilitator_session_id === userId;
+  if (!isHost && !isFacilitator) {
+    return {
+      ok: false,
+      error: "Not authorised — host or facilitator role required.",
+    };
+  }
+  return { ok: true, data: { isHost, isFacilitator } };
+}
+
+/**
+ * Verify that `userId` is the facilitator (Game Master) of the game.
+ * Stricter than `assertHostOrFacilitator` — used for facilitator-only
+ * actions like kicking players, force-advancing rounds, applying
+ * live-sim deltas. The host alone (without facilitator role) cannot
+ * perform these.
+ */
+export async function assertFacilitator(
+  gameId: string,
+  userId: string,
+): Promise<ApiResult<true>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supa = getServerClient() as any;
+  const { data, error } = await supa
+    .from("games")
+    .select("facilitator_session_id")
+    .eq("id", gameId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Game not found." };
+  const row = data as { facilitator_session_id: string | null };
+  if (row.facilitator_session_id !== userId) {
+    return { ok: false, error: "Facilitator role required." };
+  }
+  return { ok: true, data: true };
+}
+
 export interface CreateGameArgs {
   name: string;
   mode: "facilitated" | "self_guided";
@@ -77,12 +178,24 @@ export interface CreateGameArgs {
   initialState: unknown;
 }
 
-/** Generate a random 4-digit join code. We collision-check against
- *  active games (status != 'ended') but the keyspace is 10000 so
- *  with more than ~20 active private games at once you'll start
- *  retrying — fine for current scale; expand to 5 digits if needed. */
+/** Generate a random 6-digit join code. The keyspace is 1M (vs the
+ *  previous 4-digit / 10k), making brute-force enumeration infeasible
+ *  in combination with the per-IP rate limit on /api/games/join.
+ *  We collision-check against active games (status != 'ended').
+ *
+ *  Phase 1 hardening: 4-digit codes were brute-forceable in 10k
+ *  HTTP requests — an attacker without auth could enumerate the
+ *  entire keyspace in seconds and join any private lobby. 6 digits
+ *  raises the floor to ~1M attempts; with rate-limiting at 10/min
+ *  per IP, the time-to-find a single private game becomes ~100,000
+ *  minutes (~70 days), which is operationally infeasible. */
 function makeJoinCode(): string {
-  return String(Math.floor(1000 + Math.random() * 9000));
+  // crypto.randomInt avoids the Math.random bias and gives a
+  // uniformly-distributed 6-digit string. Pad with zeros so all
+  // codes display as exactly 6 chars.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { randomInt } = require("node:crypto") as typeof import("node:crypto");
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
 /** Allocate a unique join code by retrying up to N times against
@@ -303,6 +416,38 @@ export async function joinGame(args: {
       .maybeSingle();
     if (!existing) {
       return { ok: false, error: "Lobby is locked — no new seats can be claimed." };
+    }
+  }
+
+  // Phase 1.8 — capacity gate. Refuse new joins when the game is at
+  // its plannedSeats / max_teams cap. Existing members reconnecting
+  // (their session_id already in game_members) bypass the gate. The
+  // count uses ONLY non-spectator, non-facilitator seats — host /
+  // facilitator role rows occupy a member row but don't consume a
+  // playable seat.
+  {
+    const { data: existing } = await supa
+      .from("game_members")
+      .select("session_id")
+      .eq("game_id", args.gameId)
+      .eq("session_id", args.sessionId)
+      .maybeSingle();
+    const isReconnect = !!existing;
+    if (!isReconnect) {
+      const { count } = await supa
+        .from("game_members")
+        .select("session_id", { count: "exact", head: true })
+        .eq("game_id", args.gameId)
+        .neq("role", "spectator")
+        .neq("role", "facilitator");
+      const seatedCount = count ?? 0;
+      const maxTeams = (game.max_teams as number | null) ?? 0;
+      if (maxTeams > 0 && seatedCount >= maxTeams) {
+        return {
+          ok: false,
+          error: "Game is full — capacity reached.",
+        };
+      }
     }
   }
 
