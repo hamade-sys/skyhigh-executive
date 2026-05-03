@@ -58,6 +58,21 @@ export function fmtDelta(n: number, decimals = 1): string {
 export const TOTAL_GAME_ROUNDS = 40;
 const GAME_START_YEAR = 2015;
 
+/**
+ * Read the configured total round count from the game's session.
+ * Falls back to the hardcoded 40 default for legacy single-player
+ * saves that pre-date the configurable session field.
+ *
+ * Phase 3 of the enterprise-readiness plan: every UI surface that
+ * displays "Round X of Y" or gates on "have we reached the last
+ * round?" must use this helper rather than the constant. Otherwise
+ * 8/16/24-round games never end and show wrong progress copy.
+ */
+export function getTotalRounds(state: { session?: { totalRounds?: number } | null }): number {
+  const t = state?.session?.totalRounds;
+  return typeof t === "number" && t > 0 ? t : TOTAL_GAME_ROUNDS;
+}
+
 export function fmtQuarter(q: number): string {
   const idx = Math.max(0, q - 1);
   const year = GAME_START_YEAR + Math.floor(idx / 4);
@@ -68,9 +83,11 @@ export function fmtQuarter(q: number): string {
 /** Short progress tag shown under the Q# YYYY headline. The user
  *  asked us to stop calling time-units "rounds" in player-facing
  *  copy — quarters carry the date label and the campaign progress
- *  reads better as "Quarter N of 40". */
-export function fmtQuarterShort(q: number): string {
-  return `Quarter ${q} of ${TOTAL_GAME_ROUNDS}`;
+ *  reads better as "Quarter N of M". The optional `totalRounds`
+ *  arg defaults to the legacy 40-round constant for any caller
+ *  that hasn't been migrated yet. */
+export function fmtQuarterShort(q: number, totalRounds: number = TOTAL_GAME_ROUNDS): string {
+  return `Quarter ${q} of ${totalRounds}`;
 }
 
 /** Format a span in quarters as "Y & Q" — e.g. 9 → "2Y 1Q", 4 → "1Y",

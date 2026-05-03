@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Input, Modal, ModalFooter, ModalHeader, Sparkline } from "@/components/ui";
 import { useGame, selectPlayer, selectActiveTeam } from "@/store/game";
-import { fmtMoney, fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
+import { fmtMoney, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { CITIES } from "@/data/cities";
 import { runQuarterClose } from "@/lib/engine";
 import { toast } from "@/store/toasts";
@@ -68,7 +68,7 @@ export function AdminPanel() {
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">Game state</div>
         <div className="space-y-1.5 text-[0.8125rem]">
           <Row k="Phase" v={s.phase} />
-          <Row k="Round" v={`${s.currentQuarter} / ${TOTAL_GAME_ROUNDS}`} />
+          <Row k="Round" v={`${s.currentQuarter} / ${getTotalRounds(s)}`} />
           <Row k="Fuel idx" v={s.fuelIndex.toFixed(0)} />
           <Row k="Base rate" v={`${s.baseInterestRatePct.toFixed(1)}%`} />
           <Row k="Teams" v={`${s.teams.length}`} />

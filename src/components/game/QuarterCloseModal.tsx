@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { fmtMoney, fmtPct, TOTAL_GAME_ROUNDS, fmtQuarter } from "@/lib/format";
+import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
 import { brandRating, computeAirlineValue } from "@/lib/engine";
 import { MILESTONES_BY_ID } from "@/data/milestones";
@@ -74,7 +74,9 @@ export function QuarterCloseModal() {
   function continueNext() {
     if (!result) return;
     s.advanceToNext();
-    if (s.currentQuarter >= TOTAL_GAME_ROUNDS) router.push("/endgame");
+    // Phase 3: respect the configured totalRounds — short-format
+    // cohorts (8 / 16 / 24) end at their configured stop, not 40.
+    if (s.currentQuarter >= getTotalRounds(s)) router.push("/endgame");
   }
 
   // Top winners + top losers, ranked by DIRECT contribution margin
@@ -698,7 +700,7 @@ export function QuarterCloseModal() {
       </ModalBody>
       <ModalFooter>
         <Button variant="primary" onClick={continueNext}>
-          {result.quarter >= TOTAL_GAME_ROUNDS ? "See endgame →" : "Continue to next quarter →"}
+          {result.quarter >= getTotalRounds(s) ? "See endgame →" : "Continue to next quarter →"}
         </Button>
       </ModalFooter>
     </Modal>

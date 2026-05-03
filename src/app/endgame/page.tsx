@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
-import { fmtMoney, fmtPct, fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
+import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
 import { computeAirlineValue, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
@@ -231,7 +231,7 @@ export default function Endgame() {
                   All teams
                 </span>
               </div>
-              <MultiAirlineChart teams={ranked} />
+              <MultiAirlineChart teams={ranked} totalRounds={getTotalRounds(s)} />
             </CardBody>
           </Card>
         )}
@@ -305,7 +305,7 @@ export default function Endgame() {
           // Total quarters played
           facts.push({
             label: "Quarters operated",
-            value: `${player.financialsByQuarter.length} of ${TOTAL_GAME_ROUNDS}`,
+            value: `${player.financialsByQuarter.length} of ${getTotalRounds(s)}`,
           });
           // Total decisions
           if (player.decisions.length > 0) {
@@ -906,7 +906,13 @@ function ArcSpark({ label, values, color }: { label: string; values: number[]; c
   );
 }
 
-function MultiAirlineChart({ teams }: { teams: Array<{ id: string; name: string; code: string; color: string; financialsByQuarter: Array<{ quarter: number; cash: number; debt: number; brandValue: number }> }> }) {
+function MultiAirlineChart({
+  teams,
+  totalRounds,
+}: {
+  teams: Array<{ id: string; name: string; code: string; color: string; financialsByQuarter: Array<{ quarter: number; cash: number; debt: number; brandValue: number }> }>;
+  totalRounds: number;
+}) {
   const W = 720;
   const H = 240;
   const padL = 60;
@@ -931,7 +937,12 @@ function MultiAirlineChart({ teams }: { teams: Array<{ id: string; name: string;
   const yMax = allValues.length > 0 ? Math.max(1, ...allValues) : 1;
   const yRange = yMax - yMin || 1;
 
-  const x = (q: number) => padL + ((q - 1) / 19) * innerW;
+  // Phase 3: x-axis scales by totalRounds rather than the legacy
+  // 20-quarter constant so 8 / 16 / 24 / 40 round games all use the
+  // full chart width. (totalRounds - 1) is the divisor because q
+  // values are 1-indexed.
+  const xDivisor = Math.max(1, totalRounds - 1);
+  const x = (q: number) => padL + ((q - 1) / xDivisor) * innerW;
   const y = (v: number) => padT + innerH - ((v - yMin) / yRange) * innerH;
 
   // Y-axis ticks
@@ -956,13 +967,22 @@ function MultiAirlineChart({ teams }: { teams: Array<{ id: string; name: string;
             </g>
           );
         })}
-        {/* X-axis labels — yearly ticks across the 40-round campaign so the
-            calendar year ladder reads cleanly (every 4 rounds = one year). */}
-        {[1, 5, 13, 21, 29, 37, 40].map((q) => (
-          <text key={q} x={x(q)} y={H - padB + 14} textAnchor="middle" fontSize="9" fill="var(--ink-muted)" className="font-mono tabular">
-            {fmtQuarter(q)}
-          </text>
-        ))}
+        {/* X-axis labels — evenly-spaced ticks across the configured
+            campaign length so 8 / 16 / 24 / 40-round games all show
+            sensible date labels. Targets ~6 ticks regardless of
+            totalRounds; pulls from the session value. */}
+        {(() => {
+          const tickCount = Math.min(7, Math.max(3, Math.round(totalRounds / 6)));
+          const step = Math.max(1, Math.floor((totalRounds - 1) / (tickCount - 1)));
+          const ticks: number[] = [];
+          for (let q = 1; q <= totalRounds; q += step) ticks.push(q);
+          if (ticks[ticks.length - 1] !== totalRounds) ticks.push(totalRounds);
+          return ticks.map((q) => (
+            <text key={q} x={x(q)} y={H - padB + 14} textAnchor="middle" fontSize="9" fill="var(--ink-muted)" className="font-mono tabular">
+              {fmtQuarter(q)}
+            </text>
+          ));
+        })()}
         {/* X-axis baseline */}
         <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="var(--line)" strokeWidth="1" />
 

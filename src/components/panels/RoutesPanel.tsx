@@ -1202,10 +1202,17 @@ function RouteDetailModal({
         </div>
         {route.status === "pending" && (
           <div className="mt-2 rounded-md border border-warning/40 bg-[var(--warning-soft)] px-3 py-2 text-[0.75rem] text-ink-2 leading-relaxed">
+            {/* Phase 4.6 — copy fixed to match actual store behavior.
+                Previously claimed "If you're outbid, it cancels and
+                aircraft return idle." That's wrong: outbid routes
+                stay in pending state with `pendingReason` recorded,
+                and aircraft remain reserved to the route until the
+                player rebids OR cancels manually. */}
             <strong className="text-warning">Awaiting auction.</strong> Your slot
             bid resolves at end of quarter. The route will activate at the lower
             of (your intended weekly frequency) and (slots actually won). If
-            you&apos;re outbid, it cancels and aircraft return idle.
+            you&apos;re outbid, the route stays pending — re-bid next quarter,
+            or cancel manually to free the aircraft.
             {route.pendingReason && (
               <div className="mt-1.5 pt-1.5 border-t border-warning/20 font-mono text-[0.6875rem] text-ink-2">
                 Last auction: {route.pendingReason}

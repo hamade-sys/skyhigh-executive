@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
-import { SCENARIOS, SCENARIOS_BY_QUARTER } from "@/data/scenarios";
+import { SCENARIOS, SCENARIOS_BY_QUARTER, scenariosForQuarter } from "@/data/scenarios";
 import {
   applyOptionEffect,
   computeAirlineValue,
@@ -27,7 +27,7 @@ import {
   type BidEntry,
 } from "@/lib/slots";
 import { toast } from "./toasts";
-import { fmtQuarter, TOTAL_GAME_ROUNDS } from "@/lib/format";
+import { fmtQuarter, getTotalRounds, TOTAL_GAME_ROUNDS } from "@/lib/format";
 import {
   planBotAircraftOrder,
   planBotRoutes,
@@ -421,7 +421,10 @@ export interface GameStore extends GameState {
    *  on failure but doesn't unwind. Caller passes the eventType
    *  string + optional payload that lands in game_events for the
    *  audit trail. */
-  pushStateToServer(eventType: string, eventPayload?: unknown): void;
+  pushStateToServer(
+    eventType: string,
+    eventPayload?: unknown,
+  ): Promise<{ ok: true } | { ok: false; error: string; status?: number }>;
   /** Re-issue the session code without creating a new game state.
    *  Players reconnecting use the new code; existing saved snapshots
    *  are preserved. Useful after a facilitator restores a snapshot. */
@@ -1102,12 +1105,32 @@ export const useGame = create<GameStore>()(
         ) {
           return { ok: false, error: "Doctrine already revised this campaign" };
         }
+        // Phase 5.1 — slider streaks reset on doctrine switch.
+        // The audit verified that ALL doctrine multipliers in
+        // engine.ts are live-readable from `team.doctrine`, so the
+        // multiplier swap is clean. The one persistent state that
+        // would drag old-doctrine momentum forward is sliderStreaks
+        // (the +bonus a slider earns after holding a level for 3+
+        // quarters). Resetting them on switch makes the player earn
+        // streak bonuses fresh under the new doctrine — matches the
+        // narrative intent of "a strategic reset" and prevents a
+        // premium-doctrine player from inheriting cargo-era staff
+        // discipline.
+        const SLIDER_KEYS = ["staff", "marketing", "service", "rewards", "operations", "customerService"] as const;
+        const resetStreaks = SLIDER_KEYS.reduce(
+          (acc, k) => {
+            acc[k] = { level: player.sliders[k] ?? 2, quarters: 0 };
+            return acc;
+          },
+          {} as typeof player.sliderStreaks,
+        );
         set({
           teams: s.teams.map((t) => {
             if (t.id !== player.id) return t;
             return {
               ...t,
               doctrine,
+              sliderStreaks: resetStreaks,
               flags: new Set([
                 ...(t.flags ?? []),
                 "doctrine_revised_midgame",
@@ -1125,7 +1148,13 @@ export const useGame = create<GameStore>()(
         cabinAmenities, cargoBelly,
       }) => {
         const s = get();
-        if (s.isObserver) return;
+        // Game Master / spectator observers cannot edit team state. The
+        // function signature requires the {ok, error?} envelope; an
+        // early `return;` would yield `undefined` and break the type
+        // contract (also surfaced by tsc and the playtest audit).
+        if (s.isObserver) {
+          return { ok: false, error: "Observer mode: cannot order aircraft" };
+        }
         const spec = AIRCRAFT_BY_ID[specId];
         if (!spec) return { ok: false, error: "Unknown aircraft" };
         // Pre-orders open at unlockQuarter − 2 (announcement window per
@@ -2685,6 +2714,24 @@ export const useGame = create<GameStore>()(
 
         // If aircraft reassigned, validate range + availability
         const newAircraftIds = patch.aircraftIds ?? route.aircraftIds;
+
+        // Phase 4.5 — empty-aircraft guard. An active or pending route
+        // with zero assigned aircraft consumes slots at both endpoints
+        // but produces no revenue and no flights. The previous logic
+        // clamped to 1/7 daily frequency, leaving phantom capacity
+        // active. Now: reject the edit if it would result in an
+        // empty active or pending route. Closing or suspending uses
+        // the dedicated suspend/close store actions, not updateRoute.
+        if (
+          newAircraftIds.length === 0
+          && (route.status === "active" || route.status === "pending")
+        ) {
+          return {
+            ok: false,
+            error:
+              "An active route needs at least one aircraft. Add one, suspend the route, or close it.",
+          };
+        }
         if (patch.aircraftIds) {
           const planes = newAircraftIds
             .map((id) => player.fleet.find((f) => f.id === id));
@@ -2787,7 +2834,11 @@ export const useGame = create<GameStore>()(
       submitDecision: ({ scenarioId, optionId, lockInQuarters }) => {
         const s = get();
         if (s.isObserver) return;
-        const scenario = SCENARIOS_BY_QUARTER[s.currentQuarter]?.find(
+        // Phase 3: scenarios are scaled to the configured totalRounds
+        // so 8/16/24/40-round games each see scenarios fire at the
+        // correct PROPORTIONAL quarter, not always at the absolute
+        // 40-round target.
+        const scenario = scenariosForQuarter(s.currentQuarter, getTotalRounds(s)).find(
           (sc) => sc.id === scenarioId);
         if (!scenario) return;
         const option = scenario.options.find((o) => o.id === optionId);
@@ -3152,7 +3203,10 @@ export const useGame = create<GameStore>()(
         // didn't explicitly answer. Calls submitDecision so all the
         // dedup + eligibility logic from above also applies.
         {
-          const pending = (SCENARIOS_BY_QUARTER[s.currentQuarter] ?? []).filter(
+          // Phase 3: pull scenarios from the scaled lookup so short-
+          // format games see their proportional scenarios at the right
+          // quarter (not always the absolute 40-round target).
+          const pending = scenariosForQuarter(s.currentQuarter, getTotalRounds(s)).filter(
             (sc) => !player.decisions.some(
               (d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter,
             ),
@@ -3910,7 +3964,7 @@ export const useGame = create<GameStore>()(
         // their choices. Deferred / acquire / refinance effects are
         // not yet wired for bots — those need more plumbing and aren't
         // needed for the leaderboard signal.
-        const scenariosThisQuarter = SCENARIOS_BY_QUARTER[s.currentQuarter] ?? [];
+        const scenariosThisQuarter = scenariosForQuarter(s.currentQuarter, getTotalRounds(s));
         const teamsAfterBotScenarios = teamsAfterBotTurns.map((t) => {
           if (!t.botDifficulty) return t;
           if (scenariosThisQuarter.length === 0) return t;
@@ -4521,7 +4575,10 @@ export const useGame = create<GameStore>()(
 
       advanceToNext: () => {
         const s = get();
-        if (s.currentQuarter >= TOTAL_GAME_ROUNDS) {
+        // Phase 3: respect the configured totalRounds so 8 / 16 / 24
+        // round games end at their configured stop, not always at 40.
+        const totalRounds = getTotalRounds(s);
+        if (s.currentQuarter >= totalRounds) {
           set({ phase: "endgame", lastCloseResult: null });
           toast.accent("Final round complete", "Your legacy is sealed.");
           return;
@@ -4765,11 +4822,11 @@ export const useGame = create<GameStore>()(
           toQuarter: nextQ,
         });
 
-        // Player-facing label: "Round 13/40" headline with the calendar
-        // quarter as the detail line. Internal round numbers are 1..40;
-        // calendar quarters are Q1 2015..Q4 2024 derived from that.
+        // Player-facing label: "Round 13/N" headline with the calendar
+        // quarter as the detail line. N comes from the game's session
+        // (8 / 16 / 24 / 40) so short-format cohorts see the right total.
         toast.accent(
-          `Round ${nextQ}/${TOTAL_GAME_ROUNDS}`,
+          `Round ${nextQ}/${getTotalRounds(s)}`,
           fmtQuarter(nextQ),
         );
       },
@@ -5274,16 +5331,16 @@ export const useGame = create<GameStore>()(
       pushStateToServer: (eventType, eventPayload) => {
         const s = get();
         // Game Master is observer-only — never write state on their behalf.
-        if (s.isObserver) return;
+        if (s.isObserver) return Promise.resolve({ ok: true as const });
         const session = s.session;
         // Solo runs (no session) and runs that haven't been bound to a
         // server-side gameId skip the write-back entirely. Returning
         // here is a no-op — the local engine has already advanced.
-        if (!session?.gameId) return;
+        if (!session?.gameId) return Promise.resolve({ ok: true as const });
         // Use the authenticated Supabase user.id stored during hydration.
         // This is always server-side identity — never a localStorage UUID.
         const sessionId = s.localSessionId;
-        if (!sessionId) return;
+        if (!sessionId) return Promise.resolve({ ok: true as const });
         const actorTeamId = s.activeTeamId ?? s.playerTeamId ?? undefined;
 
         // Build a partialize-compatible payload mirroring the persist
@@ -5318,20 +5375,28 @@ export const useGame = create<GameStore>()(
           session: { ...session, version: session.version + 1 },
         };
 
-        // Fire-and-forget. Errors get logged + a soft toast on the
-        // facilitator/host side, but the local engine doesn't unwind
-        // — the next /api/games/load brings this browser back in sync
-        // if the server rejected the write.
-        if (typeof fetch === "undefined") return;
+        if (typeof fetch === "undefined") return Promise.resolve({ ok: true as const });
         const expectedVersion = session.version;
         const gameId = session.gameId;
-        fetch("/api/games/state-update", {
+
+        // Phase 4.1: returns a Promise so callers that want to await
+        // (closeQuarter especially) can do so. Existing fire-and-forget
+        // callers (open route, set sliders, etc.) continue to ignore
+        // the return value and operate optimistically. On 409 we
+        // auto-refetch the authoritative state via /api/games/load
+        // and hydrate locally — the user gets a clear toast that
+        // their last action was overridden by the cohort's lead and
+        // a hint to retry.
+        return fetch("/api/games/state-update", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             gameId,
             expectedVersion,
             newState: stateJson,
+            // actorSessionId is server-derived (Phase 1 hardening),
+            // but we still ship it for the audit log fallback when
+            // the cookie session is missing in dev.
             actorSessionId: sessionId,
             actorTeamId,
             eventType,
@@ -5340,38 +5405,55 @@ export const useGame = create<GameStore>()(
         })
           .then(async (res) => {
             if (res.ok) {
-              // Bump the local session.version to match the server's
-              // new row so the NEXT write-back uses the fresh CAS
-              // baseline. Other state already reflects the close.
               const cur = get();
               if (cur.session?.gameId === gameId) {
                 set({
                   session: { ...cur.session, version: cur.session.version + 1 },
                 });
               }
-              return;
+              return { ok: true as const };
             }
             const json = await res.json().catch(() => ({}));
             if (res.status === 409) {
-              // Stale state: someone else's close landed first. Log
-              // and let the next /api/games/load resync this browser.
               console.warn(
                 `[state-update] stale write — server rejected event ${eventType}. ` +
-                  `Refresh the page to pull the authoritative state.`,
+                  `Auto-refetching authoritative state.`,
               );
+              // Refetch + hydrate so this browser snaps to the cohort's
+              // canonical state. The local mutation is lost; the user
+              // sees a clear toast and retries.
+              try {
+                const loadRes = await fetch(
+                  `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
+                  { cache: "no-store" },
+                );
+                if (loadRes.ok) {
+                  const loadJson = await loadRes.json();
+                  if (loadJson?.state?.state_json) {
+                    get().hydrateFromServerState({
+                      stateJson: loadJson.state.state_json,
+                      mySessionId: sessionId,
+                    });
+                  }
+                }
+              } catch (refetchErr) {
+                console.warn("[state-update] refetch after 409 failed:", refetchErr);
+              }
               toast.warning(
                 "Game state out of sync",
-                "Another player advanced the round before your write landed. Refresh the page to resync.",
+                "The cohort advanced before your action landed. We've pulled the latest state — please retry your action.",
               );
-              return;
+              return { ok: false as const, error: "stale state", status: 409 };
             }
             console.warn(
               `[state-update] failed (${res.status}) on event ${eventType}:`,
               json.error,
             );
+            return { ok: false as const, error: json.error ?? "Server error", status: res.status };
           })
           .catch((err) => {
             console.warn(`[state-update] network error on event ${eventType}:`, err);
+            return { ok: false as const, error: err instanceof Error ? err.message : "Network error" };
           });
       },
 
@@ -6204,7 +6286,7 @@ export const useGame = create<GameStore>()(
         if (wasRunning && next === 0) {
           const player = s.teams.find((t) => t.id === s.playerTeamId);
           if (!player) return;
-          const scenariosThisQuarter = SCENARIOS_BY_QUARTER[s.currentQuarter] ?? [];
+          const scenariosThisQuarter = scenariosForQuarter(s.currentQuarter, getTotalRounds(s));
           const unsubmitted = scenariosThisQuarter.filter(
             (sc) => !player.decisions.some(
               (d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter,

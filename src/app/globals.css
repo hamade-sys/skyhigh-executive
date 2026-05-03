@@ -1,6 +1,12 @@
 /* ────────────────────────────────────────────────────────────────
-   SkyForce · Flight Deck Modernist
-   Warm off-white, deep navy, terracotta. 1985 airline boardroom.
+   ICAN Simulations · in-game theme
+   White-dominant surfaces, ICAN teal accents, charcoal text.
+   Phase 7 of the enterprise-readiness plan: in-game and marketing
+   surfaces share the same brand palette. The previous warm
+   off-white + navy + terracotta theme was inherited from the
+   "SkyForce · Flight Deck Modernist" codename and felt
+   disconnected from the marketing site (which uses ICAN teal
+   `#00C2CB` everywhere).
    ──────────────────────────────────────────────────────────────── */
 
 @import url("https://api.fontshare.com/v2/css?f[]=switzer@400,500,600,700,800&display=swap");
@@ -10,35 +16,44 @@
 @import "tailwindcss";
 
 /* ───────────────────────────────────────────────────────────────
-   :root — raw tokens (OKLCH-tinted neutrals toward navy brand hue)
+   :root — raw tokens. White surfaces, ICAN teal accent (#00C2CB),
+   charcoal text scale. Brand teal mirrors the marketing site so
+   visitors don't see a brand jump on entry.
    ─────────────────────────────────────────────────────────────── */
 :root {
-  /* Surfaces — warm off-white, subtly tinted toward brand */
-  --bg: #f7f3ec;
+  /* Brand teal — single source of truth for marketing + in-game. */
+  --brand-teal: #00C2CB;
+  --brand-teal-hover: #00a9b1;
+  --brand-teal-soft: rgba(0, 194, 203, 0.08);
+  --brand-teal-soft-2: rgba(0, 194, 203, 0.16);
+
+  /* Surfaces — white-dominant. */
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f0ebe0;
-  --surface-hover: #efe8d6;
+  --surface-2: #f8fafc;
+  --surface-hover: #f1f5f9;
 
-  /* Lines & separators — warm, consistent with bg */
-  --line: #e5ddca;
-  --line-strong: #b9ac94;
+  /* Lines & separators — slate, low-contrast. */
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
 
-  /* Ink — deep navy text scale, perceptually uniform steps */
-  --ink: #10253f;
-  --ink-2: #3a5475;
-  --ink-muted: #7a8ca0;
-  --ink-faint: #a9b6c6;
+  /* Ink — charcoal text scale, perceptually uniform steps. */
+  --ink: #1a1a1a;
+  --ink-2: #334155;
+  --ink-muted: #64748b;
+  --ink-faint: #94a3b8;
 
-  /* Primary — navy. Used for brand, primary buttons, active tabs. */
-  --primary: #14355e;
-  --primary-hover: #0e2747;
-  --primary-fg: #f7f3ec;
+  /* Primary — charcoal. Used for primary CTAs, active tabs, hub
+   *  beacons. Pairs against brand teal accent. */
+  --primary: #1a1a1a;
+  --primary-hover: #0f172a;
+  --primary-fg: #ffffff;
 
-  /* Accent — terracotta. Restrained; 10% rule. Replaces gold. */
-  --accent: #d14a2e;
-  --accent-hover: #b83e24;
-  --accent-soft: rgba(209, 74, 46, 0.08);
-  --accent-soft-2: rgba(209, 74, 46, 0.16);
+  /* Accent — ICAN teal. Same hue as the marketing CTA color. */
+  --accent: var(--brand-teal);
+  --accent-hover: var(--brand-teal-hover);
+  --accent-soft: var(--brand-teal-soft);
+  --accent-soft-2: var(--brand-teal-soft-2);
 
   /* Semantic — muted, editorial, not SaaS-primary */
   --positive: #1e6b5c;
@@ -50,16 +65,16 @@
   --info: #2b6b88;
   --info-soft: rgba(43, 107, 136, 0.1);
 
-  /* Map — satellite-ish feel, clear land vs water, not photographic */
-  --map-ocean: #c6d7e3;          /* muted steel blue */
-  --map-ocean-deep: #b3c8d8;     /* deeper water tone for depth accents */
-  --map-land: #d8c9a5;            /* warm earth bone */
-  --map-land-hover: #cfbe92;
-  --map-land-select: #c2ad77;
-  --map-line: #9a8766;            /* warmer coastline */
-  --map-arc: #d14a2e;
-  --map-arc-muted: rgba(185, 172, 148, 0.5);
-  --map-hub: #14355e;
+  /* Map — clean modern feel, slate water + warm land for legibility. */
+  --map-ocean: #cfe1ec;          /* slate-leaning ocean */
+  --map-ocean-deep: #b8d2e0;     /* depth accents */
+  --map-land: #f1ebde;            /* light warm bone */
+  --map-land-hover: #e6dfcb;
+  --map-land-select: #d8cfb6;
+  --map-line: #94a3b8;            /* slate coastline */
+  --map-arc: var(--brand-teal);
+  --map-arc-muted: rgba(148, 163, 184, 0.45);
+  --map-hub: #1a1a1a;
 
   /* Radius */
   --r-1: 2px;

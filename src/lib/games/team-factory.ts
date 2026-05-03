@@ -136,27 +136,48 @@ export function createInitializedTeamFromOnboarding(
       args.salaryPhilosophy === "above" ? 3 : 2;
   }
 
-  // Starter fleet — 2× A320, both active, ready to be assigned to
-  // routes in Q2. Same retirement clock as the solo flow.
-  const starter1: FleetAircraft = {
-    id: mkId("ac"),
-    specId: "A320",
-    status: "active",
-    acquisitionType: "buy",
-    purchaseQuarter: 1,
-    purchasePrice: 25_000_000,
-    bookValue: 25_000_000,
-    leaseQuarterly: null,
-    ecoUpgrade: false,
-    ecoUpgradeQuarter: null,
-    ecoUpgradeCost: 0,
-    cabinConfig: "default",
-    routeId: null,
-    retirementQuarter: 1 + 28,
-    maintenanceDeficit: 0,
-    satisfactionPct: 75,
-  };
-  const starter2: FleetAircraft = { ...starter1, id: mkId("ac") };
+  // Phase 5.2 — doctrine-aware starter fleet. Previously every player
+  // (including cargo-dominance players + cargo-dominance bots) started
+  // with 2× A320. A cargo-doctrine player thus had ZERO cargo aircraft
+  // until Q3 — playing against their doctrine for the first two
+  // quarters. The fix: cargo-dominance starts with 1× A320 (so they
+  // can serve passenger routes from day one too) + 1× B737-300F
+  // (so they can play cargo from Q1). Other doctrines retain the
+  // legacy 2× A320 baseline. Bot rivals who pick cargo-dominance via
+  // the random doctrine assignment also get the mixed starter.
+  function starterTemplate(specId: string, price: number): FleetAircraft {
+    return {
+      id: mkId("ac"),
+      specId,
+      status: "active",
+      acquisitionType: "buy",
+      purchaseQuarter: 1,
+      purchasePrice: price,
+      bookValue: price,
+      leaseQuarterly: null,
+      ecoUpgrade: false,
+      ecoUpgradeQuarter: null,
+      ecoUpgradeCost: 0,
+      cabinConfig: "default",
+      routeId: null,
+      retirementQuarter: 1 + 28,
+      maintenanceDeficit: 0,
+      satisfactionPct: 75,
+    };
+  }
+  const starterFleet: FleetAircraft[] =
+    args.doctrine === "cargo-dominance"
+      ? [
+          // 1 passenger workhorse for any narrowbody-range city pair
+          starterTemplate("A320", 25_000_000),
+          // 1 dedicated cargo plane that's available at Q1
+          // (B737-300F: 18 tonnes capacity, narrowbody freighter).
+          starterTemplate("B737-300F", 60_000_000),
+        ]
+      : [
+          starterTemplate("A320", 25_000_000),
+          starterTemplate("A320", 25_000_000),
+        ];
 
   // Starter slot grants. Free 30 slots at the hub + 30 each at the
   // five nearest popular destinations. Lets the player open routes
@@ -216,7 +237,7 @@ export function createInitializedTeamFromOnboarding(
     loans: [],
     taxLossCarryForward: [],
     insurancePolicy: "none",
-    fleet: [starter1, starter2],
+    fleet: starterFleet,
     routes: [],
     decisions: [],
     deferredEvents: [],

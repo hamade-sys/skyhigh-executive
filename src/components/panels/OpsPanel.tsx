@@ -6,7 +6,8 @@ import { SLIDER_LABELS, SLIDER_PCT_REVENUE, SLIDER_EFFECTS } from "@/lib/engine"
 import { useGame, selectPlayer } from "@/store/game";
 import type { SliderLevel, Sliders } from "@/types/game";
 import { cn } from "@/lib/cn";
-import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
+import { scenariosForQuarter } from "@/data/scenarios";
+import { getTotalRounds } from "@/lib/format";
 import { useUi } from "@/store/ui";
 
 const SLIDER_LIST: Array<{ key: keyof Sliders; label: string; sub: string }> = [
@@ -30,7 +31,7 @@ export function OpsPanel() {
 
   if (!player) return null;
 
-  const pendingDecisions = (SCENARIOS_BY_QUARTER[s.currentQuarter] ?? []).filter(
+  const pendingDecisions = scenariosForQuarter(s.currentQuarter, getTotalRounds(s)).filter(
     (sc) => !player.decisions.some((d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter),
   );
 

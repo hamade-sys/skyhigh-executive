@@ -31,7 +31,7 @@ import { useGame } from "@/store/game";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { GameCanvas } from "@/components/game/GameCanvas";
-import { TopBar } from "@/components/layout/TopBar";
+// TopBar import removed — GameCanvas mounts it internally (Phase 4.7).
 
 interface LoadResponse {
   game: GameRow;
@@ -256,7 +256,11 @@ export default function GamePlayPage({
           Game Master — observer mode. Use &ldquo;Switch view&rdquo; to inspect any team.
         </div>
       )}
-      <TopBar />
+      {/* Phase 4.7 — GameCanvas mounts its own <TopBar/> + NavRail
+          internally. The previous shape rendered TopBar twice in
+          multiplayer (once at the play-page level, once inside
+          GameCanvas), which produced a duplicated header strip and
+          off-by-h-14 map/panel offsets. */}
       <GameCanvas />
     </div>
   );

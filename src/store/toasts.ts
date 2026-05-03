@@ -33,7 +33,14 @@ interface ToastStore {
   markAllRead(): void;
 }
 
-const HISTORY_CAP = 200;
+// Phase 6 hardening: bumped from 200 → 600 because a 40-round
+// workshop with ~10 toasts/round generated 400 events and silently
+// dropped Q1-Q5 events by Q25 — facilitators reviewing the
+// notifications log mid-workshop missed early critical events.
+// 600 entries comfortably covers a 40-round game even at peak
+// activity (~15/round) with headroom; for shorter formats the
+// extra slack is harmless.
+const HISTORY_CAP = 600;
 
 export const useToasts = create<ToastStore>()(
   persist(

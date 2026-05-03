@@ -26,6 +26,7 @@
 
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
+import { canLeaseSpec, leaseTermsFor } from "@/lib/lease";
 import { distanceBetween, maxRouteDailyFrequency, baseFareForDistance } from "@/lib/engine";
 import { BASE_SLOT_PRICE_BY_TIER } from "@/lib/slots";
 import type { Team, FleetAircraft, PricingTier } from "@/types/game";
@@ -330,6 +331,12 @@ export function planBotAircraftOrder(
   const cargoThreshold = difficulty === "hard" ? 4 : 6;
   const wantsCargo = fleetCount >= cargoThreshold && cargoCount === 0;
 
+  // Phase 4.4 — split the cash filter into two gates so a bot with
+  // lease/debt headroom but not buy-price cash isn't filtered out
+  // before the lease/buy decision. Previously the candidate list
+  // required `cashUsd >= buyPrice × ratio`, which rejected
+  // lease-eligible aircraft up front; bots stalled with $50M cash
+  // and access to a $150M aircraft via $22.5M lease deposit.
   const candidates = availableSpecs.filter((spec) => {
     if (wantsCargo && spec.family !== "cargo") return false;
     if (!wantsCargo && spec.family !== "passenger") return false;
@@ -338,7 +345,12 @@ export function planBotAircraftOrder(
         spec.seats.first + spec.seats.business + spec.seats.economy > 250;
       if (wantsWide !== isWide && fleetCount > 0) return false;
     }
-    return team.cashUsd >= spec.buyPriceUsd * profile.orderAircraftCashRatio;
+    const canBuy =
+      team.cashUsd >= spec.buyPriceUsd * profile.orderAircraftCashRatio;
+    const leaseEligible = canLeaseSpec(spec, AIRCRAFT, currentQuarter);
+    const canLease =
+      leaseEligible && team.cashUsd >= leaseTermsFor(spec).depositUsd;
+    return canBuy || canLease;
   });
   if (candidates.length === 0) return null;
 

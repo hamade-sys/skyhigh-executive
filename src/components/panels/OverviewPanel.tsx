@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Badge, Button, Metric, Modal, ModalBody, ModalFooter, ModalHeader, Sparkline } from "@/components/ui";
-import { fmtMoney, fmtPct } from "@/lib/format";
+import { fmtMoney, fmtPct, getTotalRounds } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
-import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
+import { scenariosForQuarter } from "@/data/scenarios";
 import { computeAirlineValue, fleetCount, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { DOCTRINES, DOCTRINE_BY_ID, DOCTRINE_ICON_TINT } from "@/data/doctrines";
 import { CITIES_BY_CODE } from "@/data/cities";
@@ -75,7 +75,7 @@ export function OverviewPanel() {
   const revenueSeries = history.map((q) => q.revenue);
   // loyaltySeries removed — loyalty is internal-only per PRD update.
 
-  const pendingDecisions = (SCENARIOS_BY_QUARTER[s.currentQuarter] ?? []).filter(
+  const pendingDecisions = scenariosForQuarter(s.currentQuarter, getTotalRounds(s)).filter(
     (sc) =>
       !player.decisions.some(
         (d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter,

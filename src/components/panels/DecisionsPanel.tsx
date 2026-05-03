@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { Badge, Button } from "@/components/ui";
-import { SCENARIOS, SCENARIOS_BY_QUARTER, type OptionEffect, type ScenarioOption } from "@/data/scenarios";
+import { SCENARIOS, scenariosForQuarter, type OptionEffect, type ScenarioOption } from "@/data/scenarios";
 import { useGame, selectPlayer } from "@/store/game";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { MapPin } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { Team } from "@/types/game";
-import { fmtMoney, fmtQuarter } from "@/lib/format";
+import { fmtMoney, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { quarterlyStaffCost, scaledCashAmount } from "@/lib/engine";
@@ -60,7 +60,7 @@ export function DecisionsPanel() {
   // ("facilitated + AI auto-resolve") can flip it independently.
   const boardDecisionsEnabled = s.session?.boardDecisionsEnabled ?? true;
 
-  const currentScenarios = SCENARIOS_BY_QUARTER[s.currentQuarter] ?? [];
+  const currentScenarios = scenariosForQuarter(s.currentQuarter, getTotalRounds(s));
   const pastDecisions = [...player.decisions].sort((a, b) => b.quarter - a.quarter);
 
   if (!boardDecisionsEnabled) {

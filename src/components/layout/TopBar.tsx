@@ -10,7 +10,8 @@ import { QuarterTimerChip } from "@/components/game/QuarterTimer";
 import { HelpModal } from "@/components/game/HelpModal";
 import { NotificationCenter } from "@/components/game/NotificationCenter";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
+import { scenariosForQuarter } from "@/data/scenarios";
+import { getTotalRounds } from "@/lib/format";
 import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
@@ -203,6 +204,9 @@ function LeaderboardButton() {
 function CloseQuarterButton() {
   const closeQuarter = useGame((s) => s.closeQuarter);
   const currentQuarter = useGame((s) => s.currentQuarter);
+  // Phase 3: pull totalRounds from session for the scaled scenario
+  // lookup below.
+  const totalRounds = useGame(getTotalRounds);
   // "Player" = the team this browser controls. selectActiveTeam in
   // multiplayer; selectPlayer fallback for solo + legacy saves.
   const activeTeam = useGame(selectActiveTeam);
@@ -244,7 +248,7 @@ function CloseQuarterButton() {
   // activeTeamId fallback already handled above; just satisfy TS
   void activeTeamId;
 
-  const pending = (SCENARIOS_BY_QUARTER[currentQuarter] ?? []).filter(
+  const pending = scenariosForQuarter(currentQuarter, totalRounds).filter(
     (sc) => !player.decisions.some((d) => d.scenarioId === sc.id && d.quarter === currentQuarter),
   );
 

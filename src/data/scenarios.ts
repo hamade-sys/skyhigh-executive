@@ -879,3 +879,42 @@ export const SCENARIOS_BY_QUARTER: Record<number, Scenario[]> = SCENARIOS.reduce
   },
   {} as Record<number, Scenario[]>,
 );
+
+/**
+ * Phase 3 — scenarios scaled to a configurable game length. The
+ * SCENARIOS list is keyed by absolute quarters 3..37 across a 40-round
+ * campaign (the original master design). On a shorter game (8 / 16 /
+ * 24 rounds) those quarters are off the table — the campaign ends
+ * before late scenarios fire — and the cohort sees a sparse,
+ * front-loaded scenario rhythm.
+ *
+ * `scenariosForQuarter(currentQuarter, totalRounds)` re-maps absolute
+ * scenario quarters to the proportional quarter for the configured
+ * game length, then returns the scenarios for that proportional
+ * quarter. So S3 (originally Q25 of 40) fires at:
+ *   - 40 → Q25 (unchanged)
+ *   - 24 → Q15 (Math.round(25 * 24 / 40) = 15)
+ *   - 16 → Q10
+ *   -  8 → Q5
+ *
+ * Multiple scenarios that round to the same quarter all fire
+ * together; deduplication is automatic because the mapping is
+ * idempotent at runtime. Deferred events (which use lagQuarters
+ * relative to their decision) automatically scale with the campaign
+ * via the existing scenario-relative timing logic, so we don't need
+ * to scale them here.
+ */
+export function scenariosForQuarter(
+  currentQuarter: number,
+  totalRounds: number,
+): Scenario[] {
+  // Default 40-round game: identity mapping — preserve legacy behavior.
+  if (totalRounds === 40) return SCENARIOS_BY_QUARTER[currentQuarter] ?? [];
+  const ratio = totalRounds / 40;
+  const matches: Scenario[] = [];
+  for (const sc of SCENARIOS) {
+    const scaled = Math.max(1, Math.min(totalRounds, Math.round(sc.quarter * ratio)));
+    if (scaled === currentQuarter) matches.push(sc);
+  }
+  return matches;
+}

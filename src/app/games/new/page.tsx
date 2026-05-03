@@ -56,23 +56,35 @@ function mkSlotId() {
   return `slot-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Parent component — does ONLY the auth gate. No state hooks live
+// here, so the rules-of-hooks early-return pattern is safe. Once
+// `user` is non-null, render <CreateGameForm/> which owns all the
+// form state. This split was forced by react-hooks/rules-of-hooks:
+// the previous shape called `useState` AFTER the auth-loading early
+// return, so the hook order changed when auth resolved.
 export default function CreateGamePage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const mpAvailable = isMultiplayerAvailable();
 
-  // Require sign-in to create a game. Redirect to login with a ?next
-  // param so the user lands back here after authenticating.
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace("/login?next=/games/new");
     }
   }, [authLoading, user, router]);
 
-  // Show nothing while auth resolves or redirect is in flight.
   if (authLoading || !user) {
     return <div className="flex-1 bg-slate-50" aria-hidden />;
   }
+  return <CreateGameForm />;
+}
+
+function CreateGameForm() {
+  const router = useRouter();
+  // `user` is guaranteed non-null here because <CreateGameForm/> only
+  // mounts after the parent's auth gate clears. Re-reading useAuth is
+  // cheap (context lookup) and keeps the existing code body unchanged.
+  const { user } = useAuth();
+  const mpAvailable = isMultiplayerAvailable();
 
   const [name, setName] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("public");

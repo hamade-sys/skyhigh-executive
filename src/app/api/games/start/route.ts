@@ -18,7 +18,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { startGame, loadGame, submitStateMutation } from "@/lib/games/api";
+import {
+  assertHostOrFacilitator,
+  loadGame,
+  startGame,
+  submitStateMutation,
+} from "@/lib/games/api";
+import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
 import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
 
 export const runtime = "nodejs";
@@ -51,11 +57,30 @@ type DoctrineId = "premium-service" | "budget-expansion" | "cargo-dominance" | "
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { gameId, actorSessionId } = body ?? {};
-    if (typeof gameId !== "string" || typeof actorSessionId !== "string") {
-      return NextResponse.json({ error: "gameId + actorSessionId required" }, { status: 400 });
+    // Phase 1 hardening: identity is server-derived from the cookie-
+    // bound auth session. Body parameter `actorSessionId` is ignored
+    // for identity (kept tolerated for backward-compat parsing only).
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Sign-in required to start a game." },
+        { status: 401 },
+      );
     }
+
+    const body = await req.json();
+    const { gameId } = body ?? {};
+    if (typeof gameId !== "string") {
+      return NextResponse.json({ error: "gameId required" }, { status: 400 });
+    }
+
+    // Authorization: only the host (creator) or facilitator can start.
+    const auth = await assertHostOrFacilitator(gameId, userId);
+    if (!auth.ok) {
+      const status = auth.error.includes("not found") ? 404 : 403;
+      return NextResponse.json({ error: auth.error }, { status });
+    }
+    const actorSessionId = userId;
 
     // ── Load current game + state ──────────────────────────────────────────
     const loaded = await loadGame(gameId);

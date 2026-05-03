@@ -125,10 +125,12 @@ function FacilitatorPageInner() {
     return () => { cancelled = true; };
   }, [gameId, sessionId, hydrateState, hydrateFromServerState]);
 
-  const s = useGame();
-  const player = selectPlayer(s);
-  const setActiveTeam = useGame((g) => g.setActiveTeam);
-
+  // While the page is hydrating from the server (or has errored on a
+  // hydrate attempt), render a thin gate component that owns ZERO
+  // hooks below this point. The post-hydrate UI lives in
+  // <FacilitatorContent/> so all the panel-state hooks are
+  // unconditional inside that child. Previously they sat after
+  // these early returns and tripped react-hooks/rules-of-hooks.
   if (hydrateState === "loading") {
     return (
       <main className="flex-1 min-h-0 flex flex-col items-center justify-center bg-surface-2/30">
@@ -155,6 +157,14 @@ function FacilitatorPageInner() {
       </main>
     );
   }
+
+  return <FacilitatorContent />;
+}
+
+function FacilitatorContent() {
+  const s = useGame();
+  const player = selectPlayer(s);
+  const setActiveTeam = useGame((g) => g.setActiveTeam);
 
   const [section, setSection] = useState<"teams" | "admin" | "leaderboard" | "session" | "livesims" | "saves" | "airports">("session");
   // Auto-jump the facilitator to the Airports section if a new bid
