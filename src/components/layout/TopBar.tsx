@@ -9,12 +9,14 @@ import { computeAirlineValue, brandRating } from "@/lib/engine";
 import { QuarterTimerChip } from "@/components/game/QuarterTimer";
 import { HelpModal } from "@/components/game/HelpModal";
 import { NotificationCenter } from "@/components/game/NotificationCenter";
+import { ChatPanel } from "@/components/game/ChatPanel";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { scenariosForQuarter } from "@/data/scenarios";
 import { getTotalRounds } from "@/lib/format";
-import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash } from "lucide-react";
+import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash, MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
+import { airlineColorFor } from "@/lib/games/airline-colors";
 
 export function TopBar() {
   // Fine-grained subscriptions so unrelated store writes don't re-render this.
@@ -37,6 +39,12 @@ export function TopBar() {
   const setViewingTeamId = useUi((u) => u.setViewingTeamId);
   const [helpOpen, setHelpOpen] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  // Phase 10 — chat panel state. Only available in multiplayer
+  // (`session.gameId` set). Unread badge tracks new messages while
+  // the panel is closed.
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
+  const isMultiplayer = useGame((g) => g.session?.gameId != null);
 
   if (!player) return null;
 
@@ -74,8 +82,18 @@ export function TopBar() {
           title="Switch view: see your airline or peek into a rival's network"
         >
           <span
-            className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shadow-[var(--shadow-1)]"
-            style={{ background: displayTeam.color }}
+            className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold shadow-[var(--shadow-1)]"
+            style={{
+              // Phase 9 — chosen brand color overrides legacy team.color.
+              background: airlineColorFor({
+                colorId: displayTeam.airlineColorId,
+                fallbackKey: displayTeam.id,
+              }).hex,
+              color: airlineColorFor({
+                colorId: displayTeam.airlineColorId,
+                fallbackKey: displayTeam.id,
+              }).textOn === "white" ? "#fff" : "#0F172A",
+            }}
           >
             {displayTeam.code}
           </span>
@@ -169,6 +187,27 @@ export function TopBar() {
         </div>
         <QuarterTimerChip />
         <LeaderboardButton />
+        {isMultiplayer && (
+          <button
+            type="button"
+            onClick={() => setChatOpen(true)}
+            aria-label={chatUnread > 0 ? `Open chat (${chatUnread} unread)` : "Open chat"}
+            aria-haspopup="dialog"
+            aria-expanded={chatOpen}
+            title="Cohort chat"
+            className="relative w-8 h-8 min-h-[40px] min-w-[40px] rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          >
+            <MessageCircle size={16} aria-hidden="true" />
+            {chatUnread > 0 && (
+              <span
+                aria-hidden
+                className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center px-1"
+              >
+                {chatUnread > 9 ? "9+" : chatUnread}
+              </span>
+            )}
+          </button>
+        )}
         <NotificationCenter />
         <button
           type="button"
@@ -185,6 +224,13 @@ export function TopBar() {
         <CloseQuarterButton />
       </div>
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {isMultiplayer && (
+        <ChatPanel
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          onUnreadCountChange={setChatUnread}
+        />
+      )}
     </header>
   );
 }
@@ -630,14 +676,87 @@ function GameMenu() {
   const router = useRouter();
   const resetGame = useGame((g) => g.resetGame);
   const phase = useGame((g) => g.phase);
+  const sessionGameId = useGame((g) => g.session?.gameId ?? null);
+  const isMultiplayer = sessionGameId !== null;
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  function handleEndGame() {
-    resetGame();
-    setConfirmOpen(false);
-    setOpen(false);
-    router.replace("/");
+  /**
+   * "End game" semantics — Phase 8.2 of the enterprise-readiness plan.
+   *
+   * SOLO RUN (no `session.gameId`): just wipe the local saved state
+   * and route home. There's no server to clean up.
+   *
+   * MULTIPLAYER MEMBER: forfeit the seat. The /api/games/forfeit
+   * endpoint flips the player's team to bot control (preserving
+   * accumulated state so the cohort can keep playing) and deletes
+   * the game_members row. If the caller is the host of a not-yet-
+   * started lobby, the endpoint redirects to /api/games/delete
+   * (tear down the lobby cleanly).
+   *
+   * On network failure, we DO NOT reset locally — we want the
+   * player's progress preserved so they can retry. Better to be
+   * stuck for 30s than to silently orphan their team in the cohort.
+   */
+  async function handleEndGame() {
+    setErrorMsg(null);
+    setSubmitting(true);
+
+    if (!isMultiplayer || !sessionGameId) {
+      resetGame();
+      setSubmitting(false);
+      setConfirmOpen(false);
+      setOpen(false);
+      router.replace("/");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/games/forfeit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gameId: sessionGameId }),
+      });
+      const json = await res.json().catch(() => ({}));
+
+      // Host of a not-yet-started lobby: forfeit isn't appropriate;
+      // tear down the whole lobby instead.
+      if (json?.redirectToDelete) {
+        const delRes = await fetch("/api/games/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ gameId: sessionGameId }),
+        });
+        if (!delRes.ok) {
+          const delJson = await delRes.json().catch(() => ({}));
+          setErrorMsg(
+            delJson?.error ?? "Couldn't tear down the lobby. Try again.",
+          );
+          setSubmitting(false);
+          return;
+        }
+      } else if (!res.ok) {
+        setErrorMsg(
+          json?.error ??
+            "Couldn't forfeit — your progress is safe. Try again.",
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      resetGame();
+      setSubmitting(false);
+      setConfirmOpen(false);
+      setOpen(false);
+      router.replace("/");
+    } catch {
+      setErrorMsg(
+        "Network error — your progress is safe. Check your connection and try again.",
+      );
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -676,39 +795,84 @@ function GameMenu() {
                 className="w-full text-left px-3 py-2 text-[0.8125rem] text-ink hover:bg-surface-hover flex items-center gap-2"
               >
                 <RotateCcw size={13} className="text-ink-muted" />
-                <span>End game &amp; start over</span>
+                <span>
+                  {isMultiplayer ? "Forfeit & leave game" : "End game & start over"}
+                </span>
               </button>
               <div className="px-3 py-1.5 text-[0.6875rem] text-ink-muted leading-snug border-t border-line/40 mt-1 pt-2">
                 {phase === "endgame"
                   ? "Resets the saved run and returns to onboarding."
-                  : "Wipes the current saved run. Cannot be undone."}
+                  : isMultiplayer
+                    ? "A bot takes over your airline so the cohort can keep playing."
+                    : "Wipes the current saved run. Cannot be undone."}
               </div>
             </div>
           </>
         )}
       </div>
 
-      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-        <ModalHeader>End the current game?</ModalHeader>
+      <Modal open={confirmOpen} onClose={() => !submitting && setConfirmOpen(false)}>
+        <ModalHeader>
+          {isMultiplayer ? "Forfeit your airline?" : "End the current game?"}
+        </ModalHeader>
         <ModalBody>
-          <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
-            This wipes your current run from this browser&rsquo;s saved
-            state and routes you back to the onboarding flow. There&rsquo;s
-            no undo — once you confirm, the saved game is gone.
-          </p>
-          <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
-            If you&rsquo;re in the middle of an interesting quarter you
-            want to keep, hit Cancel and consider taking a screenshot of
-            the leaderboard first.
-          </p>
+          {isMultiplayer ? (
+            <>
+              <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
+                A bot will take over your airline for the rest of the
+                game. Your team&rsquo;s state — fleet, routes, cash,
+                brand, milestones — is preserved so the cohort can
+                keep playing.
+              </p>
+              <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
+                You will return to the home page and can&rsquo;t rejoin
+                this game. If you&rsquo;re the last human and everyone
+                else has forfeited, the game ends.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
+                This wipes your current run from this browser&rsquo;s
+                saved state and routes you back to the onboarding flow.
+                There&rsquo;s no undo — once you confirm, the saved
+                game is gone.
+              </p>
+              <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
+                If you&rsquo;re in the middle of an interesting quarter
+                you want to keep, hit Cancel and consider taking a
+                screenshot of the leaderboard first.
+              </p>
+            </>
+          )}
+          {errorMsg && (
+            <div
+              role="alert"
+              className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[0.8125rem] text-rose-700"
+            >
+              {errorMsg}
+            </div>
+          )}
         </ModalBody>
         <ModalFooter>
-          <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+          <Button
+            variant="ghost"
+            onClick={() => setConfirmOpen(false)}
+            disabled={submitting}
+          >
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleEndGame}>
+          <Button
+            variant="primary"
+            onClick={handleEndGame}
+            disabled={submitting}
+          >
             <X size={14} className="mr-1" />
-            End game &amp; start over
+            {submitting
+              ? "Working…"
+              : isMultiplayer
+                ? "Forfeit & leave"
+                : "End game & start over"}
           </Button>
         </ModalFooter>
       </Modal>

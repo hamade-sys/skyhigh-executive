@@ -3,20 +3,26 @@
 /**
  * `/` — ICAN Simulations marketing landing page.
  *
- * Three audiences land here:
+ * Audiences:
  *   1. First-time visitors (no saved game) → marketing-grade hero,
  *      doctrine showcase, "how it works" strip, classroom CTA, full
  *      footer.
- *   2. Returning players with a live run (phase != idle) → drop
- *      into GameCanvas straight away. Their TopBar already carries
- *      "End game & start over" so they always have an exit; no need
- *      to bounce them through a chooser.
- *   3. Returning players with a finished run (phase === endgame) →
- *      same canvas mount, the canvas itself routes them to /endgame.
+ *   2. Returning SOLO players (local Zustand phase != idle) → drop
+ *      into GameCanvas. Their TopBar carries the forfeit/end menu
+ *      so they always have an exit.
+ *   3. Returning MULTIPLAYER players (signed in, server-side member
+ *      of an active game) → marketing renders normally; the global
+ *      `<ActiveGameRibbon />` (mounted in app/layout.tsx) surfaces a
+ *      "Resume game →" sticky banner at the top.
  *
- * The marketing surface is what we'd hand to a board / HR head /
- * facilitator considering ICAN Simulations for a workshop.
- * Every CTA leads somewhere real (no "coming soon" links).
+ * Phase 8 of the enterprise-readiness plan removed the auto-redirect
+ * from this page. Previously, signed-in players with an active
+ * `game_members` row were force-redirected to `/games/[id]/...` here,
+ * which made the marketing pages unreachable mid-game and (worse)
+ * bounced users right back into a game they'd just tried to forfeit
+ * — because resetGame() only cleared local state, not the DB row.
+ * Now we let the ribbon surface the resume affordance instead, and
+ * the new /api/games/forfeit endpoint actually deletes the membership.
  */
 
 import { useEffect, useState } from "react";
@@ -27,6 +33,7 @@ import {
   Clock, Landmark, Hotel, Wheat, Building2, Stethoscope,
   type LucideIcon,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useGame } from "@/store/game";
 import { GameCanvas } from "@/components/game/GameCanvas";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
@@ -36,66 +43,28 @@ import { useAuth } from "@/lib/auth-context";
 export default function Home() {
   const phase = useGame((s) => s.phase);
   const [hydrated, setHydrated] = useState(false);
-  const [redirect, setRedirect] = useState<string | null>(null);
-  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const { loading: authLoading } = useAuth();
 
   useEffect(() => {
-    // ?code= → join lobby (invitation link flow)
+    // ?code= → join lobby (invitation link flow). One narrow redirect
+    // we still honour because it's an explicit user action.
     if (new URLSearchParams(window.location.search).has("code")) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setRedirect("/lobby");
-      setHydrated(true);
+      router.replace("/lobby");
       return;
     }
-    // Wait for auth to settle before checking for an active game.
-    if (authLoading) return;
-
-    // Signed-in player → query the database (not localStorage) to find
-    // which active game they belong to. Works across devices and browsers
-    // because the lookup is keyed by Supabase user.id, not a local UUID.
-    if (user?.id) {
-      (async () => {
-        try {
-          const res = await fetch(
-            `/api/games/active-membership?sessionId=${encodeURIComponent(user.id)}`,
-            { cache: "no-store" },
-          );
-          const json = await res.json();
-          const game = json?.game as { id: string; status: string } | null;
-          if (game) {
-            const dest = game.status === "playing"
-              ? `/games/${game.id}/play`
-              : `/games/${game.id}/lobby`;
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setRedirect(dest);
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setHydrated(true);
-            return;
-          }
-        } catch { /* network error — fall through to landing */ }
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setHydrated(true);
-      })();
-      return;
-    }
-
-    // Not signed in — show landing page.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
-  }, [authLoading, user?.id]);
+  }, [router]);
 
-  if (!hydrated) {
+  if (!hydrated || authLoading) {
     return <div className="flex-1 min-h-0 bg-slate-50" aria-hidden />;
   }
 
-  if (redirect) {
-    if (typeof window !== "undefined") window.location.replace(redirect);
-    return <div className="flex-1 min-h-0 bg-slate-50" aria-hidden />;
-  }
-
-  // Active or finished solo run — drop into the canvas. The TopBar's
-  // GameMenu has the "End game & start over" path so the player can
-  // always escape back to this landing.
+  // Active or finished SOLO run — drop into the canvas. The TopBar's
+  // GameMenu has the forfeit/end-game path so the player can always
+  // escape back to this landing. (Multiplayer players don't end up
+  // here because they navigate to /games/[id]/play directly.)
   if (
     phase === "playing" ||
     phase === "onboarding" ||

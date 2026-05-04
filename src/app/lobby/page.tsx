@@ -4,14 +4,19 @@
  * /lobby — single source of truth for joining a game.
  *
  * Three things happen on this page:
- *   1. Browse public games (joinable directly)
- *   2. Enter a 4-digit code to join a private game
- *   3. Click "Create game" to host your own
+ *   1. Browse public games (joinable directly) — sorted by Phase 8.4:
+ *      lobbies waiting for players first (oldest first within), then
+ *      in-progress games (most-progressed first within). Ended games
+ *      and full active games are filtered out at the API level.
+ *   2. Enter a 6-digit code to join a private game (bumped from 4 in
+ *      Phase 1 hardening — 1M-keyspace makes brute-force infeasible
+ *      with the per-IP rate limiter).
+ *   3. Click "Create game" to host your own.
  *
  * Private games are NOT listed here — they exist only via code, so
  * showing them in the lobby would defeat "private". The code-input
  * field at the top is the only path into a private game from the
- * lobby; the host pastes the 4-digit code from /games/[id]/lobby's
+ * lobby; the host pastes the 6-digit code from /games/[id]/lobby's
  * prominent "share this code" panel.
  */
 
@@ -20,7 +25,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight, Plus, RefreshCw, Users, Lock, Sparkles, Globe2, Play,
-  KeyRound, Loader2, RotateCcw,
+  KeyRound, Loader2,
 } from "lucide-react";
 import { isMultiplayerAvailable } from "@/lib/supabase/browser";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
@@ -28,16 +33,25 @@ import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import type { GameRow } from "@/lib/supabase/types";
 
+// Joinable-game shape returned by /api/games/list — extends GameRow
+// with the per-game member count so we can render "3/6 joined"
+// affordances without a follow-up roundtrip.
+interface JoinableGame extends GameRow {
+  member_count?: number;
+}
+
 export default function LobbyPage() {
   const router = useRouter();
-  const { sessionId, authReady } = useMultiplayerSession();
-  const [games, setGames] = useState<GameRow[] | null>(null);
+  const { sessionId } = useMultiplayerSession();
+  const [games, setGames] = useState<JoinableGame[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Active game for the signed-in player — shown as a "Resume" card
-  const [activeGame, setActiveGame] = useState<{ id: string; status: string; name: string } | null>(null);
-
+  // Phase 8 — the global <ActiveGameRibbon /> mounted in the root
+  // layout now surfaces the "Resume game" CTA at the top of every
+  // marketing page (lobby included), so this page no longer renders
+  // its own active-game banner. Removing the duplicate prevents the
+  // visual stutter where users saw two side-by-side resume CTAs.
   const [code, setCode] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -70,30 +84,14 @@ export default function LobbyPage() {
     loadGames();
   }, []);
 
-  // Check if the signed-in player has an active game they can resume.
-  // Fires once auth is ready and a session ID is available.
-  useEffect(() => {
-    if (!authReady || !sessionId) return;
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/games/active-membership?sessionId=${encodeURIComponent(sessionId)}`,
-          { cache: "no-store" },
-        );
-        const json = await res.json();
-        if (json?.game) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setActiveGame(json.game);
-        }
-      } catch { /* ignore — non-critical */ }
-    })();
-  }, [authReady, sessionId]);
-
   async function handleJoinByCode(e: React.FormEvent) {
     e.preventDefault();
     setJoinError(null);
-    if (!/^\d{4}$/.test(code)) {
-      setJoinError("Enter the 4-digit code from your host.");
+    // Phase 1.6 bumped join codes from 4 digits to 6. Accept either
+    // length here so private games created on the legacy 4-digit
+    // schema (during the rollout) keep working.
+    if (!/^\d{4}$|^\d{6}$/.test(code)) {
+      setJoinError("Enter the 6-digit code from your host.");
       return;
     }
     if (!sessionId) return;
@@ -146,37 +144,6 @@ export default function LobbyPage() {
           </Link>
         </div>
 
-        {/* ── Resume active game banner ───────────────────────── */}
-        {activeGame && (
-          <div className="mb-6 rounded-2xl border border-cyan-200 bg-cyan-50 p-5 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
-                <RotateCcw className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-widest text-cyan-700 mb-0.5">
-                  Active game
-                </p>
-                <p className="text-sm font-semibold text-slate-900 truncate">
-                  {activeGame.name}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {activeGame.status === "playing" ? "In progress — pick up where you left off" : "Lobby open — waiting to start"}
-                </p>
-              </div>
-            </div>
-            <Link
-              href={activeGame.status === "playing"
-                ? `/games/${activeGame.id}/play`
-                : `/games/${activeGame.id}/lobby`}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors shrink-0"
-            >
-              {activeGame.status === "playing" ? "Resume game" : "Back to lobby"}
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        )}
-
         <form
           onSubmit={handleJoinByCode}
           className="mb-10 rounded-2xl border border-slate-200 bg-white p-5 flex flex-wrap items-center gap-3"
@@ -193,16 +160,16 @@ export default function LobbyPage() {
           <input
             type="text"
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            placeholder="0000"
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="000000"
             inputMode="numeric"
-            maxLength={4}
-            aria-label="4-digit join code"
-            className="flex-1 min-w-[8rem] px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50/60 font-mono tabular text-center text-2xl font-bold text-slate-900 tracking-[0.4em] focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400"
+            maxLength={6}
+            aria-label="6-digit join code"
+            className="flex-1 min-w-[8rem] px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50/60 font-mono tabular text-center text-2xl font-bold text-slate-900 tracking-[0.3em] focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400"
           />
           <button
             type="submit"
-            disabled={code.length !== 4 || joining || !sessionId}
+            disabled={(code.length !== 4 && code.length !== 6) || joining || !sessionId}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold disabled:opacity-50 transition-colors shrink-0"
           >
             {joining ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
@@ -271,8 +238,10 @@ export default function LobbyPage() {
   );
 }
 
-function GameCard({ game }: { game: GameRow }) {
+function GameCard({ game }: { game: JoinableGame }) {
   const playing = game.status === "playing";
+  const memberCount = game.member_count ?? 0;
+  const seatsRemaining = game.max_teams - memberCount;
   return (
     <Link
       href={`/games/${game.id}/lobby`}
@@ -287,6 +256,19 @@ function GameCard({ game }: { game: GameRow }) {
             <h3 className="text-base font-semibold text-slate-900 truncate group-hover:text-slate-700">
               {game.name}
             </h3>
+            {/* Phase 8.4 — primary status badge. Lobby vs in-progress
+                drives both color and the affordance copy below. */}
+            {playing ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider bg-amber-50 text-amber-700">
+                <Play className="w-2.5 h-2.5 fill-amber-700" />
+                In progress · Q{game.current_quarter}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider bg-emerald-50 text-emerald-700">
+                <Users className="w-2.5 h-2.5" />
+                Waiting · {memberCount}/{game.max_teams}
+              </span>
+            )}
             {game.mode === "facilitated" && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider bg-violet-50 text-violet-700">
                 <Sparkles className="w-2.5 h-2.5" />
@@ -299,20 +281,20 @@ function GameCard({ game }: { game: GameRow }) {
                 Locked
               </span>
             )}
-            {playing && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider bg-amber-50 text-amber-700">
-                <Play className="w-2.5 h-2.5 fill-amber-700" />
-                In progress · Q{game.current_quarter}
-              </span>
-            )}
           </div>
           <p className="text-xs text-slate-500 flex items-center gap-3">
             <span className="inline-flex items-center gap-1">
               <Users className="w-3 h-3" />
-              {game.max_teams} {game.max_teams === 1 ? "seat" : "seats"} max
+              {game.max_teams} {game.max_teams === 1 ? "seat" : "seats"} total
             </span>
             <span className="text-slate-300">·</span>
-            <span>{playing ? "ongoing" : "open lobby"}</span>
+            <span>
+              {playing
+                ? "spectator-only"
+                : seatsRemaining > 0
+                  ? `${seatsRemaining} seat${seatsRemaining === 1 ? "" : "s"} open`
+                  : "lobby full"}
+            </span>
           </p>
         </div>
         <div className="text-xs font-semibold text-slate-400 group-hover:text-slate-900 hidden sm:block">

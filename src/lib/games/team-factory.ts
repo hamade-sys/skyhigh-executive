@@ -36,6 +36,7 @@ import type {
   DoctrineId,
   SliderLevel,
 } from "@/types/game";
+import type { AirlineColorId } from "@/lib/games/airline-colors";
 
 export interface CreateInitializedTeamArgs {
   /** Airline display name. */
@@ -78,6 +79,12 @@ export interface CreateInitializedTeamArgs {
    *  separate so the lobby can show "Sarah K." next to the airline
    *  brand. Null for bots. */
   playerDisplayName?: string | null;
+
+  /** Phase 9 — visual identity color id. Picked by the player at
+   *  onboarding (humans) or assigned by the bot allocator (bots).
+   *  When null, the team renders with `airlineColorFor({ fallbackKey })`
+   *  derived from the team id — kept for legacy saves. */
+  airlineColorId?: AirlineColorId | null;
 }
 
 /**
@@ -218,6 +225,7 @@ export function createInitializedTeamFromOnboarding(
     controlledBy,
     claimedBySessionId: args.claimedBySessionId ?? null,
     playerDisplayName: args.playerDisplayName ?? (isPlayer ? args.airlineName : null),
+    airlineColorId: args.airlineColorId ?? null,
     members: [
       { role: "CEO",  name: isPlayer ? "Your CEO"  : `${code} CEO`,  mvpPts: 0, cards: [] },
       { role: "CFO",  name: isPlayer ? "Your CFO"  : `${code} CFO`,  mvpPts: 0, cards: [] },

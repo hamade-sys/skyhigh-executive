@@ -383,6 +383,15 @@ export interface Team {
    *  alongside "Skyforce Aviation". */
   playerDisplayName?: string | null;
 
+  /** Phase 9 — visual identity color id (one of the 8 in
+   *  `AIRLINE_COLOR_PALETTE`). Drives leaderboard chips, TopBar
+   *  brand dot, route ribbons, multi-airline chart line, chat avatar,
+   *  lobby seat tile. Assigned at onboarding (player picks) or at
+   *  bot creation (deterministic). When null/undefined (legacy save),
+   *  panels use `airlineColorFor({ fallbackKey: team.id })` to derive
+   *  a stable color from the team id so the UI never looks unstyled. */
+  airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
+
   /** @deprecated Use `controlledBy === "human" && claimedBySessionId === activeSessionId`
    *  instead. Retained because 34 callsites in panels/HUD still read
    *  `isPlayer`; kept in sync at every state mutation that changes

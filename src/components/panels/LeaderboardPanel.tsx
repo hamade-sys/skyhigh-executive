@@ -6,6 +6,7 @@ import { fmtMoney } from "@/lib/format";
 import { computeAirlineValue, fleetCount, brandRating } from "@/lib/engine";
 import { Plane, Crown, Trophy, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { airlineColorFor } from "@/lib/games/airline-colors";
 
 export function LeaderboardPanel() {
   const s = useGame();
@@ -110,9 +111,21 @@ export function LeaderboardPanel() {
                 </span>
               )}
               <span
-                aria-hidden="true"
-                className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shrink-0"
-                style={{ background: t.color }}
+                aria-label={`${airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).label} airline — ${t.name}`}
+                className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-[0.6875rem] font-semibold shrink-0"
+                style={{
+                  // Phase 9 — prefer the player's chosen airline color
+                  // over the legacy team.color hex. Falls back to a
+                  // deterministic palette pick for legacy teams.
+                  background: airlineColorFor({
+                    colorId: t.airlineColorId,
+                    fallbackKey: t.id,
+                  }).hex,
+                  color: airlineColorFor({
+                    colorId: t.airlineColorId,
+                    fallbackKey: t.id,
+                  }).textOn === "white" ? "#fff" : "#0F172A",
+                }}
               >
                 {t.code}
               </span>

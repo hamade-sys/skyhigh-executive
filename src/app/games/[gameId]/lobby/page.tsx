@@ -144,6 +144,7 @@ export default function GameLobbyPage({
         ?.session as Record<string, unknown> | undefined
     )?.plannedSeats as Array<{ type?: string; botDifficulty?: string }> | undefined;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSeatConfigs(
       Array.from({ length: maxTeams }, (_, i) => {
         const p = planned?.[i];

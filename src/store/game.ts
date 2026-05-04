@@ -85,6 +85,7 @@ import {
   ONBOARDING_TOTAL_BUDGET_USD,
 } from "@/lib/hub-pricing";
 import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
+import { pickNextAvailableColor, type AirlineColorId } from "@/lib/games/airline-colors";
 import type {
   AirportBid,
   AirportLease,
@@ -155,7 +156,16 @@ export interface GameStore extends GameState {
     salaryPhilosophy?: "below" | "at" | "above";
     marketingLevel?: "low" | "medium" | "high" | "aggressive";
     csrTheme?: "environment" | "community" | "employees" | "none";
+    /** Phase 9 — visual identity color the player picked at
+     *  onboarding. Defaults to "teal" (first in the palette). Bot
+     *  rivals fill the remaining colors deterministically. */
+    airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId;
   }): void;
+  /** Phase 9 — set/change the player's airline color id. Used by the
+   *  in-game settings menu so a player can re-tint mid-game without
+   *  breaking continuity. Multiplayer flows go through
+   *  /api/games/claim-color for uniqueness; solo flows write directly. */
+  setAirlineColor(colorId: import("@/lib/games/airline-colors").AirlineColorId): void;
 
   setSliders(sliders: Partial<Sliders>): void;
   reviseDoctrineAtR20(doctrine: DoctrineId): { ok: boolean; error?: string };
@@ -711,6 +721,8 @@ function makeStartingTeam(args: {
   controlledBy?: "human" | "bot";
   claimedBySessionId?: string | null;
   playerDisplayName?: string | null;
+  /** Phase 9 — visual identity color id. */
+  airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
 }): Team {
   // Derive controlledBy from isPlayer when not passed explicitly. In
   // legacy solo runs, isPlayer === true means "this browser's human"
@@ -731,6 +743,7 @@ function makeStartingTeam(args: {
     controlledBy,
     claimedBySessionId: args.claimedBySessionId ?? null,
     playerDisplayName: args.playerDisplayName ?? null,
+    airlineColorId: args.airlineColorId ?? null,
     members: [
       { role: "CEO",  name: args.isPlayer ? "Your CEO"  : `${args.code} CEO`,  mvpPts: 0, cards: [] },
       { role: "CFO",  name: args.isPlayer ? "Your CFO"  : `${args.code} CFO`,  mvpPts: 0, cards: [] },
@@ -849,7 +862,15 @@ export const useGame = create<GameStore>()(
           airlineName, code, doctrine, hubCode, teamCount = 5,
           tagline, marketFocus, geographicPriority, pricingPhilosophy,
           salaryPhilosophy, marketingLevel, csrTheme,
+          airlineColorId,
         } = args;
+
+        // Phase 9 — color allocation. Player picks at onboarding (or
+        // defaults to teal — first in the palette). Bot rivals fill
+        // the next available colors deterministically so a solo run
+        // visually matches a multiplayer cohort: player teal, then
+        // sky/amber/emerald/etc.
+        const playerColorId = airlineColorId ?? "teal";
 
         // Player team — built via the shared factory so a solo run
         // produces the SAME starting position as a player joining a
@@ -865,6 +886,7 @@ export const useGame = create<GameStore>()(
           tagline, marketFocus, geographicPriority, pricingPhilosophy,
           salaryPhilosophy, marketingLevel, csrTheme,
           controlledBy: "human",
+          airlineColorId: playerColorId,
         });
 
         // Mock competitors
@@ -885,9 +907,15 @@ export const useGame = create<GameStore>()(
             "cargo-dominance", "global-network", "premium-service",
           ];
           const doctrine = rivalDoctrines[i % rivalDoctrines.length];
+          // Phase 9 — assign rival color from the palette, skipping
+          // the player's already-claimed slot. Deterministic so the
+          // same-seed game shows the same cohort colors.
+          const takenColorIds = [playerColorId, ...rivals.map((rt) => rt.airlineColorId)];
+          const rivalColorId = pickNextAvailableColor(takenColorIds);
           const r = makeStartingTeam({
             airlineName: meta.name, code: meta.code, doctrine,
             hubCode: hub, isPlayer: false, color: meta.color,
+            airlineColorId: rivalColorId,
           });
           // Spread rival difficulties so the cohort feels mixed: a 5-rival
           // game gets ~1 easy / 3 medium / 1 hard; a 9-rival game gets
@@ -3190,6 +3218,27 @@ export const useGame = create<GameStore>()(
       closeQuarter: () => {
         const s = get();
         if (s.isObserver) return;
+
+        // Phase 8.3 — defensive auto-end. If we're in a multiplayer
+        // game (session.gameId is set) and zero human teams remain,
+        // route straight to endgame. The forfeit API endpoint handles
+        // this eagerly at write time, so this should rarely fire —
+        // but it covers the offline-forfeit / local-only-mutation
+        // path so a degenerate state doesn't loop bots forever.
+        if (s.session?.gameId) {
+          const humanCount = s.teams.filter(
+            (t) => t.controlledBy === "human",
+          ).length;
+          if (humanCount === 0) {
+            set({ phase: "endgame", lastCloseResult: null });
+            toast.warning(
+              "All players forfeited",
+              "Game ended — no human players remain.",
+            );
+            return;
+          }
+        }
+
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return;
 
@@ -4835,6 +4884,18 @@ export const useGame = create<GameStore>()(
         const s = get();
         if (!s.teams.some((t) => t.id === teamId)) return;
         set({ playerTeamId: teamId });
+      },
+
+      setAirlineColor: (colorId: AirlineColorId) => {
+        const s = get();
+        if (s.isObserver) return;
+        const meId = s.activeTeamId ?? s.playerTeamId;
+        if (!meId) return;
+        set({
+          teams: s.teams.map((t) =>
+            t.id === meId ? { ...t, airlineColorId: colorId } : t,
+          ),
+        });
       },
 
       startFacilitatedSession: (seatCount) => {

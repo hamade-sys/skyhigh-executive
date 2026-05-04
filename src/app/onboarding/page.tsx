@@ -16,6 +16,11 @@ import {
   PREMIUM_HUB_CODES,
 } from "@/lib/hub-pricing";
 import type { DoctrineId, Team } from "@/types/game";
+import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
+import {
+  AIRLINE_COLOR_BY_ID,
+  type AirlineColorId,
+} from "@/lib/games/airline-colors";
 
 // L0 presentation rank + team count are facilitator-only now —
 // removed from the player onboarding so the eight player-driven
@@ -36,10 +41,11 @@ export default function Onboarding() {
   const startNewGame = useGame((s) => s.startNewGame);
 
   const [step, setStep] = useState(0);
-  // Step 1 — airline identity
+  // Step 1 — airline identity (now also includes brand color — Phase 9)
   const [airlineName, setAirlineName] = useState("");
   const [code, setCode] = useState("");
   const [tagline, setTagline] = useState("");
+  const [airlineColorId, setAirlineColorId] = useState<AirlineColorId>("teal");
   // Step 2 — doctrine
   const [doctrine, setDoctrine] = useState<DoctrineId>("premium-service");
   // Step 3 — hub (now with cost-tier deduction)
@@ -73,6 +79,7 @@ export default function Onboarding() {
       salaryPhilosophy: salary,
       marketingLevel: marketing,
       csrTheme: csr,
+      airlineColorId,
     });
     router.push("/");
   }
@@ -145,6 +152,28 @@ export default function Onboarding() {
                       onChange={(e) => setTagline(e.target.value)}
                       placeholder="e.g. Cross continents, keep promises."
                     />
+                  </Field>
+                </div>
+                {/* Phase 9 — brand color picker. Lives on the same
+                    screen as airline name + code + tagline so identity
+                    is set in one go. Multiplayer onboarding gates
+                    uniqueness via /api/games/claim-color; solo just
+                    tracks locally. */}
+                <div className="md:col-span-2 mt-2">
+                  <Field label="Brand color">
+                    <p className="text-[0.75rem] text-ink-muted mb-3 -mt-1">
+                      Travels with your airline across the lobby,
+                      leaderboard, route map, and chat. Pick the color
+                      your cohort should associate with you.
+                    </p>
+                    <AirlineColorPicker
+                      value={airlineColorId}
+                      onChange={setAirlineColorId}
+                      airlineName={airlineName.trim() || undefined}
+                    />
+                    <p className="text-[0.75rem] text-ink-muted mt-2">
+                      Chosen: <span className="font-medium text-ink">{AIRLINE_COLOR_BY_ID[airlineColorId].label}</span>
+                    </p>
                   </Field>
                 </div>
               </div>

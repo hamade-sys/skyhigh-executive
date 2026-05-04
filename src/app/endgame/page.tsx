@@ -10,6 +10,7 @@ import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { Award, TrendingUp, TrendingDown, Trophy, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { airlineColorFor } from "@/lib/games/airline-colors";
 
 /** Legacy titles by final Brand Value band. */
 function legacyTitle(bv: number): { title: string; sub: string } {
@@ -258,7 +259,7 @@ export default function Endgame() {
                     </span>
                     <span
                       className="inline-block w-7 h-7 rounded flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg shrink-0"
-                      style={{ background: t.color }}
+                      style={{ background: airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).hex }}
                     >
                       {t.code}
                     </span>
@@ -685,7 +686,7 @@ export default function Endgame() {
                       <div className="flex items-center gap-2.5">
                         <span
                           className="inline-block w-6 h-6 rounded flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg"
-                          style={{ background: t.color }}
+                          style={{ background: airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).hex }}
                         >
                           {t.code}
                         </span>
@@ -801,7 +802,14 @@ function PodiumStep({
   place, team, isPlayer, heightClass,
 }: {
   place: 1 | 2 | 3;
-  team: { id: string; name: string; code: string; color: string; finalAirlineValue: number };
+  team: {
+    id: string;
+    name: string;
+    code: string;
+    color: string;
+    airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
+    finalAirlineValue: number;
+  };
   isPlayer: boolean;
   heightClass: string;
 }) {
@@ -824,8 +832,17 @@ function PodiumStep({
           {medal.emoji}
         </div>
         <div
-          className="inline-flex items-center justify-center w-9 h-9 rounded mb-1.5 font-mono text-[0.6875rem] font-semibold text-primary-fg shrink-0"
-          style={{ background: team.color }}
+          className="inline-flex items-center justify-center w-9 h-9 rounded mb-1.5 font-mono text-[0.6875rem] font-semibold shrink-0"
+          style={{
+            background: airlineColorFor({
+              colorId: team.airlineColorId,
+              fallbackKey: team.id,
+            }).hex,
+            color: airlineColorFor({
+              colorId: team.airlineColorId,
+              fallbackKey: team.id,
+            }).textOn === "white" ? "#fff" : "#0F172A",
+          }}
         >
           {team.code}
         </div>
@@ -910,7 +927,14 @@ function MultiAirlineChart({
   teams,
   totalRounds,
 }: {
-  teams: Array<{ id: string; name: string; code: string; color: string; financialsByQuarter: Array<{ quarter: number; cash: number; debt: number; brandValue: number }> }>;
+  teams: Array<{
+    id: string;
+    name: string;
+    code: string;
+    color: string;
+    airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
+    financialsByQuarter: Array<{ quarter: number; cash: number; debt: number; brandValue: number }>;
+  }>;
   totalRounds: number;
 }) {
   const W = 720;
@@ -992,11 +1016,11 @@ function MultiAirlineChart({
           const d = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.q).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
           return (
             <g key={team.id}>
-              <path d={d} stroke={team.color} strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+              <path d={d} stroke={airlineColorFor({ colorId: team.airlineColorId, fallbackKey: team.id }).hex} strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
               {/* End-point marker */}
               {points.length > 0 && (() => {
                 const last = points[points.length - 1];
-                return <circle cx={x(last.q)} cy={y(last.v)} r="3" fill={team.color} />;
+                return <circle cx={x(last.q)} cy={y(last.v)} r="3" fill={airlineColorFor({ colorId: team.airlineColorId, fallbackKey: team.id }).hex} />;
               })()}
             </g>
           );
@@ -1009,7 +1033,7 @@ function MultiAirlineChart({
           <div key={t.id} className="flex items-center gap-1.5 text-[0.75rem]">
             <span
               className="inline-block w-3 h-3 rounded-sm"
-              style={{ background: t.color }}
+              style={{ background: airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).hex }}
             />
             <span className="font-mono text-ink-muted">{t.code}</span>
             <span className="text-ink-2">{t.name}</span>
