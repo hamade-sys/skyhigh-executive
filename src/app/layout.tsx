@@ -18,7 +18,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
-  themeColor: "#143559",
+  // Phase 7.1 — match the brand teal (was legacy navy #143559).
+  themeColor: "#00C2CB",
   viewportFit: "cover",
 };
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- ICAN Simulations favicon — teal brand square with a stylised
+       paper plane silhouette. Matches the Phase 7.1 brand realignment
+       (white-dominant + #00C2CB accents). -->
+  <rect width="32" height="32" rx="6" fill="#00C2CB"/>
+  <path d="M22 8.5 L7 16 L13 17.5 L13.5 23 L16 19 L22 8.5 Z M16 19 L19.5 13 L13 17.5 Z"
+        fill="#ffffff" stroke="none"/>
+</svg>

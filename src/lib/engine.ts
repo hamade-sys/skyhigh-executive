@@ -3076,6 +3076,7 @@ export function runQuarterClose(
     newRcfBalance -= repay;
   }
   // If cash is negative, auto-draw into RCF
+  let rcfCeilingHitThisQuarter = false;
   if (newCashUsd < 0) {
     const draw = -newCashUsd;
     const airlineValue = computeAirlineValue(next);
@@ -3087,8 +3088,30 @@ export function runQuarterClose(
     newRcfBalance += drawAmount;
     if (drawAmount < draw) {
       notes.push("RCF ceiling hit — cash remains negative. New routes & non-essential spending frozen.");
+      rcfCeilingHitThisQuarter = true;
     } else if (drawAmount > 0) {
       notes.push(`RCF drew ${(drawAmount / 1e6).toFixed(1)}M at ${rcfRate.toFixed(1)}%`);
+    }
+  }
+
+  // Phase 6 P0 — bankruptcy detection. When cash is still negative
+  // after the RCF auto-draw clamped to its ceiling, the team is
+  // operationally insolvent. Flag it ONCE (sticky) so the UI can
+  // surface a workshop-appropriate "company bankruptcy" callout
+  // without firing every quarter. The team keeps playing — the
+  // facilitator may want to ride it out — but we record the quarter
+  // it happened in for the endgame recap and hand off a new flag
+  // that consequences/scenarios can branch on.
+  const wasBankrupt = (next.flags ?? new Set<string>()).has("bankrupt");
+  if (rcfCeilingHitThisQuarter && newCashUsd < 0 && !wasBankrupt) {
+    notes.push(
+      "BANKRUPTCY: cash negative + RCF maxed. Workshop facilitator should review whether to continue or replace this team with a bot.",
+    );
+    // Mutate the in-progress next.flags set so closeQuarter's caller
+    // captures the change. flags is always a Set on the engine path.
+    if (next.flags && typeof (next.flags as Set<string>).add === "function") {
+      (next.flags as Set<string>).add("bankrupt");
+      (next.flags as Set<string>).add(`bankrupt_at_q${ctx.quarter}`);
     }
   }
 

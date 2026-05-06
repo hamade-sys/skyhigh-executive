@@ -136,6 +136,15 @@ export interface GameStore extends GameState {
    *  All state-mutating actions check this flag and return early so the
    *  GM can spectate freely without accidentally changing any team's state. */
   isObserver: boolean;
+  /** Phase 6 P0 — re-entrancy guard for closeQuarter. In self-guided
+   *  multiplayer, two human players can both mark ready within ~50ms
+   *  and both browsers fire closeQuarter() locally. Server CAS
+   *  serialises the writes, but the local stores can run two engine
+   *  closes back-to-back, doubling consequences (deferred events,
+   *  scenario fires, etc.). The guard ensures only the first call
+   *  through closeQuarter does the work; subsequent calls return
+   *  immediately until the first finishes. */
+  isClosing: boolean;
 
   // ── Actions ───────────────────────────────────────────────
   startNewGame(args: {
@@ -856,6 +865,7 @@ export const useGame = create<GameStore>()(
       productionCapOverrides: {},
       isMultiplayerSession: false,
       isObserver: false,
+      isClosing: false,
 
       startNewGame: (args) => {
         const {
@@ -3219,6 +3229,16 @@ export const useGame = create<GameStore>()(
         const s = get();
         if (s.isObserver) return;
 
+        // Phase 6 P0 — re-entrancy guard. Two human players in a
+        // self-guided cohort both mark ready within ~50ms; both
+        // browsers' setActiveTeamReady chains call closeQuarter().
+        // Without this guard the engine runs twice (or the local
+        // store advances while the server CAS rejects the second
+        // write, leaving the local clock 1 quarter ahead of the
+        // server). Take the lock as the very first thing.
+        if (s.isClosing) return;
+        set({ isClosing: true });
+
         // Phase 8.3 — defensive auto-end. If we're in a multiplayer
         // game (session.gameId is set) and zero human teams remain,
         // route straight to endgame. The forfeit API endpoint handles
@@ -3230,7 +3250,7 @@ export const useGame = create<GameStore>()(
             (t) => t.controlledBy === "human",
           ).length;
           if (humanCount === 0) {
-            set({ phase: "endgame", lastCloseResult: null });
+            set({ phase: "endgame", lastCloseResult: null, isClosing: false });
             toast.warning(
               "All players forfeited",
               "Game ended — no human players remain.",
@@ -3240,7 +3260,10 @@ export const useGame = create<GameStore>()(
         }
 
         const player = s.teams.find((t) => t.id === s.playerTeamId);
-        if (!player) return;
+        if (!player) {
+          set({ isClosing: false });
+          return;
+        }
 
         // Auto-submit pending board decisions (PRD fallback path).
         // Earlier the close button warned the player about open
@@ -4619,7 +4642,29 @@ export const useGame = create<GameStore>()(
           baseInterestRatePct: newBaseRate,
           preOrders: preOrdersAfterDelivery,
           marketHistory: newMarketHistory,
+          // Release the re-entrancy guard atomically with the state
+          // update — phase has flipped to "quarter-closing" so the
+          // close has fully completed at this point.
+          isClosing: false,
         });
+
+        // Phase 6 P0 — surface a sticky toast when the player's team
+        // freshly went bankrupt this quarter. The engine's `notes`
+        // already explains the situation in the round-close digest;
+        // the toast is for visibility in case the player dismisses
+        // the digest quickly. Only fires once per team (engine sets
+        // the `bankrupt` flag sticky).
+        const playerAfter = teamsWithRank.find((t) => t.id === s.playerTeamId);
+        if (playerAfter) {
+          const wasBankruptBefore = player.flags?.has?.("bankrupt") ?? false;
+          const isBankruptNow = playerAfter.flags?.has?.("bankrupt") ?? false;
+          if (!wasBankruptBefore && isBankruptNow) {
+            toast.warning(
+              "Company bankruptcy",
+              "Cash is negative and RCF is maxed. Operations frozen — talk to the facilitator about hand-off to a bot or salvage strategy.",
+            );
+          }
+        }
       },
 
       advanceToNext: () => {
@@ -4633,6 +4678,44 @@ export const useGame = create<GameStore>()(
           return;
         }
         const nextQ = s.currentQuarter + 1;
+
+        // Phase 6 P0 — 3-quarter advance warning for lease expiries.
+        // We surface this at the moment the new quarter starts so
+        // players have three full rounds to react: order replacements,
+        // negotiate buyouts, or restructure routes that depend on the
+        // expiring airframe. Only fires for the player's team to
+        // avoid spamming the cohort. The engine ALREADY removes the
+        // aircraft on its expiry quarter; without this warning routes
+        // silently drop revenue when the lease ends.
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (player) {
+          const expiringSoon = player.fleet.filter((f) =>
+            f.acquisitionType === "lease" &&
+            f.status === "active" &&
+            typeof f.leaseTermEndsAtQuarter === "number" &&
+            f.leaseTermEndsAtQuarter === nextQ + 2,
+          );
+          if (expiringSoon.length > 0) {
+            // Group by route impact so the toast is actionable. List
+            // up to 3 routes affected; "and N more" beyond that.
+            const affectedRouteIds = new Set<string>();
+            for (const ac of expiringSoon) {
+              if (ac.routeId) affectedRouteIds.add(ac.routeId);
+            }
+            const affectedRoutes = player.routes.filter(
+              (r) => affectedRouteIds.has(r.id),
+            );
+            const routeNames = affectedRoutes
+              .slice(0, 3)
+              .map((r) => `${r.originCode}-${r.destCode}`)
+              .join(", ");
+            const more = affectedRoutes.length > 3 ? ` and ${affectedRoutes.length - 3} more` : "";
+            const detail = affectedRoutes.length > 0
+              ? `${expiringSoon.length} aircraft (on ${routeNames}${more}) — order replacements or negotiate buyouts now.`
+              : `${expiringSoon.length} aircraft return to lessor. Order replacements or convert to buy now.`;
+            toast.warning("Leases expiring in 3 quarters", detail);
+          }
+        }
 
         // PRD G4 — 787 Dreamliner delivery delay event.
         // 787-8 unlocks at round 12 (Q4 2017). The delay event fires at
