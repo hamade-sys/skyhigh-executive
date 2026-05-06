@@ -315,9 +315,18 @@ export default function Endgame() {
               value: `${player.decisions.length}`,
             });
           }
-          // Best brand value peak
-          const peakBV = Math.max(...player.financialsByQuarter.map((q) => q.brandValue));
-          const peakBVRow = player.financialsByQuarter.find((q) => q.brandValue === peakBV);
+          // Best brand value peak — guard against the empty-array edge
+          // case where Math.max(...[]) returns -Infinity. A player who
+          // joined the cohort mid-game (or hits the endgame redirect
+          // immediately after a forfeit auto-end) can have an empty
+          // financialsByQuarter; without the guard the peak fact line
+          // shows "−Infinity" or crashes the brand-rating lookup.
+          const peakBV = player.financialsByQuarter.length > 0
+            ? Math.max(...player.financialsByQuarter.map((q) => q.brandValue))
+            : null;
+          const peakBVRow = peakBV != null
+            ? player.financialsByQuarter.find((q) => q.brandValue === peakBV)
+            : undefined;
           if (peakBVRow) {
             facts.push({
               label: "Peak Brand Rating quarter",

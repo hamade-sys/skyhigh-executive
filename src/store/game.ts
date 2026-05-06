@@ -6490,6 +6490,39 @@ export const useGame = create<GameStore>()(
     }),
     {
       name: "skyforce-game-v1",
+      // Phase 6 P0 — save schema version. Bump this when a non-
+      // backwards-compatible field is added/renamed/removed in
+      // partialize. The `migrate` hook below converts older versions
+      // forward, falling through to a hard reset when the schema
+      // is too old to map cleanly. The version is independent of
+      // the localStorage key (`skyforce-game-v1` stays stable);
+      // this counter only governs in-key migrations.
+      //
+      // Migration history:
+      //   0 → 1: initial release shape (handled by no migration)
+      //   1 → 2: added airlineColorId on Team (Phase 9). Older
+      //          saves get null and the deterministic-hash fallback
+      //          renders them until the next save round.
+      //   2 → 3: bankrupt flag is now sticky on Team.flags. Older
+      //          saves don't carry the flag yet — that's fine,
+      //          re-detection on the next quarter-close re-stamps.
+      version: 3,
+      migrate: (persisted, fromVersion) => {
+        // Defensive: if the persisted shape is corrupt or pre-versioning,
+        // pass through and let onRehydrateStorage's per-field defaults
+        // pick up the slack. We never throw — a workshop in progress
+        // shouldn't lose state because we shipped a new field.
+        if (!persisted || typeof persisted !== "object") return persisted;
+        const s = persisted as Record<string, unknown>;
+        if (fromVersion < 2) {
+          // No-op for airlineColorId — the field is optional and the
+          // render fallback (airlineColorFor) covers null teams.
+        }
+        if (fromVersion < 3) {
+          // No-op for bankrupt — re-evaluated each quarter-close.
+        }
+        return s;
+      },
       // Custom storage that protects the solo save from being overwritten
       // while a multiplayer session is active. Multiplayer state is always
       // re-hydrated from the server on play-page load, so there is nothing

@@ -91,7 +91,10 @@ export function NotificationCenter() {
         aria-label={`Notifications (${unreadCount} unread)`}
         title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}` : "Notifications"}
         className={cn(
-          "relative w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+          // Phase 7 P2 — touch target ≥40px (visible 32px + min-h/w
+          // expansion). The bell icon stays size-16 inside the
+          // larger hit zone.
+          "relative w-8 h-8 min-h-[40px] min-w-[40px] rounded-md flex items-center justify-center transition-colors",
           open
             ? "bg-surface-hover text-ink"
             : "text-ink-muted hover:text-ink hover:bg-surface-hover",
@@ -146,7 +149,7 @@ export function NotificationCenter() {
                     onClick={() => setConfirmClear(true)}
                     aria-label="Clear all"
                     title="Clear all"
-                    className="w-8 h-8 rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center"
+                    className="w-8 h-8 min-h-[40px] min-w-[40px] rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center"
                   >
                     <Trash2 size={14} />
                   </button>

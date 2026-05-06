@@ -55,7 +55,14 @@ export function Modal({
       className={cn(
         "m-auto p-0 rounded-xl bg-surface text-ink shadow-[var(--shadow-4)]",
         "backdrop:bg-[rgba(16,37,63,0.32)] backdrop:backdrop-blur-sm",
+        // Phase 7 P2 — mobile responsiveness. Cap width to viewport
+        // minus a small padding, and cap height so long modals
+        // (HelpModal, AircraftCompareModal) scroll within their
+        // own container instead of pushing past the viewport edge
+        // on small phones. The flex column lets header / footer
+        // pin while body scrolls.
         "max-w-[calc(100vw-2rem)] w-[32rem]",
+        "max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden",
         className,
       )}
       onClick={(e) => {
@@ -84,7 +91,15 @@ export function ModalBody({
   className,
   ...rest
 }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("px-6 py-5", className)} {...rest} />;
+  return (
+    <div
+      className={cn(
+        "px-6 py-5 flex-1 min-h-0 overflow-y-auto",
+        className,
+      )}
+      {...rest}
+    />
+  );
 }
 
 export function ModalFooter({

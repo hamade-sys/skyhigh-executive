@@ -216,7 +216,7 @@ export function TopBar() {
           aria-haspopup="dialog"
           aria-expanded={helpOpen}
           title="Quick reference (cheat sheet)"
-          className="w-8 h-8 rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          className="w-8 h-8 min-h-[40px] min-w-[40px] rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
         >
           <HelpCircle size={16} aria-hidden="true" />
         </button>
@@ -247,7 +247,7 @@ function LeaderboardButton() {
       aria-pressed={isOpen}
       title="Leaderboard"
       className={cn(
-        "w-8 h-8 rounded-md flex items-center justify-center transition-colors",
+        "w-8 h-8 min-h-[40px] min-w-[40px] rounded-md flex items-center justify-center transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
         isOpen
           ? "bg-surface-hover text-ink"
@@ -769,7 +769,7 @@ function GameMenu() {
           aria-haspopup="menu"
           aria-expanded={open}
           title="Game menu"
-          className="w-8 h-8 rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          className="w-8 h-8 min-h-[40px] min-w-[40px] rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
         >
           <MoreVertical size={16} aria-hidden="true" />
         </button>
