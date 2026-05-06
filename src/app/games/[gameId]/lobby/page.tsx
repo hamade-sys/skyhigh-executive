@@ -35,6 +35,8 @@ import {
   type AirlineColorId,
   isAirlineColorId,
 } from "@/lib/games/airline-colors";
+import { useHeartbeat } from "@/lib/games/use-heartbeat";
+import { awayIndicator } from "@/lib/games/away-indicator";
 
 type DoctrineId = "premium-service" | "budget-expansion" | "cargo-dominance" | "global-network";
 type SeatType = "human" | "bot";
@@ -102,6 +104,11 @@ export default function GameLobbyPage({
   const [copyHint, setCopyHint] = useState(false);
 
   // ── Seat configuration (host/GM can toggle each unclaimed seat) ────────
+  // Phase 6 P1 — heartbeat ping so peers can see who's still in the
+  // lobby vs. who closed their tab. Stops when the page unmounts
+  // (game starts → /play takes over the heartbeat).
+  useHeartbeat(gameId);
+
   const [seatConfigs, setSeatConfigs] = useState<SeatConfig[]>([]);
   const [seatConfigSaving, setSeatConfigSaving] = useState(false);
 
@@ -792,10 +799,34 @@ function SeatCard({
                 {member.display_name ?? "Player"}
                 {isMe && <span className="ml-2 text-xs font-medium text-cyan-700">· you</span>}
               </div>
-              <div className="text-xs text-slate-500 truncate">
-                {member.role === "facilitator" ? "Game Master" :
-                 member.role === "host" ? "Host" :
-                 member.role === "spectator" ? "Spectator" : "Player"}
+              <div className="text-xs text-slate-500 truncate flex items-center gap-1.5">
+                <span>
+                  {member.role === "facilitator" ? "Game Master" :
+                   member.role === "host" ? "Host" :
+                   member.role === "spectator" ? "Spectator" : "Player"}
+                </span>
+                {/* Phase 6 P1 — away indicator. Surfaces "Away 3m"
+                    in amber when last_seen_at is stale by more than
+                    2 minutes; rose at 5 minutes (long away).
+                    Hidden for the local user (we know they're here)
+                    and for bots/spectators. */}
+                {!isMe && member.role !== "spectator" && (() => {
+                  const a = awayIndicator({ lastSeenAt: member.last_seen_at });
+                  if (a.state === "active" || a.state === "unknown") return null;
+                  return (
+                    <span
+                      className={
+                        "px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider " +
+                        (a.state === "long-away"
+                          ? "bg-rose-50 text-rose-700"
+                          : "bg-amber-50 text-amber-700")
+                      }
+                      title={`Last seen ${a.minutesAway} minute${a.minutesAway === 1 ? "" : "s"} ago — workshop facilitator may want to skip them.`}
+                    >
+                      {a.label}
+                    </span>
+                  );
+                })()}
               </div>
             </>
           ) : isBot ? (

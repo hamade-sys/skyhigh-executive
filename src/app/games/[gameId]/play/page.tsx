@@ -33,6 +33,7 @@ import { getBrowserClient } from "@/lib/supabase/browser";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { GameCanvas } from "@/components/game/GameCanvas";
 import { useGameRealtime } from "@/lib/games/use-game-realtime";
+import { useHeartbeat } from "@/lib/games/use-heartbeat";
 // TopBar import removed — GameCanvas mounts it internally (Phase 4.7).
 
 interface LoadResponse {
@@ -166,6 +167,12 @@ export default function GamePlayPage({
       router.replace("/endgame");
     }
   }, [phase, router]);
+
+  // Phase 6 P1 — heartbeat ping every 30s so peers + the facilitator
+  // can see "away (Nm)" indicators in the cohort UI when this player
+  // closes their tab or backgrounds it. Solo runs (no gameId) skip
+  // the heartbeat.
+  useHeartbeat(gameId);
 
   // Group-C — subscribe to the game:<id> broadcast channel for
   // forfeit / auto-end / start / lock events. The
