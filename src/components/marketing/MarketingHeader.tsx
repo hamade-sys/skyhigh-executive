@@ -98,28 +98,21 @@ export function MarketingHeader({ current, variant = "default" }: Props) {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Brand — ICAN flat icon (same brand mark as ican-crm,
               projects.icanmena.com, portal.icanmena.com so all ICAN
-              MENA surfaces share one identity). The mark is the
-              canonical favicon.png; we render it at 28×28 with a
-              soft ring on dark backdrops so it doesn't disappear
-              into the bg-slate-950 hero. */}
+              MENA surfaces share one identity). Rendered clean at
+              28×28 with no decorative ring — the favicon already
+              carries its own visual structure (teal circle + ICAN
+              wordmark) and adding a ring on the dark hero produced
+              a visible white halo. Matches how /crm presents the
+              same mark. */}
           <Link href="/" className="flex items-center gap-2 group" aria-label="ICAN Simulations home">
-            <span
-              className={cn(
-                "inline-flex w-7 h-7 rounded-lg overflow-hidden transition-shadow",
-                isDark
-                  ? "ring-2 ring-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.05)]"
-                  : "ring-1 ring-slate-200",
-              )}
-            >
-              <Image
-                src="/favicon.png"
-                alt=""
-                width={28}
-                height={28}
-                priority
-                className="w-7 h-7 object-cover"
-              />
-            </span>
+            <Image
+              src="/favicon.png"
+              alt=""
+              width={28}
+              height={28}
+              priority
+              className="w-7 h-7 object-contain shrink-0"
+            />
             <span
               className={cn(
                 "font-display text-lg font-bold tracking-tight transition-colors",
