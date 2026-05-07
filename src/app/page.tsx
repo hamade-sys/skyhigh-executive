@@ -272,119 +272,156 @@ function HeroPlane() {
 
         <ellipse cx="320" cy="160" rx="280" ry="92" fill="url(#planeGlow)" />
 
-        {/* Airliner silhouette — clean side profile, plane noses right.
-            Centerline y≈158. Layered back-to-front: stabilizer →
-            fuselage → wing → engine → window detail. Side profile
-            (not 3/4 view) reads as a brand mark, not a technical
-            sketch — no awkward perspective tricks. */}
+        {/* Modern airliner silhouette — Boeing 737 / Airbus A320
+            proportions. Plane noses right; centerline y≈158. The whole
+            illustration is rotated -3° around the canvas center to
+            suggest a gentle climb (more dynamic than a perfectly
+            level plane).
+
+            Layer order (back-to-front): horizontal stabilizer →
+            vertical fin → fuselage body → cockpit detail → wing →
+            engine → window dots. */}
         <g
           stroke="url(#planeStroke)"
-          strokeWidth="1.6"
+          strokeWidth="1.7"
           fill="none"
           strokeLinejoin="round"
           strokeLinecap="round"
+          transform="rotate(-3 320 160)"
         >
-          {/* ── HORIZONTAL STABILIZER — back tail wing, drawn first so
-                the fuselage covers its inner edge ───────────────── */}
+          {/* ── HORIZONTAL STABILIZER — swept like the main wing,
+                projects from the rear belly. Drawn first so the
+                fuselage covers its inboard edge cleanly. ────────── */}
           <path
-            d="M 110 162 L 60 184 Q 56 188, 64 188 L 92 188 Q 100 188, 108 184 L 130 168 Z"
+            d="
+              M 130 168
+              L 70 196
+              Q 64 200, 72 200
+              L 110 196
+              Q 118 194, 128 184
+              L 148 174
+              L 130 168 Z
+            "
             fill="url(#planeFill)"
           />
 
-          {/* ── FUSELAGE + TAIL (single closed silhouette) ────────
-              Traced clockwise from the nose tip. Coordinate system:
-                - Nose tip:        (588, 158)
-                - Fuselage top:    y = 144  (constant across length)
-                - Fuselage bottom: y = 174  (constant across length)
-                - Tail cone tip:   (55, 159) — centerline
-                - Vertical fin:    base x=90→130, tip y=90 (rises 54)
-
-              The leading edge of the fin sweeps BACK at ~30° (typical
-              for a Boeing 737 / Airbus A320), the trailing edge drops
-              near-vertically, the tip is a 10-unit flat. */}
+          {/* ── VERTICAL FIN — modern swept-back tailfin. The leading
+                edge angles back at ~50° (real 737 sweep). Trailing
+                edge is near-vertical. Tip is a short rounded flat. */}
           <path
             d="
-              M 588 158
-              Q 596 150, 580 144
-              Q 555 138, 510 140
-              L 130 144
-              L 108 92
-              Q 106 88, 102 88
-              L 96 88
-              Q 92 88, 92 92
+              M 145 144
+              L 90 92
+              Q 84 88, 92 86
+              L 102 86
+              Q 110 86, 112 92
+              L 120 144
+              Z
+            "
+            fill="url(#planeFill)"
+          />
+
+          {/* ── FUSELAGE — long elegant tube with rounded nose +
+                tapered tail cone. Single closed clockwise path
+                from the nose tip. Constant y range 144 (top) /
+                174 (bottom) for the body, tapering to a point at
+                the tail cone tip (60, 159). ─────────────────────── */}
+          <path
+            d="
+              M 590 158
+              C 600 148, 580 140, 555 140
+              L 145 144
+              L 120 144
               L 90 144
-              L 55 156
-              Q 48 159, 55 162
+              L 60 158
+              Q 56 159, 60 161
               L 90 174
-              L 510 174
-              Q 555 174, 580 170
-              Q 596 164, 588 158 Z
+              L 120 174
+              L 145 174
+              L 555 174
+              C 580 174, 600 168, 590 158 Z
             "
             fill="url(#planeFill)"
           />
 
-          {/* ── COCKPIT WINDOWS — angled tier of three panes near
-                the nose. Top short, middle longest, bottom subtle —
-                mirrors the way windscreens read on real airliners. */}
-          <path d="M 540 150 L 568 150" />
-          <path d="M 540 156 L 575 156" />
-          <path d="M 542 162 L 572 162" opacity="0.7" />
+          {/* ── COCKPIT — distinctive raised-canopy pane at the nose.
+                Two angled lines for the windscreen + a small tilt
+                line that catches the eye as "pilot windows". */}
+          <path d="M 552 144 Q 565 142, 575 146" strokeWidth="1.4" />
+          <path d="M 548 150 L 580 150" strokeWidth="1.4" />
+          <path d="M 548 156 L 580 156" strokeWidth="1.4" opacity="0.75" />
 
-          {/* ── MAIN WING (foreground, swept-back ~25°) ─────────── */}
+          {/* ── NOSE TIP — small chord at the very front to suggest
+                the radome edge ─────────────────────────────────── */}
+          <path d="M 580 160 Q 590 159, 580 158" opacity="0.5" />
+
+          {/* ── MAIN WING — swept-back at ~28°, attaches under the
+                belly and tapers to a smooth point at the wingtip.
+                Drawn as one closed shape for clarity. */}
           <path
             d="
-              M 290 170
-              L 200 248
-              Q 195 252 205 252
-              L 250 252
-              Q 258 252 268 246
-              L 360 174
-              L 290 170 Z
+              M 320 174
+              C 305 178, 280 200, 240 232
+              L 220 244
+              Q 215 246, 222 247
+              L 250 244
+              C 290 230, 330 198, 380 178
+              L 380 174
+              L 320 174 Z
             "
             fill="url(#planeFill)"
           />
 
-          {/* ── ENGINE NACELLE — elongated capsule under the wing ── */}
+          {/* ── ENGINE NACELLE — modern high-bypass turbofan. Capsule
+                shape with darker intake ring; mounted FORWARD of and
+                BELOW the wing on a pylon (real-world geometry). */}
           <g>
             <path
               d="
-                M 218 240
-                C 216 234, 220 230, 226 230
-                L 252 230
-                C 258 230, 260 234, 258 240
-                C 258 246, 254 250, 250 250
-                L 226 250
-                C 222 250, 216 246, 218 240 Z
+                M 256 232
+                C 250 226, 256 220, 264 220
+                L 296 220
+                C 304 220, 308 226, 304 232
+                C 304 240, 298 244, 292 244
+                L 264 244
+                C 258 244, 252 240, 256 232 Z
               "
               fill="url(#planeFill)"
+              strokeWidth="1.5"
             />
-            {/* Intake darker ellipse — gives the engine depth */}
-            <ellipse cx="222" cy="240" rx="3" ry="4" opacity="0.55" />
-            {/* Pylon connecting engine to wing */}
-            <path d="M 232 230 L 238 220 M 248 230 L 252 220" opacity="0.6" />
+            {/* Intake bullnose — a slightly darker inner ellipse
+                hints at the fan disk inside the nacelle */}
+            <ellipse cx="304" cy="232" rx="3" ry="5" opacity="0.55" />
+            {/* Pylon — short connecting strut from engine to wing
+                trailing edge */}
+            <path d="M 280 220 L 286 210" opacity="0.6" />
           </g>
 
-          {/* ── CABIN WINDOW STRIP — clean dotted line along the
-                fuselage centerline, gives scale + airline feel ── */}
-          <g opacity="0.6">
-            <circle cx="180" cy="160" r="1.4" />
-            <circle cx="205" cy="160" r="1.4" />
-            <circle cx="230" cy="160" r="1.4" />
-            <circle cx="255" cy="160" r="1.4" />
-            <circle cx="280" cy="160" r="1.4" />
-            <circle cx="305" cy="160" r="1.4" />
-            <circle cx="330" cy="159" r="1.4" />
-            <circle cx="380" cy="158" r="1.4" />
-            <circle cx="405" cy="158" r="1.4" />
-            <circle cx="430" cy="157" r="1.4" />
-            <circle cx="455" cy="157" r="1.4" />
-            <circle cx="480" cy="156" r="1.4" />
-            <circle cx="505" cy="156" r="1.4" />
+          {/* ── CABIN WINDOW STRIP — dotted line along the fuselage
+                centerline. Stops short of the cockpit and the tail
+                cone so the proportions read cleanly. ────────────── */}
+          <g opacity="0.65" stroke="none" fill="rgb(165 243 252)" fillOpacity="0.85">
+            <circle cx="180" cy="158" r="1.5" />
+            <circle cx="205" cy="158" r="1.5" />
+            <circle cx="230" cy="158" r="1.5" />
+            <circle cx="255" cy="158" r="1.5" />
+            <circle cx="280" cy="158" r="1.5" />
+            <circle cx="305" cy="158" r="1.5" />
+            <circle cx="330" cy="158" r="1.5" />
+            <circle cx="380" cy="158" r="1.5" />
+            <circle cx="405" cy="158" r="1.5" />
+            <circle cx="430" cy="158" r="1.5" />
+            <circle cx="455" cy="158" r="1.5" />
+            <circle cx="480" cy="158" r="1.5" />
+            <circle cx="505" cy="158" r="1.5" />
+            <circle cx="530" cy="158" r="1.5" />
           </g>
 
-          {/* ── DOOR INDICATORS — two subtle vertical hairlines ── */}
-          <line x1="160" y1="148" x2="160" y2="172" opacity="0.3" />
-          <line x1="350" y1="146" x2="350" y2="172" opacity="0.3" />
+          {/* ── DOOR INDICATORS — two subtle vertical hairlines that
+                read as the forward + rear cabin doors. Adds scale
+                without dominating. ─────────────────────────────── */}
+          <line x1="195" y1="146" x2="195" y2="172" opacity="0.32" strokeWidth="1.2" />
+          <line x1="395" y1="146" x2="395" y2="172" opacity="0.32" strokeWidth="1.2" />
         </g>
       </svg>
     </div>
