@@ -33,6 +33,10 @@ import {
   planBotRoutes,
   botSlotBidPrice,
   botPickScenarioOption,
+  pruneBotRoutes,
+  fuelSpikeRoutesToSuspend,
+  fuelNormalRoutesToResume,
+  hardBotBlockingBidCodes,
   type BotDifficulty,
 } from "@/lib/ai-bots";
 import {
@@ -3830,195 +3834,248 @@ export const useGame = create<GameStore>()(
         // follows still drives the leaderboard, but bots now build a
         // visible network the player sees on the map and competes
         // against on shared routes.
-        const teamsAfterBotTurns = s.teams.map((t) => {
-          if (!t.botDifficulty) return t;
-          let updated = { ...t };
+        // Leaderboard snapshot for rank-aware bot decisions. Rank 1 = leading.
+        const leaderboardSnapshot = [...s.teams].sort(
+          (a, b) => computeAirlineValue(b) - computeAirlineValue(a),
+        );
+        const rankOf = (teamId: string) =>
+          leaderboardSnapshot.findIndex((t) => t.id === teamId) + 1 || 1;
 
-          // Transition bot aircraft from "ordered" → "active" once a
-          // quarter has passed since purchase. Earlier the bot ordered
-          // a plane (status: ordered), then `planBotRoutes` filtered
-          // for status: active and found nothing, so the plane sat
-          // perpetually ordered and the bot never opened a single
-          // route. Mirrors the player path at the close-quarter step
-          // where the same transition runs for the player team.
-          updated = {
-            ...updated,
-            fleet: updated.fleet.map((f) =>
-              f.status === "ordered" && f.purchaseQuarter < s.currentQuarter
-                ? { ...f, status: "active" as const }
-                : f,
-            ),
-          };
+        // Sequential reduce — threads `claimedODs` so later bots avoid the
+        // same city pairs that earlier bots already picked this quarter.
+        const { teams: teamsAfterBotTurns } = s.teams.reduce<{
+          teams: typeof s.teams;
+          claimedODs: Set<string>;
+        }>(
+          ({ teams: acc, claimedODs }, t) => {
+            if (!t.botDifficulty) return { teams: [...acc, t], claimedODs };
+            let updated = { ...t };
 
-          // Aircraft order — bot may add a fresh purchase or lease.
-          // Now goes through the same lease/buy plumbing as the player
-          // so deposits, lease term/buy-out residual, production caps
-          // etc. are all respected. Bots that lease ineligible specs
-          // silently fall back to buy.
-          const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter, getTotalRounds(s));
-          if (order) {
-            const spec = AIRCRAFT_BY_ID[order.specId];
-            if (spec) {
-              // Lease eligibility check — if the chosen acquisition is
-              // lease but the spec isn't in the top-7/top-3 list, fall
-              // back to buy so the bot still acts.
-              let acquisitionType = order.acquisitionType;
-              if (acquisitionType === "lease" && !canLeaseSpec(spec, AIRCRAFT, s.currentQuarter)) {
-                acquisitionType = "buy";
-              }
-              // Cash check + lease economics (15% deposit) vs buy (full).
-              const leaseTerms = leaseTermsFor(spec);
-              const perPlaneCost = acquisitionType === "buy"
-                ? spec.buyPriceUsd
-                : leaseTerms.depositUsd;
-              const totalCost = perPlaneCost * order.quantity;
-              if (updated.cashUsd >= totalCost) {
-                const newPlanes: FleetAircraft[] = Array.from({ length: order.quantity }, () => ({
-                  id: mkId("ac"),
-                  specId: order.specId,
-                  status: "ordered",
-                  acquisitionType,
-                  purchaseQuarter: s.currentQuarter,
-                  purchasePrice: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
-                  bookValue: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
-                  leaseQuarterly: acquisitionType === "lease" ? leaseTerms.perQuarterUsd : null,
-                  leaseDepositUsd: acquisitionType === "lease" ? leaseTerms.depositUsd : undefined,
-                  leaseTermEndsAtQuarter: acquisitionType === "lease"
-                    ? s.currentQuarter + leaseTerms.termQuarters - 1
-                    : undefined,
-                  leaseBuyoutBasisUsd: acquisitionType === "lease" ? spec.buyPriceUsd : undefined,
-                  ecoUpgrade: false,
-                  ecoUpgradeQuarter: null,
-                  ecoUpgradeCost: 0,
-                  cabinConfig: "default",
-                  routeId: null,
-                  retirementQuarter: s.currentQuarter + 28,
-                  maintenanceDeficit: 0,
-                  satisfactionPct: 75,
-                }));
-                updated = {
-                  ...updated,
-                  cashUsd: updated.cashUsd - totalCost,
-                  fleet: [...updated.fleet, ...newPlanes],
-                };
-              }
-            }
-          }
-
-          // Route openings — bot may start a few new routes from idle planes.
-          // Each route's cargo/passenger flag is derived from the aircraft
-          // family so cargo-only fleets create cargo routes automatically.
-          //
-          // The planner now sees the full team list as `rivals` so it
-          // penalises saturated ODs (player + other bots already there)
-          // and applies a yield filter to drop fuel-bleeders before
-          // they're even considered. See planBotRoutes JSDoc.
-          const routePlans = planBotRoutes(
-            updated,
-            t.botDifficulty,
-            s.currentQuarter,
-            s.teams.filter((tm) => tm.id !== t.id),
-            getTotalRounds(s),
-          );
-          // Slot bid accumulator — when a bot opens a route, it must bid
-          // for any slots it doesn't already hold at both endpoints. The
-          // auction phase below this block will pick these up via
-          // `pendingSlotBids` and clear them against the airport's pool,
-          // so a bot that wants 14 slots/wk at JFK actually competes
-          // with the player and other bots for capacity.
-          const newBids: Record<string, { slots: number; price: number }> = {};
-          // Track committed-by-existing-routes slots so multiple new
-          // routes opened the same quarter accumulate correctly (a bot
-          // opening 3 routes that all want JFK should bid for 3× capacity).
-          const committedSlotsAtCode: Record<string, number> = {};
-          for (const code of Object.keys(updated.airportLeases ?? {})) {
-            committedSlotsAtCode[code] = 0;
-            for (const rt of updated.routes) {
-              if (rt.status !== "active" && rt.status !== "pending") continue;
-              if (rt.originCode === code || rt.destCode === code) {
-                committedSlotsAtCode[code] += rt.dailyFrequency * 7;
-              }
-            }
-          }
-          for (const rp of routePlans) {
-            const dist = distanceBetween(rp.origin, rp.dest);
-            const dailyFreq = Math.max(1 / 7, rp.weeklyFreq / 7);
-            const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
-            const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
-            const isCargo = acSpec?.family === "cargo";
-            const route: Route = {
-              id: mkId("route"),
-              originCode: rp.origin,
-              destCode: rp.dest,
-              distanceKm: dist,
-              aircraftIds: [rp.aircraftId],
-              dailyFrequency: dailyFreq,
-              pricingTier: rp.pricingTier,
-              econFare: null,
-              busFare: null,
-              firstFare: null,
-              cargoRatePerTonne: null,
-              status: "active",
-              openQuarter: s.currentQuarter,
-              avgOccupancy: 0,
-              quarterlyRevenue: 0,
-              quarterlyFuelCost: 0,
-              quarterlySlotCost: 0,
-              isCargo,
-              consecutiveQuartersActive: 0,
-              consecutiveLosingQuarters: 0,
-            };
-            // Compute slot deficit at both endpoints. Bots already get
-            // ~30 free slots at popular destinations from team-factory,
-            // so most early routes don't need bids; longer-tail routes
-            // and growth runs into capacity and starts competing.
-            const weeklyNeed = dailyFreq * 7;
-            for (const code of [rp.origin, rp.dest]) {
-              const held = updated.airportLeases?.[code]?.slots ?? 0;
-              const used = committedSlotsAtCode[code] ?? 0;
-              const deficit = Math.max(0, used + weeklyNeed - held);
-              committedSlotsAtCode[code] = used + weeklyNeed;
-              if (deficit > 0) {
-                const cur = newBids[code];
-                const price = botSlotBidPrice(t.botDifficulty, code);
-                newBids[code] = {
-                  slots: (cur?.slots ?? 0) + Math.ceil(deficit),
-                  price: Math.max(cur?.price ?? 0, price),
-                };
-              }
-            }
+            // Transition bot aircraft from "ordered" → "active" once a
+            // quarter has passed since purchase.
             updated = {
               ...updated,
-              routes: [...updated.routes, route],
               fleet: updated.fleet.map((f) =>
-                f.id === rp.aircraftId
-                  ? { ...f, status: "active" as const, routeId: route.id }
+                f.status === "ordered" && f.purchaseQuarter < s.currentQuarter
+                  ? { ...f, status: "active" as const }
                   : f,
               ),
             };
-          }
-          // Append accumulated slot bids to the team's pendingSlotBids.
-          // The auction phase below clears these vs the player's bids.
-          if (Object.keys(newBids).length > 0) {
-            const newPending = [...(updated.pendingSlotBids ?? [])];
-            for (const code of Object.keys(newBids)) {
-              const existing = newPending.find((b) => b.airportCode === code);
-              if (existing) {
-                existing.slots = Math.max(existing.slots, newBids[code].slots);
-                existing.pricePerSlot = Math.max(existing.pricePerSlot, newBids[code].price);
-              } else {
-                newPending.push({
-                  airportCode: code,
-                  slots: newBids[code].slots,
-                  pricePerSlot: newBids[code].price,
-                  quarterSubmitted: s.currentQuarter,
-                });
+
+            // ── Fuel spike / normalise response ────────────────────
+            // Medium + hard bots suspend long-haul during fuel spikes
+            // and resume suspended routes when prices normalise.
+            const toSuspend = fuelSpikeRoutesToSuspend(updated, t.botDifficulty, s.fuelIndex);
+            if (toSuspend.length > 0) {
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  toSuspend.includes(r.id) ? { ...r, status: "suspended" as const } : r,
+                ),
+              };
+            }
+            const toResume = fuelNormalRoutesToResume(updated, t.botDifficulty, s.fuelIndex);
+            if (toResume.length > 0) {
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  toResume.includes(r.id) ? { ...r, status: "active" as const } : r,
+                ),
+              };
+            }
+
+            // ── Route pruning ──────────────────────────────────────
+            // Medium + hard bots close consistently losing routes and
+            // free the aircraft for re-deployment elsewhere.
+            const toPrune = pruneBotRoutes(updated, t.botDifficulty);
+            if (toPrune.length > 0) {
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  toPrune.includes(r.id) ? { ...r, status: "closed" as const } : r,
+                ),
+                fleet: updated.fleet.map((f) =>
+                  f.routeId && toPrune.includes(f.routeId)
+                    ? { ...f, routeId: null }
+                    : f,
+                ),
+              };
+            }
+
+            // ── Aircraft order ─────────────────────────────────────
+            const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter, getTotalRounds(s));
+            if (order) {
+              const spec = AIRCRAFT_BY_ID[order.specId];
+              if (spec) {
+                let acquisitionType = order.acquisitionType;
+                if (acquisitionType === "lease" && !canLeaseSpec(spec, AIRCRAFT, s.currentQuarter)) {
+                  acquisitionType = "buy";
+                }
+                const leaseTerms = leaseTermsFor(spec);
+                const perPlaneCost = acquisitionType === "buy"
+                  ? spec.buyPriceUsd
+                  : leaseTerms.depositUsd;
+                const totalCost = perPlaneCost * order.quantity;
+                if (updated.cashUsd >= totalCost) {
+                  const newPlanes: FleetAircraft[] = Array.from({ length: order.quantity }, () => ({
+                    id: mkId("ac"),
+                    specId: order.specId,
+                    status: "ordered",
+                    acquisitionType,
+                    purchaseQuarter: s.currentQuarter,
+                    purchasePrice: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
+                    bookValue: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
+                    leaseQuarterly: acquisitionType === "lease" ? leaseTerms.perQuarterUsd : null,
+                    leaseDepositUsd: acquisitionType === "lease" ? leaseTerms.depositUsd : undefined,
+                    leaseTermEndsAtQuarter: acquisitionType === "lease"
+                      ? s.currentQuarter + leaseTerms.termQuarters - 1
+                      : undefined,
+                    leaseBuyoutBasisUsd: acquisitionType === "lease" ? spec.buyPriceUsd : undefined,
+                    ecoUpgrade: false,
+                    ecoUpgradeQuarter: null,
+                    ecoUpgradeCost: 0,
+                    cabinConfig: "default",
+                    routeId: null,
+                    retirementQuarter: s.currentQuarter + 28,
+                    maintenanceDeficit: 0,
+                    satisfactionPct: 75,
+                  }));
+                  updated = {
+                    ...updated,
+                    cashUsd: updated.cashUsd - totalCost,
+                    fleet: [...updated.fleet, ...newPlanes],
+                  };
+                }
               }
             }
-            updated = { ...updated, pendingSlotBids: newPending };
-          }
-          return updated;
-        });
+
+            // ── Route openings ─────────────────────────────────────
+            // Pass claimedODs so bots spread across different city pairs,
+            // leaderboardRank for desperation/conservative scaling, and
+            // fuelIndex for spike-aware quota reduction.
+            const rivals = acc.filter((tm) => tm.id !== t.id);
+            const routePlans = planBotRoutes(
+              updated,
+              t.botDifficulty,
+              s.currentQuarter,
+              rivals,
+              getTotalRounds(s),
+              claimedODs,
+              rankOf(t.id),
+              s.fuelIndex,
+            );
+
+            const newBids: Record<string, { slots: number; price: number }> = {};
+            const committedSlotsAtCode: Record<string, number> = {};
+            for (const code of Object.keys(updated.airportLeases ?? {})) {
+              committedSlotsAtCode[code] = 0;
+              for (const rt of updated.routes) {
+                if (rt.status !== "active" && rt.status !== "pending") continue;
+                if (rt.originCode === code || rt.destCode === code) {
+                  committedSlotsAtCode[code] += rt.dailyFrequency * 7;
+                }
+              }
+            }
+            for (const rp of routePlans) {
+              const dist = distanceBetween(rp.origin, rp.dest);
+              const dailyFreq = Math.max(1 / 7, rp.weeklyFreq / 7);
+              const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
+              const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
+              const isCargo = acSpec?.family === "cargo";
+              const route: Route = {
+                id: mkId("route"),
+                originCode: rp.origin,
+                destCode: rp.dest,
+                distanceKm: dist,
+                aircraftIds: [rp.aircraftId],
+                dailyFrequency: dailyFreq,
+                pricingTier: rp.pricingTier,
+                econFare: null,
+                busFare: null,
+                firstFare: null,
+                cargoRatePerTonne: null,
+                status: "active",
+                openQuarter: s.currentQuarter,
+                avgOccupancy: 0,
+                quarterlyRevenue: 0,
+                quarterlyFuelCost: 0,
+                quarterlySlotCost: 0,
+                isCargo,
+                consecutiveQuartersActive: 0,
+                consecutiveLosingQuarters: 0,
+              };
+              const weeklyNeed = dailyFreq * 7;
+              for (const code of [rp.origin, rp.dest]) {
+                const held = updated.airportLeases?.[code]?.slots ?? 0;
+                const used = committedSlotsAtCode[code] ?? 0;
+                const deficit = Math.max(0, used + weeklyNeed - held);
+                committedSlotsAtCode[code] = used + weeklyNeed;
+                if (deficit > 0) {
+                  const cur = newBids[code];
+                  const price = botSlotBidPrice(t.botDifficulty, code);
+                  newBids[code] = {
+                    slots: (cur?.slots ?? 0) + Math.ceil(deficit),
+                    price: Math.max(cur?.price ?? 0, price),
+                  };
+                }
+              }
+              // Register this OD as claimed for subsequent bots this quarter
+              const odKey = rp.origin < rp.dest
+                ? `${rp.origin}|${rp.dest}`
+                : `${rp.dest}|${rp.origin}`;
+              claimedODs.add(odKey);
+              updated = {
+                ...updated,
+                routes: [...updated.routes, route],
+                fleet: updated.fleet.map((f) =>
+                  f.id === rp.aircraftId
+                    ? { ...f, status: "active" as const, routeId: route.id }
+                    : f,
+                ),
+              };
+            }
+
+            // ── Hard bot: blocking bids at rival hubs ──────────────
+            if (t.botDifficulty === "hard") {
+              const currentSlotsByAirport: Record<string, number> = {};
+              for (const [code, lease] of Object.entries(updated.airportLeases ?? {})) {
+                currentSlotsByAirport[code] = (lease as { slots: number }).slots ?? 0;
+              }
+              const blockingCodes = hardBotBlockingBidCodes(updated, rivals, currentSlotsByAirport);
+              for (const code of blockingCodes) {
+                const price = botSlotBidPrice("hard", code);
+                const blockSlots = 14; // 2 flights/day worth of blocking
+                if (!newBids[code]) {
+                  newBids[code] = { slots: blockSlots, price };
+                } else {
+                  newBids[code].slots = Math.max(newBids[code].slots, blockSlots);
+                  newBids[code].price = Math.max(newBids[code].price, price);
+                }
+              }
+            }
+
+            if (Object.keys(newBids).length > 0) {
+              const newPending = [...(updated.pendingSlotBids ?? [])];
+              for (const code of Object.keys(newBids)) {
+                const existing = newPending.find((b) => b.airportCode === code);
+                if (existing) {
+                  existing.slots = Math.max(existing.slots, newBids[code].slots);
+                  existing.pricePerSlot = Math.max(existing.pricePerSlot, newBids[code].price);
+                } else {
+                  newPending.push({
+                    airportCode: code,
+                    slots: newBids[code].slots,
+                    pricePerSlot: newBids[code].price,
+                    quarterSubmitted: s.currentQuarter,
+                  });
+                }
+              }
+              updated = { ...updated, pendingSlotBids: newPending };
+            }
+            return { teams: [...acc, updated], claimedODs };
+          },
+          { teams: [], claimedODs: new Set<string>() },
+        );
 
         // ── Bot scenario resolution ───────────────────────────────
         // Earlier bots silently ignored every board scenario — the
