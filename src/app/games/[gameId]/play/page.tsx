@@ -112,6 +112,11 @@ export default function GamePlayPage({
     const result = hydrateFromServerState({
       stateJson: data.state.state_json,
       mySessionId: sessionId,
+      // Pass the real game_state.version so pushStateToServer sends the
+      // correct expectedVersion. Without this, the embedded session.version
+      // (which diverges after the start/seed writes) is used and every GM
+      // push gets a 409 "stale write" on the very first try.
+      dbVersion: data.state.version,
     });
     if (!result.ok) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -156,7 +161,9 @@ export default function GamePlayPage({
           lastVersionRef.current = newVersion;
           const sid = sessionIdRef.current;
           if (!sid) return;
-          hydrateRef.current({ stateJson: newState, mySessionId: sid });
+          // Pass the real DB version so every re-hydration (including
+          // after a GM bot-round advance) tracks the correct expectedVersion.
+          hydrateRef.current({ stateJson: newState, mySessionId: sid, dbVersion: newVersion });
         },
       )
       .subscribe();

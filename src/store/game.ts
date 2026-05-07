@@ -431,9 +431,20 @@ export interface GameStore extends GameState {
    *  when the state JSON doesn't look like a fully-formed engine
    *  state (no teams, no currentQuarter) — caller should fall back
    *  to the lobby. */
+  /** Actual game_state.version from the DB — used as expectedVersion in
+   *  pushStateToServer. Kept separate from session.version (embedded in
+   *  state_json) because the start/seed route increments the DB column
+   *  without updating the embedded value, so they diverge after game
+   *  start and every push gets a 409 "stale write" error. */
+  serverStateVersion: number;
+
   hydrateFromServerState(args: {
     stateJson: unknown;
     mySessionId: string;
+    /** Actual game_state.version from the DB load/Realtime payload.
+     *  When provided, overwrites serverStateVersion so pushStateToServer
+     *  sends the correct expectedVersion on the very first write. */
+    dbVersion?: number;
   }): { ok: boolean; error?: string };
 
   /** Multiplayer write-back. POSTs the current local state to
@@ -863,6 +874,7 @@ export const useGame = create<GameStore>()(
       // panels/HUD branch on it instead of `team.isPlayer` so the
       // same engine state can render correctly for any human team.
       session: null,
+      serverStateVersion: 0, // set to game_state.version during hydrateFromServerState
       activeTeamId: null,
       localSessionId: null, // set to user.id during hydrateFromServerState; null in solo
       preOrders: [],
@@ -5500,7 +5512,7 @@ export const useGame = create<GameStore>()(
       // sessionId`; if no claim is found we leave activeTeamId null
       // and the player lands in spectator-y view-only mode (still
       // valuable for facilitators dropping in mid-game).
-      hydrateFromServerState: ({ stateJson, mySessionId }) => {
+      hydrateFromServerState: ({ stateJson, mySessionId, dbVersion }) => {
         if (!stateJson || typeof stateJson !== "object") {
           return { ok: false, error: "Empty or invalid state payload." };
         }
@@ -5569,6 +5581,12 @@ export const useGame = create<GameStore>()(
             // Store the authenticated session ID so pushStateToServer
             // can use it as actorSessionId without touching localStorage.
             localSessionId: mySessionId,
+            // Use the actual DB game_state.version as the source of truth
+            // for optimistic concurrency. The embedded session.version in
+            // state_json diverges after the start/seed writes (those bump
+            // the DB column without updating the embedded field), so every
+            // first push would send the wrong expectedVersion and get 409.
+            ...(dbVersion !== undefined ? { serverStateVersion: dbVersion } : {}),
             // Reset transient UI — a fresh hydrate is a hard reload
             // of the campaign, not a continuation of a paused close.
             lastCloseResult: null,
@@ -5640,7 +5658,11 @@ export const useGame = create<GameStore>()(
         };
 
         if (typeof fetch === "undefined") return Promise.resolve({ ok: true as const });
-        const expectedVersion = session.version;
+        // Use the actual DB game_state.version (set during hydrateFromServerState
+        // from the /api/games/load response). The session.version embedded in
+        // state_json diverges after the start/seed writes and cannot be used
+        // reliably — using it caused every first GM push to 409.
+        const expectedVersion = s.serverStateVersion;
         const gameId = session.gameId;
 
         // Phase 4.1: returns a Promise so callers that want to await
@@ -5671,8 +5693,13 @@ export const useGame = create<GameStore>()(
             if (res.ok) {
               const cur = get();
               if (cur.session?.gameId === gameId) {
+                // Increment both the DB-version tracker and the legacy
+                // session.version so future hydrates and pushes stay aligned.
                 set({
-                  session: { ...cur.session, version: cur.session.version + 1 },
+                  serverStateVersion: cur.serverStateVersion + 1,
+                  session: cur.session
+                    ? { ...cur.session, version: cur.session.version + 1 }
+                    : cur.session,
                 });
               }
               return { ok: true as const };
@@ -5697,6 +5724,10 @@ export const useGame = create<GameStore>()(
                     get().hydrateFromServerState({
                       stateJson: loadJson.state.state_json,
                       mySessionId: sessionId,
+                      // Pass the real DB version so the next push uses
+                      // the correct expectedVersion rather than looping
+                      // with the same wrong value.
+                      dbVersion: loadJson.state.version,
                     });
                   }
                 }
