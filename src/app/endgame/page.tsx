@@ -11,6 +11,7 @@ import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { Award, TrendingUp, TrendingDown, Trophy, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { airlineColorFor } from "@/lib/games/airline-colors";
+import { MultiAirlineAnalytics } from "@/components/endgame/MultiAirlineAnalytics";
 
 /** Legacy titles by final Brand Value band. */
 function legacyTitle(bv: number): { title: string; sub: string } {
@@ -254,21 +255,28 @@ export default function Endgame() {
           </Card>
         )}
 
-        {/* Multi-airline trajectory chart — every team's airline value
-            quarter by quarter so the room can see how the field
-            converged or diverged across the 40-round campaign. */}
+        {/* Multi-airline analytics — toggleable view across brand
+            value, cash, revenue, profit, cumulative profit, operating
+            margin, loyalty, rank trajectory, and airline value. One
+            line per team, in the team's own brand color. The room
+            can compare strategies across the campaign and pinpoint
+            the quarters that decided the cohort. */}
         {ranked.length > 0 && (
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="font-display text-[1.5rem] text-ink">
-                  Airline value · {fmtQuarter(1)} → {fmtQuarter(40)}
+                  Cohort analytics · {fmtQuarter(1)} → {fmtQuarter(getTotalRounds(s))}
                 </h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-                  All teams
+                  All teams · {ranked.length}
                 </span>
               </div>
-              <MultiAirlineChart teams={ranked} totalRounds={getTotalRounds(s)} />
+              <MultiAirlineAnalytics
+                teams={ranked}
+                totalRounds={getTotalRounds(s)}
+                defaultMetric="brandValue"
+              />
             </CardBody>
           </Card>
         )}
@@ -351,9 +359,18 @@ export default function Endgame() {
               value: `${focusTeam.decisions.length}`,
             });
           }
-          // Best brand value peak
-          const peakBV = Math.max(...focusTeam.financialsByQuarter.map((q) => q.brandValue));
-          const peakBVRow = focusTeam.financialsByQuarter.find((q) => q.brandValue === peakBV);
+          // Best brand value peak — guard against the empty-array edge
+          // case where Math.max(...[]) returns -Infinity. A player who
+          // joined the cohort mid-game (or hits the endgame redirect
+          // immediately after a forfeit auto-end) can have an empty
+          // financialsByQuarter; without the guard the peak fact line
+          // shows "−Infinity" or crashes the brand-rating lookup.
+          const peakBV = focusTeam.financialsByQuarter.length > 0
+            ? Math.max(...focusTeam.financialsByQuarter.map((q) => q.brandValue))
+            : null;
+          const peakBVRow = peakBV != null
+            ? focusTeam.financialsByQuarter.find((q) => q.brandValue === peakBV)
+            : undefined;
           if (peakBVRow) {
             facts.push({
               label: "Peak Brand Rating quarter",
@@ -959,126 +976,9 @@ function ArcSpark({ label, values, color }: { label: string; values: number[]; c
   );
 }
 
-function MultiAirlineChart({
-  teams,
-  totalRounds,
-}: {
-  teams: Array<{
-    id: string;
-    name: string;
-    code: string;
-    color: string;
-    airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
-    financialsByQuarter: Array<{ quarter: number; cash: number; debt: number; brandValue: number }>;
-  }>;
-  totalRounds: number;
-}) {
-  const W = 720;
-  const H = 240;
-  const padL = 60;
-  const padR = 12;
-  const padT = 10;
-  const padB = 30;
-  const innerW = W - padL - padR;
-  const innerH = H - padT - padB;
-
-  // Compute series — airline value approximated as cash - debt + 100 * brandValue
-  // (matches computeAirlineValue ordering without recomputing here).
-  const series = teams.map((t) => {
-    const points: Array<{ q: number; v: number }> = [];
-    for (const f of t.financialsByQuarter) {
-      points.push({ q: f.quarter, v: f.cash - f.debt + f.brandValue * 1_000_000 });
-    }
-    return { team: t, points };
-  });
-
-  const allValues = series.flatMap((s) => s.points.map((p) => p.v));
-  const yMin = allValues.length > 0 ? Math.min(0, ...allValues) : 0;
-  const yMax = allValues.length > 0 ? Math.max(1, ...allValues) : 1;
-  const yRange = yMax - yMin || 1;
-
-  // Phase 3: x-axis scales by totalRounds rather than the legacy
-  // 20-quarter constant so 8 / 16 / 24 / 40 round games all use the
-  // full chart width. (totalRounds - 1) is the divisor because q
-  // values are 1-indexed.
-  const xDivisor = Math.max(1, totalRounds - 1);
-  const x = (q: number) => padL + ((q - 1) / xDivisor) * innerW;
-  const y = (v: number) => padT + innerH - ((v - yMin) / yRange) * innerH;
-
-  // Y-axis ticks
-  const yTicks = [yMin, yMin + yRange * 0.25, yMin + yRange * 0.5, yMin + yRange * 0.75, yMax];
-
-  return (
-    <div>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="block">
-        {/* Y gridlines */}
-        {yTicks.map((tickVal, i) => {
-          const ty = y(tickVal);
-          return (
-            <g key={i}>
-              <line x1={padL} y1={ty} x2={W - padR} y2={ty} stroke="var(--line)" strokeWidth="0.5" />
-              <text x={padL - 6} y={ty + 3} textAnchor="end" fontSize="9" fill="var(--ink-muted)" className="font-mono tabular">
-                {Math.abs(tickVal) >= 1_000_000_000
-                  ? `$${(tickVal / 1_000_000_000).toFixed(1)}B`
-                  : Math.abs(tickVal) >= 1_000_000
-                    ? `$${(tickVal / 1_000_000).toFixed(0)}M`
-                    : `$${tickVal.toFixed(0)}`}
-              </text>
-            </g>
-          );
-        })}
-        {/* X-axis labels — evenly-spaced ticks across the configured
-            campaign length so 8 / 16 / 24 / 40-round games all show
-            sensible date labels. Targets ~6 ticks regardless of
-            totalRounds; pulls from the session value. */}
-        {(() => {
-          const tickCount = Math.min(7, Math.max(3, Math.round(totalRounds / 6)));
-          const step = Math.max(1, Math.floor((totalRounds - 1) / (tickCount - 1)));
-          const ticks: number[] = [];
-          for (let q = 1; q <= totalRounds; q += step) ticks.push(q);
-          if (ticks[ticks.length - 1] !== totalRounds) ticks.push(totalRounds);
-          return ticks.map((q) => (
-            <text key={q} x={x(q)} y={H - padB + 14} textAnchor="middle" fontSize="9" fill="var(--ink-muted)" className="font-mono tabular">
-              {fmtQuarter(q)}
-            </text>
-          ));
-        })()}
-        {/* X-axis baseline */}
-        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke="var(--line)" strokeWidth="1" />
-
-        {/* One polyline per team */}
-        {series.map(({ team, points }) => {
-          if (points.length < 2) return null;
-          const d = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.q).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
-          return (
-            <g key={team.id}>
-              <path d={d} stroke={airlineColorFor({ colorId: team.airlineColorId, fallbackKey: team.id }).hex} strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
-              {/* End-point marker */}
-              {points.length > 0 && (() => {
-                const last = points[points.length - 1];
-                return <circle cx={x(last.q)} cy={y(last.v)} r="3" fill={airlineColorFor({ colorId: team.airlineColorId, fallbackKey: team.id }).hex} />;
-              })()}
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 px-2">
-        {teams.map((t) => (
-          <div key={t.id} className="flex items-center gap-1.5 text-[0.75rem]">
-            <span
-              className="inline-block w-3 h-3 rounded-sm"
-              style={{ background: airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).hex }}
-            />
-            <span className="font-mono text-ink-muted">{t.code}</span>
-            <span className="text-ink-2">{t.name}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// Legacy single-metric MultiAirlineChart removed in favor of the
+// new <MultiAirlineAnalytics /> component (see imports above) which
+// supports nine toggleable metrics with hover tooltips.
 
 function BVPillar({
   label, score, rows,

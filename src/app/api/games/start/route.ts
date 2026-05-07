@@ -26,6 +26,11 @@ import {
 } from "@/lib/games/api";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
 import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
+import {
+  isAirlineColorId,
+  pickNextAvailableColor,
+  type AirlineColorId,
+} from "@/lib/games/airline-colors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,9 +101,12 @@ export async function POST(req: NextRequest) {
       : [];
 
     if (existingTeams.length === 0 && stateJson) {
-      // Player setups saved from the lobby form
+      // Player setups saved from the lobby form. airlineColorId is
+      // optional (Phase 9) — preserved through start so the team's
+      // chosen brand color survives into engine state.
       const playerSetups = (stateJson.playerSetups as Record<string, {
         airlineName: string; code: string; hub: string; doctrine: string;
+        airlineColorId?: string | null;
       }> | undefined) ?? {};
 
       const plannedSeats = (
@@ -145,13 +153,23 @@ export async function POST(req: NextRequest) {
       const botsToSeed = botSeatsCount;
 
       const seededTeams: unknown[] = [];
+      const claimedColorIds: Array<AirlineColorId | null | undefined> = [];
 
-      // Seed human teams — one per member who joined
+      // Seed human teams — one per member who joined.
+      // Phase 9: thread airlineColorId through. Each member's choice from
+      // the lobby is in playerSetups[].airlineColorId. If null/missing
+      // (legacy member, or they didn't pick), assign the next available
+      // palette color so the cohort still renders distinctly.
       for (let i = 0; i < humanMembers.length; i++) {
         const member = humanMembers[i];
         const defaults = HUMAN_DEFAULTS[i % HUMAN_DEFAULTS.length];
-        // Use setup saved from lobby form if available, otherwise use defaults
         const setup = playerSetups[member.session_id];
+        const setupColor = isAirlineColorId(setup?.airlineColorId)
+          ? setup.airlineColorId
+          : null;
+        const memberColorId =
+          setupColor ?? pickNextAvailableColor(claimedColorIds);
+        claimedColorIds.push(memberColorId);
         const team = createInitializedTeamFromOnboarding({
           airlineName: setup?.airlineName ?? (member.display_name
             ? `${member.display_name}'s Airline`
@@ -163,6 +181,7 @@ export async function POST(req: NextRequest) {
           controlledBy: "human",
           claimedBySessionId: member.session_id,
           playerDisplayName: member.display_name ?? null,
+          airlineColorId: memberColorId,
         });
         seededTeams.push({
           ...team,
@@ -172,7 +191,9 @@ export async function POST(req: NextRequest) {
 
       // Seed bot rivals — difficulty comes from the lobby's seat config
       // (what the host set for each bot seat). Fall back to "medium" if
-      // the seat didn't carry a difficulty (e.g. old games pre-lobby config).
+      // the seat didn't carry a difficulty (e.g. old games pre-lobby
+      // config). Color comes from the Phase 9 palette allocator,
+      // skipping anything humans already claimed.
       const botPlannedSeats = plannedSeats.filter((s) => s.type === "bot");
       for (let i = 0; i < botsToSeed; i++) {
         const meta = BOT_DEFAULTS[i % BOT_DEFAULTS.length];
@@ -180,11 +201,11 @@ export async function POST(req: NextRequest) {
           "premium-service", "budget-expansion", "cargo-dominance", "global-network",
         ];
         const doctrine = botDoctrines[i % botDoctrines.length];
-        // Read difficulty from lobby config; fall back to "medium" for
-        // seats that didn't specify one (legacy or default-filled seats).
         const difficulty =
           (botPlannedSeats[i]?.botDifficulty as "easy" | "medium" | "hard" | undefined) ??
           "medium";
+        const botColorId = pickNextAvailableColor(claimedColorIds);
+        claimedColorIds.push(botColorId);
         const team = createInitializedTeamFromOnboarding({
           airlineName: meta.name,
           code: meta.code,
@@ -194,6 +215,7 @@ export async function POST(req: NextRequest) {
           controlledBy: "bot",
           claimedBySessionId: null,
           playerDisplayName: null,
+          airlineColorId: botColorId,
         });
         const botTeam = {
           ...team,

@@ -58,19 +58,16 @@ export function ActiveGameRibbon() {
       return;
     }
     let cancelled = false;
-    (async () => {
+    async function refresh() {
       try {
         const res = await fetch(
-          `/api/games/active-membership?sessionId=${encodeURIComponent(user.id)}`,
+          `/api/games/active-membership?sessionId=${encodeURIComponent(user!.id)}`,
           { cache: "no-store" },
         );
         const json = await res.json();
         if (cancelled) return;
         const g = json?.game as ActiveGame | null;
         // Defense-in-depth: never surface ended games as "active".
-        // setState calls below sit AFTER an await, so the
-        // react-hooks/set-state-in-effect rule (which only flags sync
-        // effect-body sets) doesn't apply.
         if (g && g.status !== "ended") {
           setGame(g);
         } else {
@@ -79,11 +76,20 @@ export function ActiveGameRibbon() {
       } catch {
         if (!cancelled) setGame(null);
       }
-    })();
+    }
+    void refresh();
+    // Group-E polish — re-poll the active-membership endpoint every
+    // 15 seconds so a forfeit or auto-end clears the "Resume" CTA
+    // without requiring the user to manually reload. The interval
+    // is conservative because most users only see the ribbon for a
+    // few seconds before clicking through; 15s catches the
+    // post-forfeit replication-lag race without thrashing the API.
+    const interval = setInterval(refresh, 15_000);
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
-  }, [authLoading, user?.id, pathname]);
+  }, [authLoading, user?.id, pathname, user]);
 
   if (authLoading || !user?.id || !game || insideActiveGame) {
     return null;

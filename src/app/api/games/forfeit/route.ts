@@ -30,6 +30,7 @@ import {
 } from "@/lib/games/api";
 import { getServerClient } from "@/lib/supabase/server";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
+import { broadcastGameEvent } from "@/lib/games/realtime-broadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,6 +84,28 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
+
+    // Phase 8.3 — tell peer browsers the team flipped (so they
+    // refetch state without waiting for their poll cycle). When the
+    // game auto-ended (last human gone), emit a second event so
+    // /games/[id]/play can route to /endgame immediately.
+    await broadcastGameEvent({
+      gameId,
+      event: "team.forfeited",
+      payload: {
+        bySessionId: userId,
+        replacedByBot: result.data.replacedByBot,
+        remainingHumans: result.data.remainingHumans,
+      },
+    });
+    if (result.data.gameEnded) {
+      await broadcastGameEvent({
+        gameId,
+        event: "game.autoEnded",
+        payload: { reason: "all_human_players_forfeited" },
+      });
+    }
+
     return NextResponse.json({ ok: true, ...result.data });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

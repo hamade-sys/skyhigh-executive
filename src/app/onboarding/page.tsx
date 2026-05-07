@@ -654,7 +654,21 @@ function HubPickerStep({
             <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
               Remaining cash
             </div>
-            <div className="font-display text-[1.5rem] tabular text-positive leading-none mt-0.5">
+            <div
+              className={cn(
+                "font-display text-[1.5rem] tabular leading-none mt-0.5",
+                // Phase 6 — flag low operating runway. Anything under
+                // ~$50M starts the player on cash-flow watch from
+                // Q1; anything under $30M is dangerously thin once
+                // the 2× A320 starter fleet's lease/maintenance
+                // ratio hits.
+                remainingCash < 30_000_000
+                  ? "text-negative"
+                  : remainingCash < 50_000_000
+                    ? "text-[var(--color-warning)]"
+                    : "text-positive",
+              )}
+            >
               {fmtMoney(remainingCash)}
             </div>
           </div>
@@ -664,6 +678,42 @@ function HubPickerStep({
             <strong className="text-ink">{selected.name}</strong> ({selected.code})
             {" · "}{hubTierLabel(selected)}
             {" · "}{selected.regionName}
+          </div>
+        )}
+        {/* Phase 6 — workshop-survival affordability hint. The
+            engine doesn't block low-cash runs, but executives who
+            picked a $300M premium gateway with a $350M budget
+            should know they'll be RCF-drawing from quarter 1.
+            Soft warning, not a hard block — facilitators may
+            actively WANT to see how teams handle the squeeze. */}
+        {selected && remainingCash < 50_000_000 && (
+          <div
+            role="note"
+            className={cn(
+              "mt-3 rounded-md border px-3 py-2 text-[0.75rem] leading-relaxed",
+              remainingCash < 30_000_000
+                ? "border-rose-300 bg-rose-50 text-rose-900"
+                : "border-amber-300 bg-amber-50 text-amber-900",
+            )}
+          >
+            {remainingCash < 30_000_000 ? (
+              <>
+                <strong className="block text-[0.8125rem] mb-0.5">
+                  Tight runway warning
+                </strong>
+                After the hub, you’ll have under {fmtMoney(remainingCash)}.
+                Expect to draw on the RCF from Q1. Pick a smaller hub
+                if you want operating room.
+              </>
+            ) : (
+              <>
+                <strong className="block text-[0.8125rem] mb-0.5">
+                  Lean budget
+                </strong>
+                {fmtMoney(remainingCash)} after the hub leaves room
+                for ~1 aircraft order before the RCF.
+              </>
+            )}
           </div>
         )}
       </div>

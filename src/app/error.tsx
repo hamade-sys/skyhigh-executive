@@ -24,6 +24,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { AlertCircle, RotateCcw, Home } from "lucide-react";
+import { captureException } from "@/lib/telemetry";
 
 export default function GlobalError({
   error,
@@ -33,11 +34,14 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Local console log for dev visibility. Production telemetry hook
-    // lives here (Sentry / Vercel Observability) — left as a comment
-    // so the operator can wire it in without re-deploying the page.
-    console.error("[ican-sims:error-boundary]", error);
-    // if (process.env.NEXT_PUBLIC_SENTRY_DSN) Sentry.captureException(error);
+    // Telemetry: structured log + optional webhook POST. Without a
+    // configured webhook this is just a richer console.error; with
+    // NEXT_PUBLIC_TELEMETRY_WEBHOOK set, every error fires real-time
+    // to whatever channel the operator wires up (Slack / Discord /
+    // Vercel Webhook / etc.). See src/lib/telemetry.ts.
+    captureException(error, {
+      route: typeof window !== "undefined" ? window.location.pathname : "unknown",
+    });
   }, [error]);
 
   return (

@@ -16,6 +16,14 @@ import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import type { City, Team, Route } from "@/types/game";
 import { cn } from "@/lib/cn";
 
+// Phase 7 P2 — gold accent for the in-flight pending-route ribbon.
+// Slightly brighter than the leaderboard's --gold token (#d4a017)
+// because this color sits on the muted map ocean and needs more
+// pop to read at-a-glance. Defined here as a JS constant since the
+// callsites below feed it into Leaflet `stroke` attributes (string
+// values, not Tailwind classes that could pick up CSS variables).
+const PENDING_GOLD = "#E0A93B";
+
 /**
  * Leaflet-based world map.
  *
@@ -335,7 +343,7 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
       ? "#C23B1F"
       : teamColor;
   const cargoColor = profitable
-    ? "#E0A93B"
+    ? PENDING_GOLD
     : losing
       ? "#C23B1F"
       : "#F2C063";
@@ -584,7 +592,7 @@ export function WorldMap({
               key={r.id}
               positions={positions}
               pathOptions={{
-                color: "#E0A93B",       // amber/gold for pending
+                color: PENDING_GOLD,       // amber/gold for pending
                 weight: 2.2,
                 opacity: 0.85,
                 lineCap: "round",
@@ -914,7 +922,7 @@ export function WorldMap({
         {pendingRoutes.length > 0 && (
           <span className="flex items-center gap-1.5 border-l border-line pl-3">
             <svg width="20" height="6" aria-hidden>
-              <line x1="0" y1="3" x2="20" y2="3" stroke="#E0A93B" strokeWidth="2.2" strokeDasharray="6 4" />
+              <line x1="0" y1="3" x2="20" y2="3" stroke={PENDING_GOLD} strokeWidth="2.2" strokeDasharray="6 4" />
             </svg>
             <span className="text-ink-2">Pending bid</span>
           </span>

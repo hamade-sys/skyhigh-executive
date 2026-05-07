@@ -43,6 +43,17 @@ export function subscribeToChat(
     return { unsubscribe: () => {} };
   }
 
+  // Defense-in-depth: when a row arrives with `deleted_at` set,
+  // blank out the body locally before forwarding. The /list endpoint
+  // already redacts deleted bodies on backfill, but Realtime
+  // postgres_changes events ship the raw row, so a moderator's soft-
+  // delete would otherwise leak the original content to every
+  // subscribed browser. Patch on the client side as a belt-and-
+  // suspenders measure to /api/games/chat/delete's intent.
+  function redactIfDeleted(row: ChatMessageRow): ChatMessageRow {
+    return row.deleted_at ? { ...row, body: "" } : row;
+  }
+
   const channel: RealtimeChannel = supa.channel(`chat:${gameId}`)
     .on(
       "postgres_changes",
@@ -54,7 +65,7 @@ export function subscribeToChat(
       },
       (payload) => {
         const row = payload.new as ChatMessageRow;
-        handlers.onInsert(row);
+        handlers.onInsert(redactIfDeleted(row));
       },
     )
     .on(
@@ -67,7 +78,7 @@ export function subscribeToChat(
       },
       (payload) => {
         const row = payload.new as ChatMessageRow;
-        handlers.onUpdate(row);
+        handlers.onUpdate(redactIfDeleted(row));
       },
     )
     .subscribe();

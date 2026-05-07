@@ -65,6 +65,12 @@
   --info: #2b6b88;
   --info-soft: rgba(43, 107, 136, 0.1);
 
+  /* Phase 7 P2 — semantic gold for podium / trophy / 1st-place
+     accents on the leaderboard + endgame screens. Replaces the
+     hardcoded #E0A93B that was scattered across components. */
+  --gold: #d4a017;
+  --gold-soft: rgba(212, 160, 23, 0.12);
+
   /* Map — clean modern feel, slate water + warm land for legibility. */
   --map-ocean: #cfe1ec;          /* slate-leaning ocean */
   --map-ocean-deep: #b8d2e0;     /* depth accents */
@@ -179,7 +185,13 @@
 
   /* Headings — Switzer/Inter sans throughout for a cleaner modern feel.
      Tight tracking on display headings + heavier weight does the work
-     a serif used to do for hierarchy. */
+     a serif used to do for hierarchy.
+     Note: color intentionally omitted so headings INHERIT from their
+     parent. The body sets `color: var(--ink)` so light surfaces get
+     dark headings automatically; sections that opt into a dark
+     backdrop with `text-white` (hero, FacilitatorBlock, the dark
+     bands on /about and /simulations) get white headings without
+     having to override every <h1>/<h2> individually. */
   h1,
   h2 {
     font-family: var(--font-display);

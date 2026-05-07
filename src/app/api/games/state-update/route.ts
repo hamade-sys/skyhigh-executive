@@ -38,6 +38,7 @@ import {
   submitStateMutation,
 } from "@/lib/games/api";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
+import { broadcastGameEvent } from "@/lib/games/realtime-broadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -144,6 +145,18 @@ export async function POST(req: NextRequest) {
       const status = result.error.toLowerCase().includes("stale state") ? 409 : 400;
       return NextResponse.json({ error: result.error }, { status });
     }
+
+    // Tell peer browsers the state changed. We send a tiny "go
+    // refetch" payload (event type + version) rather than the full
+    // state to keep websocket frames small and avoid leaking team
+    // state into the broadcast pipe (peers re-call /api/games/load
+    // which respects the membership-gated read policy).
+    await broadcastGameEvent({
+      gameId,
+      event: "game.stateChanged",
+      payload: { eventType, version: result.data.version },
+    });
+
     return NextResponse.json({ state: result.data });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

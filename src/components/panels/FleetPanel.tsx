@@ -221,17 +221,33 @@ export function FleetPanel() {
     const onOrder = fleet.filter((f) => f.status === "ordered").length;
     const grounded = fleet.filter((f) => f.status === "grounded").length;
     const active = fleet.filter((f) => f.status === "active");
+    // Phase 6 P2 — split routes into "active flying" and "pending bid"
+    // so an aircraft assigned to a pending-auction route doesn't get
+    // mislabelled as idle. Previously, planes on `status='pending'`
+    // routes counted as idle (because of the `!== "closed"` filter
+    // — pending IS not closed, but it's also not earning revenue).
+    // Now: onRoutes counts only `active` routes; onPendingRoutes is
+    // surfaced separately so the player understands why the plane
+    // isn't flying.
     const onRoutes = active.filter((f) => {
       if (!f.routeId) return false;
       const r = player.routes.find((rt) => rt.id === f.routeId);
-      return !!(r && r.status !== "closed");
+      return !!(r && r.status === "active");
     }).length;
-    const idle = active.length - onRoutes;
+    const onPendingRoutes = active.filter((f) => {
+      if (!f.routeId) return false;
+      const r = player.routes.find((rt) => rt.id === f.routeId);
+      return !!(r && r.status === "pending");
+    }).length;
+    const idle = active.length - onRoutes - onPendingRoutes;
     const aging = active.filter((f) => {
       const q = f.retirementQuarter - s.currentQuarter;
       return q > 0 && q <= 4;
     }).length;
-    return { onOrder, grounded, onRoutes, idle, aging, total: fleet.length };
+    return {
+      onOrder, grounded, onRoutes, onPendingRoutes, idle, aging,
+      total: fleet.length,
+    };
   })();
 
   return (
@@ -252,7 +268,11 @@ export function FleetPanel() {
             label="On routes"
             count={opsBuckets.onRoutes}
             tone="positive"
-            sub="Generating revenue"
+            sub={
+              opsBuckets.onPendingRoutes > 0
+                ? `Generating revenue · ${opsBuckets.onPendingRoutes} on pending bid${opsBuckets.onPendingRoutes === 1 ? "" : "s"}`
+                : "Generating revenue"
+            }
           />
           <FleetStateCard
             label="On order"
@@ -561,11 +581,34 @@ export function FleetPanel() {
                         <Badge tone="warning" title="Custom cabin layout">Custom cabin</Badge>
                       )}
                     </div>
-                    <div className="text-[0.75rem] text-ink-muted">
+                    <div className="text-[0.75rem] text-ink-muted flex items-center gap-1.5">
                       {route ? (
-                        <span className="font-mono text-ink-2">
-                          {route.originCode} → {route.destCode}
-                        </span>
+                        <>
+                          <span className="font-mono text-ink-2">
+                            {route.originCode} → {route.destCode}
+                          </span>
+                          {/* Phase 6 P2 — pending-route visibility.
+                              Aircraft on pending-bid routes look like
+                              they're flying but earn nothing until
+                              the slot auction resolves. Surface a
+                              pill so the player understands why. */}
+                          {route.status === "pending" && (
+                            <span
+                              className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-amber-50 text-amber-700"
+                              title="Route is in a pending slot auction — aircraft is reserved but earns no revenue until the bid resolves."
+                            >
+                              Pending bid
+                            </span>
+                          )}
+                          {route.status === "suspended" && (
+                            <span
+                              className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-slate-100 text-slate-600"
+                              title="Route is suspended — aircraft is reserved but not flying."
+                            >
+                              Suspended
+                            </span>
+                          )}
+                        </>
                       ) : (
                         <span className="italic">Idle — assign to a route</span>
                       )}

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { ActiveGameRibbon } from "@/components/marketing/ActiveGameRibbon";
+import { StorageFailureBanner } from "@/components/StorageFailureBanner";
 
 // Adopts the ICAN brand assets from ican-crm — same favicon.png,
 // apple-touch-icon.png, og-image.png in /public so all ICAN MENA
@@ -83,6 +84,7 @@ export default function RootLayout({
       <body className="h-full flex flex-col bg-bg text-ink antialiased overflow-hidden">
         <AuthProvider>
           <ActiveGameRibbon />
+          <StorageFailureBanner />
           {children}
         </AuthProvider>
       </body>

@@ -121,16 +121,23 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
   }, [sessionGameId]);
 
   // Unread tracking — count messages newer than the last "panel
-  // opened" timestamp. Resets to 0 when open. Initialised lazily in
-  // an effect (not in useRef) so we don't call Date.now() during
-  // render — the React lint forbids that.
+  // opened" timestamp. Resets to 0 when open. We initialise the ref
+  // to `null` and set it on the first effect run so we don't call
+  // Date.now() during render (lint forbids that). The unread-count
+  // effect is fire-safe even if a Realtime INSERT lands BEFORE the
+  // mount effect runs: the `lastSeen ?? Date.now()` fallback in
+  // that branch returns "now", so any in-flight message would be
+  // skipped — but we explicitly clamp via a single setup effect
+  // before any unread calculation runs.
   const lastSeenAtRef = useRef<number | null>(null);
+  const [seenInitialized, setSeenInitialized] = useState(false);
   useEffect(() => {
-    if (lastSeenAtRef.current === null) {
-      lastSeenAtRef.current = Date.now();
-    }
+    lastSeenAtRef.current = Date.now();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSeenInitialized(true);
   }, []);
   useEffect(() => {
+    if (!seenInitialized) return;
     if (open) {
       lastSeenAtRef.current = Date.now();
       onUnreadCountChange?.(0);
@@ -147,7 +154,7 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
       );
     }).length;
     onUnreadCountChange(unread);
-  }, [messages, open, onUnreadCountChange, sessionId]);
+  }, [messages, open, onUnreadCountChange, sessionId, seenInitialized]);
 
   // Auto-scroll to bottom on new messages (when panel is open).
   useEffect(() => {
@@ -162,8 +169,31 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
     if (!body || !sessionGameId || sending || isReadOnly) return;
     setSending(true);
     setError(null);
+
+    // Optimistic insert — render the message immediately with a
+    // temp id so the user sees feedback before the network round-
+    // trip. When the Realtime echo arrives we de-dupe by matching
+    // (author + created_at proximity + body) and replace the temp.
+    // On failure we roll back.
+    const tempId = `temp:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic: ChatMessageRow = {
+      id: tempId,
+      game_id: sessionGameId,
+      author_session_id: sessionId ?? "",
+      author_display_name: "You",
+      author_airline_color_id: null,
+      is_facilitator_broadcast: broadcastMode && isFacilitator,
+      body,
+      created_at: new Date().toISOString(),
+      deleted_at: null,
+      deleted_by_session_id: null,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+    setDraft("");
+
     try {
-      const res = await fetch("/api/games/chat/send", {
+      const { fetchWithRetry } = await import("@/lib/games/fetch-with-retry");
+      const res = await fetchWithRetry("/api/games/chat/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -171,20 +201,38 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
           body,
           asFacilitatorBroadcast: broadcastMode && isFacilitator,
         }),
+        // Don't retry 422 (profanity) or 429 (rate-limit) — those
+        // are user-side and should be surfaced immediately. The
+        // helper already skips 4xx by default, so chat-send only
+        // retries on 5xx + network failures.
+        maxAttempts: 3,
       });
       const json = await res.json();
       if (!res.ok) {
+        // Rollback the optimistic insert and restore the draft so
+        // the user can edit + retry without retyping.
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setDraft(body);
         setError(json?.error ?? "Couldn't send message.");
         return;
       }
-      setDraft("");
-      // Realtime will deliver the row; no need to merge locally.
+      // Server-confirmed row — replace the temp with the real row
+      // (the Realtime listener may also fire and deliver this same
+      // row; the dedupe in onInsert by row.id handles that).
+      const real = json?.message as ChatMessageRow | undefined;
+      if (real) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? real : m)),
+        );
+      }
     } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setDraft(body);
       setError("Network error — message not sent.");
     } finally {
       setSending(false);
     }
-  }, [draft, sessionGameId, sending, isReadOnly, broadcastMode, isFacilitator]);
+  }, [draft, sessionGameId, sending, isReadOnly, broadcastMode, isFacilitator, sessionId]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {

@@ -606,190 +606,38 @@ export async function forfeitMember(args: {
   remainingHumans: number;
   gameEnded: boolean;
 }>> {
+  // Group-D of the audit follow-ups — call the SECURITY DEFINER
+  // function `forfeit_member_atomic` (migration 0006) so the
+  // read/flip/delete/audit operations all run inside a single
+  // Postgres transaction with a row-level lock on `games`. This
+  // eliminates the CAS race that the previous JS implementation
+  // (the version that was on origin/main before this merge) could
+  // lose to a concurrent /api/games/state-update writer.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supa = getServerClient() as any;
-
-  // Read game + state for the team flip.
-  const { data: game } = await supa
-    .from("games")
-    .select("*")
-    .eq("id", args.gameId)
-    .maybeSingle();
-  if (!game) return { ok: false, error: "Game not found." };
-
-  // Lobby with not-yet-onboarded membership: just delete the row,
-  // no team flip needed (no team exists yet for that session).
-  if ((game as GameRow).status === "lobby") {
-    await supa
-      .from("game_members")
-      .delete()
-      .eq("game_id", args.gameId)
-      .eq("session_id", args.sessionId);
-    await appendEvent({
-      gameId: args.gameId,
-      actorSessionId: args.sessionId,
-      type: "game.forfeited",
-      payload: { from: "lobby" },
-    });
-    // Empty-lobby cleanup — if the last seat just vacated, the lobby
-    // is dead weight. Garbage-collect it so it doesn't show up as a
-    // ghost row on /lobby.
-    await cleanupEmptyLobby(args.gameId);
-    return {
-      ok: true,
-      data: { replacedByBot: false, remainingHumans: 0, gameEnded: false },
-    };
-  }
-
-  // Playing — flip the team to bot control via CAS.
-  const { data: stateRow } = await supa
-    .from("game_state")
-    .select("*")
-    .eq("game_id", args.gameId)
-    .maybeSingle();
-  if (!stateRow) return { ok: false, error: "Game state missing." };
-
-  const state = (stateRow.state_json ?? {}) as {
-    teams?: Array<{
-      id: string;
-      claimedBySessionId?: string | null;
-      controlledBy?: string;
-      playerDisplayName?: string | null;
-      isPlayer?: boolean;
-      botDifficulty?: string;
-      flags?: Record<string, unknown>;
-    }>;
-    currentQuarter?: number;
-    session?: { botDifficulty?: string };
-  };
-
-  const teams = state.teams ?? [];
-  const team = teams.find((t) => t.claimedBySessionId === args.sessionId);
-  if (!team) {
-    // Member row exists but no claimed team — common during early
-    // multiplayer where the player joined the lobby but never
-    // completed onboarding before the game started. Just delete the
-    // row and append the event. Other players are unaffected.
-    await supa
-      .from("game_members")
-      .delete()
-      .eq("game_id", args.gameId)
-      .eq("session_id", args.sessionId);
-    await appendEvent({
-      gameId: args.gameId,
-      actorSessionId: args.sessionId,
-      type: "game.forfeited",
-      payload: { from: "playing", note: "no_team_claimed" },
-    });
-    return {
-      ok: true,
-      data: { replacedByBot: false, remainingHumans: 0, gameEnded: false },
-    };
-  }
-
-  const newDifficulty =
-    (state.session?.botDifficulty as string | undefined) ?? "medium";
-  const currentQuarter = state.currentQuarter ?? 1;
-
-  const flippedTeams = teams.map((t) => {
-    if (t.id !== team.id) return t;
-    return {
-      ...t,
-      claimedBySessionId: null,
-      controlledBy: "bot",
-      playerDisplayName: null,
-      isPlayer: false,
-      botDifficulty: newDifficulty,
-      flags: {
-        ...(t.flags ?? {}),
-        forfeitedAtQuarter: currentQuarter,
-        forfeitedBySessionId: args.sessionId,
-      },
-    };
+  const { data, error } = await supa.rpc("forfeit_member_atomic", {
+    p_game_id: args.gameId,
+    p_session_id: args.sessionId,
   });
-
-  const remainingHumans = flippedTeams.filter(
-    (t) => t.controlledBy === "human",
-  ).length;
-
-  // Auto-end if no humans remain — Phase 8.3 hardening at the API
-  // level (the engine has its own check on closeQuarter, but we
-  // short-circuit here so the game ends immediately rather than at
-  // the next round close).
-  let gameEnded = false;
-  let nextStatePatch: Record<string, unknown> = {
-    ...state,
-    teams: flippedTeams,
+  if (error) {
+    if (error.code === "P0002") {
+      return { ok: false, error: error.message };
+    }
+    return { ok: false, error: error.message ?? "Forfeit failed." };
+  }
+  // The RPC returns a single jsonb object with snake_case keys.
+  const result = (data ?? {}) as {
+    replaced_by_bot?: boolean;
+    remaining_humans?: number;
+    game_ended?: boolean;
   };
-  if (remainingHumans === 0) {
-    nextStatePatch = {
-      ...nextStatePatch,
-      phase: "endgame",
-    };
-    gameEnded = true;
-  }
-
-  // CAS write — version comes from the row.
-  const expectedVersion = (stateRow as { version: number }).version;
-  const { data: writeResult, error: writeErr } = await supa
-    .from("game_state")
-    .update({
-      state_json: nextStatePatch,
-      version: expectedVersion + 1,
-    })
-    .eq("game_id", args.gameId)
-    .eq("version", expectedVersion)
-    .select()
-    .maybeSingle();
-  if (writeErr || !writeResult) {
-    return {
-      ok: false,
-      error:
-        "Couldn't write forfeit — someone else mutated the game in flight. Refresh and retry.",
-    };
-  }
-
-  // Flip the games row when fully ended.
-  if (gameEnded) {
-    await supa
-      .from("games")
-      .update({ status: "ended", ended_at: new Date().toISOString() })
-      .eq("id", args.gameId);
-  }
-
-  // Delete the member row.
-  await supa
-    .from("game_members")
-    .delete()
-    .eq("game_id", args.gameId)
-    .eq("session_id", args.sessionId);
-
-  await appendEvent({
-    gameId: args.gameId,
-    actorSessionId: args.sessionId,
-    actorTeamId: team.id,
-    type: "game.forfeited",
-    payload: {
-      from: "playing",
-      teamId: team.id,
-      replacedByBotDifficulty: newDifficulty,
-      remainingHumans,
-      gameEnded,
-    },
-  });
-
-  if (gameEnded) {
-    await appendEvent({
-      gameId: args.gameId,
-      actorSessionId: null,
-      type: "game.autoEnded",
-      payload: { reason: "all_human_players_forfeited" },
-    });
-  }
-
   return {
     ok: true,
-    data: { replacedByBot: true, remainingHumans, gameEnded },
+    data: {
+      replacedByBot: !!result.replaced_by_bot,
+      remainingHumans: Number(result.remaining_humans ?? 0),
+      gameEnded: !!result.game_ended,
+    },
   };
 }
 

@@ -146,11 +146,11 @@ function Hero() {
         />
       </div>
 
-      {/* Decorative airliner outline anchored to the right of the hero.
-          Sits behind the headline copy (z-0); we don't let it crowd
-          the text on small viewports — hidden below md so the title
-          gets full width on phones. Stroked in cyan-300 at 25% opacity
-          to read as ambient brand decoration, not a focal point. */}
+      {/* Decorative paper-airplane dart anchored to the right of the
+          hero. Sits behind the headline copy (z-0); hidden below md
+          so the title gets full width on phones. Cyan stroke gradient
+          + soft halo so it reads as ambient brand decoration, not a
+          focal point. See HeroPlane below for the SVG. */}
       <HeroPlane />
 
       {/* Subtle dashed flightpath arc echoing the route theme. Same

@@ -63,4 +63,62 @@ end
 from ordered
 where m.id = ordered.id;
 
+-- Phase 9 part 2 — sync the backfilled color ids into the engine
+-- state's per-team airlineColorId. Rendering surfaces (leaderboard,
+-- TopBar dot, route ribbons, multi-airline chart) read the team
+-- field; the chat panel + lobby seat-list read game_members. Without
+-- this second backfill the two diverge on legacy games.
+--
+-- Strategy: for each game, walk the game_state.state_json.teams[]
+-- array; for any team where claimedBySessionId matches a member with
+-- airline_color_id set, write that color into the team object.
+do $$
+declare
+  rec record;
+  new_state_json jsonb;
+  i int;
+  team_obj jsonb;
+begin
+  -- Collect (game_id, state_json) pairs that have teams to update.
+  for rec in
+    select gs.game_id, gs.state_json
+    from public.game_state gs
+    where (gs.state_json -> 'teams') is not null
+      and jsonb_typeof(gs.state_json -> 'teams') = 'array'
+  loop
+    new_state_json := rec.state_json;
+    -- Walk team indices.
+    for i in 0 .. (jsonb_array_length(new_state_json -> 'teams') - 1) loop
+      team_obj := new_state_json -> 'teams' -> i;
+      -- Only process teams claimed by a player session.
+      if (team_obj ->> 'claimedBySessionId') is not null then
+        -- Look up the matching member's color.
+        new_state_json := jsonb_set(
+          new_state_json,
+          array['teams', i::text, 'airlineColorId'],
+          coalesce(
+            to_jsonb((
+              select gm.airline_color_id
+              from public.game_members gm
+              where gm.game_id = rec.game_id
+                and gm.session_id::text = (team_obj ->> 'claimedBySessionId')
+              limit 1
+            )),
+            -- Preserve existing value when no member match (or use null).
+            coalesce(team_obj -> 'airlineColorId', 'null'::jsonb)
+          ),
+          true
+        );
+      end if;
+    end loop;
+    -- Only write back if the state actually changed.
+    if new_state_json is distinct from rec.state_json then
+      update public.game_state
+      set state_json = new_state_json,
+          version = version + 1
+      where game_id = rec.game_id;
+    end if;
+  end loop;
+end $$;
+
 commit;

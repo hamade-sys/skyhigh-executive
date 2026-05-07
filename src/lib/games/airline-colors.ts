@@ -104,7 +104,15 @@ export function airlineColorFor(args: {
 export function pickNextAvailableColor(
   takenColorIds: ReadonlyArray<AirlineColorId | null | undefined>,
 ): AirlineColorId {
-  const taken = new Set(takenColorIds.filter((c): c is AirlineColorId => !!c));
+  // Filter only null/undefined; everything else is treated as a real
+  // claim. Earlier we used `!!c` which silently dropped any falsy
+  // value (incl. an unexpected empty string) — tightening so a stray
+  // empty string still blocks the slot.
+  const taken = new Set(
+    takenColorIds.filter(
+      (c): c is AirlineColorId => c !== null && c !== undefined,
+    ),
+  );
   for (const c of AIRLINE_COLOR_PALETTE) {
     if (!taken.has(c.id)) return c.id;
   }

@@ -880,7 +880,10 @@ function SavesView() {
                       {m.label}
                     </div>
                     <div className="text-[0.625rem] text-ink-muted/70 mt-0.5">
-                      Saved {new Date(m.savedAt).toLocaleString()} · {m.teamCount} team{m.teamCount === 1 ? "" : "s"}
+                      Saved {new Date(m.savedAt).toLocaleString("en-AE", {
+                        day: "numeric", month: "short", year: "numeric",
+                        hour: "numeric", minute: "2-digit",
+                      })} · {m.teamCount} team{m.teamCount === 1 ? "" : "s"}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -956,7 +959,10 @@ function SavesView() {
                   </div>
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-ink-muted">Saved</span>
-                    <span className="text-ink">{new Date(meta.savedAt).toLocaleString()}</span>
+                    <span className="text-ink">{new Date(meta.savedAt).toLocaleString("en-AE", {
+                      day: "numeric", month: "short", year: "numeric",
+                      hour: "numeric", minute: "2-digit",
+                    })}</span>
                   </div>
                 </div>
               </ModalBody>

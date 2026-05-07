@@ -70,7 +70,7 @@ export function LeaderboardPanel() {
                     size={14}
                     className={
                       i === 0
-                        ? "text-[#E0A93B]"
+                        ? "text-[var(--gold)]"
                         : i === 1
                           ? "text-ink-2"
                           : "text-warning"

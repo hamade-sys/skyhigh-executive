@@ -92,6 +92,8 @@ import {
 } from "@/lib/hub-pricing";
 import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
 import { pickNextAvailableColor, type AirlineColorId } from "@/lib/games/airline-colors";
+import { fetchWithRetry } from "@/lib/games/fetch-with-retry";
+import { captureEvent } from "@/lib/telemetry";
 import type {
   AirportBid,
   AirportLease,
@@ -142,6 +144,15 @@ export interface GameStore extends GameState {
    *  All state-mutating actions check this flag and return early so the
    *  GM can spectate freely without accidentally changing any team's state. */
   isObserver: boolean;
+  /** Phase 6 P0 — re-entrancy guard for closeQuarter. In self-guided
+   *  multiplayer, two human players can both mark ready within ~50ms
+   *  and both browsers fire closeQuarter() locally. Server CAS
+   *  serialises the writes, but the local stores can run two engine
+   *  closes back-to-back, doubling consequences (deferred events,
+   *  scenario fires, etc.). The guard ensures only the first call
+   *  through closeQuarter does the work; subsequent calls return
+   *  immediately until the first finishes. */
+  isClosing: boolean;
 
   // ── Actions ───────────────────────────────────────────────
   startNewGame(args: {
@@ -890,6 +901,7 @@ export const useGame = create<GameStore>()(
       productionCapOverrides: {},
       isMultiplayerSession: false,
       isObserver: false,
+      isClosing: false,
 
       startNewGame: (args) => {
         const {
@@ -3253,6 +3265,43 @@ export const useGame = create<GameStore>()(
         const s = get();
         if (s.isObserver) return;
 
+        // Phase 6 P0 — re-entrancy guard. Two human players in a
+        // self-guided cohort both mark ready within ~50ms; both
+        // browsers' setActiveTeamReady chains call closeQuarter().
+        // Without this guard the engine runs twice (or the local
+        // store advances while the server CAS rejects the second
+        // write, leaving the local clock 1 quarter ahead of the
+        // server). Take the lock as the very first thing.
+        if (s.isClosing) return;
+        set({ isClosing: true });
+
+        // Phase 6 P1 — timing telemetry. closeQuarter is the
+        // heaviest hot path in the engine. Log every close's
+        // wall-clock time and warn loudly when it crosses 60s so
+        // the operator catches the regression before workshops
+        // feel it.
+        const closeStartedAt = typeof performance !== "undefined"
+          ? performance.now()
+          : Date.now();
+        const reportTiming = () => {
+          const elapsedMs = (typeof performance !== "undefined"
+            ? performance.now()
+            : Date.now()) - closeStartedAt;
+          if (elapsedMs > 60_000) {
+            captureEvent("closeQuarter.slow", "warn", {
+              elapsedMs: Math.round(elapsedMs),
+              quarter: s.currentQuarter,
+              teams: s.teams.length,
+            });
+          } else if (process.env.NODE_ENV !== "production") {
+            captureEvent("closeQuarter.timing", "info", {
+              elapsedMs: Math.round(elapsedMs),
+              quarter: s.currentQuarter,
+              teams: s.teams.length,
+            });
+          }
+        };
+
         // Phase 8.3 — defensive auto-end. If we're in a multiplayer
         // game (session.gameId is set) and zero human teams remain,
         // route straight to endgame. The forfeit API endpoint handles
@@ -3260,11 +3309,12 @@ export const useGame = create<GameStore>()(
         // but it covers the offline-forfeit / local-only-mutation
         // path so a degenerate state doesn't loop bots forever.
         //
-        // GM-sim exception: when `gmAdvanceQuarter` calls closeQuarter
-        // it temporarily assigns a bot team as the synthetic playerTeamId
-        // so the logic runs. Detect this via botDifficulty on the "player"
-        // team and skip the endgame guard — the GM wants to watch bots
-        // compete, not have the game end immediately.
+        // GM-sim exception (from main): when `gmAdvanceQuarter` calls
+        // closeQuarter it temporarily assigns a bot team as the
+        // synthetic playerTeamId so the logic runs. Detect this via
+        // botDifficulty on the "player" team and skip the endgame
+        // guard — the GM wants to watch bots compete, not have the
+        // game end immediately.
         if (s.session?.gameId) {
           const humanCount = s.teams.filter(
             (t) => t.controlledBy === "human",
@@ -3275,17 +3325,22 @@ export const useGame = create<GameStore>()(
             (syntheticPlayer.botDifficulty != null ||
               syntheticPlayer.controlledBy === "bot");
           if (humanCount === 0 && !isGmSimAdvance) {
-            set({ phase: "endgame", lastCloseResult: null });
+            set({ phase: "endgame", lastCloseResult: null, isClosing: false });
             toast.warning(
               "All players forfeited",
               "Game ended — no human players remain.",
             );
+            reportTiming();
             return;
           }
         }
 
         const player = s.teams.find((t) => t.id === s.playerTeamId);
-        if (!player) return;
+        if (!player) {
+          set({ isClosing: false });
+          reportTiming();
+          return;
+        }
 
         // Auto-submit pending board decisions (PRD fallback path).
         // Earlier the close button warned the player about open
@@ -4752,7 +4807,31 @@ export const useGame = create<GameStore>()(
           baseInterestRatePct: newBaseRate,
           preOrders: preOrdersAfterDelivery,
           marketHistory: newMarketHistory,
+          // Release the re-entrancy guard atomically with the state
+          // update — phase has flipped to "quarter-closing" so the
+          // close has fully completed at this point.
+          isClosing: false,
         });
+
+        // Phase 6 P0 — surface a sticky toast when the player's team
+        // freshly went bankrupt this quarter. The engine's `notes`
+        // already explains the situation in the round-close digest;
+        // the toast is for visibility in case the player dismisses
+        // the digest quickly. Only fires once per team (engine sets
+        // the `bankrupt` flag sticky).
+        const playerAfter = teamsWithRank.find((t) => t.id === s.playerTeamId);
+        if (playerAfter) {
+          const wasBankruptBefore = player.flags?.has?.("bankrupt") ?? false;
+          const isBankruptNow = playerAfter.flags?.has?.("bankrupt") ?? false;
+          if (!wasBankruptBefore && isBankruptNow) {
+            toast.warning(
+              "Company bankruptcy",
+              "Cash is negative and RCF is maxed. Operations frozen — talk to the facilitator about hand-off to a bot or salvage strategy.",
+            );
+          }
+        }
+
+        reportTiming();
       },
 
       advanceToNext: () => {
@@ -4766,6 +4845,44 @@ export const useGame = create<GameStore>()(
           return;
         }
         const nextQ = s.currentQuarter + 1;
+
+        // Phase 6 P0 — 3-quarter advance warning for lease expiries.
+        // We surface this at the moment the new quarter starts so
+        // players have three full rounds to react: order replacements,
+        // negotiate buyouts, or restructure routes that depend on the
+        // expiring airframe. Only fires for the player's team to
+        // avoid spamming the cohort. The engine ALREADY removes the
+        // aircraft on its expiry quarter; without this warning routes
+        // silently drop revenue when the lease ends.
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (player) {
+          const expiringSoon = player.fleet.filter((f) =>
+            f.acquisitionType === "lease" &&
+            f.status === "active" &&
+            typeof f.leaseTermEndsAtQuarter === "number" &&
+            f.leaseTermEndsAtQuarter === nextQ + 2,
+          );
+          if (expiringSoon.length > 0) {
+            // Group by route impact so the toast is actionable. List
+            // up to 3 routes affected; "and N more" beyond that.
+            const affectedRouteIds = new Set<string>();
+            for (const ac of expiringSoon) {
+              if (ac.routeId) affectedRouteIds.add(ac.routeId);
+            }
+            const affectedRoutes = player.routes.filter(
+              (r) => affectedRouteIds.has(r.id),
+            );
+            const routeNames = affectedRoutes
+              .slice(0, 3)
+              .map((r) => `${r.originCode}-${r.destCode}`)
+              .join(", ");
+            const more = affectedRoutes.length > 3 ? ` and ${affectedRoutes.length - 3} more` : "";
+            const detail = affectedRoutes.length > 0
+              ? `${expiringSoon.length} aircraft (on ${routeNames}${more}) — order replacements or negotiate buyouts now.`
+              : `${expiringSoon.length} aircraft return to lessor. Order replacements or convert to buy now.`;
+            toast.warning("Leases expiring in 3 quarters", detail);
+          }
+        }
 
         // PRD G4 — 787 Dreamliner delivery delay event.
         // 787-8 unlocks at round 12 (Q4 2017). The delay event fires at
@@ -5103,6 +5220,11 @@ export const useGame = create<GameStore>()(
         set({ isObserver: true });
       },
 
+      // setAirlineColor is defined earlier in this file (line ~5147 in
+      // the resolved merge). The duplicate originally appeared during
+      // the audit-fix wave; keeping a single canonical definition above
+      // and removing this one.
+
       startFacilitatedSession: (seatCount) => {
         // 4-digit code, leading zeros allowed (e.g. "0421")
         const code = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
@@ -5332,13 +5454,26 @@ export const useGame = create<GameStore>()(
       },
 
       resetGame: () => {
-        // Clear the milestone-shown ledger so a fresh game's first
-        // close lights up the relevant milestones again instead of
-        // suppressing them as "already seen".
-        // Clear the milestone-shown ledger so fresh milestones show again.
+        // Clear every skyforce:* localStorage key so a fresh game
+        // doesn't carry stale toast history, snapshots, milestone
+        // dedup ledgers, or notification preferences from the
+        // previous run. The persisted Zustand store is one of those
+        // keys and gets cleared here too — the `set({ phase: 'idle',
+        // ... })` below then primes a clean idle state.
         if (typeof window !== "undefined") {
-          try { window.localStorage.removeItem("skyforce:milestonesShown:v1"); } catch {}
+          try {
+            const keys: string[] = [];
+            for (let i = 0; i < window.localStorage.length; i += 1) {
+              const k = window.localStorage.key(i);
+              if (k && k.startsWith("skyforce:")) keys.push(k);
+            }
+            for (const k of keys) {
+              try { window.localStorage.removeItem(k); } catch { /* ignore */ }
+            }
+          } catch { /* localStorage disabled (private mode) */ }
         }
+        // Active-game redirect is now handled via Supabase (game_members
+        // table) — no localStorage key to clear there.
         // Active-game redirect is now handled via Supabase (game_members
         // table) — no localStorage key to clear.
         set({
@@ -5396,17 +5531,83 @@ export const useGame = create<GameStore>()(
         //   - the flip was a "true" (player marked ready, not unmarked)
         //   - the game is multiplayer self-guided (session.mode)
         //   - more than one human team exists (solo doesn't auto-advance)
-        //   - all human teams are now ready
+        //   - all ACTIVE human teams are now ready (Phase 6 P1: long-
+        //     away humans count as ready so they don't stall the
+        //     cohort indefinitely — see below)
         if (!ready) return;
         const after = get();
         const session = after.session;
         if (!session || session.mode !== "self_guided") return;
         const humans = after.teams.filter((t) => t.controlledBy === "human");
         if (humans.length < 2) return;
-        if (!humans.every((t) => t.readyForNextQuarter === true)) return;
-        // All humans ready — auto-close. The engine handles the rest
-        // of the round close (procedural rivals, slot auctions, etc).
-        get().closeQuarter();
+
+        // Phase 6 P1 — fetch members + treat long-away humans as
+        // ready so the cohort can advance even when one player has
+        // closed their tab. Threshold: 5 minutes since heartbeat.
+        // We do this asynchronously so the user-facing setReady
+        // call returns immediately; auto-close fires once the
+        // member fetch resolves.
+        const gameId = session.gameId;
+        if (!gameId) return;
+        (async () => {
+          // Try to fetch the latest members (with last_seen_at).
+          // On failure, fall back to the strict "every human ready"
+          // gate — better to wait than to advance prematurely.
+          let staleHumans = new Set<string>();
+          try {
+            const res = await fetch(
+              `/api/games/load?gameId=${encodeURIComponent(gameId)}`,
+              { cache: "no-store" },
+            );
+            if (res.ok) {
+              const json = await res.json();
+              const now = Date.now();
+              const LONG_AWAY_MS = 5 * 60 * 1000;
+              for (const m of (json.members ?? []) as Array<{
+                session_id: string;
+                last_seen_at?: string | null;
+              }>) {
+                const ts = m.last_seen_at ? Date.parse(m.last_seen_at) : NaN;
+                if (Number.isFinite(ts) && now - ts > LONG_AWAY_MS) {
+                  staleHumans.add(m.session_id);
+                }
+              }
+            }
+          } catch {
+            // Network blip — fall back to strict gate by leaving
+            // staleHumans empty.
+            staleHumans = new Set();
+          }
+
+          // Re-pull state in case anything moved while we awaited.
+          const fresh = get();
+          const freshHumans = fresh.teams.filter(
+            (t) => t.controlledBy === "human",
+          );
+          const blockingHumans = freshHumans.filter((t) => {
+            // A human blocks auto-close only if they're (a) not
+            // marked ready AND (b) not long-away. Long-away humans
+            // are skipped — they get a forfeit/replacement decision
+            // from the facilitator UI later.
+            if (t.readyForNextQuarter === true) return false;
+            if (t.claimedBySessionId && staleHumans.has(t.claimedBySessionId)) {
+              return false;
+            }
+            return true;
+          });
+          if (blockingHumans.length > 0) return;
+
+          // All ACTIVE humans ready — auto-close. The engine handles
+          // the rest of the round close (procedural rivals, slot
+          // auctions, etc).
+          if (staleHumans.size > 0) {
+            toast.warning(
+              "Auto-advancing past stalled players",
+              `${staleHumans.size} player${staleHumans.size === 1 ? " was" : "s were"} away for 5+ min — facilitator can mark them forfeit later.`,
+            );
+          }
+          get().closeQuarter();
+        })();
       },
 
       allActiveTeamsReady: () => {
@@ -5479,12 +5680,26 @@ export const useGame = create<GameStore>()(
           // Convert flags arrays → Sets on each team (mirror of the
           // onRehydrateStorage hook, since we're skipping Zustand's
           // built-in rehydrate for this in-place restore).
-          const teams = (restored.teams ?? []).map((t) => ({
-            ...t,
-            flags: new Set(
-              Array.isArray(t.flags) ? t.flags : Array.from(t.flags ?? []),
-            ),
-          }));
+          // Phase 6 — also sweep stale routeId references on aircraft.
+          // Restoring a Q5 snapshot over a Q15 game can resurrect
+          // routes that were closed in Q6-Q14; fleet.routeId then
+          // points at a route id that doesn't exist in the snapshot.
+          // Detach the dangling reference so the aircraft list as
+          // "idle" instead of crashing the routes panel.
+          const teams = (restored.teams ?? []).map((t) => {
+            const validRouteIds = new Set((t.routes ?? []).map((r) => r.id));
+            return {
+              ...t,
+              fleet: (t.fleet ?? []).map((f) =>
+                f.routeId && !validRouteIds.has(f.routeId)
+                  ? { ...f, routeId: null }
+                  : f,
+              ),
+              flags: new Set(
+                Array.isArray(t.flags) ? t.flags : Array.from(t.flags ?? []),
+              ),
+            };
+          });
           set({
             ...restored,
             teams,
@@ -5685,7 +5900,7 @@ export const useGame = create<GameStore>()(
         // and hydrate locally — the user gets a clear toast that
         // their last action was overridden by the cohort's lead and
         // a hint to retry.
-        return fetch("/api/games/state-update", {
+        return fetchWithRetry("/api/games/state-update", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -5700,6 +5915,11 @@ export const useGame = create<GameStore>()(
             eventType,
             eventPayload,
           }),
+          // Phase 6 P1 — retry on 5xx and network errors so a single
+          // transient Supabase fault doesn't desync the local store
+          // from the server. 4xx errors (auth, validation, 409 CAS
+          // conflict) bypass retry and surface immediately.
+          maxAttempts: 3,
         })
           .then(async (res) => {
             if (res.ok) {
@@ -6568,19 +6788,38 @@ export const useGame = create<GameStore>()(
       },
 
       // ── Quarter timer (A12) ────────────────────────────────
+      // Phase 6 P1 — multiplayer-aware. The local tick still runs
+      // per-browser (drift is small at 1Hz), but every state change
+      // (start, pause, resume, extend) is pushed to the server so
+      // peer browsers re-hydrate. The play page already subscribes
+      // to game_state UPDATE via postgres_changes, so this is the
+      // last-mile change to make timer state cohort-coherent.
+      // Solo runs (no session.gameId) skip the push silently.
       startQuarterTimer: (seconds = 1800) => {
         set({ quarterTimerSecondsRemaining: seconds, quarterTimerPaused: false });
+        if (get().session?.gameId) {
+          void get().pushStateToServer("game.timerStarted", { seconds });
+        }
       },
       pauseQuarterTimer: () => {
         set({ quarterTimerPaused: true });
+        if (get().session?.gameId) {
+          void get().pushStateToServer("game.timerPaused");
+        }
       },
       resumeQuarterTimer: () => {
         set({ quarterTimerPaused: false });
+        if (get().session?.gameId) {
+          void get().pushStateToServer("game.timerResumed");
+        }
       },
       extendQuarterTimer: (seconds) => {
         const s = get();
         if (s.quarterTimerSecondsRemaining === null) return;
         set({ quarterTimerSecondsRemaining: s.quarterTimerSecondsRemaining + seconds });
+        if (s.session?.gameId) {
+          void get().pushStateToServer("game.timerExtended", { seconds });
+        }
       },
       tickQuarterTimer: (deltaSeconds) => {
         const s = get();
@@ -6626,6 +6865,39 @@ export const useGame = create<GameStore>()(
     }),
     {
       name: "skyforce-game-v1",
+      // Phase 6 P0 — save schema version. Bump this when a non-
+      // backwards-compatible field is added/renamed/removed in
+      // partialize. The `migrate` hook below converts older versions
+      // forward, falling through to a hard reset when the schema
+      // is too old to map cleanly. The version is independent of
+      // the localStorage key (`skyforce-game-v1` stays stable);
+      // this counter only governs in-key migrations.
+      //
+      // Migration history:
+      //   0 → 1: initial release shape (handled by no migration)
+      //   1 → 2: added airlineColorId on Team (Phase 9). Older
+      //          saves get null and the deterministic-hash fallback
+      //          renders them until the next save round.
+      //   2 → 3: bankrupt flag is now sticky on Team.flags. Older
+      //          saves don't carry the flag yet — that's fine,
+      //          re-detection on the next quarter-close re-stamps.
+      version: 3,
+      migrate: (persisted, fromVersion) => {
+        // Defensive: if the persisted shape is corrupt or pre-versioning,
+        // pass through and let onRehydrateStorage's per-field defaults
+        // pick up the slack. We never throw — a workshop in progress
+        // shouldn't lose state because we shipped a new field.
+        if (!persisted || typeof persisted !== "object") return persisted;
+        const s = persisted as Record<string, unknown>;
+        if (fromVersion < 2) {
+          // No-op for airlineColorId — the field is optional and the
+          // render fallback (airlineColorFor) covers null teams.
+        }
+        if (fromVersion < 3) {
+          // No-op for bankrupt — re-evaluated each quarter-close.
+        }
+        return s;
+      },
       // Custom storage that protects the solo save from being overwritten
       // while a multiplayer session is active. Multiplayer state is always
       // re-hydrated from the server on play-page load, so there is nothing
@@ -6646,7 +6918,21 @@ export const useGame = create<GameStore>()(
             };
             if (parsed?.state?.isMultiplayerSession === true) return;
             localStorage.setItem(name, value);
-          } catch { /* ignore */ }
+          } catch (err) {
+            // Phase 7 P2 — surface a one-time failure event so the
+            // <StorageFailureBanner /> component can warn the user
+            // their progress isn't being saved (private mode, quota
+            // exceeded, browser cache cleared mid-session, etc.).
+            // Used to be silently dropped; live workshops then lost
+            // entire runs on a tab reload.
+            if (typeof window !== "undefined") {
+              try {
+                window.dispatchEvent(new CustomEvent("skyforce:storage-failed", {
+                  detail: { error: err instanceof Error ? err.message : "unknown" },
+                }));
+              } catch { /* ignore — event-dispatch failure is bizarre but non-fatal */ }
+            }
+          }
         },
         removeItem: (name: string) => {
           try { localStorage.removeItem(name); } catch { /* ignore */ }

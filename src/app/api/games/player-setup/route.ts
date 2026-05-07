@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertMembership, submitStateMutation } from "@/lib/games/api";
 import { getServerClient } from "@/lib/supabase/server";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
+import { isAirlineColorId } from "@/lib/games/airline-colors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,13 +47,20 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { gameId, airlineName, code, hub, doctrine } = body ?? {};
+    const { gameId, airlineName, code, hub, doctrine, airlineColorId } = body ?? {};
 
     if (!gameId || !airlineName || !code || !hub || !doctrine) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
     if (!VALID_DOCTRINES.includes(doctrine)) {
       return NextResponse.json({ error: "Invalid doctrine." }, { status: 400 });
+    }
+    // Phase 9 — airlineColorId is optional but if provided must be valid.
+    // The picker writes via /api/games/claim-color first (server enforces
+    // uniqueness in game_members.airline_color_id); player-setup just
+    // mirrors that into the engine state for rendering.
+    if (airlineColorId !== undefined && airlineColorId !== null && !isAirlineColorId(airlineColorId)) {
+      return NextResponse.json({ error: "Invalid airlineColorId." }, { status: 400 });
     }
     if (airlineName.trim().length < 2) {
       return NextResponse.json({ error: "Airline name too short." }, { status: 400 });
@@ -98,6 +106,7 @@ export async function POST(req: NextRequest) {
           code: code.trim().toUpperCase().slice(0, 3),
           hub: hub.trim().toUpperCase(),
           doctrine,
+          airlineColorId: airlineColorId ?? null,
         },
       },
     };

@@ -25,12 +25,15 @@
 
 import Link from "next/link";
 import { useEffect, useState, useRef, use } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import { useGame } from "@/store/game";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { GameCanvas } from "@/components/game/GameCanvas";
+import { useGameRealtime } from "@/lib/games/use-game-realtime";
+import { useHeartbeat } from "@/lib/games/use-heartbeat";
 // TopBar import removed — GameCanvas mounts it internally (Phase 4.7).
 
 interface LoadResponse {
@@ -45,6 +48,7 @@ export default function GamePlayPage({
   params: Promise<{ gameId: string }>;
 }) {
   const { gameId } = use(params);
+  const router = useRouter();
   // Stable server-side identity — Supabase user.id only.
   const { sessionId, authReady } = useMultiplayerSession();
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
@@ -172,6 +176,53 @@ export default function GamePlayPage({
       supa.removeChannel(channel);
     };
   }, [hydrated, gameId, sessionId]);
+
+  // Phase 8.3 — when the engine transitions to endgame (last human
+  // forfeited, or final round closed), route this browser to the
+  // endgame summary. Without this, peer browsers stay stuck on the
+  // play canvas after the cohort auto-ends.
+  useEffect(() => {
+    if (phase === "endgame") {
+      router.replace("/endgame");
+    }
+  }, [phase, router]);
+
+  // Phase 6 P1 — heartbeat ping every 30s so peers + the facilitator
+  // can see "away (Nm)" indicators in the cohort UI when this player
+  // closes their tab or backgrounds it. Solo runs (no gameId) skip
+  // the heartbeat.
+  useHeartbeat(gameId);
+
+  // Group-C — subscribe to the game:<id> broadcast channel for
+  // forfeit / auto-end / start / lock events. The
+  // postgres_changes subscription above handles the heavy state
+  // refetch; this hook just routes when the game ends or another
+  // team flips to bot, both of which warrant an immediate refresh.
+  useGameRealtime(hydrated ? gameId : null, {
+    onAutoEnded: () => {
+      router.replace("/endgame");
+    },
+    onTeamForfeited: async () => {
+      // Refetch state so the team flip surfaces without waiting
+      // for the postgres_changes to land. Cheap; both events tend
+      // to fire close together — an extra fetch is harmless.
+      try {
+        const res = await fetch(
+          `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
+          { cache: "no-store" },
+        );
+        const json = await res.json();
+        if (res.ok && sessionId && json?.state?.state_json) {
+          hydrateRef.current({
+            stateJson: json.state.state_json,
+            mySessionId: sessionId,
+          });
+        }
+      } catch {
+        // Best-effort — postgres_changes will catch us up.
+      }
+    },
+  });
 
   // Auth gate — must be signed in to play
   if (authReady && !sessionId) {

@@ -29,6 +29,14 @@ import {
 } from "lucide-react";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
+import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
+import {
+  AIRLINE_COLOR_BY_ID,
+  type AirlineColorId,
+  isAirlineColorId,
+} from "@/lib/games/airline-colors";
+import { useHeartbeat } from "@/lib/games/use-heartbeat";
+import { awayIndicator } from "@/lib/games/away-indicator";
 
 type DoctrineId = "premium-service" | "budget-expansion" | "cargo-dominance" | "global-network";
 type SeatType = "human" | "bot";
@@ -96,6 +104,11 @@ export default function GameLobbyPage({
   const [copyHint, setCopyHint] = useState(false);
 
   // ── Seat configuration (host/GM can toggle each unclaimed seat) ────────
+  // Phase 6 P1 — heartbeat ping so peers can see who's still in the
+  // lobby vs. who closed their tab. Stops when the page unmounts
+  // (game starts → /play takes over the heartbeat).
+  useHeartbeat(gameId);
+
   const [seatConfigs, setSeatConfigs] = useState<SeatConfig[]>([]);
   const [seatConfigSaving, setSeatConfigSaving] = useState(false);
 
@@ -104,6 +117,9 @@ export default function GameLobbyPage({
   const [airlineCode, setAirlineCode] = useState("");
   const [airlineHub, setAirlineHub] = useState("IST");
   const [airlineDoctrine, setAirlineDoctrine] = useState<DoctrineId>("premium-service");
+  // Phase 9 — color picked at lobby. Server enforces uniqueness via
+  // /api/games/claim-color (called from inside <AirlineColorPicker/>).
+  const [airlineColorId, setAirlineColorId] = useState<AirlineColorId | null>(null);
   const [setupSaved, setSetupSaved] = useState(false);
   const [setupSaving, setSetupSaving] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -269,6 +285,7 @@ export default function GameLobbyPage({
           code: airlineCode.trim(),
           hub: airlineHub,
           doctrine: airlineDoctrine,
+          airlineColorId,
         }),
       });
       const json = await res.json();
@@ -504,13 +521,41 @@ export default function GameLobbyPage({
                   </div>
                 </div>
 
+                {/* Phase 9 — brand color. The picker calls
+                    /api/games/claim-color server-side; on 409 (taken)
+                    the parent re-fetches members so the greyed-out
+                    set updates immediately. */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-2">
+                    Brand color
+                  </label>
+                  <AirlineColorPicker
+                    value={airlineColorId}
+                    onChange={setAirlineColorId}
+                    gameId={gameId}
+                    onTakenConflict={() => { void load(); }}
+                    takenColorIds={
+                      (data?.members ?? [])
+                        .map((m) => (m as GameMemberRow & { airline_color_id?: string | null }).airline_color_id)
+                        .filter((c): c is AirlineColorId => isAirlineColorId(c))
+                        .filter((c) => c !== airlineColorId)
+                    }
+                    airlineName={airlineName.trim() || undefined}
+                  />
+                  {airlineColorId && (
+                    <p className="text-[0.6875rem] text-slate-500 mt-1.5">
+                      Chosen: <span className="font-medium text-slate-700">{AIRLINE_COLOR_BY_ID[airlineColorId].label}</span>
+                    </p>
+                  )}
+                </div>
+
                 {setupError && (
                   <p className="text-xs text-rose-600">{setupError}</p>
                 )}
 
                 <button
                   onClick={handleSaveSetup}
-                  disabled={setupSaving || !airlineName.trim() || airlineCode.trim().length < 2}
+                  disabled={setupSaving || !airlineName.trim() || airlineCode.trim().length < 2 || !airlineColorId}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#00C2CB] text-white text-sm font-semibold hover:bg-[#00a9b1] disabled:opacity-50 transition-colors"
                 >
                   {setupSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -754,10 +799,34 @@ function SeatCard({
                 {member.display_name ?? "Player"}
                 {isMe && <span className="ml-2 text-xs font-medium text-cyan-700">· you</span>}
               </div>
-              <div className="text-xs text-slate-500 truncate">
-                {member.role === "facilitator" ? "Game Master" :
-                 member.role === "host" ? "Host" :
-                 member.role === "spectator" ? "Spectator" : "Player"}
+              <div className="text-xs text-slate-500 truncate flex items-center gap-1.5">
+                <span>
+                  {member.role === "facilitator" ? "Game Master" :
+                   member.role === "host" ? "Host" :
+                   member.role === "spectator" ? "Spectator" : "Player"}
+                </span>
+                {/* Phase 6 P1 — away indicator. Surfaces "Away 3m"
+                    in amber when last_seen_at is stale by more than
+                    2 minutes; rose at 5 minutes (long away).
+                    Hidden for the local user (we know they're here)
+                    and for bots/spectators. */}
+                {!isMe && member.role !== "spectator" && (() => {
+                  const a = awayIndicator({ lastSeenAt: member.last_seen_at });
+                  if (a.state === "active" || a.state === "unknown") return null;
+                  return (
+                    <span
+                      className={
+                        "px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider " +
+                        (a.state === "long-away"
+                          ? "bg-rose-50 text-rose-700"
+                          : "bg-amber-50 text-amber-700")
+                      }
+                      title={`Last seen ${a.minutesAway} minute${a.minutesAway === 1 ? "" : "s"} ago — workshop facilitator may want to skip them.`}
+                    >
+                      {a.label}
+                    </span>
+                  );
+                })()}
               </div>
             </>
           ) : isBot ? (
