@@ -65,6 +65,7 @@ function BotAutoAdvanceBanner({
 
   // Reset counter every time this component mounts (= start of a new round).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSeconds(BOT_AUTO_ADVANCE_SECONDS);
   }, []);
 

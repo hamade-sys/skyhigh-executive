@@ -185,7 +185,11 @@
     font-family: var(--font-display);
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: var(--ink);
+    /* color intentionally omitted so headings inherit from their
+       parent. Body sets `color: var(--ink)`, so light surfaces get
+       dark headings; sections that opt into a dark backdrop with
+       `text-white` (hero, FacilitatorBlock, /about and /simulations
+       dark bands) get white headings without per-headline override. */
   }
 
   h3,
@@ -195,7 +199,7 @@
     font-family: var(--font-sans);
     font-weight: 600;
     letter-spacing: -0.01em;
-    color: var(--ink);
+    /* color inherits — see h1/h2 above. */
   }
 
   /* Tabular figures everywhere by default for data legibility */

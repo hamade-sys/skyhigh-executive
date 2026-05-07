@@ -146,7 +146,18 @@ function Hero() {
         />
       </div>
 
-      <div className="relative max-w-6xl mx-auto px-6 pt-20 pb-28 lg:pt-28 lg:pb-36">
+      {/* Decorative airliner outline anchored to the right of the hero.
+          Sits behind the headline copy (z-0); we don't let it crowd
+          the text on small viewports — hidden below md so the title
+          gets full width on phones. Stroked in cyan-300 at 25% opacity
+          to read as ambient brand decoration, not a focal point. */}
+      <HeroPlane />
+
+      {/* Subtle dashed flightpath arc echoing the route theme. Same
+          visibility breakpoint as the plane. */}
+      <HeroFlightPath />
+
+      <div className="relative z-10 max-w-6xl mx-auto px-6 pt-20 pb-28 lg:pt-28 lg:pb-36">
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm mb-6">
             <Sparkles className="w-3 h-3 text-cyan-400" />
@@ -155,7 +166,12 @@ function Hero() {
             </span>
           </div>
 
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.04] mb-6">
+          {/* globals.css drops `color` from the global h1 rule so this
+              heading inherits text-white from the parent <section>.
+              Explicit `text-white` is also set here as belt-and-
+              suspenders so any future cascading override (e.g. a
+              theme variant) doesn't accidentally re-hide the title. */}
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.04] mb-6 text-white">
             Lead an industry.
             <br />
             <span className="text-cyan-300">Not a spreadsheet.</span>
@@ -201,6 +217,136 @@ function Hero() {
         </div>
       </div>
     </section>
+  );
+}
+
+// ─── Hero decorative airliner ───────────────────────────────
+// Outline-style 3/4-view airliner anchored to the right of the hero.
+// Reinforces the "airline simulation" positioning without crowding the
+// headline copy. The whole illustration is wrapped in `pointer-events-
+// none` so it never intercepts CTA clicks.
+//
+// Sizing: scales fluidly with `clamp()` so the plane stays proportionate
+// on a laptop AND a 4K desktop. Hidden below `md` so the title gets full
+// width on phones — the gradient blobs already provide enough texture
+// for narrow viewports.
+function HeroPlane() {
+  return (
+    <div
+      aria-hidden
+      className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[-4rem] lg:right-[-2rem] xl:right-8 z-0 pointer-events-none"
+      style={{
+        width: "clamp(360px, 38vw, 580px)",
+      }}
+    >
+      <svg
+        viewBox="0 0 600 300"
+        fill="none"
+        className="w-full h-auto"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Soft glow halo behind the airframe to lift it off the
+            backdrop without competing with the gradient blobs. */}
+        <defs>
+          <radialGradient id="planeGlow" cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0%" stopColor="rgb(34 211 238)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="planeStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgb(165 243 252)" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.35" />
+          </linearGradient>
+        </defs>
+        <ellipse cx="300" cy="150" rx="240" ry="80" fill="url(#planeGlow)" />
+
+        {/* Airliner — 3/4 view, gentle climb. Built from clean
+            geometric strokes so it reads as a brand mark, not a
+            photograph. Coordinates are hand-tuned to read at 360px
+            (tablet) up through 580px (desktop). */}
+        <g
+          stroke="url(#planeStroke)"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        >
+          {/* Fuselage */}
+          <path d="M 100 158 Q 95 152 110 148 L 460 142 Q 510 144 520 152 Q 510 160 460 162 L 110 158 Q 95 156 100 158 Z" />
+          {/* Cockpit windows */}
+          <path d="M 488 148 Q 502 150 510 152" />
+          <path d="M 480 154 L 510 154" />
+          {/* Nose tip */}
+          <path d="M 510 152 Q 525 152 528 154" />
+          {/* Tail fin */}
+          <path d="M 110 148 L 80 96 L 102 96 L 130 144" />
+          {/* Tail rudder line */}
+          <path d="M 86 116 L 124 132" opacity="0.6" />
+          {/* Horizontal stabilizer (right tail wing) */}
+          <path d="M 118 152 L 80 178 L 100 180 L 140 158" />
+          {/* Main wing — top */}
+          <path d="M 280 156 L 200 220 L 240 224 L 340 162" />
+          {/* Main wing — bottom (under fuselage perspective) */}
+          <path d="M 280 156 Q 270 172 290 188 L 320 188 Q 340 172 340 162" opacity="0.5" />
+          {/* Engine pod 1 (under wing) */}
+          <ellipse cx="248" cy="200" rx="22" ry="9" />
+          <line x1="234" y1="200" x2="262" y2="200" />
+          {/* Engine pod 2 (under fuselage on far side, hinted) */}
+          <ellipse cx="318" cy="190" rx="14" ry="6" opacity="0.5" />
+          {/* Cabin window strip — staggered dots imply the row */}
+          <g opacity="0.55">
+            <circle cx="170" cy="152" r="1.2" />
+            <circle cx="190" cy="151" r="1.2" />
+            <circle cx="210" cy="150" r="1.2" />
+            <circle cx="230" cy="150" r="1.2" />
+            <circle cx="250" cy="149" r="1.2" />
+            <circle cx="350" cy="149" r="1.2" />
+            <circle cx="370" cy="148" r="1.2" />
+            <circle cx="390" cy="148" r="1.2" />
+            <circle cx="410" cy="147" r="1.2" />
+            <circle cx="430" cy="147" r="1.2" />
+            <circle cx="450" cy="146" r="1.2" />
+          </g>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+// ─── Hero flight path arc ───────────────────────────────────
+// Dashed arc behind the headline that echoes the route theme. Subtle
+// — 8% white opacity — so it reads as map-style ambient decor.
+function HeroFlightPath() {
+  return (
+    <div
+      aria-hidden
+      className="hidden lg:block absolute inset-0 z-0 pointer-events-none"
+    >
+      <svg
+        viewBox="0 0 1400 800"
+        fill="none"
+        preserveAspectRatio="xMidYMid slice"
+        className="w-full h-full"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M -50 600 Q 400 100 900 300 T 1500 220"
+          stroke="white"
+          strokeOpacity="0.07"
+          strokeWidth="1.5"
+          strokeDasharray="6 8"
+          fill="none"
+        />
+        {/* A second softer arc to add depth — not parallel, slight
+            divergence so it reads as an organic flight network. */}
+        <path
+          d="M -50 700 Q 500 200 1100 380 T 1500 320"
+          stroke="rgb(34 211 238)"
+          strokeOpacity="0.05"
+          strokeWidth="1"
+          strokeDasharray="3 10"
+          fill="none"
+        />
+      </svg>
+    </div>
   );
 }
 
@@ -842,7 +988,7 @@ function FacilitatorBlock() {
             <p className="text-xs font-semibold text-violet-300 uppercase tracking-widest mb-3">
               For Game Masters
             </p>
-            <h2 className="text-3xl md:text-4xl font-display font-bold tracking-tight mb-4 leading-tight">
+            <h2 className="text-3xl md:text-4xl font-display font-bold tracking-tight mb-4 leading-tight text-white">
               Run an executive workshop.
             </h2>
             <p className="text-base text-slate-400 max-w-2xl mb-8 leading-relaxed">
