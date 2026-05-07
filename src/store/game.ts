@@ -5081,21 +5081,26 @@ export const useGame = create<GameStore>()(
         get().advanceToNext();
 
         // ── Single atomic write ─────────────────────────────────────────
-        // Clear the suppress flag, then push once with the complete final
-        // state (including all bot route/aircraft/slot decisions).
-        _suppressGmPush = false;
-        get().pushStateToServer("game.botRoundAdvanced", {
-          quarter: get().currentQuarter,
-        });
-
-        // Restore GM to pure observer mode. lastCloseResult:null prevents
-        // the QuarterCloseModal (player-only UI) from appearing.
+        // Restore clean observer state FIRST so the stateJson captured by
+        // pushStateToServer has playerTeamId:null (not the synthetic bot id).
+        // Without this, every re-hydration from Realtime restores the bot as
+        // the player, causing subtle state pollution across rounds.
         set({
           isObserver: true,
           playerTeamId: null,
           activeTeamId: savedActiveTeamId,
           lastCloseResult: null,
         });
+
+        // Brief flip to non-observer just for the push call — React effects
+        // are async (fire after paint), so this synchronous window is
+        // invisible to the UI. _suppressGmPush=false allows the push through.
+        _suppressGmPush = false;
+        set({ isObserver: false });
+        get().pushStateToServer("game.botRoundAdvanced", {
+          quarter: get().currentQuarter,
+        });
+        set({ isObserver: true });
       },
 
       startFacilitatedSession: (seatCount) => {
