@@ -185,13 +185,18 @@
 
   /* Headings — Switzer/Inter sans throughout for a cleaner modern feel.
      Tight tracking on display headings + heavier weight does the work
-     a serif used to do for hierarchy. */
+     a serif used to do for hierarchy.
+     Note: color intentionally omitted so headings INHERIT from their
+     parent. The body sets `color: var(--ink)` so light surfaces get
+     dark headings automatically; sections that opt into a dark
+     backdrop with `text-white` (hero, FacilitatorBlock, the dark
+     bands on /about and /simulations) get white headings without
+     having to override every <h1>/<h2> individually. */
   h1,
   h2 {
     font-family: var(--font-display);
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: var(--ink);
   }
 
   h3,
@@ -201,7 +206,6 @@
     font-family: var(--font-sans);
     font-weight: 600;
     letter-spacing: -0.01em;
-    color: var(--ink);
   }
 
   /* Tabular figures everywhere by default for data legibility */

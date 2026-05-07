@@ -1,27 +1,37 @@
 /**
- * AI bot players for SkyForce.
+ * AI bot players for SkyForce — scripted playbooks per phase × difficulty.
  *
- * Three difficulty profiles drive every quarterly decision:
+ * KEY DESIGN PRINCIPLES
+ * ─────────────────────
+ * 1. Bots always act — actionProbability is 1.0. Volume is controlled by
+ *    ROUTE_QUOTA and ORDER_QTY tables keyed by (phase × difficulty).
  *
- *   EASY    — random / passive. Doesn't always order aircraft, opens
- *             a few routes haphazardly, picks safe scenario options,
- *             never bids aggressively. Mostly a punching bag.
+ * 2. Game phases (based on % of total rounds completed):
+ *      startup   0 – 25 %   conservative — build the fleet, open first hubs
+ *      growth   25 – 55 %   aggressive  — rapid network + fleet expansion
+ *      mid      55 – 80 %   optimise    — prune losers, counter rivals
+ *      endgame  80 – 100%   protect     — defend revenue, avoid risk
  *
- *   MEDIUM  — balanced strategist. Orders ~1-2 aircraft when cash >= 2x
- *             buy price, opens 1-2 routes per quarter, prices at market,
- *             bids floor+25% on slots, picks PRD's recommended scenario
- *             options where defined. Default difficulty for facilitated
- *             test runs.
+ * 3. Aircraft ordering is generous: bots need many planes to open many
+ *    routes. Without enough aircraft the route quota is meaningless.
+ *    orderAircraftCashRatio is intentionally low so bots spend money.
  *
- *   HARD    — aggressive optimizer. Orders aircraft whenever ROI looks
- *             positive, opens routes opportunistically, prices to
- *             undercut leader on price-sensitive routes / overprice
- *             on brand-sensitive, bids floor+60% on contested slots,
- *             picks revenue-maximizing scenario options.
+ * 4. Doctrine shapes route style — budget bots prioritise short+freq,
+ *    premium bots go long+low-freq, cargo bots prefer freighter ODs.
  *
- * Bots run during quarter close — runBotTurn(team, ctx) is called for
- * every non-player team that has been flagged with `botDifficulty`.
- * The function returns a list of state mutations the engine applies.
+ * 5. Fuel spike response — when fuelIndex > 140 bots scale back openings.
+ *    Hard bots scale less; easy bots scale the most.
+ *
+ * 6. Leaderboard awareness — trailing bots get more aggressive (higher
+ *    effective quota); leading bots become slightly more conservative.
+ *
+ * 7. Route pruning — pruneBotRoutes() returns IDs of routes that have
+ *    been losing money for 2+ consecutive quarters. Called before new
+ *    route openings so freed aircraft can immediately be re-deployed.
+ *
+ * 8. Multi-bot OD coordination — planBotRoutes accepts a `claimedODs`
+ *    set filled by earlier bots this same quarter, applying a heavy
+ *    penalty so bots spread across different markets.
  */
 
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
@@ -29,85 +39,106 @@ import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { canLeaseSpec, leaseTermsFor } from "@/lib/lease";
 import { distanceBetween, maxRouteDailyFrequency, baseFareForDistance } from "@/lib/engine";
 import { BASE_SLOT_PRICE_BY_TIER } from "@/lib/slots";
-import type { Team, FleetAircraft, PricingTier } from "@/types/game";
+import type { Team, FleetAircraft, PricingTier, Route } from "@/types/game";
 
 export type BotDifficulty = "easy" | "medium" | "hard";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+type GamePhase = "startup" | "growth" | "mid" | "endgame";
+
+function gamePhase(quarter: number, totalRounds: number): GamePhase {
+  const pct = quarter / Math.max(1, totalRounds);
+  if (pct < 0.25) return "startup";
+  if (pct < 0.55) return "growth";
+  if (pct < 0.80) return "mid";
+  return "endgame";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scripted quotas & ordering cadence
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * MAX routes the bot will open this quarter. Actual count is
+ * min(quota, idleAircraft). Quotas are intentionally high so the
+ * idle-aircraft count is the real throttle, not an artificial cap.
+ */
+const ROUTE_QUOTA: Record<BotDifficulty, Record<GamePhase, number>> = {
+  //         startup  growth  mid  endgame
+  easy:   {  s: 1,   g: 2,   m: 2,  e: 1  } as unknown as Record<GamePhase, number>,
+  medium: {  s: 2,   g: 4,   m: 3,  e: 2  } as unknown as Record<GamePhase, number>,
+  hard:   {  s: 3,   g: 6,   m: 5,  e: 3  } as unknown as Record<GamePhase, number>,
+};
+
+// Typed properly:
+const _RQ: Record<BotDifficulty, Record<GamePhase, number>> = {
+  easy:   { startup: 1, growth: 2, mid: 2, endgame: 1 },
+  medium: { startup: 2, growth: 4, mid: 3, endgame: 2 },
+  hard:   { startup: 3, growth: 6, mid: 5, endgame: 3 },
+};
+
+/**
+ * How many aircraft to ORDER this quarter (before cash check).
+ * Higher = more aircraft arrive next quarter = more idle planes = more routes.
+ */
+const ORDER_QTY: Record<BotDifficulty, Record<GamePhase, number>> = {
+  easy:   { startup: 1, growth: 1, mid: 1, endgame: 0 },
+  medium: { startup: 2, growth: 3, mid: 2, endgame: 1 },
+  hard:   { startup: 3, growth: 4, mid: 3, endgame: 2 },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-difficulty base profile
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface BotProfile {
-  // Cash thresholds for actions, as multiplier of aircraft price
+  /** Cash multiple required to buy (1.0 = buy when you have exactly the price). */
   orderAircraftCashRatio: number;
-  // Probability the bot takes any action this quarter at all
-  actionProbability: number;
-  // How aggressively to expand network: max routes opened per quarter
-  routesOpenedPerQuarter: number;
-  // Slot bid multiplier above floor
   slotBidMultiplier: number;
-  // Pricing tendency: -1 budget, 0 standard, +1 premium
+  /** −1 budget, 0 standard, +1 premium */
   pricingBias: number;
-  // How willing to take on debt to expand (0 = avoid, 1 = aggressive)
   debtTolerance: number;
-  // Scenario picks for known scenarios (option ID by scenario ID)
   scenarioPicks: Record<string, string>;
 }
 
 const PROFILES: Record<BotDifficulty, BotProfile> = {
   easy: {
-    orderAircraftCashRatio: 3,
-    actionProbability: 0.75,
-    routesOpenedPerQuarter: 1,
+    orderAircraftCashRatio: 2.0,   // needs 2× price in cash (cautious)
     slotBidMultiplier: 1.0,
     pricingBias: 0,
     debtTolerance: 0,
     scenarioPicks: {
-      // Easy bots tend to pick safe / cautious options
-      S1: "A", // Self-report (safest)
-      S2: "A", // Reroute (safest)
-      S3: "C", // Decline flash deal
-      S4: "B", // 6-month partial hedge
-      S5: "B", // Take partial gov deal
-      S6: "B", // Decline refinancing
-      S7: "D", // Codeshare (passive)
-      S8: "B", // Negotiate 3
-      S9: "C", // Split budget
-      S10: "C", // Small bid
-      S11: "B", // National team only
-      S12: "A", // Terminate ambassador
-      S13: "B", // Conservative AI rollout
-      S14: "B", // Counter cap
-      S15: "B", // Temporary measures
-      S16: "A", // Lock in defensive
-      S17: "B", // Comply
-      S18: "A", // Pay premium (safest, keep brand)
+      S1: "A", S2: "A", S3: "C", S4: "B", S5: "B",
+      S6: "B", S7: "D", S8: "B", S9: "C", S10: "C",
+      S11: "B", S12: "A", S13: "B", S14: "B", S15: "B",
+      S16: "A", S17: "B", S18: "A",
     },
   },
   medium: {
-    orderAircraftCashRatio: 2,
-    actionProbability: 0.85,
-    routesOpenedPerQuarter: 2,
+    orderAircraftCashRatio: 1.4,
     slotBidMultiplier: 1.25,
     pricingBias: 0,
     debtTolerance: 0.4,
     scenarioPicks: {
-      // PRD-recommended balanced picks
-      S1: "A",  S2: "A",  S3: "D",  S4: "D",
-      S5: "A",  S6: "A",  S7: "B",  S8: "A",
-      S9: "A",  S10: "B", S11: "A", S12: "B",
+      S1: "A", S2: "A", S3: "D", S4: "D",
+      S5: "A", S6: "A", S7: "B", S8: "A",
+      S9: "A", S10: "B", S11: "A", S12: "B",
       S13: "C", S14: "C", S15: "B", S16: "B",
       S17: "C", S18: "A",
     },
   },
   hard: {
-    orderAircraftCashRatio: 1.2,
-    actionProbability: 0.95,
-    routesOpenedPerQuarter: 3,
+    orderAircraftCashRatio: 1.0,   // buy immediately once you can afford it
     slotBidMultiplier: 1.6,
     pricingBias: 1,
     debtTolerance: 0.7,
     scenarioPicks: {
-      // Aggressive revenue/share-maximizing picks
-      S1: "B",  S2: "C",  S3: "A",  S4: "A",
-      S5: "A",  S6: "A",  S7: "A",  S8: "A",
-      S9: "A",  S10: "A", S11: "A", S12: "C",
+      S1: "B", S2: "C", S3: "A", S4: "A",
+      S5: "A", S6: "A", S7: "A", S8: "A",
+      S9: "A", S10: "A", S11: "A", S12: "C",
       S13: "A", S14: "A", S15: "A", S16: "B",
       S17: "C", S18: "D",
     },
@@ -115,31 +146,67 @@ const PROFILES: Record<BotDifficulty, BotProfile> = {
 };
 
 /** Decide what option a bot picks for a given scenario. */
-export function botPickScenarioOption(
-  difficulty: BotDifficulty,
-  scenarioId: string,
-): string {
+export function botPickScenarioOption(difficulty: BotDifficulty, scenarioId: string): string {
   return PROFILES[difficulty].scenarioPicks[scenarioId] ?? "A";
 }
 
-/** Plan a bot's route-opening actions for this quarter. Returns up to N
- *  candidate routes the bot would like to open (origin, dest, plane,
- *  weekly freq, fares) — the caller validates + executes.
+// ─────────────────────────────────────────────────────────────────────────────
+// Route pruning
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns IDs of routes the bot should close this quarter.
  *
- *  Profitability + competition awareness (Wave 4):
- *    - Saturated ODs penalised: when player + other rivals already fly
- *      the same OD, score drops sharply (avoid bidding into a glut).
- *    - Yield sanity check: estimated daily fuel cost must be < estimated
- *      daily revenue at base fare × 0.6 occupancy. Anything below this
- *      threshold is dropped before scoring (bot won't open a route that
- *      bleeds cash on day one).
- *    - Range/comfort fit kept (wides like 8000km+, narrows like ~4000km).
- *    - Tier preference kept (T1 dests preferred). */
+ * Pruning rules (difficulty-scaled):
+ *  - Hard:   close after 2 consecutive losing quarters
+ *  - Medium: close after 3 consecutive losing quarters
+ *  - Easy:   never prunes (stays stuck with bad routes — intentional weakness)
+ *
+ * A "losing quarter" is tracked by `consecutiveLosingQuarters` on the Route.
+ * We also close routes where the aircraft has sat on a route with 0 revenue
+ * for 3+ quarters (bot opened and forgot about it — shouldn't happen but
+ * defensive cleanup).
+ */
+export function pruneBotRoutes(team: Team, difficulty: BotDifficulty): string[] {
+  if (difficulty === "easy") return []; // easy bots don't prune
+
+  const threshold = difficulty === "hard" ? 2 : 3;
+  const toClose: string[] = [];
+
+  for (const r of team.routes) {
+    if (r.status !== "active") continue;
+    if ((r.consecutiveLosingQuarters ?? 0) >= threshold) {
+      toClose.push(r.id);
+    }
+  }
+
+  return toClose;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Route planning
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Plan route openings for this quarter.
+ *
+ * @param claimedODs  OD keys already picked by earlier bots this same quarter
+ *                    (odSorted format: "AAA|BBB"). Passed from the sequential
+ *                    reduce in closeQuarter so bots spread across markets.
+ * @param leaderboardRank  1 = leading; higher = trailing. Trailing bots get
+ *                         a +30 % quota bonus to simulate desperation.
+ * @param fuelIndex   Current fuel index (100 = baseline). Above 140 bots
+ *                    scale back openings.
+ */
 export function planBotRoutes(
   team: Team,
   difficulty: BotDifficulty,
   currentQuarter: number,
   rivals: Team[] = [],
+  totalRounds = 20,
+  claimedODs: Set<string> = new Set(),
+  leaderboardRank = 1,
+  fuelIndex = 100,
 ): Array<{
   origin: string;
   dest: string;
@@ -148,15 +215,32 @@ export function planBotRoutes(
   pricingTier: PricingTier;
 }> {
   const profile = PROFILES[difficulty];
-  if (Math.random() > profile.actionProbability) return [];
+  const phase = gamePhase(currentQuarter, totalRounds);
 
-  // Find idle aircraft (active, no route assignment)
-  const idle = team.fleet.filter(
-    (f) => f.status === "active" && !f.routeId,
-  );
+  // Base quota from the scripted table
+  let quota = _RQ[difficulty][phase];
+
+  // Leaderboard awareness: trailing bots push harder
+  const totalBots = rivals.filter(r => r.botDifficulty).length + 1;
+  if (leaderboardRank > Math.ceil(totalBots / 2)) {
+    quota = Math.ceil(quota * 1.3); // +30% when in the bottom half
+  } else if (leaderboardRank === 1 && phase !== "startup") {
+    quota = Math.max(1, quota - 1); // leader plays slightly safer
+  }
+
+  // Fuel spike: high fuel = fewer new routes (thinner margins)
+  if (fuelIndex > 140) {
+    const fuelPenalty = difficulty === "hard" ? 0.8 : difficulty === "medium" ? 0.6 : 0.4;
+    quota = Math.max(0, Math.round(quota * fuelPenalty));
+  }
+
+  if (quota === 0) return [];
+
+  // Idle aircraft available for new routes
+  const idle = team.fleet.filter(f => f.status === "active" && !f.routeId);
   if (idle.length === 0) return [];
 
-  // Existing route endpoints to avoid duplicates
+  // Existing route OD set (avoid duplicates)
   const existing = new Set<string>();
   for (const r of team.routes) {
     if (r.status !== "closed") {
@@ -165,10 +249,9 @@ export function planBotRoutes(
     }
   }
 
-  // Build a map of OD pair → competitor count from rivals' active routes.
-  // Used to penalise routes that are already crowded so the bot picks
-  // emptier markets. Direction-agnostic via odKey-style sorted pair.
   const odSorted = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+  // Competitor count per OD (for saturation penalty)
   const odCompetitorCount: Record<string, number> = {};
   for (const rv of rivals) {
     if (rv.id === team.id) continue;
@@ -179,10 +262,31 @@ export function planBotRoutes(
     }
   }
 
-  // Candidate destinations: hub + secondary hubs as origins, every other
-  // city as dest. Score each by demand × amplifier × distance fit, then
-  // discount by competitor saturation and apply yield filter.
+  // Hard bot: human OD bonus — compete directly on profitable human routes
+  const humanOdRevenue: Record<string, number> = {};
+  if (difficulty === "hard") {
+    for (const rv of rivals) {
+      if (rv.controlledBy !== "human") continue;
+      for (const r of rv.routes) {
+        if (r.status !== "active") continue;
+        const k = odSorted(r.originCode, r.destCode);
+        humanOdRevenue[k] = (humanOdRevenue[k] ?? 0) + (r.quarterlyRevenue ?? r.dailyFrequency * 7);
+      }
+    }
+  }
+
+  // Easy bot mistake mode: deterministic per (team+quarter) so replays
+  // and GM advances produce identical decisions rather than re-rolling.
+  const mistakeSeed = team.id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const easyMistakeMode = difficulty === "easy" && ((mistakeSeed + currentQuarter) % 10) < 3;
+
+  // Doctrine pricing and distance preferences
+  const docPremium = team.doctrine === "premium-service";
+  const docBudget  = team.doctrine === "budget-expansion";
+  const docCargo   = team.doctrine === "cargo-dominance";
+
   const hubs = [team.hubCode, ...(team.secondaryHubCodes ?? [])];
+
   const candidates: Array<{
     origin: string;
     dest: string;
@@ -193,74 +297,96 @@ export function planBotRoutes(
   for (const plane of idle) {
     const spec = AIRCRAFT_BY_ID[plane.specId];
     if (!spec) continue;
+    const isCargo = spec.family === "cargo";
+
+    // Doctrine filter: cargo-doctrine bots prefer cargo aircraft on cargo routes
+    if (docCargo && !isCargo && idle.some(f => AIRCRAFT_BY_ID[f.specId]?.family === "cargo" && !f.routeId)) {
+      continue; // skip passenger planes if a cargo plane is also idle
+    }
+
     for (const origin of hubs) {
       const originCity = CITIES_BY_CODE[origin];
       if (!originCity) continue;
+
       for (const dest of CITIES) {
         if (dest.code === origin) continue;
         const dist = distanceBetween(origin, dest.code);
         if (dist > spec.rangeKm) continue;
         if (existing.has(`${origin}-${dest.code}`)) continue;
 
-        // Yield sanity — drop routes that would bleed cash on day one.
-        // Approx daily revenue at 60% occupancy × base fare ÷ 1.4 (the
-        // fare-fee discount factor most class mixes apply); approx daily
-        // fuel cost at $0.85/L × spec.fuelLPerKm × dist × 1 flight/day.
-        // If revenue doesn't beat fuel by ≥ 1.4× we skip. Hard bots
-        // accept thinner margins (1.15×); easy bots want comfort (1.6×).
-        const isCargo = spec.family === "cargo";
+        // Yield sanity filter (bots won't open routes that bleed cash on day 1)
         if (!isCargo) {
           const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
           const dailyRev = seats * 0.6 * (baseFareForDistance(dist) / 1.4);
           const dailyFuel = (spec.fuelBurnPerKm ?? 4) * dist * 0.85;
           const margin =
-            difficulty === "hard" ? 1.15 :
-            difficulty === "easy" ? 1.6 : 1.35;
+            difficulty === "hard" ? 1.1 :
+            difficulty === "easy" ? 1.5 : 1.25;
           if (dailyRev < dailyFuel * margin) continue;
         }
 
-        // Score: bigger total demand on shorter distance wins for narrow,
-        // longer distance for wide-body. Tier-1 dests preferred.
         const baseDemand = (originCity.tourism + originCity.business)
           + (dest.tourism + dest.business);
         const tierBonus = dest.tier === 1 ? 1.5 : dest.tier === 2 ? 1.2 : 1.0;
-        const isWide =
-          spec.seats.first + spec.seats.business + spec.seats.economy > 250;
-        const distFit = isWide
-          ? Math.min(1, dist / 8000) // wides like long
-          : Math.max(0.3, 1 - Math.abs(dist - 4000) / 6000); // narrows mid-range
 
-        // Saturation penalty: if N rivals already fly this OD, demand
-        // pool is shared. 0 rivals → 1.0×, 1 → 0.7×, 2 → 0.5×, 3+ → 0.35×.
-        // Hard bots are more willing to muscle in (less penalty).
+        // Doctrine distance fit:
+        //   premium → long-haul wides or medium narrowbody preferred
+        //   budget  → short-haul preferred
+        //   cargo   → medium range
+        const isWide = spec.seats.first + spec.seats.business + spec.seats.economy > 250;
+        let distFit: number;
+        if (docPremium) {
+          distFit = isWide
+            ? Math.min(1, dist / 7000)               // wides love long
+            : Math.max(0.4, 1 - Math.abs(dist - 5000) / 6000);
+        } else if (docBudget) {
+          distFit = Math.max(0.3, 1 - dist / 10000); // short preferred
+        } else {
+          distFit = isWide
+            ? Math.min(1, dist / 8000)
+            : Math.max(0.3, 1 - Math.abs(dist - 4000) / 6000);
+        }
+
+        // Saturation penalty
         const compCount = odCompetitorCount[odSorted(origin, dest.code)] ?? 0;
-        const baseSat = compCount === 0 ? 1.0
-          : compCount === 1 ? 0.7
-          : compCount === 2 ? 0.5
-          : 0.35;
-        const satPenalty = difficulty === "hard"
-          ? 1 - (1 - baseSat) * 0.5  // hard bots discount the saturation hit
-          : baseSat;
+        const baseSat = compCount === 0 ? 1.0 : compCount === 1 ? 0.7 : compCount === 2 ? 0.5 : 0.35;
+        const satPenalty = difficulty === "hard" ? 1 - (1 - baseSat) * 0.5 : baseSat;
 
-        const score = baseDemand * tierBonus * distFit * satPenalty;
+        // Multi-bot OD deconfliction: heavy penalty if another bot already
+        // claimed this OD this quarter (not a hard block — they can still
+        // pick it but it scores much lower).
+        const alreadyClaimed = claimedODs.has(odSorted(origin, dest.code)) ? 0.2 : 1.0;
+
+        // Hard bot counter-compete bonus
+        const odKey = odSorted(origin, dest.code);
+        const counterBonus =
+          difficulty === "hard" && humanOdRevenue[odKey]
+            ? Math.min(2.0, 1 + humanOdRevenue[odKey] / 5_000_000)
+            : 1.0;
+
+        // Easy mistake: invert demand scoring 30% of the time
+        const demandScore = easyMistakeMode
+          ? 1 / Math.max(1, baseDemand)
+          : baseDemand * tierBonus;
+
+        const score = demandScore * distFit * satPenalty * alreadyClaimed * counterBonus;
         candidates.push({ origin, dest: dest.code, aircraft: plane, score });
       }
     }
   }
 
-  // Sort by score, dedupe by aircraft (one route per plane), take top N
+  // Sort by score desc; dedupe by aircraft id; take up to quota
   candidates.sort((a, b) => b.score - a.score);
-  const used = new Set<string>();
+  const usedPlanes = new Set<string>();
   const picks: typeof candidates = [];
   for (const c of candidates) {
-    if (used.has(c.aircraft.id)) continue;
+    if (usedPlanes.has(c.aircraft.id)) continue;
     picks.push(c);
-    used.add(c.aircraft.id);
-    if (picks.length >= profile.routesOpenedPerQuarter) break;
+    usedPlanes.add(c.aircraft.id);
+    if (picks.length >= quota) break;
   }
 
-  // Convert each pick into an opening proposal
-  return picks.map((p) => {
+  return picks.map(p => {
     const dist = distanceBetween(p.origin, p.dest);
     const maxWeeklyFreq = Math.max(
       1,
@@ -271,177 +397,282 @@ export function planBotRoutes(
         doctrine: team.doctrine,
       }]) * 7),
     );
-    // Bot route schedules should use the same weekly unit players see.
-    // Saturating every aircraft at maxDaily * 7 made the whole world look
-    // like 7/wk, 14/wk, 21/wk only. Pick a high-but-not-always-max integer
-    // weekly schedule so short routes can land on values like 8, 15, 22/wk.
-    const utilization = 0.65 + Math.random() * 0.35;
-    const weeklyFreq = Math.max(1, Math.round(maxWeeklyFreq * utilization));
-    const tier: PricingTier =
-      profile.pricingBias > 0 ? "premium" :
-      profile.pricingBias < 0 ? "budget" : "standard";
-    return {
-      origin: p.origin,
-      dest: p.dest,
-      aircraftId: p.aircraft.id,
-      weeklyFreq,
-      pricingTier: tier,
-    };
+
+    // Utilisation: hard bots maximise frequency; easy underfly
+    const util = difficulty === "hard" ? 0.9 : difficulty === "easy" ? 0.5 : 0.7;
+    const weeklyFreq = Math.max(1, Math.round(maxWeeklyFreq * util));
+
+    // Pricing by doctrine + difficulty
+    let tier: PricingTier = "standard";
+    if (difficulty === "hard") {
+      const odKey = odSorted(p.origin, p.dest);
+      // Undercut humans on their profitable routes; premium everywhere else
+      tier = humanOdRevenue[odKey] ? "budget" : "premium";
+    } else if (docPremium) {
+      tier = "premium";
+    } else if (docBudget) {
+      tier = "budget";
+    } else {
+      tier = profile.pricingBias > 0 ? "premium" : profile.pricingBias < 0 ? "budget" : "standard";
+    }
+
+    return { origin: p.origin, dest: p.dest, aircraftId: p.aircraft.id, weeklyFreq, pricingTier: tier };
   });
 }
 
-/** Plan an aircraft order for this quarter. Returns null if the bot
- *  doesn't want to order anything. */
+// ─────────────────────────────────────────────────────────────────────────────
+// Aircraft ordering
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Plan an aircraft purchase/lease for this quarter.
+ * Returns null if the bot can't afford anything or the quota is 0.
+ */
 export function planBotAircraftOrder(
   team: Team,
   difficulty: BotDifficulty,
   currentQuarter: number,
+  totalRounds = 20,
 ): { specId: string; quantity: number; acquisitionType: "buy" | "lease" } | null {
   const profile = PROFILES[difficulty];
-  // Earlier this throttle was actionProbability * 0.7, which made
-  // even Hard bots skip ~33% of order chances on top of the action
-  // probability roll — leading to "bots aren't doing anything"
-  // complaints. Now just gate on actionProbability directly: Hard
-  // bots order ~95% of quarters when they have cash, Medium ~85%,
-  // Easy ~75%.
-  if (Math.random() > profile.actionProbability) return null;
+  const phase = gamePhase(currentQuarter, totalRounds);
+  const targetQty = ORDER_QTY[difficulty][phase];
+  if (targetQty === 0) return null;
 
-  // Available specs for this quarter
-  const availableSpecs = AIRCRAFT.filter((a) => a.unlockQuarter <= currentQuarter);
+  const availableSpecs = AIRCRAFT.filter(a => a.unlockQuarter <= currentQuarter);
   if (availableSpecs.length === 0) return null;
 
-  // Pick a spec the bot can afford. Strategy:
-  //  - Empty fleet: start with a narrow-body passenger (steady cashflow).
-  //  - 4+ pax narrows and no wides: add a wide-body for long-haul.
-  //  - 6+ planes total and zero cargo: add a cargo aircraft (yield diversification).
-  //  - HARD bots prefer modern airframes (highest unlockQuarter).
-  //  - Cash-constrained bots LEASE instead of buy.
-  const fleetCount = team.fleet.filter((f) => f.status !== "retired").length;
-  const wideCount = team.fleet.filter((f) => {
+  const fleetCount = team.fleet.filter(f => f.status !== "retired").length;
+  const wideCount  = team.fleet.filter(f => {
     const s = AIRCRAFT_BY_ID[f.specId];
-    return f.status !== "retired" && s && s.family === "passenger" &&
-      (s.seats.first + s.seats.business + s.seats.economy > 250);
+    return f.status !== "retired" && s?.family === "passenger" &&
+      s.seats.first + s.seats.business + s.seats.economy > 250;
   }).length;
-  const cargoCount = team.fleet.filter((f) => {
+  const cargoCount = team.fleet.filter(f => {
     const s = AIRCRAFT_BY_ID[f.specId];
-    return f.status !== "retired" && s && s.family === "cargo";
+    return f.status !== "retired" && s?.family === "cargo";
   }).length;
-  const wantsWide = fleetCount >= 4 && wideCount < fleetCount * 0.4;
-  // Cargo diversification: medium+ from fleet 6, hard from fleet 4
-  const cargoThreshold = difficulty === "hard" ? 4 : 6;
+
+  const wantsWide  = fleetCount >= 4 && wideCount < fleetCount * 0.35;
+  const cargoThreshold = difficulty === "hard" ? 3 : 5;
   const wantsCargo = fleetCount >= cargoThreshold && cargoCount === 0;
 
-  // Phase 4.4 — split the cash filter into two gates so a bot with
-  // lease/debt headroom but not buy-price cash isn't filtered out
-  // before the lease/buy decision. Previously the candidate list
-  // required `cashUsd >= buyPrice × ratio`, which rejected
-  // lease-eligible aircraft up front; bots stalled with $50M cash
-  // and access to a $150M aircraft via $22.5M lease deposit.
-  const candidates = availableSpecs.filter((spec) => {
+  const candidates = availableSpecs.filter(spec => {
     if (wantsCargo && spec.family !== "cargo") return false;
     if (!wantsCargo && spec.family !== "passenger") return false;
     if (spec.family === "passenger") {
-      const isWide =
-        spec.seats.first + spec.seats.business + spec.seats.economy > 250;
+      const isWide = spec.seats.first + spec.seats.business + spec.seats.economy > 250;
       if (wantsWide !== isWide && fleetCount > 0) return false;
     }
-    const canBuy =
-      team.cashUsd >= spec.buyPriceUsd * profile.orderAircraftCashRatio;
-    const leaseEligible = canLeaseSpec(spec, AIRCRAFT, currentQuarter);
-    const canLease =
-      leaseEligible && team.cashUsd >= leaseTermsFor(spec).depositUsd;
+    const canBuy   = team.cashUsd >= spec.buyPriceUsd * profile.orderAircraftCashRatio;
+    const canLease = canLeaseSpec(spec, AIRCRAFT, currentQuarter)
+      && team.cashUsd >= leaseTermsFor(spec).depositUsd;
     return canBuy || canLease;
   });
   if (candidates.length === 0) return null;
 
-  // Diversification scoring — bots used to "pick the cheapest" or "pick
-  // the most modern" which led to monoculture fleets (10× A320, 5× A380).
-  // Now we score each candidate by:
-  //   - base score (price for EASY/MEDIUM, modernity for HARD)
-  //   - diversification bonus (under-represented sub-family)
-  //   - regional preference (encourage the new turboprops + regional jets
-  //     once the fleet is mature enough to support thin spokes)
-  const classify = (s: typeof availableSpecs[number]): string => {
+  // Diversity scoring (avoid monoculture fleets)
+  const classify = (s: typeof availableSpecs[number]) => {
     if (s.family === "cargo") return "cargo";
     const seats = s.seats.first + s.seats.business + s.seats.economy;
-    if (seats < 100) return "regional";
-    if (seats > 250) return "wide";
-    return "narrow";
+    return seats < 100 ? "regional" : seats > 250 ? "wide" : "narrow";
   };
-  const fleetBuckets: Record<string, number> = {};
+  const buckets: Record<string, number> = {};
   for (const f of team.fleet) {
     if (f.status === "retired") continue;
     const s = AIRCRAFT_BY_ID[f.specId];
     if (!s) continue;
-    const b = classify(s);
-    fleetBuckets[b] = (fleetBuckets[b] ?? 0) + 1;
+    buckets[classify(s)] = (buckets[classify(s)] ?? 0) + 1;
   }
-  const fleetTotal = Math.max(1, Object.values(fleetBuckets).reduce((s, n) => s + n, 0));
-  // Mature fleets without any regional jet should consider one for thin
-  // routes — handled as a soft bias rather than a hard filter so the
-  // primary cargo / wide / narrow logic still wins where appropriate.
-  const wantsRegional =
-    fleetCount >= 8 &&
-    !wantsCargo &&
-    !wantsWide &&
-    (fleetBuckets["regional"] ?? 0) === 0;
-  const candidatesScored = candidates.map((c) => {
-    const bucket = classify(c);
-    const share = (fleetBuckets[bucket] ?? 0) / fleetTotal;
-    // Under-represented buckets earn up to +0.5; saturated ones earn 0.
-    const diversityBonus = (1 - share) * 0.5;
-    const regionalBonus = wantsRegional && bucket === "regional" ? 0.4 : 0;
-    const base =
-      difficulty === "hard"
-        ? c.unlockQuarter / 40                    // 0..1
-        : -c.buyPriceUsd / 200_000_000;            // -1..0 (cheaper = higher)
+  const total = Math.max(1, Object.values(buckets).reduce((a, b) => a + b, 0));
+  const wantsRegional = fleetCount >= 8 && !wantsCargo && !wantsWide && !buckets["regional"];
+
+  const scored = candidates.map(c => {
+    const b = classify(c);
+    const diversityBonus = (1 - (buckets[b] ?? 0) / total) * 0.5;
+    const regionalBonus  = wantsRegional && b === "regional" ? 0.4 : 0;
+    const base = difficulty === "hard"
+      ? c.unlockQuarter / 40
+      : -c.buyPriceUsd / 200_000_000;
     return { spec: c, score: base + diversityBonus + regionalBonus };
   });
-  candidatesScored.sort((a, b) => b.score - a.score);
-  const pick = candidatesScored[0].spec;
+  scored.sort((a, b) => b.score - a.score);
+  const pick = scored[0].spec;
 
-  // Quantity: 1 for easy, 1-2 for medium, 1-3 for hard. Cargo orders
-  // are usually solo (one big freighter at a time).
-  const maxQ = wantsCargo
-    ? 1
-    : difficulty === "hard" ? 3 : difficulty === "medium" ? 2 : 1;
-  const affordableQty = Math.min(
-    maxQ,
-    Math.floor(team.cashUsd / (pick.buyPriceUsd * profile.orderAircraftCashRatio)),
-  );
-
-  // Lease vs buy: HARD bots lease aggressively early (better cash position
-  // for slot bidding); EASY always buys; MEDIUM mixes by cash situation.
+  // How many can we actually afford?
   const cashRatio = team.cashUsd / Math.max(1, pick.buyPriceUsd);
   const acquisitionType: "buy" | "lease" =
-    difficulty === "hard" && cashRatio < 4 ? "lease" :
+    difficulty === "hard"   && cashRatio < 3 ? "lease" :
     difficulty === "medium" && cashRatio < 2 ? "lease" : "buy";
 
-  return {
-    specId: pick.id,
-    quantity: Math.max(1, affordableQty),
-    acquisitionType,
-  };
+  const costPerPlane = acquisitionType === "buy"
+    ? pick.buyPriceUsd * profile.orderAircraftCashRatio
+    : leaseTermsFor(pick).depositUsd;
+
+  const maxAffordable = Math.floor(team.cashUsd / Math.max(1, costPerPlane));
+  const quantity = Math.max(1, Math.min(targetQty, maxAffordable));
+
+  return { specId: pick.id, quantity, acquisitionType };
 }
 
-/** Bid amount per slot for a bot. Returns price ≥ tier base. */
-export function botSlotBidPrice(
-  difficulty: BotDifficulty,
-  airportCode: string,
-): number {
+// ─────────────────────────────────────────────────────────────────────────────
+// Slot bidding
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Bid price per slot. Hard bots also tactically bid at rivals' hubs. */
+export function botSlotBidPrice(difficulty: BotDifficulty, airportCode: string): number {
   const profile = PROFILES[difficulty];
   const city = CITIES_BY_CODE[airportCode];
   const tier = (city?.tier ?? 1) as 1 | 2 | 3 | 4;
-  // Pull from the canonical table in slots.ts so bot bids stay in
-  // step with the player's validation floor (no more "$120K T1"
-  // drift after the rebalance).
-  const basePrice = BASE_SLOT_PRICE_BY_TIER[tier];
-  return Math.round(basePrice * profile.slotBidMultiplier);
+  return Math.round(BASE_SLOT_PRICE_BY_TIER[tier] * profile.slotBidMultiplier);
 }
 
-/** Difficulty label for UI. */
+/**
+ * Hard bots: return airport codes at human/rival hubs where the bot
+ * should place blocking bids (more slots than needed, to limit rivals).
+ * Called alongside normal slot bidding so the hard bot competes at
+ * opponent hubs even if it has no route there yet.
+ */
+export function hardBotBlockingBidCodes(
+  team: Team,
+  rivals: Team[],
+  currentSlotsByAirport: Record<string, number>,
+): string[] {
+  if (!team.botDifficulty || team.botDifficulty !== "hard") return [];
+  const codes: string[] = [];
+  for (const rv of rivals) {
+    if (rv.id === team.id) continue;
+    if (rv.controlledBy !== "human" && rv.botDifficulty !== "medium") continue;
+    // Bid at any T1/T2 rival hub we don't already dominate
+    const hubCode = rv.hubCode;
+    const rvCity = CITIES_BY_CODE[hubCode];
+    if (!rvCity || rvCity.tier > 2) continue;
+    const ourSlots = currentSlotsByAirport[hubCode] ?? 0;
+    const theirSlots = (rv.airportLeases?.[hubCode]?.slots ?? 0);
+    // Only bid if they have more slots at their hub than we do
+    if (theirSlots > ourSlots) codes.push(hubCode);
+  }
+  return codes;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fuel spike response
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns route IDs the bot should SUSPEND (not close) during a fuel spike.
+ * Only medium + hard bots respond to fuel. Easy bots keep flying inefficiently.
+ * Routes get suspended not closed so they resume when fuel normalises.
+ */
+export function fuelSpikeRoutesToSuspend(
+  team: Team,
+  difficulty: BotDifficulty,
+  fuelIndex: number,
+): string[] {
+  if (difficulty === "easy") return [];
+  if (fuelIndex <= 140) return [];
+
+  const threshold = difficulty === "hard" ? 160 : 145;
+  if (fuelIndex <= threshold) return [];
+
+  // Suspend long-haul routes first (most fuel-intensive)
+  return team.routes
+    .filter(r => r.status === "active" && r.distanceKm > 6000)
+    .sort((a, b) => b.distanceKm - a.distanceKm)
+    .slice(0, difficulty === "hard" ? 1 : 2)
+    .map(r => r.id);
+}
+
+/**
+ * Returns route IDs the bot should RESUME when fuel has normalised.
+ */
+export function fuelNormalRoutesToResume(
+  team: Team,
+  difficulty: BotDifficulty,
+  fuelIndex: number,
+): string[] {
+  if (difficulty === "easy") return [];
+  if (fuelIndex > 130) return []; // still elevated — don't resume yet
+  return team.routes.filter(r => r.status === "suspended").map(r => r.id);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Route repricing
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIER_ORDER: PricingTier[] = ["budget", "standard", "premium", "ultra"];
+
+/**
+ * Returns repricing actions for routes that have enough occupancy data.
+ *
+ * Rules (applied after ≥2 consecutive active quarters):
+ *  - avgOccupancy < 0.50  → drop one tier (all difficulties; easy bots bleed
+ *                           cash on empty seats and eventually react)
+ *  - avgOccupancy > 0.85  → raise one tier (medium + hard only; easy bots
+ *                           leave money on the table — intentional weakness)
+ *  - Easy bots only reprice once every other quarter (sluggish reaction).
+ */
+export function repriceBotRoutes(
+  team: Team,
+  difficulty: BotDifficulty,
+  currentQuarter: number,
+): Array<{ routeId: string; newTier: PricingTier }> {
+  const results: Array<{ routeId: string; newTier: PricingTier }> = [];
+
+  for (const r of team.routes) {
+    if (r.status !== "active") continue;
+    if ((r.consecutiveQuartersActive ?? 0) < 2) continue;
+    // Easy bots are sluggish — only check on even quarters
+    if (difficulty === "easy" && currentQuarter % 2 !== 0) continue;
+
+    const occ = r.avgOccupancy ?? 0;
+    const curIdx = TIER_ORDER.indexOf(r.pricingTier);
+
+    if (occ < 0.50 && curIdx > 0) {
+      results.push({ routeId: r.id, newTier: TIER_ORDER[curIdx - 1] });
+    } else if (occ > 0.85 && difficulty !== "easy" && curIdx < TIER_ORDER.length - 1) {
+      results.push({ routeId: r.id, newTier: TIER_ORDER[curIdx + 1] });
+    }
+  }
+
+  return results;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fleet retirement
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns IDs of aircraft the bot should retire this quarter.
+ * Includes both age-expired frames (retirementQuarter reached) and
+ * expired leases (leaseTermEndsAtQuarter passed). Routes assigned to
+ * these aircraft must be closed before retirement so the aircraft
+ * slot is freed correctly.
+ */
+export function retireAgedAircraft(
+  team: Team,
+  currentQuarter: number,
+): string[] {
+  return team.fleet
+    .filter((f) => {
+      if (f.status === "retired") return false;
+      if (f.retirementQuarter !== undefined && currentQuarter >= f.retirementQuarter) return true;
+      if (
+        f.acquisitionType === "lease" &&
+        typeof f.leaseTermEndsAtQuarter === "number" &&
+        currentQuarter > f.leaseTermEndsAtQuarter
+      ) return true;
+      return false;
+    })
+    .map((f) => f.id);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Labels
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const BOT_DIFFICULTY_LABEL: Record<BotDifficulty, { label: string; description: string }> = {
-  easy:   { label: "Easy",   description: "Cautious. Slow expansion. Light slot bids. Ignores edge opportunities." },
-  medium: { label: "Medium", description: "Balanced. Opens 1–2 routes/quarter. Bids 25% above floor. PRD-aligned scenario picks." },
-  hard:   { label: "Hard",   description: "Aggressive. Maxes out fleet. Bids 60% above floor. Revenue-maximizing scenario picks." },
+  easy:   { label: "Easy",   description: "Cautious. Slow expansion. Stays with bad routes. Light slot bids." },
+  medium: { label: "Medium", description: "Balanced. 2–4 routes/quarter. Pauses on fuel spikes. PRD scenario picks." },
+  hard:   { label: "Hard",   description: "Aggressive. Max fleet. Undercuts humans on shared routes. Blocks rival hubs." },
 };

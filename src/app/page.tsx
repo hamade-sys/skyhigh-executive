@@ -155,7 +155,13 @@ function Hero() {
             </span>
           </div>
 
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.04] mb-6">
+          {/* Phase 7.1 brand realignment moved global h1 color to
+              `var(--ink)` (#1a1a1a) so headings on light surfaces
+              read crisply. The hero sits on a dark backdrop, so we
+              override with explicit text-white here — without it,
+              the headline becomes invisible against bg-slate-950.
+              The accent line keeps its cyan. */}
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.04] mb-6 text-white">
             Lead an industry.
             <br />
             <span className="text-cyan-300">Not a spreadsheet.</span>
@@ -842,7 +848,7 @@ function FacilitatorBlock() {
             <p className="text-xs font-semibold text-violet-300 uppercase tracking-widest mb-3">
               For Game Masters
             </p>
-            <h2 className="text-3xl md:text-4xl font-display font-bold tracking-tight mb-4 leading-tight">
+            <h2 className="text-3xl md:text-4xl font-display font-bold tracking-tight mb-4 leading-tight text-white">
               Run an executive workshop.
             </h2>
             <p className="text-base text-slate-400 max-w-2xl mb-8 leading-relaxed">

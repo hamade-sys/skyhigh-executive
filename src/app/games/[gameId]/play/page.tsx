@@ -58,10 +58,16 @@ export default function GamePlayPage({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [hydrated, setHydrated] = useState(false);
-  // Ref so the Realtime callback can call the latest hydrateFromServerState
-  // without being stale-closed over an old reference.
+  // Refs so Realtime callbacks always see the latest values without
+  // being stale-closed — avoids tearing when sessionId stabilises
+  // asynchronously after the subscription is first set up.
   const hydrateRef = useRef(hydrateFromServerState);
   useEffect(() => { hydrateRef.current = hydrateFromServerState; }, [hydrateFromServerState]);
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
+  // Track the last version we applied so duplicate Realtime fires (which
+  // Supabase can occasionally emit) don't trigger a redundant re-hydrate.
+  const lastVersionRef = useRef<number>(-1);
 
   // Step 1 — fetch the server snapshot.
   useEffect(() => {
@@ -110,6 +116,11 @@ export default function GamePlayPage({
     const result = hydrateFromServerState({
       stateJson: data.state.state_json,
       mySessionId: sessionId,
+      // Pass the real game_state.version so pushStateToServer sends the
+      // correct expectedVersion. Without this, the embedded session.version
+      // (which diverges after the start/seed writes) is used and every GM
+      // push gets a 409 "stale write" on the very first try.
+      dbVersion: data.state.version,
     });
     if (!result.ok) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -144,11 +155,19 @@ export default function GamePlayPage({
         },
         (payload: { new: { state_json: unknown; version: number } }) => {
           // Another player pushed new state. Re-hydrate from the fresh
-          // server snapshot so this browser stays in sync. We skip if
-          // the version hasn't changed (duplicate fire safety).
+          // server snapshot so this browser stays in sync.
           const newState = payload.new?.state_json;
+          const newVersion = payload.new?.version ?? -1;
           if (!newState) return;
-          hydrateRef.current({ stateJson: newState, mySessionId: sessionId });
+          // Skip duplicate fires (Supabase can occasionally re-emit
+          // the same row update on reconnect).
+          if (newVersion !== -1 && newVersion <= lastVersionRef.current) return;
+          lastVersionRef.current = newVersion;
+          const sid = sessionIdRef.current;
+          if (!sid) return;
+          // Pass the real DB version so every re-hydration (including
+          // after a GM bot-round advance) tracks the correct expectedVersion.
+          hydrateRef.current({ stateJson: newState, mySessionId: sid, dbVersion: newVersion });
         },
       )
       .subscribe();
@@ -282,7 +301,7 @@ export default function GamePlayPage({
   // server-authoritative team list, currentQuarter, fuel index, etc.
   // Facilitators have no team (teamsCount may still be 0 if seeding just
   // happened), but we still render the canvas so they can observe the game.
-  if (!hydrated || phase !== "playing" || (!isFacilitator && teamsCount === 0)) {
+  if (!hydrated || (phase !== "playing" && phase !== "endgame") || (!isFacilitator && teamsCount === 0)) {
     return (
       <CenteredMessage>
         <Loader2 className="w-6 h-6 text-slate-400 animate-spin mb-3" />

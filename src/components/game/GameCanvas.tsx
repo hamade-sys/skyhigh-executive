@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 // Leaflet hits `window` on import, so the map can't render on the server.
@@ -33,11 +33,85 @@ import { MapCommandHud } from "@/components/game/MapCommandHud";
 import { QuarterTimerDriver } from "@/components/game/QuarterTimer";
 import { Toaster } from "@/components/game/Toaster";
 import { useShallow } from "zustand/react/shallow";
-import { useGame, selectPlayer, selectRivals } from "@/store/game";
+import { useGame, selectPlayer, selectRivals, selectActiveTeam } from "@/store/game";
 import type { City } from "@/types/game";
 import { CITIES } from "@/data/cities";
 import { Button } from "@/components/ui";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
+// ── Bot-only auto-advance ──────────────────────────────────────────────────
+// How long (seconds) to pause between rounds so the GM can watch what
+// happened before the next bot simulation fires automatically.
+const BOT_AUTO_ADVANCE_SECONDS = 20;
+
+/** Countdown + auto-advance component rendered inside the GM observer banner
+ *  when ALL teams are bots (no human players in the game). Counts down from
+ *  BOT_AUTO_ADVANCE_SECONDS, then fires gmAdvanceQuarter automatically.
+ *  The GM can click "▶ Skip" to advance immediately. */
+function BotAutoAdvanceBanner({
+  gmAdvanceQuarter,
+}: {
+  gmAdvanceQuarter: () => void;
+}) {
+  const [seconds, setSeconds] = useState(BOT_AUTO_ADVANCE_SECONDS);
+
+  // Always-current ref so the countdown effect never needs gmAdvanceQuarter
+  // in its dependency array. Without this, a reference change (e.g. after a
+  // Realtime re-hydration) would re-run the effect while seconds === 0 and
+  // fire gmAdvanceQuarter a second time — causing a duplicate advance and a
+  // cascade of 409 version-conflict errors.
+  const advanceRef = useRef(gmAdvanceQuarter);
+  useEffect(() => { advanceRef.current = gmAdvanceQuarter; }, [gmAdvanceQuarter]);
+
+  // Reset counter every time this component mounts (= start of a new round).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSeconds(BOT_AUTO_ADVANCE_SECONDS);
+  }, []);
+
+  // Count down 1 s at a time; fire advance when we reach 0.
+  // gmAdvanceQuarter accessed via ref — excluded from deps intentionally.
+  useEffect(() => {
+    if (seconds <= 0) {
+      advanceRef.current();
+      return;
+    }
+    const id = window.setTimeout(() => setSeconds((s) => s - 1), 1000);
+    return () => window.clearTimeout(id);
+  }, [seconds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Arc progress — full circle = BOT_AUTO_ADVANCE_SECONDS, shrinks to 0.
+  const pct = seconds / BOT_AUTO_ADVANCE_SECONDS;
+  const r = 10;
+  const circ = 2 * Math.PI * r;
+  const dash = circ * pct;
+
+  return (
+    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/80 backdrop-blur-sm text-white text-xs font-semibold shadow-lg">
+      {/* Circular countdown arc */}
+      <svg width="22" height="22" className="-rotate-90">
+        <circle cx="11" cy="11" r={r} fill="none" stroke="#475569" strokeWidth="2" />
+        <circle
+          cx="11" cy="11" r={r}
+          fill="none"
+          stroke="#a78bfa"
+          strokeWidth="2"
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="text-violet-300 tabular-nums">{seconds}s</span>
+      <span className="text-slate-300">· next round in</span>
+      <button
+        onClick={() => { setSeconds(0); }}
+        className="ml-1 px-2 py-0.5 rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-xs font-semibold transition-colors cursor-pointer"
+        title="Advance to next round immediately"
+      >
+        ▶ Skip
+      </button>
+    </div>
+  );
+}
 
 const PANEL_META: Record<
   PanelId,
@@ -75,18 +149,43 @@ function CanvasInner() {
     (s) => ((s.session as Record<string, unknown> | null)?.gameId as string) ?? null,
   );
   const setActiveTeam = useGame((s) => s.setActiveTeam);
+  const gmAdvanceQuarter = useGame((s) => s.gmAdvanceQuarter);
   const firstTeamId = useGame((s) => s.teams[0]?.id ?? null);
   const player = useGame(selectPlayer);
+  // isObserver is true for the Game Master (no claimed team). All state
+  // mutations are already blocked in the store; here we use it to keep
+  // the GM's playerTeamId null (so setActiveTeam only sets activeTeamId)
+  // and to hide interactive canvas elements (map click, launch bar, HUD).
+  const isObserver = useGame((s) => s.isObserver);
+  // GM can advance if there is at least one bot team — the button is
+  // hidden when all seats are filled by human players (they control their
+  // own advance via the Close Quarter button).
+  const hasBotTeams = useGame((s) =>
+    s.teams.some((t) => t.botDifficulty != null || t.controlledBy === "bot"),
+  );
+  // True when ALL teams are bots (no human players at all). In this
+  // mode the game auto-advances on a timer instead of waiting for a human.
+  const allBotsGame = useGame((s) =>
+    s.teams.length > 0 &&
+    s.teams.every((t) => t.botDifficulty != null || t.controlledBy === "bot"),
+  );
+  // activeTeam: what is currently displayed. For observers this is the
+  // team they are spectating (set via setActiveTeam). For players it's
+  // the same as player. canvasPlayer is the non-null "display team" used
+  // by the map and panels.
+  const activeTeam = useGame(selectActiveTeam);
+  const canvasPlayer = isObserver ? activeTeam : player;
 
-  // Game Master auto-view: when the GM is in a multiplayer game but has no
-  // claimed team, automatically pin their view to the first available team
-  // so the canvas renders immediately. They can use "Switch view" to hop
-  // between players at any time.
+  // Game Master auto-view: when the GM has no claimed team, pin their
+  // view to the first available team so the map renders immediately.
+  // Because setActiveTeam now sets activeTeamId (not playerTeamId) for
+  // observers, playerTeamId stays null — the GM never accidentally gets
+  // ownership of a player's team.
   useEffect(() => {
-    if (multiplayerGameId && !playerTeamId && firstTeamId) {
+    if (multiplayerGameId && isObserver && !activeTeam && firstTeamId) {
       setActiveTeam(firstTeamId);
     }
-  }, [multiplayerGameId, playerTeamId, firstTeamId, setActiveTeam]);
+  }, [multiplayerGameId, isObserver, activeTeam, firstTeamId, setActiveTeam]);
   // View-only competitor mode (Sprint 7): when set, the map renders
   // the named rival's network instead of the player's. Click handlers
   // are still bound to the player so route creation always targets
@@ -122,6 +221,9 @@ function CanvasInner() {
   const [launchOpen, setLaunchOpen] = useState(false);
 
   function handleCityClick(c: City) {
+    // Observers (GM) cannot create or modify routes — hard block here
+    // so map clicks never start the selection/launch flow.
+    if (isObserver) return;
     // No origin yet: select it (highlighted yellow on the map).
     if (!origin) return setOrigin(c.code);
     // Clicked the same origin: deselect.
@@ -182,35 +284,21 @@ function CanvasInner() {
     );
   }
 
-  // ── Multiplayer: no claimed team (game master or session mismatch) ──────
-  // When we're hydrated from a server game but this browser has no claimed
-  // team, show an observer/waiting screen instead of the solo onboarding CTA.
-  // This covers the game master (facilitator, no team by design) and players
-  // whose session ID changed between joining and starting (anonymous → auth).
-  if (multiplayerGameId && !playerTeamId) {
-    return (
-      <main className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="max-w-md text-center">
-          <div className="w-14 h-14 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center mx-auto mb-5 text-2xl">
-            👁
-          </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">Observer mode</h2>
-          <p className="text-sm text-slate-500 mb-6">
-            You are connected to the game as an observer. The leaderboard and team
-            panels update in real time. Use the nav rail to inspect any team.
-          </p>
-          <a
-            href={`/games/${multiplayerGameId}/lobby`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors"
-          >
-            ← Back to lobby
-          </a>
-        </div>
-      </main>
-    );
-  }
-
-  if (phase === "idle" || !playerTeamId || !player) {
+  // ── Multiplayer observer (Game Master) ──────────────────────────────────
+  // isObserver is true when the GM has no claimed team. We let them reach
+  // the full live canvas — the observer banner and the interaction blocks
+  // below keep everything read-only. If the active team hasn't been set
+  // yet (teams not loaded), show a brief loading state.
+  if (isObserver && multiplayerGameId) {
+    if (!canvasPlayer) {
+      return (
+        <main className="flex-1 flex items-center justify-center text-ink-muted">
+          Loading game…
+        </main>
+      );
+    }
+    // Fall through to the full canvas render below.
+  } else if (phase === "idle" || !playerTeamId || !player) {
     // PRD §13.1 pre-game lobby
     return (
       <main className="flex-1 flex items-center justify-center px-6 py-12">
@@ -285,17 +373,18 @@ function CanvasInner() {
         style={{ left: railExpanded ? "14rem" : "3.5rem" }}
       >
         <WorldMap
+          // canvasPlayer is guaranteed non-null here: observers are
+          // returned early above if canvasPlayer is null; non-observers
+          // are guarded by the idle/!player check before this block.
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           team={
-            // In view-only mode, map paints the named rival's network.
-            // Click handlers and onClearSelection still target the
-            // player so route creation always affects the player only.
             viewingTeamId
-              ? rivals.find((r) => r.id === viewingTeamId) ?? player
-              : player
+              ? rivals.find((r) => r.id === viewingTeamId) ?? canvasPlayer!
+              : canvasPlayer!
           }
           rivals={rivals}
           currentQuarter={currentQuarter}
-          selectedOriginCode={origin}
+          selectedOriginCode={isObserver ? null : origin}
           onCityClick={handleCityClick}
           onCityDoubleClick={(c) => setAirportDetailCode(c.code)}
           onClearSelection={() => { setOrigin(null); setDest(null); }}
@@ -319,32 +408,73 @@ function CanvasInner() {
         </Panel>
       )}
 
+      {/* Observer / GM banner — shown instead of action HUDs so the GM
+          always knows they're in spectate-only mode.
+          - Bot-only game  → auto-advance countdown + Skip button
+          - Mixed game     → static read-only pill + manual Advance button
+          - Human-only     → static read-only pill (no advance control) */}
+      {isObserver && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[700] flex items-center gap-3">
+
+          {allBotsGame && phase === "playing" ? (
+            /* Bot simulation mode: auto-advance fires after the countdown.
+               A new BotAutoAdvanceBanner mounts each round (currentQuarter
+               change causes a re-key) so the timer resets cleanly. */
+            <BotAutoAdvanceBanner
+              key={currentQuarter}
+              gmAdvanceQuarter={gmAdvanceQuarter}
+            />
+          ) : (
+            /* Mixed or human-only game: static observer pill */
+            <div className="pointer-events-none inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/80 backdrop-blur-sm text-white text-xs font-semibold shadow-lg">
+              <span className="text-violet-300">👁</span>
+              Observer · read-only — use the nav rail to switch teams
+            </div>
+          )}
+
+          {/* Manual Advance button: visible in mixed games (human + bots)
+              so the GM can trigger bot rounds if no human is online, and
+              in bot-only games where they want to skip without waiting. */}
+          {hasBotTeams && !allBotsGame && phase === "playing" && (
+            <button
+              onClick={gmAdvanceQuarter}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-xs font-semibold shadow-lg transition-colors cursor-pointer select-none"
+              title="Run all bot turns and advance to the next round"
+            >
+              ▶ Advance Round
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Bottom-right command HUD — scaffolds the route-launch flow and
-          tells the player exactly what to do at each step. Collapses to
-          an explanatory note when a panel is open so they know why map
-          clicks aren't working. */}
-      <MapCommandHud
-        origin={origin}
-        dest={dest}
-        hubCode={player.hubCode}
-        activeRouteCount={
-          player.routes.filter((r) => r.status !== "closed").length
-        }
-        compact={!!currentPanel}
-      />
+          tells the player exactly what to do at each step. Hidden for
+          observers since they cannot create routes. */}
+      {!isObserver && canvasPlayer && (
+        <MapCommandHud
+          origin={origin}
+          dest={dest}
+          hubCode={canvasPlayer.hubCode}
+          activeRouteCount={
+            canvasPlayer.routes.filter((r) => r.status !== "closed").length
+          }
+          compact={!!currentPanel}
+        />
+      )}
 
-      {/* Floating route launch bar — always visible during selection,
-          never blocks the map. Clicking "Launch" opens the detail modal. */}
-      <RouteLaunchBar
-        origin={origin}
-        dest={dest}
-        onCancel={() => { setOrigin(null); setDest(null); setIsCargo(false); }}
-        onLaunch={() => setLaunchOpen(true)}
-      />
+      {/* Floating route launch bar — hidden for observers. */}
+      {!isObserver && (
+        <RouteLaunchBar
+          origin={origin}
+          dest={dest}
+          onCancel={() => { setOrigin(null); setDest(null); setIsCargo(false); }}
+          onLaunch={() => setLaunchOpen(true)}
+        />
+      )}
 
-      {/* Detail modal for route configuration — only opens post-Launch */}
+      {/* Detail modal for route configuration — never opens for observers */}
       <RouteSetupModal
-        open={launchOpen}
+        open={!isObserver && launchOpen}
         origin={origin}
         dest={dest}
         forceCargo={isCargo}

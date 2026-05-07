@@ -33,6 +33,12 @@ import {
   planBotRoutes,
   botSlotBidPrice,
   botPickScenarioOption,
+  pruneBotRoutes,
+  fuelSpikeRoutesToSuspend,
+  fuelNormalRoutesToResume,
+  hardBotBlockingBidCodes,
+  repriceBotRoutes,
+  retireAgedAircraft,
   type BotDifficulty,
 } from "@/lib/ai-bots";
 import {
@@ -401,6 +407,13 @@ export interface GameStore extends GameState {
   advanceToNext(): void;
   resetGame(): void;
 
+  /** GM / facilitator fast-forward — runs all bot AI turns and advances
+   *  the quarter without requiring a human player. Only works when
+   *  `isObserver && isMultiplayerSession`. Useful for bot-only simulation
+   *  runs where the Game Master watches bots compete and manually steps
+   *  each round forward. */
+  gmAdvanceQuarter(): void;
+
   /** Toggle this team's ready-for-next-quarter flag. In self-guided
    *  multiplayer the engine auto-advances when every active human
    *  team is ready; in facilitated mode the facilitator still drives
@@ -429,9 +442,20 @@ export interface GameStore extends GameState {
    *  when the state JSON doesn't look like a fully-formed engine
    *  state (no teams, no currentQuarter) — caller should fall back
    *  to the lobby. */
+  /** Actual game_state.version from the DB — used as expectedVersion in
+   *  pushStateToServer. Kept separate from session.version (embedded in
+   *  state_json) because the start/seed route increments the DB column
+   *  without updating the embedded value, so they diverge after game
+   *  start and every push gets a 409 "stale write" error. */
+  serverStateVersion: number;
+
   hydrateFromServerState(args: {
     stateJson: unknown;
     mySessionId: string;
+    /** Actual game_state.version from the DB load/Realtime payload.
+     *  When provided, overwrites serverStateVersion so pushStateToServer
+     *  sends the correct expectedVersion on the very first write. */
+    dbVersion?: number;
   }): { ok: boolean; error?: string };
 
   /** Multiplayer write-back. POSTs the current local state to
@@ -598,6 +622,15 @@ function emptyStreaks() {
 // mkId('team') / etc.) need no edit.
 import { mkId as mkIdShared } from "@/lib/id";
 const mkId = mkIdShared;
+
+// Module-level flag set by gmAdvanceQuarter to suppress the individual
+// pushStateToServer calls that fire inside closeQuarter / advanceToNext.
+// Without suppression, closeQuarter pushes "game.quarterClosed" async at
+// version N, and gmAdvanceQuarter also pushes at version N moments later
+// — both land simultaneously and one gets a 409.  The flag lets us keep
+// isObserver:false (so closeQuarter's guard passes and bots actually run)
+// while still doing exactly one atomic write at the end.
+let _suppressGmPush = false;
 
 function fmtMoneyPlain(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -861,6 +894,7 @@ export const useGame = create<GameStore>()(
       // panels/HUD branch on it instead of `team.isPlayer` so the
       // same engine state can render correctly for any human team.
       session: null,
+      serverStateVersion: 0, // set to game_state.version during hydrateFromServerState
       activeTeamId: null,
       localSessionId: null, // set to user.id during hydrateFromServerState; null in solo
       preOrders: [],
@@ -3242,14 +3276,10 @@ export const useGame = create<GameStore>()(
         set({ isClosing: true });
 
         // Phase 6 P1 — timing telemetry. closeQuarter is the
-        // heaviest hot path in the engine (route economics, slot
-        // auctions, scenario consequences, deferred events,
-        // financials backfill). On a 10-team cohort it can creep
-        // toward Vercel's 300s function ceiling under load. We
-        // log every close's wall-clock time and warn loudly when
-        // it crosses 60s so the operator catches the regression
-        // before workshops feel it. Replace `console.warn` with a
-        // Sentry call when wiring observability.
+        // heaviest hot path in the engine. Log every close's
+        // wall-clock time and warn loudly when it crosses 60s so
+        // the operator catches the regression before workshops
+        // feel it.
         const closeStartedAt = typeof performance !== "undefined"
           ? performance.now()
           : Date.now();
@@ -3258,8 +3288,6 @@ export const useGame = create<GameStore>()(
             ? performance.now()
             : Date.now()) - closeStartedAt;
           if (elapsedMs > 60_000) {
-            // Slow close: warn-level telemetry so the operator's
-            // webhook (if configured) gets a real-time signal.
             captureEvent("closeQuarter.slow", "warn", {
               elapsedMs: Math.round(elapsedMs),
               quarter: s.currentQuarter,
@@ -3280,11 +3308,23 @@ export const useGame = create<GameStore>()(
         // this eagerly at write time, so this should rarely fire —
         // but it covers the offline-forfeit / local-only-mutation
         // path so a degenerate state doesn't loop bots forever.
+        //
+        // GM-sim exception (from main): when `gmAdvanceQuarter` calls
+        // closeQuarter it temporarily assigns a bot team as the
+        // synthetic playerTeamId so the logic runs. Detect this via
+        // botDifficulty on the "player" team and skip the endgame
+        // guard — the GM wants to watch bots compete, not have the
+        // game end immediately.
         if (s.session?.gameId) {
           const humanCount = s.teams.filter(
             (t) => t.controlledBy === "human",
           ).length;
-          if (humanCount === 0) {
+          const syntheticPlayer = s.teams.find((t) => t.id === s.playerTeamId);
+          const isGmSimAdvance =
+            syntheticPlayer != null &&
+            (syntheticPlayer.botDifficulty != null ||
+              syntheticPlayer.controlledBy === "bot");
+          if (humanCount === 0 && !isGmSimAdvance) {
             set({ phase: "endgame", lastCloseResult: null, isClosing: false });
             toast.warning(
               "All players forfeited",
@@ -3872,194 +3912,282 @@ export const useGame = create<GameStore>()(
         // follows still drives the leaderboard, but bots now build a
         // visible network the player sees on the map and competes
         // against on shared routes.
-        const teamsAfterBotTurns = s.teams.map((t) => {
-          if (!t.botDifficulty) return t;
-          let updated = { ...t };
+        // Leaderboard snapshot for rank-aware bot decisions. Rank 1 = leading.
+        const leaderboardSnapshot = [...s.teams].sort(
+          (a, b) => computeAirlineValue(b) - computeAirlineValue(a),
+        );
+        const rankOf = (teamId: string) =>
+          leaderboardSnapshot.findIndex((t) => t.id === teamId) + 1 || 1;
 
-          // Transition bot aircraft from "ordered" → "active" once a
-          // quarter has passed since purchase. Earlier the bot ordered
-          // a plane (status: ordered), then `planBotRoutes` filtered
-          // for status: active and found nothing, so the plane sat
-          // perpetually ordered and the bot never opened a single
-          // route. Mirrors the player path at the close-quarter step
-          // where the same transition runs for the player team.
-          updated = {
-            ...updated,
-            fleet: updated.fleet.map((f) =>
-              f.status === "ordered" && f.purchaseQuarter < s.currentQuarter
-                ? { ...f, status: "active" as const }
-                : f,
-            ),
-          };
+        // Sequential reduce — threads `claimedODs` so later bots avoid the
+        // same city pairs that earlier bots already picked this quarter.
+        const { teams: teamsAfterBotTurns } = s.teams.reduce<{
+          teams: typeof s.teams;
+          claimedODs: Set<string>;
+        }>(
+          ({ teams: acc, claimedODs }, t) => {
+            if (!t.botDifficulty) return { teams: [...acc, t], claimedODs };
+            let updated = { ...t };
 
-          // Aircraft order — bot may add a fresh purchase or lease.
-          // Now goes through the same lease/buy plumbing as the player
-          // so deposits, lease term/buy-out residual, production caps
-          // etc. are all respected. Bots that lease ineligible specs
-          // silently fall back to buy.
-          const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter);
-          if (order) {
-            const spec = AIRCRAFT_BY_ID[order.specId];
-            if (spec) {
-              // Lease eligibility check — if the chosen acquisition is
-              // lease but the spec isn't in the top-7/top-3 list, fall
-              // back to buy so the bot still acts.
-              let acquisitionType = order.acquisitionType;
-              if (acquisitionType === "lease" && !canLeaseSpec(spec, AIRCRAFT, s.currentQuarter)) {
-                acquisitionType = "buy";
-              }
-              // Cash check + lease economics (15% deposit) vs buy (full).
-              const leaseTerms = leaseTermsFor(spec);
-              const perPlaneCost = acquisitionType === "buy"
-                ? spec.buyPriceUsd
-                : leaseTerms.depositUsd;
-              const totalCost = perPlaneCost * order.quantity;
-              if (updated.cashUsd >= totalCost) {
-                const newPlanes: FleetAircraft[] = Array.from({ length: order.quantity }, () => ({
-                  id: mkId("ac"),
-                  specId: order.specId,
-                  status: "ordered",
-                  acquisitionType,
-                  purchaseQuarter: s.currentQuarter,
-                  purchasePrice: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
-                  bookValue: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
-                  leaseQuarterly: acquisitionType === "lease" ? leaseTerms.perQuarterUsd : null,
-                  leaseDepositUsd: acquisitionType === "lease" ? leaseTerms.depositUsd : undefined,
-                  leaseTermEndsAtQuarter: acquisitionType === "lease"
-                    ? s.currentQuarter + leaseTerms.termQuarters - 1
-                    : undefined,
-                  leaseBuyoutBasisUsd: acquisitionType === "lease" ? spec.buyPriceUsd : undefined,
-                  ecoUpgrade: false,
-                  ecoUpgradeQuarter: null,
-                  ecoUpgradeCost: 0,
-                  cabinConfig: "default",
-                  routeId: null,
-                  retirementQuarter: s.currentQuarter + 28,
-                  maintenanceDeficit: 0,
-                  satisfactionPct: 75,
-                }));
-                updated = {
-                  ...updated,
-                  cashUsd: updated.cashUsd - totalCost,
-                  fleet: [...updated.fleet, ...newPlanes],
-                };
-              }
-            }
-          }
-
-          // Route openings — bot may start a few new routes from idle planes.
-          // Each route's cargo/passenger flag is derived from the aircraft
-          // family so cargo-only fleets create cargo routes automatically.
-          //
-          // The planner now sees the full team list as `rivals` so it
-          // penalises saturated ODs (player + other bots already there)
-          // and applies a yield filter to drop fuel-bleeders before
-          // they're even considered. See planBotRoutes JSDoc.
-          const routePlans = planBotRoutes(
-            updated,
-            t.botDifficulty,
-            s.currentQuarter,
-            s.teams.filter((tm) => tm.id !== t.id),
-          );
-          // Slot bid accumulator — when a bot opens a route, it must bid
-          // for any slots it doesn't already hold at both endpoints. The
-          // auction phase below this block will pick these up via
-          // `pendingSlotBids` and clear them against the airport's pool,
-          // so a bot that wants 14 slots/wk at JFK actually competes
-          // with the player and other bots for capacity.
-          const newBids: Record<string, { slots: number; price: number }> = {};
-          // Track committed-by-existing-routes slots so multiple new
-          // routes opened the same quarter accumulate correctly (a bot
-          // opening 3 routes that all want JFK should bid for 3× capacity).
-          const committedSlotsAtCode: Record<string, number> = {};
-          for (const code of Object.keys(updated.airportLeases ?? {})) {
-            committedSlotsAtCode[code] = 0;
-            for (const rt of updated.routes) {
-              if (rt.status !== "active" && rt.status !== "pending") continue;
-              if (rt.originCode === code || rt.destCode === code) {
-                committedSlotsAtCode[code] += rt.dailyFrequency * 7;
-              }
-            }
-          }
-          for (const rp of routePlans) {
-            const dist = distanceBetween(rp.origin, rp.dest);
-            const dailyFreq = Math.max(1 / 7, rp.weeklyFreq / 7);
-            const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
-            const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
-            const isCargo = acSpec?.family === "cargo";
-            const route: Route = {
-              id: mkId("route"),
-              originCode: rp.origin,
-              destCode: rp.dest,
-              distanceKm: dist,
-              aircraftIds: [rp.aircraftId],
-              dailyFrequency: dailyFreq,
-              pricingTier: rp.pricingTier,
-              econFare: null,
-              busFare: null,
-              firstFare: null,
-              cargoRatePerTonne: null,
-              status: "active",
-              openQuarter: s.currentQuarter,
-              avgOccupancy: 0,
-              quarterlyRevenue: 0,
-              quarterlyFuelCost: 0,
-              quarterlySlotCost: 0,
-              isCargo,
-              consecutiveQuartersActive: 0,
-              consecutiveLosingQuarters: 0,
-            };
-            // Compute slot deficit at both endpoints. Bots already get
-            // ~30 free slots at popular destinations from team-factory,
-            // so most early routes don't need bids; longer-tail routes
-            // and growth runs into capacity and starts competing.
-            const weeklyNeed = dailyFreq * 7;
-            for (const code of [rp.origin, rp.dest]) {
-              const held = updated.airportLeases?.[code]?.slots ?? 0;
-              const used = committedSlotsAtCode[code] ?? 0;
-              const deficit = Math.max(0, used + weeklyNeed - held);
-              committedSlotsAtCode[code] = used + weeklyNeed;
-              if (deficit > 0) {
-                const cur = newBids[code];
-                const price = botSlotBidPrice(t.botDifficulty, code);
-                newBids[code] = {
-                  slots: (cur?.slots ?? 0) + Math.ceil(deficit),
-                  price: Math.max(cur?.price ?? 0, price),
-                };
-              }
-            }
+            // Transition bot aircraft from "ordered" → "active" once a
+            // quarter has passed since purchase.
             updated = {
               ...updated,
-              routes: [...updated.routes, route],
               fleet: updated.fleet.map((f) =>
-                f.id === rp.aircraftId
-                  ? { ...f, status: "active" as const, routeId: route.id }
+                f.status === "ordered" && f.purchaseQuarter < s.currentQuarter
+                  ? { ...f, status: "active" as const }
                   : f,
               ),
             };
-          }
-          // Append accumulated slot bids to the team's pendingSlotBids.
-          // The auction phase below clears these vs the player's bids.
-          if (Object.keys(newBids).length > 0) {
-            const newPending = [...(updated.pendingSlotBids ?? [])];
-            for (const code of Object.keys(newBids)) {
-              const existing = newPending.find((b) => b.airportCode === code);
-              if (existing) {
-                existing.slots = Math.max(existing.slots, newBids[code].slots);
-                existing.pricePerSlot = Math.max(existing.pricePerSlot, newBids[code].price);
-              } else {
-                newPending.push({
-                  airportCode: code,
-                  slots: newBids[code].slots,
-                  pricePerSlot: newBids[code].price,
-                  quarterSubmitted: s.currentQuarter,
-                });
+
+            // ── Fleet retirement ───────────────────────────────────
+            // Retire age-expired and lease-expired aircraft. Close any
+            // routes they were assigned to first so the aircraft slot
+            // is freed and doesn't leave orphaned active routes.
+            const toRetire = retireAgedAircraft(updated, s.currentQuarter);
+            if (toRetire.length > 0) {
+              const retiredRouteIds = updated.fleet
+                .filter((f) => toRetire.includes(f.id) && f.routeId)
+                .map((f) => f.routeId as string);
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  retiredRouteIds.includes(r.id) ? { ...r, status: "closed" as const } : r,
+                ),
+                fleet: updated.fleet.filter((f) => !toRetire.includes(f.id)),
+              };
+            }
+
+            // ── Fuel spike / normalise response ────────────────────
+            // Medium + hard bots suspend long-haul during fuel spikes
+            // and resume suspended routes when prices normalise.
+            const toSuspend = fuelSpikeRoutesToSuspend(updated, t.botDifficulty, s.fuelIndex);
+            if (toSuspend.length > 0) {
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  toSuspend.includes(r.id) ? { ...r, status: "suspended" as const } : r,
+                ),
+              };
+            }
+            const toResume = fuelNormalRoutesToResume(updated, t.botDifficulty, s.fuelIndex);
+            if (toResume.length > 0) {
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  toResume.includes(r.id) ? { ...r, status: "active" as const } : r,
+                ),
+              };
+            }
+
+            // ── Route pruning ──────────────────────────────────────
+            // Medium + hard bots close consistently losing routes and
+            // free the aircraft for re-deployment elsewhere.
+            const toPrune = pruneBotRoutes(updated, t.botDifficulty);
+            if (toPrune.length > 0) {
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  toPrune.includes(r.id) ? { ...r, status: "closed" as const } : r,
+                ),
+                fleet: updated.fleet.map((f) =>
+                  f.routeId && toPrune.includes(f.routeId)
+                    ? { ...f, routeId: null }
+                    : f,
+                ),
+              };
+            }
+
+            // ── Route repricing ────────────────────────────────────
+            // Adjust pricing tier based on occupancy history:
+            // underfilled routes drop one tier; oversubscribed routes
+            // rise one tier (medium/hard only). Easy bots only reprice
+            // every other quarter and never raise prices.
+            const repricings = repriceBotRoutes(updated, t.botDifficulty, s.currentQuarter);
+            if (repricings.length > 0) {
+              const repriceMap = new Map(repricings.map((r) => [r.routeId, r.newTier]));
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  repriceMap.has(r.id) ? { ...r, pricingTier: repriceMap.get(r.id)! } : r,
+                ),
+              };
+            }
+
+            // ── Aircraft order ─────────────────────────────────────
+            const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter, getTotalRounds(s));
+            if (order) {
+              const spec = AIRCRAFT_BY_ID[order.specId];
+              if (spec) {
+                let acquisitionType = order.acquisitionType;
+                if (acquisitionType === "lease" && !canLeaseSpec(spec, AIRCRAFT, s.currentQuarter)) {
+                  acquisitionType = "buy";
+                }
+                const leaseTerms = leaseTermsFor(spec);
+                const perPlaneCost = acquisitionType === "buy"
+                  ? spec.buyPriceUsd
+                  : leaseTerms.depositUsd;
+                const totalCost = perPlaneCost * order.quantity;
+                if (updated.cashUsd >= totalCost) {
+                  const newPlanes: FleetAircraft[] = Array.from({ length: order.quantity }, () => ({
+                    id: mkId("ac"),
+                    specId: order.specId,
+                    status: "ordered",
+                    acquisitionType,
+                    purchaseQuarter: s.currentQuarter,
+                    purchasePrice: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
+                    bookValue: acquisitionType === "buy" ? spec.buyPriceUsd : 0,
+                    leaseQuarterly: acquisitionType === "lease" ? leaseTerms.perQuarterUsd : null,
+                    leaseDepositUsd: acquisitionType === "lease" ? leaseTerms.depositUsd : undefined,
+                    leaseTermEndsAtQuarter: acquisitionType === "lease"
+                      ? s.currentQuarter + leaseTerms.termQuarters - 1
+                      : undefined,
+                    leaseBuyoutBasisUsd: acquisitionType === "lease" ? spec.buyPriceUsd : undefined,
+                    ecoUpgrade: false,
+                    ecoUpgradeQuarter: null,
+                    ecoUpgradeCost: 0,
+                    cabinConfig: "default",
+                    routeId: null,
+                    retirementQuarter: s.currentQuarter + 28,
+                    maintenanceDeficit: 0,
+                    satisfactionPct: 75,
+                  }));
+                  updated = {
+                    ...updated,
+                    cashUsd: updated.cashUsd - totalCost,
+                    fleet: [...updated.fleet, ...newPlanes],
+                  };
+                }
               }
             }
-            updated = { ...updated, pendingSlotBids: newPending };
-          }
-          return updated;
-        });
+
+            // ── Route openings ─────────────────────────────────────
+            // Pass claimedODs so bots spread across different city pairs,
+            // leaderboardRank for desperation/conservative scaling, and
+            // fuelIndex for spike-aware quota reduction.
+            const rivals = acc.filter((tm) => tm.id !== t.id);
+            const routePlans = planBotRoutes(
+              updated,
+              t.botDifficulty,
+              s.currentQuarter,
+              rivals,
+              getTotalRounds(s),
+              claimedODs,
+              rankOf(t.id),
+              s.fuelIndex,
+            );
+
+            const newBids: Record<string, { slots: number; price: number }> = {};
+            const committedSlotsAtCode: Record<string, number> = {};
+            for (const code of Object.keys(updated.airportLeases ?? {})) {
+              committedSlotsAtCode[code] = 0;
+              for (const rt of updated.routes) {
+                if (rt.status !== "active" && rt.status !== "pending") continue;
+                if (rt.originCode === code || rt.destCode === code) {
+                  committedSlotsAtCode[code] += rt.dailyFrequency * 7;
+                }
+              }
+            }
+            for (const rp of routePlans) {
+              const dist = distanceBetween(rp.origin, rp.dest);
+              const dailyFreq = Math.max(1 / 7, rp.weeklyFreq / 7);
+              const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
+              const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
+              const isCargo = acSpec?.family === "cargo";
+              const route: Route = {
+                id: mkId("route"),
+                originCode: rp.origin,
+                destCode: rp.dest,
+                distanceKm: dist,
+                aircraftIds: [rp.aircraftId],
+                dailyFrequency: dailyFreq,
+                pricingTier: rp.pricingTier,
+                econFare: null,
+                busFare: null,
+                firstFare: null,
+                cargoRatePerTonne: null,
+                status: "active",
+                openQuarter: s.currentQuarter,
+                avgOccupancy: 0,
+                quarterlyRevenue: 0,
+                quarterlyFuelCost: 0,
+                quarterlySlotCost: 0,
+                isCargo,
+                consecutiveQuartersActive: 0,
+                consecutiveLosingQuarters: 0,
+              };
+              const weeklyNeed = dailyFreq * 7;
+              for (const code of [rp.origin, rp.dest]) {
+                const held = updated.airportLeases?.[code]?.slots ?? 0;
+                const used = committedSlotsAtCode[code] ?? 0;
+                const deficit = Math.max(0, used + weeklyNeed - held);
+                committedSlotsAtCode[code] = used + weeklyNeed;
+                if (deficit > 0) {
+                  const cur = newBids[code];
+                  const price = botSlotBidPrice(t.botDifficulty, code);
+                  newBids[code] = {
+                    slots: (cur?.slots ?? 0) + Math.ceil(deficit),
+                    price: Math.max(cur?.price ?? 0, price),
+                  };
+                }
+              }
+              // Register this OD as claimed for subsequent bots this quarter
+              const odKey = rp.origin < rp.dest
+                ? `${rp.origin}|${rp.dest}`
+                : `${rp.dest}|${rp.origin}`;
+              claimedODs.add(odKey);
+              updated = {
+                ...updated,
+                routes: [...updated.routes, route],
+                fleet: updated.fleet.map((f) =>
+                  f.id === rp.aircraftId
+                    ? { ...f, status: "active" as const, routeId: route.id }
+                    : f,
+                ),
+              };
+            }
+
+            // ── Hard bot: blocking bids at rival hubs ──────────────
+            if (t.botDifficulty === "hard") {
+              const currentSlotsByAirport: Record<string, number> = {};
+              for (const [code, lease] of Object.entries(updated.airportLeases ?? {})) {
+                currentSlotsByAirport[code] = (lease as { slots: number }).slots ?? 0;
+              }
+              const blockingCodes = hardBotBlockingBidCodes(updated, rivals, currentSlotsByAirport);
+              for (const code of blockingCodes) {
+                const price = botSlotBidPrice("hard", code);
+                const blockSlots = 14; // 2 flights/day worth of blocking
+                if (!newBids[code]) {
+                  newBids[code] = { slots: blockSlots, price };
+                } else {
+                  newBids[code].slots = Math.max(newBids[code].slots, blockSlots);
+                  newBids[code].price = Math.max(newBids[code].price, price);
+                }
+              }
+            }
+
+            if (Object.keys(newBids).length > 0) {
+              const newPending = [...(updated.pendingSlotBids ?? [])];
+              for (const code of Object.keys(newBids)) {
+                const existing = newPending.find((b) => b.airportCode === code);
+                if (existing) {
+                  existing.slots = Math.max(existing.slots, newBids[code].slots);
+                  existing.pricePerSlot = Math.max(existing.pricePerSlot, newBids[code].price);
+                } else {
+                  newPending.push({
+                    airportCode: code,
+                    slots: newBids[code].slots,
+                    pricePerSlot: newBids[code].price,
+                    quarterSubmitted: s.currentQuarter,
+                  });
+                }
+              }
+              updated = { ...updated, pendingSlotBids: newPending };
+            }
+            return { teams: [...acc, updated], claimedODs };
+          },
+          { teams: [], claimedODs: new Set<string>() },
+        );
 
         // ── Bot scenario resolution ───────────────────────────────
         // Earlier bots silently ignored every board scenario — the
@@ -5005,7 +5133,15 @@ export const useGame = create<GameStore>()(
       setActiveTeam: (teamId) => {
         const s = get();
         if (!s.teams.some((t) => t.id === teamId)) return;
-        set({ playerTeamId: teamId });
+        if (s.isObserver) {
+          // Observer / Game Master: only update the *viewing* target.
+          // Never touch playerTeamId — that field signals team ownership
+          // and setting it for an observer would bypass the read-only
+          // guards throughout the canvas (map clicks, route creation, etc.).
+          set({ activeTeamId: teamId });
+        } else {
+          set({ playerTeamId: teamId });
+        }
       },
 
       setAirlineColor: (colorId: AirlineColorId) => {
@@ -5019,6 +5155,75 @@ export const useGame = create<GameStore>()(
           ),
         });
       },
+
+      gmAdvanceQuarter: () => {
+        const s = get();
+        // Only for GM/facilitators in a live multiplayer session.
+        if (!s.isObserver || !s.isMultiplayerSession) return;
+        if (s.phase !== "playing") return;
+
+        // We need at least one bot team to simulate. If all teams are
+        // human (none joined a bot-only slot) there's nothing to run.
+        const botTeam =
+          s.teams.find((t) => t.botDifficulty != null) ??
+          s.teams.find((t) => t.controlledBy === "bot");
+        if (!botTeam) {
+          toast.warning(
+            "No bot teams",
+            "All seats are human-controlled — players must advance this round.",
+          );
+          return;
+        }
+
+        const savedActiveTeamId = s.activeTeamId;
+
+        // ── Suppress internal pushes, then run bot turns ────────────────
+        // closeQuarter has `if (s.isObserver) return;` at its top, so we
+        // must set isObserver:false for it to actually process bot turns.
+        // But that causes closeQuarter to fire pushStateToServer internally
+        // at version N, and our final push also at version N → 409 race.
+        // Solution: _suppressGmPush blocks ALL pushStateToServer calls until
+        // we clear it and fire the single authoritative write ourselves.
+        _suppressGmPush = true;
+        set({ isObserver: false, playerTeamId: botTeam.id });
+
+        // closeQuarter runs all bot AI decisions (routes, aircraft, slots),
+        // processes every team through runQuarterClose, resolves slot
+        // auctions, and updates fuel / interest rate. Fully synchronous.
+        // Internal push is suppressed by _suppressGmPush.
+        get().closeQuarter();
+
+        // advanceToNext bumps currentQuarter and transitions phase → "playing".
+        // Internal push also suppressed.
+        get().advanceToNext();
+
+        // ── Single atomic write ─────────────────────────────────────────
+        // Restore clean observer state FIRST so the stateJson captured by
+        // pushStateToServer has playerTeamId:null (not the synthetic bot id).
+        // Without this, every re-hydration from Realtime restores the bot as
+        // the player, causing subtle state pollution across rounds.
+        set({
+          isObserver: true,
+          playerTeamId: null,
+          activeTeamId: savedActiveTeamId,
+          lastCloseResult: null,
+        });
+
+        // Brief flip to non-observer just for the push call — React effects
+        // are async (fire after paint), so this synchronous window is
+        // invisible to the UI. _suppressGmPush=false allows the push through.
+        _suppressGmPush = false;
+        set({ isObserver: false });
+        get().pushStateToServer("game.botRoundAdvanced", {
+          quarter: get().currentQuarter,
+        });
+        set({ isObserver: true });
+      },
+
+      // setAirlineColor is defined earlier in this file (line ~5147 in
+      // the resolved merge). The duplicate originally appeared during
+      // the audit-fix wave; keeping a single canonical definition above
+      // and removing this one.
 
       startFacilitatedSession: (seatCount) => {
         // 4-digit code, leading zeros allowed (e.g. "0421")
@@ -5530,7 +5735,7 @@ export const useGame = create<GameStore>()(
       // sessionId`; if no claim is found we leave activeTeamId null
       // and the player lands in spectator-y view-only mode (still
       // valuable for facilitators dropping in mid-game).
-      hydrateFromServerState: ({ stateJson, mySessionId }) => {
+      hydrateFromServerState: ({ stateJson, mySessionId, dbVersion }) => {
         if (!stateJson || typeof stateJson !== "object") {
           return { ok: false, error: "Empty or invalid state payload." };
         }
@@ -5562,7 +5767,25 @@ export const useGame = create<GameStore>()(
           const claimed = teams.find(
             (t) => t.claimedBySessionId === mySessionId,
           );
-          const activeTeamId = claimed?.id ?? null;
+          const claimedTeamId = claimed?.id ?? null;
+
+          // For observers (GM/facilitator), preserve the team they are
+          // currently watching across live Realtime re-hydrations. Without
+          // this, every push from a player would reset activeTeamId → null,
+          // making the GM's canvas go blank until the auto-view effect
+          // asynchronously re-sets it — and in the meantime the map shows
+          // stale/empty state instead of the live update that just arrived.
+          // We only preserve the target if the team still exists in the
+          // fresh state (teams can be dropped on forfeit, etc.).
+          const currentState = get();
+          const preservedViewTarget =
+            !claimed && currentState.isObserver && currentState.activeTeamId
+              ? (teams.some((t) => t.id === currentState.activeTeamId)
+                  ? currentState.activeTeamId
+                  : (teams[0]?.id ?? null))
+              : claimedTeamId;
+
+          const activeTeamId = preservedViewTarget;
           // Mirror activeTeamId into playerTeamId so the 75+ panel
           // surfaces that still read selectPlayer (legacy) resolve
           // to the same team. This is safe in multiplayer because
@@ -5581,6 +5804,12 @@ export const useGame = create<GameStore>()(
             // Store the authenticated session ID so pushStateToServer
             // can use it as actorSessionId without touching localStorage.
             localSessionId: mySessionId,
+            // Use the actual DB game_state.version as the source of truth
+            // for optimistic concurrency. The embedded session.version in
+            // state_json diverges after the start/seed writes (those bump
+            // the DB column without updating the embedded field), so every
+            // first push would send the wrong expectedVersion and get 409.
+            ...(dbVersion !== undefined ? { serverStateVersion: dbVersion } : {}),
             // Reset transient UI — a fresh hydrate is a hard reload
             // of the campaign, not a continuation of a paused close.
             lastCloseResult: null,
@@ -5608,6 +5837,10 @@ export const useGame = create<GameStore>()(
         const s = get();
         // Game Master is observer-only — never write state on their behalf.
         if (s.isObserver) return Promise.resolve({ ok: true as const });
+        // Suppress internal pushes during gmAdvanceQuarter so only one
+        // atomic write goes out after both closeQuarter + advanceToNext
+        // have fully computed the new state.
+        if (_suppressGmPush) return Promise.resolve({ ok: true as const });
         const session = s.session;
         // Solo runs (no session) and runs that haven't been bound to a
         // server-side gameId skip the write-back entirely. Returning
@@ -5652,7 +5885,11 @@ export const useGame = create<GameStore>()(
         };
 
         if (typeof fetch === "undefined") return Promise.resolve({ ok: true as const });
-        const expectedVersion = session.version;
+        // Use the actual DB game_state.version (set during hydrateFromServerState
+        // from the /api/games/load response). The session.version embedded in
+        // state_json diverges after the start/seed writes and cannot be used
+        // reliably — using it caused every first GM push to 409.
+        const expectedVersion = s.serverStateVersion;
         const gameId = session.gameId;
 
         // Phase 4.1: returns a Promise so callers that want to await
@@ -5688,8 +5925,13 @@ export const useGame = create<GameStore>()(
             if (res.ok) {
               const cur = get();
               if (cur.session?.gameId === gameId) {
+                // Increment both the DB-version tracker and the legacy
+                // session.version so future hydrates and pushes stay aligned.
                 set({
-                  session: { ...cur.session, version: cur.session.version + 1 },
+                  serverStateVersion: cur.serverStateVersion + 1,
+                  session: cur.session
+                    ? { ...cur.session, version: cur.session.version + 1 }
+                    : cur.session,
                 });
               }
               return { ok: true as const };
@@ -5714,6 +5956,10 @@ export const useGame = create<GameStore>()(
                     get().hydrateFromServerState({
                       stateJson: loadJson.state.state_json,
                       mySessionId: sessionId,
+                      // Pass the real DB version so the next push uses
+                      // the correct expectedVersion rather than looping
+                      // with the same wrong value.
+                      dbVersion: loadJson.state.version,
                     });
                   }
                 }

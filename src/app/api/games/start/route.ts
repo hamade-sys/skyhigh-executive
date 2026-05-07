@@ -189,15 +189,21 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Seed bot rivals — same color allocator, picks among colors not
-      // already claimed by humans.
+      // Seed bot rivals — difficulty comes from the lobby's seat config
+      // (what the host set for each bot seat). Fall back to "medium" if
+      // the seat didn't carry a difficulty (e.g. old games pre-lobby
+      // config). Color comes from the Phase 9 palette allocator,
+      // skipping anything humans already claimed.
+      const botPlannedSeats = plannedSeats.filter((s) => s.type === "bot");
       for (let i = 0; i < botsToSeed; i++) {
         const meta = BOT_DEFAULTS[i % BOT_DEFAULTS.length];
         const botDoctrines: DoctrineId[] = [
           "premium-service", "budget-expansion", "cargo-dominance", "global-network",
         ];
         const doctrine = botDoctrines[i % botDoctrines.length];
-        const botDifficulties = ["easy", "medium", "medium", "hard", "medium"];
+        const difficulty =
+          (botPlannedSeats[i]?.botDifficulty as "easy" | "medium" | "hard" | undefined) ??
+          "medium";
         const botColorId = pickNextAvailableColor(claimedColorIds);
         claimedColorIds.push(botColorId);
         const team = createInitializedTeamFromOnboarding({
@@ -215,7 +221,7 @@ export async function POST(req: NextRequest) {
           ...team,
           isPlayer: false,
           controlledBy: "bot" as const,
-          botDifficulty: botDifficulties[i % botDifficulties.length],
+          botDifficulty: difficulty,
           flags: Array.from(team.flags ?? []),
         };
         seededTeams.push(botTeam);

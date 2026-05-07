@@ -606,11 +606,13 @@ export async function forfeitMember(args: {
   remainingHumans: number;
   gameEnded: boolean;
 }>> {
-  // Group-D — call the SECURITY DEFINER function `forfeit_member_atomic`
-  // (migration 0006) so the read/flip/delete/audit are wrapped in a
-  // single transaction with a row-level lock on `games`. This eliminates
-  // the CAS race that the previous JS implementation could lose to a
-  // concurrent /api/games/state-update writer.
+  // Group-D of the audit follow-ups — call the SECURITY DEFINER
+  // function `forfeit_member_atomic` (migration 0006) so the
+  // read/flip/delete/audit operations all run inside a single
+  // Postgres transaction with a row-level lock on `games`. This
+  // eliminates the CAS race that the previous JS implementation
+  // (the version that was on origin/main before this merge) could
+  // lose to a concurrent /api/games/state-update writer.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supa = getServerClient() as any;
   const { data, error } = await supa.rpc("forfeit_member_atomic", {
