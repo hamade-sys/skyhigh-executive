@@ -3855,7 +3855,7 @@ export const useGame = create<GameStore>()(
           // so deposits, lease term/buy-out residual, production caps
           // etc. are all respected. Bots that lease ineligible specs
           // silently fall back to buy.
-          const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter);
+          const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter, getTotalRounds(s));
           if (order) {
             const spec = AIRCRAFT_BY_ID[order.specId];
             if (spec) {
@@ -3918,6 +3918,7 @@ export const useGame = create<GameStore>()(
             t.botDifficulty,
             s.currentQuarter,
             s.teams.filter((tm) => tm.id !== t.id),
+            getTotalRounds(s),
           );
           // Slot bid accumulator — when a bot opens a route, it must bid
           // for any slots it doesn't already hold at both endpoints. The

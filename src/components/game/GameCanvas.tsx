@@ -39,6 +39,70 @@ import { CITIES } from "@/data/cities";
 import { Button } from "@/components/ui";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
+// ── Bot-only auto-advance ──────────────────────────────────────────────────
+// How long (seconds) to pause between rounds so the GM can watch what
+// happened before the next bot simulation fires automatically.
+const BOT_AUTO_ADVANCE_SECONDS = 20;
+
+/** Countdown + auto-advance component rendered inside the GM observer banner
+ *  when ALL teams are bots (no human players in the game). Counts down from
+ *  BOT_AUTO_ADVANCE_SECONDS, then fires gmAdvanceQuarter automatically.
+ *  The GM can click "▶ Skip" to advance immediately. */
+function BotAutoAdvanceBanner({
+  gmAdvanceQuarter,
+}: {
+  gmAdvanceQuarter: () => void;
+}) {
+  const [seconds, setSeconds] = useState(BOT_AUTO_ADVANCE_SECONDS);
+
+  // Reset counter every time this component mounts (= start of a new round).
+  useEffect(() => {
+    setSeconds(BOT_AUTO_ADVANCE_SECONDS);
+  }, []);
+
+  // Count down 1 s at a time; fire advance when we reach 0.
+  useEffect(() => {
+    if (seconds <= 0) {
+      gmAdvanceQuarter();
+      return;
+    }
+    const id = window.setTimeout(() => setSeconds((s) => s - 1), 1000);
+    return () => window.clearTimeout(id);
+  }, [seconds, gmAdvanceQuarter]);
+
+  // Arc progress — full circle = BOT_AUTO_ADVANCE_SECONDS, shrinks to 0.
+  const pct = seconds / BOT_AUTO_ADVANCE_SECONDS;
+  const r = 10;
+  const circ = 2 * Math.PI * r;
+  const dash = circ * pct;
+
+  return (
+    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/80 backdrop-blur-sm text-white text-xs font-semibold shadow-lg">
+      {/* Circular countdown arc */}
+      <svg width="22" height="22" className="-rotate-90">
+        <circle cx="11" cy="11" r={r} fill="none" stroke="#475569" strokeWidth="2" />
+        <circle
+          cx="11" cy="11" r={r}
+          fill="none"
+          stroke="#a78bfa"
+          strokeWidth="2"
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="text-violet-300 tabular-nums">{seconds}s</span>
+      <span className="text-slate-300">· next round in</span>
+      <button
+        onClick={() => { setSeconds(0); }}
+        className="ml-1 px-2 py-0.5 rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-xs font-semibold transition-colors cursor-pointer"
+        title="Advance to next round immediately"
+      >
+        ▶ Skip
+      </button>
+    </div>
+  );
+}
+
 const PANEL_META: Record<
   PanelId,
   { title: string; subtitle?: string; width?: "narrow" | "wide"; render: () => React.ReactNode }
@@ -88,6 +152,12 @@ function CanvasInner() {
   // own advance via the Close Quarter button).
   const hasBotTeams = useGame((s) =>
     s.teams.some((t) => t.botDifficulty != null || t.controlledBy === "bot"),
+  );
+  // True when ALL teams are bots (no human players at all). In this
+  // mode the game auto-advances on a timer instead of waiting for a human.
+  const allBotsGame = useGame((s) =>
+    s.teams.length > 0 &&
+    s.teams.every((t) => t.botDifficulty != null || t.controlledBy === "bot"),
   );
   // activeTeam: what is currently displayed. For observers this is the
   // team they are spectating (set via setActiveTeam). For players it's
@@ -328,20 +398,34 @@ function CanvasInner() {
         </Panel>
       )}
 
-      {/* Observer banner — shown instead of action HUDs so the GM
-          always knows they're in spectate-only mode. When bot teams
-          exist, an "Advance Round" button lets the GM step the
-          simulation forward without any human player needing to act. */}
+      {/* Observer / GM banner — shown instead of action HUDs so the GM
+          always knows they're in spectate-only mode.
+          - Bot-only game  → auto-advance countdown + Skip button
+          - Mixed game     → static read-only pill + manual Advance button
+          - Human-only     → static read-only pill (no advance control) */}
       {isObserver && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[700] flex items-center gap-3">
-          {/* Status pill — pointer-events-none so map clicks pass through */}
-          <div className="pointer-events-none inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/80 backdrop-blur-sm text-white text-xs font-semibold shadow-lg">
-            <span className="text-violet-300">👁</span>
-            Observer · read-only — use the nav rail to switch teams
-          </div>
 
-          {/* Advance Round — only shown when bot teams exist and game is live */}
-          {hasBotTeams && phase === "playing" && (
+          {allBotsGame && phase === "playing" ? (
+            /* Bot simulation mode: auto-advance fires after the countdown.
+               A new BotAutoAdvanceBanner mounts each round (currentQuarter
+               change causes a re-key) so the timer resets cleanly. */
+            <BotAutoAdvanceBanner
+              key={currentQuarter}
+              gmAdvanceQuarter={gmAdvanceQuarter}
+            />
+          ) : (
+            /* Mixed or human-only game: static observer pill */
+            <div className="pointer-events-none inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/80 backdrop-blur-sm text-white text-xs font-semibold shadow-lg">
+              <span className="text-violet-300">👁</span>
+              Observer · read-only — use the nav rail to switch teams
+            </div>
+          )}
+
+          {/* Manual Advance button: visible in mixed games (human + bots)
+              so the GM can trigger bot rounds if no human is online, and
+              in bot-only games where they want to skip without waiting. */}
+          {hasBotTeams && !allBotsGame && phase === "playing" && (
             <button
               onClick={gmAdvanceQuarter}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-xs font-semibold shadow-lg transition-colors cursor-pointer select-none"
