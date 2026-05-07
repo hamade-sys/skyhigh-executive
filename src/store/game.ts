@@ -37,6 +37,8 @@ import {
   fuelSpikeRoutesToSuspend,
   fuelNormalRoutesToResume,
   hardBotBlockingBidCodes,
+  repriceBotRoutes,
+  retireAgedAircraft,
   type BotDifficulty,
 } from "@/lib/ai-bots";
 import {
@@ -3862,6 +3864,24 @@ export const useGame = create<GameStore>()(
               ),
             };
 
+            // ── Fleet retirement ───────────────────────────────────
+            // Retire age-expired and lease-expired aircraft. Close any
+            // routes they were assigned to first so the aircraft slot
+            // is freed and doesn't leave orphaned active routes.
+            const toRetire = retireAgedAircraft(updated, s.currentQuarter);
+            if (toRetire.length > 0) {
+              const retiredRouteIds = updated.fleet
+                .filter((f) => toRetire.includes(f.id) && f.routeId)
+                .map((f) => f.routeId as string);
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  retiredRouteIds.includes(r.id) ? { ...r, status: "closed" as const } : r,
+                ),
+                fleet: updated.fleet.filter((f) => !toRetire.includes(f.id)),
+              };
+            }
+
             // ── Fuel spike / normalise response ────────────────────
             // Medium + hard bots suspend long-haul during fuel spikes
             // and resume suspended routes when prices normalise.
@@ -3898,6 +3918,22 @@ export const useGame = create<GameStore>()(
                   f.routeId && toPrune.includes(f.routeId)
                     ? { ...f, routeId: null }
                     : f,
+                ),
+              };
+            }
+
+            // ── Route repricing ────────────────────────────────────
+            // Adjust pricing tier based on occupancy history:
+            // underfilled routes drop one tier; oversubscribed routes
+            // rise one tier (medium/hard only). Easy bots only reprice
+            // every other quarter and never raise prices.
+            const repricings = repriceBotRoutes(updated, t.botDifficulty, s.currentQuarter);
+            if (repricings.length > 0) {
+              const repriceMap = new Map(repricings.map((r) => [r.routeId, r.newTier]));
+              updated = {
+                ...updated,
+                routes: updated.routes.map((r) =>
+                  repriceMap.has(r.id) ? { ...r, pricingTier: repriceMap.get(r.id)! } : r,
                 ),
               };
             }

@@ -275,8 +275,10 @@ export function planBotRoutes(
     }
   }
 
-  // Easy bot mistake mode: ~30% chance to score low-demand cities highly
-  const easyMistakeMode = difficulty === "easy" && Math.random() < 0.3;
+  // Easy bot mistake mode: deterministic per (team+quarter) so replays
+  // and GM advances produce identical decisions rather than re-rolling.
+  const mistakeSeed = team.id.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const easyMistakeMode = difficulty === "easy" && ((mistakeSeed + currentQuarter) % 10) < 3;
 
   // Doctrine pricing and distance preferences
   const docPremium = team.doctrine === "premium-service";
@@ -592,6 +594,77 @@ export function fuelNormalRoutesToResume(
   if (difficulty === "easy") return [];
   if (fuelIndex > 130) return []; // still elevated — don't resume yet
   return team.routes.filter(r => r.status === "suspended").map(r => r.id);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Route repricing
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIER_ORDER: PricingTier[] = ["budget", "standard", "premium", "ultra"];
+
+/**
+ * Returns repricing actions for routes that have enough occupancy data.
+ *
+ * Rules (applied after ≥2 consecutive active quarters):
+ *  - avgOccupancy < 0.50  → drop one tier (all difficulties; easy bots bleed
+ *                           cash on empty seats and eventually react)
+ *  - avgOccupancy > 0.85  → raise one tier (medium + hard only; easy bots
+ *                           leave money on the table — intentional weakness)
+ *  - Easy bots only reprice once every other quarter (sluggish reaction).
+ */
+export function repriceBotRoutes(
+  team: Team,
+  difficulty: BotDifficulty,
+  currentQuarter: number,
+): Array<{ routeId: string; newTier: PricingTier }> {
+  const results: Array<{ routeId: string; newTier: PricingTier }> = [];
+
+  for (const r of team.routes) {
+    if (r.status !== "active") continue;
+    if ((r.consecutiveQuartersActive ?? 0) < 2) continue;
+    // Easy bots are sluggish — only check on even quarters
+    if (difficulty === "easy" && currentQuarter % 2 !== 0) continue;
+
+    const occ = r.avgOccupancy ?? 0;
+    const curIdx = TIER_ORDER.indexOf(r.pricingTier);
+
+    if (occ < 0.50 && curIdx > 0) {
+      results.push({ routeId: r.id, newTier: TIER_ORDER[curIdx - 1] });
+    } else if (occ > 0.85 && difficulty !== "easy" && curIdx < TIER_ORDER.length - 1) {
+      results.push({ routeId: r.id, newTier: TIER_ORDER[curIdx + 1] });
+    }
+  }
+
+  return results;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fleet retirement
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns IDs of aircraft the bot should retire this quarter.
+ * Includes both age-expired frames (retirementQuarter reached) and
+ * expired leases (leaseTermEndsAtQuarter passed). Routes assigned to
+ * these aircraft must be closed before retirement so the aircraft
+ * slot is freed correctly.
+ */
+export function retireAgedAircraft(
+  team: Team,
+  currentQuarter: number,
+): string[] {
+  return team.fleet
+    .filter((f) => {
+      if (f.status === "retired") return false;
+      if (f.retirementQuarter !== undefined && currentQuarter >= f.retirementQuarter) return true;
+      if (
+        f.acquisitionType === "lease" &&
+        typeof f.leaseTermEndsAtQuarter === "number" &&
+        currentQuarter > f.leaseTermEndsAtQuarter
+      ) return true;
+      return false;
+    })
+    .map((f) => f.id);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
