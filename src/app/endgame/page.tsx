@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
 import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds } from "@/lib/format";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, selectActiveTeam } from "@/store/game";
 import { computeAirlineValue, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
@@ -25,7 +25,12 @@ function legacyTitle(bv: number): { title: string; sub: string } {
 export default function Endgame() {
   const s = useGame();
   const router = useRouter();
-  const player = selectPlayer(s);
+  // In multiplayer (GM/observer), playerTeamId may briefly be null while
+  // Realtime re-hydration is in-flight, or permanently null for an observer
+  // who never claimed a seat. Fall back to activeTeamId (the team the GM
+  // was watching) so the results screen always renders.
+  const player = selectActiveTeam(s) ?? selectPlayer(s) ?? (s.teams.length > 0 ? s.teams[0] : null);
+  const isObserver = s.isObserver;
   const reset = useGame((g) => g.resetGame);
 
   if (!player) {
@@ -60,12 +65,18 @@ export default function Endgame() {
     if (b.brandPts !== a.brandPts) return b.brandPts - a.brandPts;
     return b.customerLoyaltyPct - a.customerLoyaltyPct;
   });
-  const finalRank = ranked.findIndex((t) => t.id === player.id) + 1;
-  const { title, sub } = legacyTitle(player.brandValue);
-  const totalProfit = player.financialsByQuarter.reduce((s, q) => s + q.netProfit, 0);
+  // For GM/observer: focus on the winner (ranked[0]) for the hero section.
+  // For regular players: focus on their own team.
+  const focusTeam = isObserver ? (ranked[0] ?? player) : player;
+  const focusAwards = resolveEndgameAwards(focusTeam);
+  const focusCardMult = focusAwards.reduce((m, a) => m * a.airlineValueMult, 1);
+  const focusFinalAirlineValue = computeAirlineValue(focusTeam) * focusCardMult;
+  const finalRank = ranked.findIndex((t) => t.id === focusTeam.id) + 1;
+  const { title, sub } = legacyTitle(focusTeam.brandValue);
+  const totalProfit = focusTeam.financialsByQuarter.reduce((s, q) => s + q.netProfit, 0);
   // Backwards-compatible alias for legacy display fragments below
-  const adjustedBV = player.brandValue;
-  const airlineValue = finalAirlineValue;
+  const adjustedBV = focusTeam.brandValue;
+  const airlineValue = isObserver ? focusFinalAirlineValue : finalAirlineValue;
 
   function playAgain() {
     reset();
@@ -85,7 +96,7 @@ export default function Endgame() {
         <div className="flex items-baseline gap-3">
           <span className="font-display text-xl text-ink">ICAN Simulations</span>
           <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
-            Final scoring · Q4 2024 closed
+            {isObserver ? "Game Master · Final Results" : "Final scoring · Q4 2024 closed"}
           </span>
         </div>
       </header>
@@ -96,47 +107,72 @@ export default function Endgame() {
             standings table below is enough). The player's tile gets
             a "You" pill + thicker border so they spot themselves
             at-a-glance even if they didn't medal. */}
-        {ranked.length >= 3 && (
-          <div className="grid grid-cols-3 gap-4 mb-10 items-end">
-            <PodiumStep
-              place={2}
-              team={ranked[1]}
-              isPlayer={ranked[1].id === player.id}
-              heightClass="h-44"
-            />
-            <PodiumStep
-              place={1}
-              team={ranked[0]}
-              isPlayer={ranked[0].id === player.id}
-              heightClass="h-56"
-            />
-            <PodiumStep
-              place={3}
-              team={ranked[2]}
-              isPlayer={ranked[2].id === player.id}
-              heightClass="h-36"
-            />
+        {ranked.length >= 2 && (
+          <div className={`grid gap-4 mb-10 items-end ${ranked.length >= 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+            {ranked.length >= 3 ? (
+              <>
+                <PodiumStep
+                  place={2}
+                  team={ranked[1]}
+                  isPlayer={!isObserver && ranked[1].id === player.id}
+                  heightClass="h-44"
+                />
+                <PodiumStep
+                  place={1}
+                  team={ranked[0]}
+                  isPlayer={!isObserver && ranked[0].id === player.id}
+                  heightClass="h-56"
+                />
+                <PodiumStep
+                  place={3}
+                  team={ranked[2]}
+                  isPlayer={!isObserver && ranked[2].id === player.id}
+                  heightClass="h-36"
+                />
+              </>
+            ) : (
+              <>
+                <PodiumStep
+                  place={1}
+                  team={ranked[0]}
+                  isPlayer={!isObserver && ranked[0].id === player.id}
+                  heightClass="h-56"
+                />
+                <PodiumStep
+                  place={2}
+                  team={ranked[1]}
+                  isPlayer={!isObserver && ranked[1].id === player.id}
+                  heightClass="h-44"
+                />
+              </>
+            )}
           </div>
         )}
 
-        <Badge tone="accent">{finalRank === 1 ? "Winner" : `Finished #${finalRank} of ${s.teams.length}`}</Badge>
+        <Badge tone="accent">
+          {isObserver
+            ? `🏆 Winner: ${ranked[0]?.name ?? "—"}`
+            : finalRank === 1 ? "Winner" : `Finished #${finalRank} of ${s.teams.length}`}
+        </Badge>
         <h1 className="font-display text-[clamp(3rem,7vw,5rem)] leading-[1.04] text-ink mt-4 mb-3">
-          {title}.
+          {isObserver ? `${ranked[0]?.name ?? "Winner"} wins!` : `${title}.`}
         </h1>
         <p className="text-ink-2 text-[1.125rem] leading-relaxed max-w-[52ch] mb-10">
-          {sub}
+          {isObserver
+            ? `${ranked[0]?.name ?? "The winner"} finished with the highest airline value. Full standings below.`
+            : sub}
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           <Stat label="Final Brand Value" value={adjustedBV.toFixed(1)} tone="accent" />
           <Stat label="Airline Value" value={fmtMoney(airlineValue)} />
-          <Stat label="Customer loyalty" value={fmtPct(player.customerLoyaltyPct, 0)} />
+          <Stat label="Customer loyalty" value={fmtPct(focusTeam.customerLoyaltyPct, 0)} />
           <Stat label="Total net profit" value={fmtMoney(totalProfit)} tone={totalProfit >= 0 ? "positive" : "negative"} />
         </div>
 
         {/* Brand Value composition — how the final number was constructed */}
         {(() => {
-          const bv = computeBrandValueBreakdown(player);
+          const bv = computeBrandValueBreakdown(focusTeam);
           return (
             <Card className="mb-6">
               <CardBody>
@@ -188,14 +224,14 @@ export default function Endgame() {
         })()}
 
         {/* End-game awards (PRD G9) */}
-        {awards.length > 0 && (
+        {focusAwards.length > 0 && (
           <Card className="mb-6">
             <CardBody>
               <h2 className="font-display text-[1.5rem] text-ink mb-3">
-                End-game awards earned
+                End-game awards earned{isObserver ? ` · ${focusTeam.name}` : ""}
               </h2>
               <div className="space-y-2">
-                {awards.map((a) => (
+                {focusAwards.map((a) => (
                   <div
                     key={a.card}
                     className="flex items-baseline justify-between py-2 border-b border-line last:border-0"
@@ -249,7 +285,7 @@ export default function Endgame() {
                   <div
                     key={t.id}
                     className={`flex items-center gap-3 rounded-md border p-2.5 ${
-                      t.id === player.id
+                      !isObserver && t.id === player.id
                         ? "border-primary bg-[rgba(20,53,94,0.04)]"
                         : "border-line bg-surface"
                     }`}
@@ -265,10 +301,10 @@ export default function Endgame() {
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[0.9375rem] truncate ${t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}`}>
+                        <span className={`text-[0.9375rem] truncate ${!isObserver && t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}`}>
                           {t.name}
                         </span>
-                        {t.id === player.id && <Badge tone="primary">You</Badge>}
+                        {!isObserver && t.id === player.id && <Badge tone="primary">You</Badge>}
                         {i === 0 && <Badge tone="accent">Winner</Badge>}
                       </div>
                       <div className="text-[0.6875rem] text-ink-muted font-mono">
@@ -294,7 +330,7 @@ export default function Endgame() {
         {(() => {
           const facts: Array<{ label: string; value: string }> = [];
           // Most-flown route
-          const routesByRev = [...player.routes].sort(
+          const routesByRev = [...focusTeam.routes].sort(
             (a, b) => b.quarterlyRevenue - a.quarterlyRevenue,
           );
           if (routesByRev.length > 0 && routesByRev[0].quarterlyRevenue > 0) {
@@ -306,26 +342,26 @@ export default function Endgame() {
           // Total quarters played
           facts.push({
             label: "Quarters operated",
-            value: `${player.financialsByQuarter.length} of ${getTotalRounds(s)}`,
+            value: `${focusTeam.financialsByQuarter.length} of ${getTotalRounds(s)}`,
           });
           // Total decisions
-          if (player.decisions.length > 0) {
+          if (focusTeam.decisions.length > 0) {
             facts.push({
               label: "Boardroom decisions submitted",
-              value: `${player.decisions.length}`,
+              value: `${focusTeam.decisions.length}`,
             });
           }
           // Best brand value peak
-          const peakBV = Math.max(...player.financialsByQuarter.map((q) => q.brandValue));
-          const peakBVRow = player.financialsByQuarter.find((q) => q.brandValue === peakBV);
+          const peakBV = Math.max(...focusTeam.financialsByQuarter.map((q) => q.brandValue));
+          const peakBVRow = focusTeam.financialsByQuarter.find((q) => q.brandValue === peakBV);
           if (peakBVRow) {
             facts.push({
               label: "Peak Brand Rating quarter",
-              value: `${brandRating({ ...player, brandPts: peakBVRow.brandPts ?? player.brandPts }).grade} at Q${peakBVRow.quarter}`,
+              value: `${brandRating({ ...focusTeam, brandPts: peakBVRow.brandPts ?? focusTeam.brandPts }).grade} at Q${peakBVRow.quarter}`,
             });
           }
           // Total revenue
-          const totalRev = player.financialsByQuarter.reduce((s, q) => s + q.revenue, 0);
+          const totalRev = focusTeam.financialsByQuarter.reduce((s, q) => s + q.revenue, 0);
           facts.push({
             label: "Lifetime revenue",
             value: fmtMoney(totalRev),
@@ -333,11 +369,11 @@ export default function Endgame() {
           // Aircraft acquired
           facts.push({
             label: "Aircraft in fleet at endgame",
-            value: `${player.fleet.filter((f) => f.status !== "retired").length} active · ${player.fleet.filter((f) => f.status === "retired").length} retired`,
+            value: `${focusTeam.fleet.filter((f) => f.status !== "retired").length} active · ${focusTeam.fleet.filter((f) => f.status === "retired").length} retired`,
           });
           // Network reach
           const uniqueCities = new Set<string>();
-          for (const r of player.routes) {
+          for (const r of focusTeam.routes) {
             if (r.status !== "closed") {
               uniqueCities.add(r.originCode);
               uniqueCities.add(r.destCode);
@@ -367,7 +403,7 @@ export default function Endgame() {
         })()}
 
         {/* Career arc — brand value trajectory across all 40 rounds */}
-        {player.financialsByQuarter.length >= 2 && (
+        {focusTeam.financialsByQuarter.length >= 2 && (
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
@@ -377,15 +413,15 @@ export default function Endgame() {
                 </span>
               </div>
               {(() => {
-                const series = player.financialsByQuarter.map((q) => q.brandValue);
-                const profitSeries = player.financialsByQuarter.map((q) => q.netProfit);
-                const cashSeries = player.financialsByQuarter.map((q) => q.cash);
+                const series = focusTeam.financialsByQuarter.map((q) => q.brandValue);
+                const profitSeries = focusTeam.financialsByQuarter.map((q) => q.netProfit);
+                const cashSeries = focusTeam.financialsByQuarter.map((q) => q.cash);
                 const peakBV = Math.max(...series);
-                const peakBVQ = player.financialsByQuarter.find((q) => q.brandValue === peakBV)?.quarter ?? 1;
+                const peakBVQ = focusTeam.financialsByQuarter.find((q) => q.brandValue === peakBV)?.quarter ?? 1;
                 const trough = Math.min(...profitSeries);
                 const peak = Math.max(...profitSeries);
-                const bestQ = player.financialsByQuarter.find((q) => q.netProfit === peak);
-                const worstQ = player.financialsByQuarter.find((q) => q.netProfit === trough);
+                const bestQ = focusTeam.financialsByQuarter.find((q) => q.netProfit === peak);
+                const worstQ = focusTeam.financialsByQuarter.find((q) => q.netProfit === trough);
                 return (
                   <>
                     <div className="grid grid-cols-3 gap-4 mb-4">
@@ -420,7 +456,7 @@ export default function Endgame() {
           const highlights: Highlight[] = [];
 
           // Best & worst quarter by net profit
-          const profitSeries = player.financialsByQuarter
+          const profitSeries = focusTeam.financialsByQuarter
             .map((q) => ({ q: q.quarter, p: q.netProfit }));
           if (profitSeries.length > 0) {
             const best = profitSeries.reduce((acc, x) => x.p > acc.p ? x : acc, profitSeries[0]);
@@ -450,7 +486,7 @@ export default function Endgame() {
           //    quarterly cash series, track the lowest cash position,
           //    and report the largest peak-to-trough recovery if it's
           //    meaningful (>$50M and spans >= 2Q).
-          const cashSeries = player.financialsByQuarter
+          const cashSeries = focusTeam.financialsByQuarter
             .map((q) => ({ q: q.quarter, c: q.cash }));
           if (cashSeries.length >= 3) {
             let troughIdx = 0;
@@ -477,7 +513,7 @@ export default function Endgame() {
           // ── Highest debt-stress moment — peak debt-to-airline-value
           //    ratio. Only worth surfacing when it crossed the
           //    "covenant pressure" zone (≥50%).
-          const stressSeries = player.financialsByQuarter
+          const stressSeries = focusTeam.financialsByQuarter
             .map((q) => {
               // Approximate airline value from cash-debt+brandValue.
               // computeAirlineValue would be more accurate but needs
@@ -514,7 +550,7 @@ export default function Endgame() {
           }
 
           // Peak brand value quarter
-          const bvSeries = player.financialsByQuarter
+          const bvSeries = focusTeam.financialsByQuarter
             .map((q) => ({ q: q.quarter, bv: q.brandValue }));
           if (bvSeries.length > 0) {
             const peak = bvSeries.reduce((acc, x) => x.bv > acc.bv ? x : acc, bvSeries[0]);
@@ -528,7 +564,7 @@ export default function Endgame() {
           }
 
           // Most-impactful decisions — first 3 by quarter
-          const earlyDecisions = [...player.decisions]
+          const earlyDecisions = [...focusTeam.decisions]
             .sort((a, b) => a.quarter - b.quarter)
             .slice(0, 3);
           for (const d of earlyDecisions) {
@@ -594,14 +630,14 @@ export default function Endgame() {
         })()}
 
         {/* Decisions retrospective — every board call this team made */}
-        {player.decisions.length > 0 && (
+        {focusTeam.decisions.length > 0 && (
           <Card className="mb-6">
             <CardBody>
               <h2 className="font-display text-[1.5rem] text-ink mb-3">
-                Boardroom decisions · {player.decisions.length}
+                Boardroom decisions · {focusTeam.decisions.length}
               </h2>
               <div className="space-y-1.5">
-                {[...player.decisions]
+                {[...focusTeam.decisions]
                   .sort((a, b) => a.quarter - b.quarter)
                   .map((d) => {
                     const scenario = (SCENARIOS_BY_QUARTER[d.quarter] ?? [])
@@ -626,7 +662,7 @@ export default function Endgame() {
         )}
 
         {/* Milestones unlocked across the 40-round campaign */}
-        {player.milestones.length > 0 && (
+        {focusTeam.milestones.length > 0 && (
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
@@ -634,11 +670,11 @@ export default function Endgame() {
                   <Award size={20} /> Milestones unlocked
                 </h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-                  {player.milestones.length} of {MILESTONES.length}
+                  {focusTeam.milestones.length} of {MILESTONES.length}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {player.milestones.map((id) => {
+                {focusTeam.milestones.map((id) => {
                   const m = MILESTONES_BY_ID[id];
                   if (!m) return null;
                   return (
@@ -680,7 +716,7 @@ export default function Endgame() {
               </thead>
               <tbody>
                 {ranked.map((t, i) => (
-                  <tr key={t.id} className={`border-b border-line last:border-0 ${t.id === player.id ? "bg-[rgba(20,53,94,0.04)]" : ""}`}>
+                  <tr key={t.id} className={`border-b border-line last:border-0 ${!isObserver && t.id === player.id ? "bg-[rgba(20,53,94,0.04)]" : ""}`}>
                     <td className="py-3 w-10 font-mono text-ink-muted">{i + 1}</td>
                     <td className="py-3">
                       <div className="flex items-center gap-2.5">
@@ -690,10 +726,10 @@ export default function Endgame() {
                         >
                           {t.code}
                         </span>
-                        <span className={t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}>
+                        <span className={!isObserver && t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}>
                           {t.name}
                         </span>
-                        {t.id === player.id && <Badge tone="primary">You</Badge>}
+                        {!isObserver && t.id === player.id && <Badge tone="primary">You</Badge>}
                       </div>
                     </td>
                     <td className="py-3 text-right tabular font-display text-[1.125rem]">{fmtMoney(t.finalAirlineValue)}</td>
@@ -710,7 +746,7 @@ export default function Endgame() {
 
         {/* MVP Award (PRD §15.2) */}
         {(() => {
-          type MvpCandidate = { teamCode: string; teamName: string; teamColor: string; member: (typeof player.members)[number] };
+          type MvpCandidate = { teamCode: string; teamName: string; teamColor: string; member: (typeof focusTeam.members)[number] };
           const allMembers: MvpCandidate[] = s.teams.flatMap((t) =>
             t.members.map((m) => ({ teamCode: t.code, teamName: t.name, teamColor: t.color, member: m }))
           );

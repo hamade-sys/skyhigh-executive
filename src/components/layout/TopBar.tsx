@@ -45,6 +45,9 @@ export function TopBar() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
   const isMultiplayer = useGame((g) => g.session?.gameId != null);
+  // Phase 3: pull configured totalRounds from session so the "Quarter X of Y"
+  // chip uses the actual game length (8, 16, 24, 40…) not the hardcoded default.
+  const totalRounds = useGame(getTotalRounds);
 
   if (!player) return null;
 
@@ -182,7 +185,7 @@ export function TopBar() {
             {fmtQuarter(currentQuarter)}
           </span>
           <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mt-0.5 tabular">
-            {fmtQuarterShort(currentQuarter)}
+            {fmtQuarterShort(currentQuarter, totalRounds)}
           </span>
         </div>
         <QuarterTimerChip />
