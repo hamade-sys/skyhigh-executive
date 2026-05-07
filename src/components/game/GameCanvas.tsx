@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 // Leaflet hits `window` on import, so the map can't render on the server.
@@ -55,20 +55,29 @@ function BotAutoAdvanceBanner({
 }) {
   const [seconds, setSeconds] = useState(BOT_AUTO_ADVANCE_SECONDS);
 
+  // Always-current ref so the countdown effect never needs gmAdvanceQuarter
+  // in its dependency array. Without this, a reference change (e.g. after a
+  // Realtime re-hydration) would re-run the effect while seconds === 0 and
+  // fire gmAdvanceQuarter a second time — causing a duplicate advance and a
+  // cascade of 409 version-conflict errors.
+  const advanceRef = useRef(gmAdvanceQuarter);
+  useEffect(() => { advanceRef.current = gmAdvanceQuarter; }, [gmAdvanceQuarter]);
+
   // Reset counter every time this component mounts (= start of a new round).
   useEffect(() => {
     setSeconds(BOT_AUTO_ADVANCE_SECONDS);
   }, []);
 
   // Count down 1 s at a time; fire advance when we reach 0.
+  // gmAdvanceQuarter accessed via ref — excluded from deps intentionally.
   useEffect(() => {
     if (seconds <= 0) {
-      gmAdvanceQuarter();
+      advanceRef.current();
       return;
     }
     const id = window.setTimeout(() => setSeconds((s) => s - 1), 1000);
     return () => window.clearTimeout(id);
-  }, [seconds, gmAdvanceQuarter]);
+  }, [seconds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Arc progress — full circle = BOT_AUTO_ADVANCE_SECONDS, shrinks to 0.
   const pct = seconds / BOT_AUTO_ADVANCE_SECONDS;

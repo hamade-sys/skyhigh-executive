@@ -5037,27 +5037,44 @@ export const useGame = create<GameStore>()(
           return;
         }
 
-        // Temporarily lower the observer flag and assign the first bot as
-        // the "synthetic player" so closeQuarter's guards pass. The modified
-        // humanCount guard in closeQuarter detects this pattern (via
-        // botDifficulty on the playerTeamId team) and skips the endgame path.
         const savedActiveTeamId = s.activeTeamId;
-        set({ isObserver: false, playerTeamId: botTeam.id });
+
+        // ── Keep isObserver:true during all processing ─────────────────
+        // Only set playerTeamId so closeQuarter's isGmSimAdvance guard
+        // detects the synthetic player (via botDifficulty check) and skips
+        // the humanCount===0 endgame path.
+        //
+        // Crucially: isObserver stays true so pushStateToServer returns
+        // immediately (no-op) inside BOTH closeQuarter and advanceToNext.
+        // Previously setting isObserver:false here caused two races:
+        //   1. closeQuarter pushed "game.quarterClosed" at version N async.
+        //   2. UI components saw isObserver:false (player mode), detected
+        //      unresolved scenarios, and pushed "player.submittedDecision"
+        //      also at version N — both landed simultaneously → 409 cascade.
+        set({ playerTeamId: botTeam.id });
 
         // closeQuarter runs all bot AI decisions (routes, aircraft, slots),
         // processes every team through runQuarterClose, resolves slot
-        // auctions, updates fuel / interest rate, and sets phase →
-        // "quarter-closing". It is fully synchronous.
+        // auctions, and updates fuel / interest rate. Fully synchronous.
+        // Its internal pushStateToServer is suppressed (isObserver:true).
         get().closeQuarter();
 
-        // advanceToNext transitions phase → "playing", bumps currentQuarter,
-        // saves a snapshot, and pushes the new state to the server so every
-        // other browser re-hydrates.
+        // advanceToNext transitions phase → "playing" and bumps currentQuarter.
+        // Its internal pushStateToServer is also suppressed.
         get().advanceToNext();
 
-        // Restore the GM to pure observer mode. lastCloseResult: null
-        // prevents the QuarterCloseModal from appearing (it's a player-only
-        // UI), and playerTeamId: null re-establishes the read-only contract.
+        // ── Single atomic write ─────────────────────────────────────────
+        // Briefly flip isObserver:false only for the push call so exactly
+        // one write goes out with the fully-computed final state.
+        // This happens synchronously before any React re-render can observe
+        // the transient isObserver:false — effects fire after the paint, by
+        // which point isObserver is already restored to true.
+        set({ isObserver: false });
+        get().pushStateToServer("game.botRoundAdvanced", {
+          quarter: get().currentQuarter,
+        });
+        // Restore observer state. lastCloseResult:null prevents the
+        // QuarterCloseModal (player-only UI) from appearing.
         set({
           isObserver: true,
           playerTeamId: null,
