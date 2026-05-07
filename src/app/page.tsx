@@ -221,15 +221,16 @@ function Hero() {
 }
 
 // ─── Hero decorative airliner ───────────────────────────────
-// Outline-style 3/4-view airliner anchored to the right of the hero.
-// Reinforces the "airline simulation" positioning without crowding the
-// headline copy. The whole illustration is wrapped in `pointer-events-
-// none` so it never intercepts CTA clicks.
+// Clean side-profile airliner, anchored to the right of the hero.
+// Designed as a brand mark — single continuous fuselage silhouette
+// (closed path) with proper Boeing-737-style proportions: 1:8 width-to-
+// length ratio, 25° wing sweep, swept tail fin, two underwing engines.
+// Stroked with a cyan gradient + a soft halo so it reads as elegant
+// ambient decor, not a technical diagram.
 //
-// Sizing: scales fluidly with `clamp()` so the plane stays proportionate
-// on a laptop AND a 4K desktop. Hidden below `md` so the title gets full
-// width on phones — the gradient blobs already provide enough texture
-// for narrow viewports.
+// Sizing: scales fluidly with `clamp()` from 360px (tablet) up through
+// 580px (desktop). Hidden below `md` so the title gets full-width on
+// phones; pointer-events-none so it never intercepts CTA clicks.
 function HeroPlane() {
   return (
     <div
@@ -240,71 +241,150 @@ function HeroPlane() {
       }}
     >
       <svg
-        viewBox="0 0 600 300"
+        viewBox="0 0 640 320"
         fill="none"
         className="w-full h-auto"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Soft glow halo behind the airframe to lift it off the
-            backdrop without competing with the gradient blobs. */}
         <defs>
-          <radialGradient id="planeGlow" cx="0.5" cy="0.5" r="0.5">
+          {/* Soft halo behind the airframe — lifts the silhouette
+              off the slate-950 backdrop without competing with the
+              hero's cyan/violet/emerald gradient blobs. */}
+          <radialGradient id="planeGlow" cx="0.5" cy="0.5" r="0.55">
             <stop offset="0%" stopColor="rgb(34 211 238)" stopOpacity="0.18" />
+            <stop offset="60%" stopColor="rgb(34 211 238)" stopOpacity="0.05" />
             <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0" />
           </radialGradient>
-          <linearGradient id="planeStroke" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgb(165 243 252)" stopOpacity="0.55" />
+          {/* Stroke gradient — lighter at the nose, deeper at the
+              tail. Reads as light catching the leading edge in flight. */}
+          <linearGradient id="planeStroke" x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="rgb(207 250 254)" stopOpacity="0.85" />
+            <stop offset="55%" stopColor="rgb(165 243 252)" stopOpacity="0.6" />
             <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.35" />
           </linearGradient>
+          {/* Gentle inner-fill gradient applied to the wing + fuselage
+              to hint at body without filling them in solid. */}
+          <linearGradient id="planeFill" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="rgb(165 243 252)" stopOpacity="0.06" />
+            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.02" />
+          </linearGradient>
         </defs>
-        <ellipse cx="300" cy="150" rx="240" ry="80" fill="url(#planeGlow)" />
 
-        {/* Airliner — 3/4 view, gentle climb. Built from clean
-            geometric strokes so it reads as a brand mark, not a
-            photograph. Coordinates are hand-tuned to read at 360px
-            (tablet) up through 580px (desktop). */}
+        <ellipse cx="320" cy="160" rx="280" ry="92" fill="url(#planeGlow)" />
+
+        {/* Airliner silhouette — clean side profile, plane noses right.
+            Centerline y≈158. Layered back-to-front: stabilizer →
+            fuselage → wing → engine → window detail. Side profile
+            (not 3/4 view) reads as a brand mark, not a technical
+            sketch — no awkward perspective tricks. */}
         <g
           stroke="url(#planeStroke)"
-          strokeWidth="1.5"
+          strokeWidth="1.6"
+          fill="none"
           strokeLinejoin="round"
           strokeLinecap="round"
         >
-          {/* Fuselage */}
-          <path d="M 100 158 Q 95 152 110 148 L 460 142 Q 510 144 520 152 Q 510 160 460 162 L 110 158 Q 95 156 100 158 Z" />
-          {/* Cockpit windows */}
-          <path d="M 488 148 Q 502 150 510 152" />
-          <path d="M 480 154 L 510 154" />
-          {/* Nose tip */}
-          <path d="M 510 152 Q 525 152 528 154" />
-          {/* Tail fin */}
-          <path d="M 110 148 L 80 96 L 102 96 L 130 144" />
-          {/* Tail rudder line */}
-          <path d="M 86 116 L 124 132" opacity="0.6" />
-          {/* Horizontal stabilizer (right tail wing) */}
-          <path d="M 118 152 L 80 178 L 100 180 L 140 158" />
-          {/* Main wing — top */}
-          <path d="M 280 156 L 200 220 L 240 224 L 340 162" />
-          {/* Main wing — bottom (under fuselage perspective) */}
-          <path d="M 280 156 Q 270 172 290 188 L 320 188 Q 340 172 340 162" opacity="0.5" />
-          {/* Engine pod 1 (under wing) */}
-          <ellipse cx="248" cy="200" rx="22" ry="9" />
-          <line x1="234" y1="200" x2="262" y2="200" />
-          {/* Engine pod 2 (under fuselage on far side, hinted) */}
-          <ellipse cx="318" cy="190" rx="14" ry="6" opacity="0.5" />
-          {/* Cabin window strip — staggered dots imply the row */}
-          <g opacity="0.55">
-            <circle cx="170" cy="152" r="1.2" />
-            <circle cx="190" cy="151" r="1.2" />
-            <circle cx="210" cy="150" r="1.2" />
-            <circle cx="230" cy="150" r="1.2" />
-            <circle cx="250" cy="149" r="1.2" />
-            <circle cx="350" cy="149" r="1.2" />
-            <circle cx="370" cy="148" r="1.2" />
-            <circle cx="390" cy="148" r="1.2" />
-            <circle cx="410" cy="147" r="1.2" />
-            <circle cx="430" cy="147" r="1.2" />
-            <circle cx="450" cy="146" r="1.2" />
+          {/* ── HORIZONTAL STABILIZER — back tail wing, drawn first so
+                the fuselage covers its inner edge ───────────────── */}
+          <path
+            d="M 110 162 L 60 184 Q 56 188, 64 188 L 92 188 Q 100 188, 108 184 L 130 168 Z"
+            fill="url(#planeFill)"
+          />
+
+          {/* ── FUSELAGE + TAIL (single closed silhouette) ────────
+              Traced clockwise from the nose tip. Coordinate system:
+                - Nose tip:        (588, 158)
+                - Fuselage top:    y = 144  (constant across length)
+                - Fuselage bottom: y = 174  (constant across length)
+                - Tail cone tip:   (55, 159) — centerline
+                - Vertical fin:    base x=90→130, tip y=90 (rises 54)
+
+              The leading edge of the fin sweeps BACK at ~30° (typical
+              for a Boeing 737 / Airbus A320), the trailing edge drops
+              near-vertically, the tip is a 10-unit flat. */}
+          <path
+            d="
+              M 588 158
+              Q 596 150, 580 144
+              Q 555 138, 510 140
+              L 130 144
+              L 108 92
+              Q 106 88, 102 88
+              L 96 88
+              Q 92 88, 92 92
+              L 90 144
+              L 55 156
+              Q 48 159, 55 162
+              L 90 174
+              L 510 174
+              Q 555 174, 580 170
+              Q 596 164, 588 158 Z
+            "
+            fill="url(#planeFill)"
+          />
+
+          {/* ── COCKPIT WINDOWS — angled tier of three panes near
+                the nose. Top short, middle longest, bottom subtle —
+                mirrors the way windscreens read on real airliners. */}
+          <path d="M 540 150 L 568 150" />
+          <path d="M 540 156 L 575 156" />
+          <path d="M 542 162 L 572 162" opacity="0.7" />
+
+          {/* ── MAIN WING (foreground, swept-back ~25°) ─────────── */}
+          <path
+            d="
+              M 290 170
+              L 200 248
+              Q 195 252 205 252
+              L 250 252
+              Q 258 252 268 246
+              L 360 174
+              L 290 170 Z
+            "
+            fill="url(#planeFill)"
+          />
+
+          {/* ── ENGINE NACELLE — elongated capsule under the wing ── */}
+          <g>
+            <path
+              d="
+                M 218 240
+                C 216 234, 220 230, 226 230
+                L 252 230
+                C 258 230, 260 234, 258 240
+                C 258 246, 254 250, 250 250
+                L 226 250
+                C 222 250, 216 246, 218 240 Z
+              "
+              fill="url(#planeFill)"
+            />
+            {/* Intake darker ellipse — gives the engine depth */}
+            <ellipse cx="222" cy="240" rx="3" ry="4" opacity="0.55" />
+            {/* Pylon connecting engine to wing */}
+            <path d="M 232 230 L 238 220 M 248 230 L 252 220" opacity="0.6" />
           </g>
+
+          {/* ── CABIN WINDOW STRIP — clean dotted line along the
+                fuselage centerline, gives scale + airline feel ── */}
+          <g opacity="0.6">
+            <circle cx="180" cy="160" r="1.4" />
+            <circle cx="205" cy="160" r="1.4" />
+            <circle cx="230" cy="160" r="1.4" />
+            <circle cx="255" cy="160" r="1.4" />
+            <circle cx="280" cy="160" r="1.4" />
+            <circle cx="305" cy="160" r="1.4" />
+            <circle cx="330" cy="159" r="1.4" />
+            <circle cx="380" cy="158" r="1.4" />
+            <circle cx="405" cy="158" r="1.4" />
+            <circle cx="430" cy="157" r="1.4" />
+            <circle cx="455" cy="157" r="1.4" />
+            <circle cx="480" cy="156" r="1.4" />
+            <circle cx="505" cy="156" r="1.4" />
+          </g>
+
+          {/* ── DOOR INDICATORS — two subtle vertical hairlines ── */}
+          <line x1="160" y1="148" x2="160" y2="172" opacity="0.3" />
+          <line x1="350" y1="146" x2="350" y2="172" opacity="0.3" />
         </g>
       </svg>
     </div>
