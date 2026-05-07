@@ -146,7 +146,18 @@ function Hero() {
         />
       </div>
 
-      <div className="relative max-w-6xl mx-auto px-6 pt-20 pb-28 lg:pt-28 lg:pb-36">
+      {/* Decorative paper-airplane dart anchored to the right of the
+          hero. Sits behind the headline copy (z-0); hidden below md
+          so the title gets full width on phones. Cyan stroke gradient
+          + soft halo so it reads as ambient brand decoration, not a
+          focal point. See HeroPlane below for the SVG. */}
+      <HeroPlane />
+
+      {/* Subtle dashed flightpath arc echoing the route theme. Same
+          visibility breakpoint as the plane. */}
+      <HeroFlightPath />
+
+      <div className="relative z-10 max-w-6xl mx-auto px-6 pt-20 pb-28 lg:pt-28 lg:pb-36">
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm mb-6">
             <Sparkles className="w-3 h-3 text-cyan-400" />
@@ -155,12 +166,11 @@ function Hero() {
             </span>
           </div>
 
-          {/* Phase 7.1 brand realignment moved global h1 color to
-              `var(--ink)` (#1a1a1a) so headings on light surfaces
-              read crisply. The hero sits on a dark backdrop, so we
-              override with explicit text-white here — without it,
-              the headline becomes invisible against bg-slate-950.
-              The accent line keeps its cyan. */}
+          {/* globals.css drops `color` from the global h1 rule so this
+              heading inherits text-white from the parent <section>.
+              Explicit `text-white` is also set here as belt-and-
+              suspenders so any future cascading override (e.g. a
+              theme variant) doesn't accidentally re-hide the title. */}
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-bold tracking-tight leading-[1.04] mb-6 text-white">
             Lead an industry.
             <br />
@@ -207,6 +217,194 @@ function Hero() {
         </div>
       </div>
     </section>
+  );
+}
+
+// ─── Hero decorative paper airplane ──────────────────────────
+// Iconic folded-paper-airplane silhouette anchored to the right of
+// the hero. Reads as a brand mark, not a technical diagram. The
+// classic "send" / Telegram-arrow geometry — a sharp dart pointing
+// forward, with a center fold visible inside, two wing planes folded
+// out either side of the spine.
+//
+// Why a paper airplane instead of a jet airliner: paper-plane folds
+// are pure geometric polygons, so there's no risk of "ugly biomorphic
+// curves looking deformed". Just clean straight lines — the shape is
+// always crisp at any size. Same airline-y motion, friendlier feel.
+//
+// Sizing: scales fluidly with `clamp()` from 320px (tablet) up
+// through 540px (desktop). Hidden below `md` so the title gets
+// full-width on phones; pointer-events-none so it never intercepts
+// CTA clicks.
+function HeroPlane() {
+  return (
+    <div
+      aria-hidden
+      className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[-2rem] lg:right-4 xl:right-12 z-0 pointer-events-none"
+      style={{
+        width: "clamp(320px, 34vw, 540px)",
+      }}
+    >
+      <svg
+        viewBox="0 0 600 380"
+        fill="none"
+        className="w-full h-auto"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          {/* Soft halo behind the plane — lifts the silhouette off
+              the slate-950 backdrop without competing with the hero's
+              gradient blobs. */}
+          <radialGradient id="paperGlow" cx="0.5" cy="0.5" r="0.55">
+            <stop offset="0%" stopColor="rgb(34 211 238)" stopOpacity="0.22" />
+            <stop offset="60%" stopColor="rgb(34 211 238)" stopOpacity="0.06" />
+            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0" />
+          </radialGradient>
+
+          {/* Stroke gradient — bright at the nose, fades toward the
+              tail. Reads as light catching the leading edge mid-flight. */}
+          <linearGradient id="paperStroke" x1="100%" y1="20%" x2="0%" y2="80%">
+            <stop offset="0%" stopColor="rgb(207 250 254)" stopOpacity="0.95" />
+            <stop offset="55%" stopColor="rgb(165 243 252)" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.4" />
+          </linearGradient>
+
+          {/* Top-wing fill — the wing facing the light, slightly
+              brighter so the paper folds read as 3D not flat. */}
+          <linearGradient id="paperFillTop" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stopColor="rgb(207 250 254)" stopOpacity="0.10" />
+            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.04" />
+          </linearGradient>
+
+          {/* Bottom-wing fill — the wing in shadow, deeper tint so the
+              two halves contrast subtly without heavy shading. */}
+          <linearGradient id="paperFillBottom" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stopColor="rgb(34 211 238)" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="rgb(8 145 178)" stopOpacity="0.10" />
+          </linearGradient>
+        </defs>
+
+        {/* Glow */}
+        <ellipse cx="300" cy="190" rx="280" ry="120" fill="url(#paperGlow)" />
+
+        {/* Plane body. Gentle climb — rotated -10° around its center
+            so the dart reads as in-flight, not parked.
+            Geometry (before rotation):
+              - Nose tip (right):       (560, 190)
+              - Top wingtip:            (40, 80)
+              - Tail-fold center:       (200, 190)
+              - Bottom wingtip:         (40, 300)
+            The center fold from nose → tail-fold splits the dart into
+            an upper triangle (catching light) and a lower triangle
+            (in shadow). Two thin "tail flap" lines hint at the small
+            stabilizer fold most paper planes have. */}
+        <g transform="rotate(-10 300 190)">
+          {/* TOP WING — upper triangle (lit) */}
+          <path
+            d="M 560 190 L 40 80 L 200 190 Z"
+            fill="url(#paperFillTop)"
+            stroke="url(#paperStroke)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+
+          {/* BOTTOM WING — lower triangle (shadowed) */}
+          <path
+            d="M 560 190 L 40 300 L 200 190 Z"
+            fill="url(#paperFillBottom)"
+            stroke="url(#paperStroke)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+
+          {/* CENTER FOLD — the spine line from nose to tail-fold.
+              Slightly thicker so the crease reads as the focal axis
+              of the dart. */}
+          <line
+            x1="560" y1="190"
+            x2="200" y2="190"
+            stroke="url(#paperStroke)"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+          />
+
+          {/* TAIL FLAP HINT — a tiny dart tail folded up (the flap
+              you'd grip when throwing). Opacity dialed back so it
+              stays a quiet detail. */}
+          <line
+            x1="200" y1="190"
+            x2="155" y2="170"
+            stroke="url(#paperStroke)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            opacity="0.6"
+          />
+          <line
+            x1="200" y1="190"
+            x2="155" y2="210"
+            stroke="url(#paperStroke)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            opacity="0.5"
+          />
+
+          {/* MOTION TRAILS — three short dashed strokes tucked behind
+              the tail to suggest forward velocity. Cyan, low opacity,
+              taper from longer at the tail to shorter farther back. */}
+          <g
+            stroke="rgb(165 243 252)"
+            strokeOpacity="0.35"
+            strokeLinecap="round"
+            strokeWidth="1.4"
+          >
+            <line x1="135" y1="190" x2="80" y2="190" strokeDasharray="2 6" />
+            <line x1="155" y1="160" x2="100" y2="140" strokeDasharray="2 6" opacity="0.7" />
+            <line x1="155" y1="220" x2="100" y2="240" strokeDasharray="2 6" opacity="0.7" />
+          </g>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+// ─── Hero flight path arc ───────────────────────────────────
+// Dashed arc behind the headline that echoes the route theme. Subtle
+// — 8% white opacity — so it reads as map-style ambient decor.
+function HeroFlightPath() {
+  return (
+    <div
+      aria-hidden
+      className="hidden lg:block absolute inset-0 z-0 pointer-events-none"
+    >
+      <svg
+        viewBox="0 0 1400 800"
+        fill="none"
+        preserveAspectRatio="xMidYMid slice"
+        className="w-full h-full"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M -50 600 Q 400 100 900 300 T 1500 220"
+          stroke="white"
+          strokeOpacity="0.07"
+          strokeWidth="1.5"
+          strokeDasharray="6 8"
+          fill="none"
+        />
+        {/* A second softer arc to add depth — not parallel, slight
+            divergence so it reads as an organic flight network. */}
+        <path
+          d="M -50 700 Q 500 200 1100 380 T 1500 320"
+          stroke="rgb(34 211 238)"
+          strokeOpacity="0.05"
+          strokeWidth="1"
+          strokeDasharray="3 10"
+          fill="none"
+        />
+      </svg>
+    </div>
   );
 }
 

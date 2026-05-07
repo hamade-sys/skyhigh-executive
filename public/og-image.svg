@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ICAN CRM — social share card (1200×630).
+
+  This is a placeholder SVG. When the design team produces a 1200×630 PNG
+  with proper photography / brand composition, drop it at `public/og-image.png`
+  and switch the `images` paths in `src/app/layout.tsx` from `.svg` to `.png`.
+  Most platforms accept SVG, but Facebook/LinkedIn render PNG more reliably
+  at target size.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#ecfeff"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00C2CB"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- left accent bar -->
+  <rect x="0" y="0" width="12" height="630" fill="url(#accent)"/>
+
+  <!-- content block -->
+  <g transform="translate(96 140)">
+    <!-- pill -->
+    <g>
+      <rect x="0" y="0" rx="999" ry="999" width="180" height="36" fill="#ecfeff" stroke="#a5f3fc"/>
+      <text x="90" y="23" font-family="-apple-system, system-ui, Segoe UI, Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#0e7490" text-anchor="middle" letter-spacing="0.02em">ICAN MENA · CRM</text>
+    </g>
+
+    <!-- headline -->
+    <text x="0" y="140" font-family="-apple-system, system-ui, Segoe UI, Helvetica, Arial, sans-serif" font-size="84" font-weight="700" fill="#0f172a" letter-spacing="-0.02em">Sales pipeline, built</text>
+    <text x="0" y="230" font-family="-apple-system, system-ui, Segoe UI, Helvetica, Arial, sans-serif" font-size="84" font-weight="700" fill="#0f172a" letter-spacing="-0.02em">for HR consulting.</text>
+
+    <!-- subhead -->
+    <text x="0" y="310" font-family="-apple-system, system-ui, Segoe UI, Helvetica, Arial, sans-serif" font-size="28" font-weight="400" fill="#475569">Pipeline, clients, invoices, and campaigns</text>
+    <text x="0" y="350" font-family="-apple-system, system-ui, Segoe UI, Helvetica, Arial, sans-serif" font-size="28" font-weight="400" fill="#475569">— in one workspace. Dubai · MENA.</text>
+  </g>
+
+  <!-- corner mark -->
+  <g transform="translate(1040 540)">
+    <circle cx="40" cy="40" r="40" fill="#00C2CB"/>
+    <text x="40" y="52" font-family="-apple-system, system-ui, Segoe UI, Helvetica, Arial, sans-serif" font-size="32" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-0.04em">IC</text>
+  </g>
+</svg>

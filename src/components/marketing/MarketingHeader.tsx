@@ -14,7 +14,8 @@
 
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
-import { Layers, ArrowRight, Menu, X, LogOut, User as UserIcon } from "lucide-react";
+import { ArrowRight, Menu, X, LogOut, User as UserIcon } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth-context";
 
@@ -95,18 +96,23 @@ export function MarketingHeader({ current, variant = "default" }: Props) {
         )}
       >
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          {/* Brand */}
+          {/* Brand — ICAN flat icon (same brand mark as ican-crm,
+              projects.icanmena.com, portal.icanmena.com so all ICAN
+              MENA surfaces share one identity). Rendered clean at
+              28×28 with no decorative ring — the favicon already
+              carries its own visual structure (teal circle + ICAN
+              wordmark) and adding a ring on the dark hero produced
+              a visible white halo. Matches how /crm presents the
+              same mark. */}
           <Link href="/" className="flex items-center gap-2 group" aria-label="ICAN Simulations home">
-            <div
-              className={cn(
-                "w-7 h-7 rounded-lg flex items-center justify-center transition-colors",
-                isDark
-                  ? "bg-cyan-500/15 ring-2 ring-cyan-500/20"
-                  : "bg-cyan-50 ring-2 ring-cyan-100",
-              )}
-            >
-              <Layers className={cn("w-3.5 h-3.5", isDark ? "text-cyan-300" : "text-cyan-700")} />
-            </div>
+            <Image
+              src="/favicon.png"
+              alt=""
+              width={28}
+              height={28}
+              priority
+              className="w-7 h-7 object-contain shrink-0"
+            />
             <span
               className={cn(
                 "font-display text-lg font-bold tracking-tight transition-colors",
