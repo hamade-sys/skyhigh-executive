@@ -14,7 +14,8 @@
 
 import Link from "next/link";
 import { useEffect, useState, useRef } from "react";
-import { Layers, ArrowRight, Menu, X, LogOut, User as UserIcon } from "lucide-react";
+import { ArrowRight, Menu, X, LogOut, User as UserIcon } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth-context";
 
@@ -95,18 +96,30 @@ export function MarketingHeader({ current, variant = "default" }: Props) {
         )}
       >
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          {/* Brand */}
+          {/* Brand — ICAN flat icon (same brand mark as ican-crm,
+              projects.icanmena.com, portal.icanmena.com so all ICAN
+              MENA surfaces share one identity). The mark is the
+              canonical favicon.png; we render it at 28×28 with a
+              soft ring on dark backdrops so it doesn't disappear
+              into the bg-slate-950 hero. */}
           <Link href="/" className="flex items-center gap-2 group" aria-label="ICAN Simulations home">
-            <div
+            <span
               className={cn(
-                "w-7 h-7 rounded-lg flex items-center justify-center transition-colors",
+                "inline-flex w-7 h-7 rounded-lg overflow-hidden transition-shadow",
                 isDark
-                  ? "bg-cyan-500/15 ring-2 ring-cyan-500/20"
-                  : "bg-cyan-50 ring-2 ring-cyan-100",
+                  ? "ring-2 ring-white/15 shadow-[0_0_0_1px_rgba(255,255,255,0.05)]"
+                  : "ring-1 ring-slate-200",
               )}
             >
-              <Layers className={cn("w-3.5 h-3.5", isDark ? "text-cyan-300" : "text-cyan-700")} />
-            </div>
+              <Image
+                src="/favicon.png"
+                alt=""
+                width={28}
+                height={28}
+                priority
+                className="w-7 h-7 object-cover"
+              />
+            </span>
             <span
               className={cn(
                 "font-display text-lg font-bold tracking-tight transition-colors",
