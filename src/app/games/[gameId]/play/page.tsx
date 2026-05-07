@@ -250,7 +250,7 @@ export default function GamePlayPage({
   // server-authoritative team list, currentQuarter, fuel index, etc.
   // Facilitators have no team (teamsCount may still be 0 if seeding just
   // happened), but we still render the canvas so they can observe the game.
-  if (!hydrated || phase !== "playing" || (!isFacilitator && teamsCount === 0)) {
+  if (!hydrated || (phase !== "playing" && phase !== "endgame") || (!isFacilitator && teamsCount === 0)) {
     return (
       <CenteredMessage>
         <Loader2 className="w-6 h-6 text-slate-400 animate-spin mb-3" />
