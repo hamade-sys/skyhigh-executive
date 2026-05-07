@@ -220,181 +220,149 @@ function Hero() {
   );
 }
 
-// ─── Hero decorative airliner ───────────────────────────────
-// Clean side-profile airliner, anchored to the right of the hero.
-// Designed as a brand mark — single continuous fuselage silhouette
-// (closed path) with proper Boeing-737-style proportions: 1:8 width-to-
-// length ratio, 25° wing sweep, swept tail fin, two underwing engines.
-// Stroked with a cyan gradient + a soft halo so it reads as elegant
-// ambient decor, not a technical diagram.
+// ─── Hero decorative paper airplane ──────────────────────────
+// Iconic folded-paper-airplane silhouette anchored to the right of
+// the hero. Reads as a brand mark, not a technical diagram. The
+// classic "send" / Telegram-arrow geometry — a sharp dart pointing
+// forward, with a center fold visible inside, two wing planes folded
+// out either side of the spine.
 //
-// Sizing: scales fluidly with `clamp()` from 360px (tablet) up through
-// 580px (desktop). Hidden below `md` so the title gets full-width on
-// phones; pointer-events-none so it never intercepts CTA clicks.
+// Why a paper airplane instead of a jet airliner: paper-plane folds
+// are pure geometric polygons, so there's no risk of "ugly biomorphic
+// curves looking deformed". Just clean straight lines — the shape is
+// always crisp at any size. Same airline-y motion, friendlier feel.
+//
+// Sizing: scales fluidly with `clamp()` from 320px (tablet) up
+// through 540px (desktop). Hidden below `md` so the title gets
+// full-width on phones; pointer-events-none so it never intercepts
+// CTA clicks.
 function HeroPlane() {
   return (
     <div
       aria-hidden
-      className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[-4rem] lg:right-[-2rem] xl:right-8 z-0 pointer-events-none"
+      className="hidden md:block absolute top-1/2 -translate-y-1/2 right-[-2rem] lg:right-4 xl:right-12 z-0 pointer-events-none"
       style={{
-        width: "clamp(360px, 38vw, 580px)",
+        width: "clamp(320px, 34vw, 540px)",
       }}
     >
       <svg
-        viewBox="0 0 640 320"
+        viewBox="0 0 600 380"
         fill="none"
         className="w-full h-auto"
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Soft halo behind the airframe — lifts the silhouette
-              off the slate-950 backdrop without competing with the
-              hero's cyan/violet/emerald gradient blobs. */}
-          <radialGradient id="planeGlow" cx="0.5" cy="0.5" r="0.55">
-            <stop offset="0%" stopColor="rgb(34 211 238)" stopOpacity="0.18" />
-            <stop offset="60%" stopColor="rgb(34 211 238)" stopOpacity="0.05" />
+          {/* Soft halo behind the plane — lifts the silhouette off
+              the slate-950 backdrop without competing with the hero's
+              gradient blobs. */}
+          <radialGradient id="paperGlow" cx="0.5" cy="0.5" r="0.55">
+            <stop offset="0%" stopColor="rgb(34 211 238)" stopOpacity="0.22" />
+            <stop offset="60%" stopColor="rgb(34 211 238)" stopOpacity="0.06" />
             <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0" />
           </radialGradient>
-          {/* Stroke gradient — lighter at the nose, deeper at the
-              tail. Reads as light catching the leading edge in flight. */}
-          <linearGradient id="planeStroke" x1="100%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="rgb(207 250 254)" stopOpacity="0.85" />
-            <stop offset="55%" stopColor="rgb(165 243 252)" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.35" />
+
+          {/* Stroke gradient — bright at the nose, fades toward the
+              tail. Reads as light catching the leading edge mid-flight. */}
+          <linearGradient id="paperStroke" x1="100%" y1="20%" x2="0%" y2="80%">
+            <stop offset="0%" stopColor="rgb(207 250 254)" stopOpacity="0.95" />
+            <stop offset="55%" stopColor="rgb(165 243 252)" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.4" />
           </linearGradient>
-          {/* Gentle inner-fill gradient applied to the wing + fuselage
-              to hint at body without filling them in solid. */}
-          <linearGradient id="planeFill" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="rgb(165 243 252)" stopOpacity="0.06" />
-            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.02" />
+
+          {/* Top-wing fill — the wing facing the light, slightly
+              brighter so the paper folds read as 3D not flat. */}
+          <linearGradient id="paperFillTop" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stopColor="rgb(207 250 254)" stopOpacity="0.10" />
+            <stop offset="100%" stopColor="rgb(34 211 238)" stopOpacity="0.04" />
+          </linearGradient>
+
+          {/* Bottom-wing fill — the wing in shadow, deeper tint so the
+              two halves contrast subtly without heavy shading. */}
+          <linearGradient id="paperFillBottom" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stopColor="rgb(34 211 238)" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="rgb(8 145 178)" stopOpacity="0.10" />
           </linearGradient>
         </defs>
 
-        <ellipse cx="320" cy="160" rx="280" ry="92" fill="url(#planeGlow)" />
+        {/* Glow */}
+        <ellipse cx="300" cy="190" rx="280" ry="120" fill="url(#paperGlow)" />
 
-        {/* Modern airliner — minimalist side profile. Plane noses RIGHT.
-            The vertical fin is integrated INTO the fuselage outline as
-            one continuous path so the tail base doesn't double-stroke.
-            Centerline y≈155. Slight -3° rotation gives a gentle climb. */}
-        <g
-          stroke="url(#planeStroke)"
-          strokeWidth="1.8"
-          fill="none"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          transform="rotate(-3 320 160)"
-        >
-          {/* ── HORIZONTAL STABILIZER — swept tail wing (drawn FIRST
-                so the fuselage covers its inboard edge). Tapers from
-                fuselage out to a clean tip. ───────────────────────── */}
+        {/* Plane body. Gentle climb — rotated -10° around its center
+            so the dart reads as in-flight, not parked.
+            Geometry (before rotation):
+              - Nose tip (right):       (560, 190)
+              - Top wingtip:            (40, 80)
+              - Tail-fold center:       (200, 190)
+              - Bottom wingtip:         (40, 300)
+            The center fold from nose → tail-fold splits the dart into
+            an upper triangle (catching light) and a lower triangle
+            (in shadow). Two thin "tail flap" lines hint at the small
+            stabilizer fold most paper planes have. */}
+        <g transform="rotate(-10 300 190)">
+          {/* TOP WING — upper triangle (lit) */}
           <path
-            d="
-              M 132 162
-              L 78 184
-              Q 72 187, 80 188
-              L 110 187
-              Q 122 184, 134 174
-              L 148 168
-              Z
-            "
-            fill="url(#planeFill)"
+            d="M 560 190 L 40 80 L 200 190 Z"
+            fill="url(#paperFillTop)"
+            stroke="url(#paperStroke)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
           />
 
-          {/* ── FUSELAGE + VERTICAL FIN (one continuous closed path) ──
-                Traced clockwise from the nose tip. The vertical fin
-                is a "bump" on top of the fuselage — its leading edge
-                sweeps up-back from the upper fuselage, tip is a short
-                flat, trailing edge drops near-vertically back to the
-                fuselage top. This keeps the fin's base seamless with
-                the fuselage instead of two paths overlapping. ─────── */}
+          {/* BOTTOM WING — lower triangle (shadowed) */}
           <path
-            d="
-              M 600 156
-              C 605 146, 580 138, 545 140
-              L 175 146
-              L 92 88
-              Q 86 84, 96 84
-              L 110 84
-              Q 116 84, 118 90
-              L 132 154
-              L 60 158
-              Q 50 160, 60 162
-              L 132 168
-              L 545 172
-              C 580 174, 605 166, 600 156 Z
-            "
-            fill="url(#planeFill)"
+            d="M 560 190 L 40 300 L 200 190 Z"
+            fill="url(#paperFillBottom)"
+            stroke="url(#paperStroke)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
           />
 
-          {/* ── COCKPIT WINDSCREEN — angled tier of three panes, with
-                the top pane curved to suggest the canopy roll. ───── */}
-          <path d="M 555 145 Q 568 142, 580 146" strokeWidth="1.5" />
-          <path d="M 552 152 L 585 152" strokeWidth="1.5" />
-          <path d="M 555 159 L 583 159" strokeWidth="1.5" opacity="0.7" />
-
-          {/* ── MAIN WING — swept-back at ~28°. Attaches cleanly under
-                the belly between x=305-380, tapers to a sharp wingtip
-                at the trailing-edge corner. ───────────────────────── */}
-          <path
-            d="
-              M 305 172
-              C 290 178, 260 200, 218 232
-              L 200 244
-              Q 195 246, 204 247
-              L 240 245
-              C 280 232, 330 200, 380 174
-              L 380 170
-              L 305 172 Z
-            "
-            fill="url(#planeFill)"
+          {/* CENTER FOLD — the spine line from nose to tail-fold.
+              Slightly thicker so the crease reads as the focal axis
+              of the dart. */}
+          <line
+            x1="560" y1="190"
+            x2="200" y2="190"
+            stroke="url(#paperStroke)"
+            strokeWidth="2.2"
+            strokeLinecap="round"
           />
 
-          {/* ── ENGINE NACELLE — high-bypass turbofan. Mounted forward
-                + below the wing leading edge with a short pylon. The
-                inlet ring (small darker ellipse at the front) gives
-                the engine apparent depth without shading. ─────────── */}
-          <g>
-            <path
-              d="
-                M 240 230
-                C 234 224, 242 218, 252 218
-                L 290 218
-                C 300 218, 304 224, 298 230
-                C 298 240, 292 244, 286 244
-                L 252 244
-                C 246 244, 234 240, 240 230 Z
-              "
-              fill="url(#planeFill)"
-              strokeWidth="1.6"
-            />
-            <ellipse cx="298" cy="231" rx="3" ry="5" opacity="0.55" />
-            <path d="M 280 218 L 286 208" opacity="0.55" strokeWidth="1.2" />
+          {/* TAIL FLAP HINT — a tiny dart tail folded up (the flap
+              you'd grip when throwing). Opacity dialed back so it
+              stays a quiet detail. */}
+          <line
+            x1="200" y1="190"
+            x2="155" y2="170"
+            stroke="url(#paperStroke)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            opacity="0.6"
+          />
+          <line
+            x1="200" y1="190"
+            x2="155" y2="210"
+            stroke="url(#paperStroke)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            opacity="0.5"
+          />
+
+          {/* MOTION TRAILS — three short dashed strokes tucked behind
+              the tail to suggest forward velocity. Cyan, low opacity,
+              taper from longer at the tail to shorter farther back. */}
+          <g
+            stroke="rgb(165 243 252)"
+            strokeOpacity="0.35"
+            strokeLinecap="round"
+            strokeWidth="1.4"
+          >
+            <line x1="135" y1="190" x2="80" y2="190" strokeDasharray="2 6" />
+            <line x1="155" y1="160" x2="100" y2="140" strokeDasharray="2 6" opacity="0.7" />
+            <line x1="155" y1="220" x2="100" y2="240" strokeDasharray="2 6" opacity="0.7" />
           </g>
-
-          {/* ── CABIN WINDOWS — single row of small filled circles
-                along the centerline. Filled (not stroked) so they
-                read crisp at this scale. Stops short of the cockpit
-                + tail cone so the proportions feel right. ────────── */}
-          <g stroke="none" fill="rgb(165 243 252)" fillOpacity="0.78">
-            <circle cx="180" cy="158" r="1.6" />
-            <circle cx="205" cy="158" r="1.6" />
-            <circle cx="230" cy="158" r="1.6" />
-            <circle cx="255" cy="158" r="1.6" />
-            <circle cx="280" cy="158" r="1.6" />
-            <circle cx="305" cy="158" r="1.6" />
-            <circle cx="330" cy="158" r="1.6" />
-            <circle cx="380" cy="158" r="1.6" />
-            <circle cx="405" cy="158" r="1.6" />
-            <circle cx="430" cy="158" r="1.6" />
-            <circle cx="455" cy="158" r="1.6" />
-            <circle cx="480" cy="158" r="1.6" />
-            <circle cx="510" cy="158" r="1.6" />
-          </g>
-
-          {/* ── DOOR INDICATORS — two subtle vertical hairlines for
-                forward/rear cabin doors. Adds scale + airline-feel. */}
-          <line x1="195" y1="148" x2="195" y2="170" opacity="0.32" strokeWidth="1.2" />
-          <line x1="395" y1="148" x2="395" y2="170" opacity="0.32" strokeWidth="1.2" />
         </g>
       </svg>
     </div>
