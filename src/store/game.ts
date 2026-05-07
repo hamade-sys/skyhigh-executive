@@ -612,6 +612,15 @@ function emptyStreaks() {
 import { mkId as mkIdShared } from "@/lib/id";
 const mkId = mkIdShared;
 
+// Module-level flag set by gmAdvanceQuarter to suppress the individual
+// pushStateToServer calls that fire inside closeQuarter / advanceToNext.
+// Without suppression, closeQuarter pushes "game.quarterClosed" async at
+// version N, and gmAdvanceQuarter also pushes at version N moments later
+// — both land simultaneously and one gets a 409.  The flag lets us keep
+// isObserver:false (so closeQuarter's guard passes and bots actually run)
+// while still doing exactly one atomic write at the end.
+let _suppressGmPush = false;
+
 function fmtMoneyPlain(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
@@ -5051,42 +5060,36 @@ export const useGame = create<GameStore>()(
 
         const savedActiveTeamId = s.activeTeamId;
 
-        // ── Keep isObserver:true during all processing ─────────────────
-        // Only set playerTeamId so closeQuarter's isGmSimAdvance guard
-        // detects the synthetic player (via botDifficulty check) and skips
-        // the humanCount===0 endgame path.
-        //
-        // Crucially: isObserver stays true so pushStateToServer returns
-        // immediately (no-op) inside BOTH closeQuarter and advanceToNext.
-        // Previously setting isObserver:false here caused two races:
-        //   1. closeQuarter pushed "game.quarterClosed" at version N async.
-        //   2. UI components saw isObserver:false (player mode), detected
-        //      unresolved scenarios, and pushed "player.submittedDecision"
-        //      also at version N — both landed simultaneously → 409 cascade.
-        set({ playerTeamId: botTeam.id });
+        // ── Suppress internal pushes, then run bot turns ────────────────
+        // closeQuarter has `if (s.isObserver) return;` at its top, so we
+        // must set isObserver:false for it to actually process bot turns.
+        // But that causes closeQuarter to fire pushStateToServer internally
+        // at version N, and our final push also at version N → 409 race.
+        // Solution: _suppressGmPush blocks ALL pushStateToServer calls until
+        // we clear it and fire the single authoritative write ourselves.
+        _suppressGmPush = true;
+        set({ isObserver: false, playerTeamId: botTeam.id });
 
         // closeQuarter runs all bot AI decisions (routes, aircraft, slots),
         // processes every team through runQuarterClose, resolves slot
         // auctions, and updates fuel / interest rate. Fully synchronous.
-        // Its internal pushStateToServer is suppressed (isObserver:true).
+        // Internal push is suppressed by _suppressGmPush.
         get().closeQuarter();
 
-        // advanceToNext transitions phase → "playing" and bumps currentQuarter.
-        // Its internal pushStateToServer is also suppressed.
+        // advanceToNext bumps currentQuarter and transitions phase → "playing".
+        // Internal push also suppressed.
         get().advanceToNext();
 
         // ── Single atomic write ─────────────────────────────────────────
-        // Briefly flip isObserver:false only for the push call so exactly
-        // one write goes out with the fully-computed final state.
-        // This happens synchronously before any React re-render can observe
-        // the transient isObserver:false — effects fire after the paint, by
-        // which point isObserver is already restored to true.
-        set({ isObserver: false });
+        // Clear the suppress flag, then push once with the complete final
+        // state (including all bot route/aircraft/slot decisions).
+        _suppressGmPush = false;
         get().pushStateToServer("game.botRoundAdvanced", {
           quarter: get().currentQuarter,
         });
-        // Restore observer state. lastCloseResult:null prevents the
-        // QuarterCloseModal (player-only UI) from appearing.
+
+        // Restore GM to pure observer mode. lastCloseResult:null prevents
+        // the QuarterCloseModal (player-only UI) from appearing.
         set({
           isObserver: true,
           playerTeamId: null,
@@ -5614,6 +5617,10 @@ export const useGame = create<GameStore>()(
         const s = get();
         // Game Master is observer-only — never write state on their behalf.
         if (s.isObserver) return Promise.resolve({ ok: true as const });
+        // Suppress internal pushes during gmAdvanceQuarter so only one
+        // atomic write goes out after both closeQuarter + advanceToNext
+        // have fully computed the new state.
+        if (_suppressGmPush) return Promise.resolve({ ok: true as const });
         const session = s.session;
         // Solo runs (no session) and runs that haven't been bound to a
         // server-side gameId skip the write-back entirely. Returning
