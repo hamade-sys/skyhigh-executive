@@ -34,10 +34,21 @@ export default function Endgame() {
   const isObserver = s.isObserver;
   const reset = useGame((g) => g.resetGame);
 
+  // Multiplayer detection — if the engine carries a session.gameId,
+  // "play again" should route into the multiplayer entry (lobby or
+  // create) instead of the solo /onboarding flow. The latter would
+  // pull the player back through doctrine + hub onboarding pages
+  // which feel duplicative when they just finished a multiplayer run.
+  const isMultiplayer = !!s.session?.gameId;
+  const playAgainHref = isMultiplayer ? "/lobby" : "/onboarding";
+  const playAgainLabel = isMultiplayer ? "Browse lobbies" : "Start a new simulation";
+
   if (!player) {
     return (
       <main className="flex-1 min-h-0 flex items-center justify-center overflow-y-auto">
-        <div className="text-ink-muted">No active game. <Link href="/onboarding" className="underline">Start a new simulation</Link></div>
+        <div className="text-ink-muted">
+          No active game. <Link href={playAgainHref} className="underline">{playAgainLabel}</Link>
+        </div>
       </main>
     );
   }
@@ -81,7 +92,11 @@ export default function Endgame() {
 
   function playAgain() {
     reset();
-    router.push("/onboarding");
+    // Multiplayer players go to /lobby (they typically want to start
+    // or join another cohort, not re-onboard solo). Solo players keep
+    // the legacy /onboarding entry. See `isMultiplayer` derivation
+    // above for the detection rule.
+    router.push(playAgainHref);
   }
 
   return (
@@ -824,7 +839,7 @@ export default function Endgame() {
 
         <div className="flex items-center gap-3">
           <Button variant="primary" size="lg" onClick={playAgain}>
-            Begin new simulation →
+            {isMultiplayer ? "Browse lobbies →" : "Begin new simulation →"}
           </Button>
           <Button
             variant="secondary"
