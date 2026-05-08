@@ -40,34 +40,39 @@ export interface AirlineColor {
   ring: string;
 }
 
-// Palette revision (post-PR #19 workshop feedback):
+// Palette revision (post-PR #20 workshop feedback):
 //
-//   1. Teal is reserved for ICAN brand chrome and is NO LONGER a player
-//      color. Players who legacy-have airlineColorId="teal" or
-//      airlineColorId="indigo" hash-fallback through `airlineColorFor`
-//      to a deterministic new-palette pick on render.
-//   2. Eight nicely-distinct hues at workshop projection distance:
-//      blue, red, orange, yellow, green, dark grey, pink, purple. Two
-//      of these (slate, violet/purple) come from the ICAN brand
-//      palette; the rest are independent hexes chosen for cohort
-//      legibility.
-//   3. Stable ids are preserved where the semantic color is close
-//      enough (sky→Blue, amber→Orange, emerald→Green, rose→Red,
-//      violet→Purple, slate→Dark grey) so existing in-flight games
-//      don't reset color assignments. Two new ids (yellow, pink)
-//      replace dropped (teal, indigo).
+//   1. ICAN brand teal is BACK in the palette as the 9th color, kept
+//      at its standard hex #00C2CB. It's the host's natural default
+//      and gives the cohort one extra distinct option past the
+//      8-team max so a 9th observer/late-joiner doesn't conflict.
+//   2. Hues are now pastel-ish — lighter and softer than the previous
+//      saturated -600 Tailwind tones. The trade-off: white text on
+//      most pastel fills no longer hits 4.5:1 contrast, so each
+//      color carries its own `textOn` choice (slate-900 for the
+//      lighter tones, white for the darker ones). The seat-tile
+//      avatar squares already honor textOn, so labels stay readable.
+//   3. Slate stays darker (slate-600) so the "Dark grey" name still
+//      reads as dark grey at projection distance.
+//   4. Yellow stays slightly darker than the rest (yellow-500) — go
+//      any lighter and it disappears against the white app surface.
+//   5. Stable ids are preserved across the revision (sky/rose/amber/
+//      emerald/violet/slate/teal); new ids `yellow` and `pink` were
+//      added in PR #20 and stay.
 export const AIRLINE_COLOR_PALETTE: readonly AirlineColor[] = [
-  { id: "sky",     label: "Blue",      hex: "#2563EB", textOn: "white",      tint: "#DBEAFE", ring: "#93C5FD" },
-  { id: "rose",    label: "Red",       hex: "#DC2626", textOn: "white",      tint: "#FEE2E2", ring: "#FCA5A5" },
-  { id: "amber",   label: "Orange",    hex: "#EA580C", textOn: "white",      tint: "#FFEDD5", ring: "#FDBA74" },
-  { id: "yellow",  label: "Yellow",    hex: "#CA8A04", textOn: "white",      tint: "#FEF9C3", ring: "#FDE047" },
-  { id: "emerald", label: "Green",     hex: "#16A34A", textOn: "white",      tint: "#DCFCE7", ring: "#86EFAC" },
-  { id: "slate",   label: "Dark grey", hex: "#334155", textOn: "white",      tint: "#E2E8F0", ring: "#94A3B8" },
-  { id: "pink",    label: "Pink",      hex: "#DB2777", textOn: "white",      tint: "#FCE7F3", ring: "#F9A8D4" },
-  { id: "violet",  label: "Purple",    hex: "#7C3AED", textOn: "white",      tint: "#EDE9FE", ring: "#C4B5FD" },
+  { id: "teal",    label: "Teal",      hex: "#00C2CB", textOn: "slate-900",  tint: "#E0F8F9", ring: "#80E0E5" },
+  { id: "sky",     label: "Blue",      hex: "#60A5FA", textOn: "slate-900",  tint: "#DBEAFE", ring: "#93C5FD" },
+  { id: "rose",    label: "Red",       hex: "#F87171", textOn: "slate-900",  tint: "#FEE2E2", ring: "#FCA5A5" },
+  { id: "amber",   label: "Orange",    hex: "#FB923C", textOn: "slate-900",  tint: "#FFEDD5", ring: "#FDBA74" },
+  { id: "yellow",  label: "Yellow",    hex: "#FACC15", textOn: "slate-900",  tint: "#FEF9C3", ring: "#FDE047" },
+  { id: "emerald", label: "Green",     hex: "#4ADE80", textOn: "slate-900",  tint: "#DCFCE7", ring: "#86EFAC" },
+  { id: "slate",   label: "Dark grey", hex: "#475569", textOn: "white",      tint: "#E2E8F0", ring: "#94A3B8" },
+  { id: "pink",    label: "Pink",      hex: "#F472B6", textOn: "slate-900",  tint: "#FCE7F3", ring: "#F9A8D4" },
+  { id: "violet",  label: "Purple",    hex: "#A78BFA", textOn: "slate-900",  tint: "#EDE9FE", ring: "#C4B5FD" },
 ] as const;
 
 export type AirlineColorId =
+  | "teal"
   | "sky"
   | "rose"
   | "amber"

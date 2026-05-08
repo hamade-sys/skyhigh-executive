@@ -85,16 +85,23 @@ export function Modal({
       className={cn(
         "m-auto p-0 rounded-xl bg-surface text-ink shadow-[var(--shadow-4)]",
         "backdrop:bg-[rgba(16,37,63,0.32)] backdrop:backdrop-blur-sm",
-        // Phase 7 P2 — mobile responsiveness. Cap width to viewport
-        // minus a small padding, and cap height so long modals
-        // (HelpModal, AircraftCompareModal) scroll within their
-        // own container instead of pushing past the viewport edge
-        // on small phones. The flex column lets header / footer
-        // pin while body scrolls.
+        // Width: cap to viewport minus 2rem of breathing room.
         "max-w-[calc(100vw-2rem)] w-[32rem]",
-        "max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden",
+        // Height: cap to dynamic viewport height (handles mobile
+        // browser chrome resize correctly), with a hard fallback to
+        // the static vh for older browsers. flex flex-col lets
+        // header + footer pin while body scrolls inside. Inline
+        // style as defense — `<dialog>` user-agent stylesheets
+        // sometimes override Tailwind tokens with !important rules,
+        // so an inline maxHeight is the belt-and-suspenders way to
+        // ensure the dialog can't grow past the viewport (which is
+        // what was clipping HelpModal headers earlier).
+        "max-h-[calc(100dvh-2rem)] max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden",
         className,
       )}
+      style={{
+        maxHeight: "calc(100dvh - 2rem)",
+      }}
       onClick={(e) => {
         // Click on backdrop (dialog element itself, not children) closes
         if (e.target === dialogRef.current) onClose();
