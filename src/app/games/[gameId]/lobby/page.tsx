@@ -20,7 +20,13 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useMemo, useState, useCallback, use } from "react";
+import { CITIES } from "@/data/cities";
+import {
+  hubPickableCities,
+  hubPriceUsd,
+  hubTierLabel,
+} from "@/lib/hub-pricing";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import {
@@ -68,19 +74,6 @@ const DOCTRINES: { id: DoctrineId; label: string; desc: string }[] = [
   { id: "global-network",   label: "Global Network", desc: "Breadth pays — routes compound" },
 ];
 
-const POPULAR_HUBS = [
-  { code: "IST", name: "Istanbul" },
-  { code: "LHR", name: "London Heathrow" },
-  { code: "DXB", name: "Dubai" },
-  { code: "FRA", name: "Frankfurt" },
-  { code: "AMS", name: "Amsterdam" },
-  { code: "CDG", name: "Paris CDG" },
-  { code: "NRT", name: "Tokyo Narita" },
-  { code: "SIN", name: "Singapore" },
-  { code: "HKG", name: "Hong Kong" },
-  { code: "JFK", name: "New York JFK" },
-];
-
 interface LobbyResponse {
   game: GameRow;
   members: GameMemberRow[];
@@ -112,6 +105,17 @@ export default function GameLobbyPage({
 
   const [seatConfigs, setSeatConfigs] = useState<SeatConfig[]>([]);
   const [seatConfigSaving, setSeatConfigSaving] = useState(false);
+
+  // Phase 5 — open hub choice to ALL playable cities (T1-T4), not the
+  // hardcoded 10-city POPULAR_HUBS list. Sorted by price desc / name
+  // asc so premium gateways lead and ties resolve alphabetically. The
+  // dropdown shows tier + price so players understand what they're
+  // paying for. fmtMoney is local-only so we don't import a heavy
+  // dep — short integer M is enough.
+  const pickableHubs = useMemo(() => hubPickableCities(CITIES), []);
+  function fmtHubPrice(usd: number): string {
+    return `$${(usd / 1_000_000).toFixed(0)}M`;
+  }
 
   // ── Airline setup state (for non-facilitator players) ─────────────────
   const [airlineName, setAirlineName] = useState("");
@@ -524,16 +528,32 @@ export default function GameLobbyPage({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Home hub airport</label>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Home hub airport
+                    {(() => {
+                      const selected = pickableHubs.find((c) => c.code === airlineHub);
+                      if (!selected) return null;
+                      return (
+                        <span className="ml-2 font-normal text-slate-500">
+                          · {hubTierLabel(selected)} · {fmtHubPrice(hubPriceUsd(selected))}
+                        </span>
+                      );
+                    })()}
+                  </label>
                   <select
                     value={airlineHub}
                     onChange={(e) => setAirlineHub(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-400"
                   >
-                    {POPULAR_HUBS.map((h) => (
-                      <option key={h.code} value={h.code}>{h.code} — {h.name}</option>
+                    {pickableHubs.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} — {c.name} · {hubTierLabel(c)} · {fmtHubPrice(hubPriceUsd(c))}
+                      </option>
                     ))}
                   </select>
+                  <p className="text-[0.6875rem] text-slate-500 mt-1">
+                    All {pickableHubs.length} playable cities — bigger hubs cost more upfront but seed brand and slot advantages.
+                  </p>
                 </div>
 
                 <div>
@@ -652,6 +672,18 @@ export default function GameLobbyPage({
                 const isMe = member ? member.session_id === sessionId : false;
                 const hasSetup = member ? member.session_id in playerSetups : false;
                 const cfg = seatConfigs[i] ?? { index: i, type: "human" as SeatType, difficulty: "medium" as Difficulty };
+                // Pull the saved airline name from playerSetups so the
+                // seat tile reads "Hamade Airlines" instead of the
+                // generic "Player". Falls back to display_name (set
+                // when the user typed a name in the join flow) or
+                // "Player" as a last resort.
+                const memberSetup = member
+                  ? (playerSetups[member.session_id] as
+                      | { airlineName?: string }
+                      | undefined)
+                  : undefined;
+                const seatLabel =
+                  memberSetup?.airlineName ?? member?.display_name ?? "Player";
                 return (
                   <SeatCard
                     key={i}
@@ -659,6 +691,7 @@ export default function GameLobbyPage({
                     member={member ?? null}
                     isMe={isMe}
                     hasSetup={hasSetup}
+                    seatLabel={seatLabel}
                     seatConfig={cfg}
                     botColorPreview={botColorByIndex.get(i) ?? null}
                     canEditConfig={(isHost || isFacilitator) && !member && game.status === "lobby"}
@@ -822,12 +855,13 @@ function HostPanel({
 }
 
 function SeatCard({
-  index, member, isMe, hasSetup, seatConfig, botColorPreview, canEditConfig, onConfigChange,
+  index, member, isMe, hasSetup, seatLabel, seatConfig, botColorPreview, canEditConfig, onConfigChange,
 }: {
   index: number;
   member: GameMemberRow | null;
   isMe: boolean;
   hasSetup: boolean;
+  seatLabel: string;
   seatConfig: SeatConfig;
   botColorPreview: AirlineColorId | null;
   canEditConfig: boolean;
@@ -899,7 +933,7 @@ function SeatCard({
           {claimed ? (
             <>
               <div className="text-sm font-semibold text-slate-900 truncate">
-                {member.display_name ?? "Player"}
+                {seatLabel}
                 {isMe && (
                   <span
                     className="ml-2 text-xs font-medium"

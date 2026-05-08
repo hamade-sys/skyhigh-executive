@@ -1,7 +1,7 @@
 "use client";
 
 import { Modal, ModalBody, ModalFooter, ModalHeader, Button } from "@/components/ui";
-import { Plane, Map, Hexagon, Info, Keyboard, BookOpen } from "lucide-react";
+import { Plane, Map, Hexagon, Info, Keyboard, BookOpen, X } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -10,20 +10,41 @@ interface Props {
 
 /** Quick-reference cheat sheet — opens from a "?" button in the topbar.
  *  Aimed at the facilitator running a live session and any player who
- *  needs a refresher on what each panel does. */
+ *  needs a refresher on what each panel does.
+ *
+ *  Layout note: the Modal primitive already constrains us to
+ *  `max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden`, so the
+ *  body section gets `flex-1` and scrolls within. Earlier the body
+ *  also tried to set `max-h-[70vh]` which fought with the parent
+ *  cap — on shorter viewports (13" laptops) the inner cap won and
+ *  pushed the header off-screen, leaving users staring at the middle
+ *  of the cheat sheet with no visible close affordance. Removed the
+ *  inner cap and added an explicit X close button in the header so
+ *  there's always a one-click escape regardless of stacking quirks
+ *  with concurrent route-config dialogs. */
 export function HelpModal({ open, onClose }: Props) {
   return (
     <Modal open={open} onClose={onClose} className="max-w-2xl">
-      <ModalHeader>
-        <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
-          ICAN Simulations reference
-        </span>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight mt-1">
-          Quick-reference cheat sheet
-        </h2>
+      <ModalHeader className="flex items-start justify-between gap-3">
+        <div>
+          <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
+            ICAN Simulations reference
+          </span>
+          <h2 className="font-display text-[1.5rem] text-ink leading-tight mt-1">
+            Quick-reference cheat sheet
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close help"
+          className="shrink-0 -m-1 p-2 rounded-lg text-ink-2 hover:bg-line/40 hover:text-ink transition"
+        >
+          <X size={18} />
+        </button>
       </ModalHeader>
 
-      <ModalBody className="space-y-5 max-h-[70vh] overflow-y-auto">
+      <ModalBody className="space-y-5">
         <Section icon={<Map size={14} />} title="Map flow">
           <Row label="Click a city" detail="Selects it as origin (turns yellow)." />
           <Row label="Click another city" detail="Auto-opens the route setup modal." />
