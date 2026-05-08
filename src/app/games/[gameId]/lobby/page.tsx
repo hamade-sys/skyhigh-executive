@@ -123,6 +123,11 @@ export default function GameLobbyPage({
   const [setupSaved, setSetupSaved] = useState(false);
   const [setupSaving, setSetupSaving] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
+  // Edit mode override — when the user clicks "Edit" on the saved
+  // confirmation, this flag forces the form back open even though
+  // the server still has a saved setup. The save handler resets it
+  // to false on success.
+  const [editingSetup, setEditingSetup] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -292,6 +297,7 @@ export default function GameLobbyPage({
       if (!res.ok) { setSetupError(json.error ?? "Save failed."); }
       else {
         setSetupSaved(true);
+        setEditingSetup(false);
         // Refresh lobby data immediately so all seat badges flip to "✓ Ready"
         // without waiting for the 5-second poll cycle.
         await load();
@@ -368,8 +374,13 @@ export default function GameLobbyPage({
     (data.state?.state_json as Record<string, unknown> | undefined)?.playerSetups as
       Record<string, unknown> | undefined
   ) ?? {};
-  // Track whether MY airline setup is saved (players only — facilitator has no team)
-  const mySetupSaved = !isFacilitator && (setupSaved || (sessionId != null && sessionId in playerSetups));
+  // Track whether MY airline setup is saved (players only — facilitator has no team).
+  // `editingSetup` is the user's explicit "Edit" intent; while it's true we
+  // show the form even if the server still has a saved setup.
+  const mySetupSaved =
+    !isFacilitator &&
+    !editingSetup &&
+    (setupSaved || (sessionId != null && sessionId in playerSetups));
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50">
@@ -446,7 +457,32 @@ export default function GameLobbyPage({
                   <p className="text-xs text-emerald-700 mt-0.5">
                     Saved! The game master will start shortly.
                     <button
-                      onClick={() => setSetupSaved(false)}
+                      onClick={() => {
+                        // Re-prefill local form state from the server's
+                        // saved setup so the user doesn't have to retype.
+                        const saved = (playerSetups[sessionId ?? ""] ?? null) as
+                          | {
+                              airlineName?: string;
+                              code?: string;
+                              hub?: string;
+                              doctrine?: string;
+                              airlineColorId?: string;
+                            }
+                          | null;
+                        if (saved) {
+                          if (typeof saved.airlineName === "string") setAirlineName(saved.airlineName);
+                          if (typeof saved.code === "string") setAirlineCode(saved.code);
+                          if (typeof saved.hub === "string") setAirlineHub(saved.hub);
+                          if (typeof saved.doctrine === "string") {
+                            setAirlineDoctrine(saved.doctrine as DoctrineId);
+                          }
+                          if (typeof saved.airlineColorId === "string" && isAirlineColorId(saved.airlineColorId)) {
+                            setAirlineColorId(saved.airlineColorId);
+                          }
+                        }
+                        setEditingSetup(true);
+                        setSetupSaved(false);
+                      }}
                       className="ml-2 underline text-emerald-700 hover:text-emerald-900"
                     >
                       Edit
@@ -773,23 +809,60 @@ function SeatCard({
   const claimed = !!member;
   const isBot = !claimed && seatConfig.type === "bot";
   const botName = BOT_NAMES[(index - 1) % BOT_NAMES.length];
+  // Phase 9 — once a claimant has chosen a color, tint their seat
+  // tile + avatar square with that hex. Falls back to the legacy
+  // cyan-for-me / slate-for-others palette when no color is set
+  // (pre-Phase-9 saves or before the picker step).
+  const memberColor =
+    claimed && member.airline_color_id && isAirlineColorId(member.airline_color_id)
+      ? AIRLINE_COLOR_BY_ID[member.airline_color_id]
+      : null;
+  const tileStyle: React.CSSProperties | undefined = memberColor
+    ? {
+        borderColor: memberColor.hex,
+        // ~10% opacity tinted background — the same hex as the border
+        // with an `1a` alpha suffix renders as a soft wash that keeps
+        // body text legible against the light surface.
+        backgroundColor: `${memberColor.hex}1a`,
+      }
+    : undefined;
+  const avatarStyle: React.CSSProperties | undefined = memberColor
+    ? {
+        backgroundColor: memberColor.hex,
+        color: memberColor.textOn === "white" ? "#ffffff" : "#0f172a",
+      }
+    : undefined;
 
   return (
-    <div className={
-      "rounded-xl border p-4 space-y-3 " +
-      (isMe
-        ? "border-cyan-300 bg-cyan-50/40"
-        : isBot
-          ? "border-violet-200 bg-violet-50/30"
-          : claimed
-            ? "border-slate-200 bg-white"
-            : "border-dashed border-slate-200 bg-white")
-    }>
+    <div
+      className={
+        "rounded-xl border p-4 space-y-3 " +
+        (memberColor
+          ? "" // colors come from inline style below
+          : isMe
+            ? "border-cyan-300 bg-cyan-50/40"
+            : isBot
+              ? "border-violet-200 bg-violet-50/30"
+              : claimed
+                ? "border-slate-200 bg-white"
+                : "border-dashed border-slate-200 bg-white")
+      }
+      style={tileStyle}
+    >
       <div className="flex items-center gap-3">
-        <div className={
-          "w-9 h-9 rounded-lg flex items-center justify-center font-mono text-xs font-bold tabular shrink-0 " +
-          (claimed ? "bg-slate-900 text-white" : isBot ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-400")
-        }>
+        <div
+          className={
+            "w-9 h-9 rounded-lg flex items-center justify-center font-mono text-xs font-bold tabular shrink-0 " +
+            (avatarStyle
+              ? ""
+              : claimed
+                ? "bg-slate-900 text-white"
+                : isBot
+                  ? "bg-violet-100 text-violet-700"
+                  : "bg-slate-100 text-slate-400")
+          }
+          style={avatarStyle}
+        >
           {claimed ? index : isBot ? <Bot className="w-4 h-4" /> : index}
         </div>
         <div className="flex-1 min-w-0">
@@ -797,7 +870,18 @@ function SeatCard({
             <>
               <div className="text-sm font-semibold text-slate-900 truncate">
                 {member.display_name ?? "Player"}
-                {isMe && <span className="ml-2 text-xs font-medium text-cyan-700">· you</span>}
+                {isMe && (
+                  <span
+                    className="ml-2 text-xs font-medium"
+                    style={
+                      memberColor
+                        ? { color: memberColor.hex }
+                        : { color: "#0e7490" /* cyan-700 fallback */ }
+                    }
+                  >
+                    · you
+                  </span>
+                )}
               </div>
               <div className="text-xs text-slate-500 truncate flex items-center gap-1.5">
                 <span>

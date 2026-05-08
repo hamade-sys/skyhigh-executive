@@ -41,6 +41,9 @@ interface RedactedMember {
   display_name: string | null;
   connected_at: string | null;
   last_seen_at: string | null;
+  // Public — non-sensitive. Color identity is meant to be visible to
+  // every cohort participant (lobby seat tile, leaderboard, route map).
+  airline_color_id: string | null;
 }
 
 function redactMembers(
@@ -59,6 +62,7 @@ function redactMembers(
     display_name: m.display_name ?? null,
     connected_at: m.connected_at ?? null,
     last_seen_at: m.last_seen_at ?? null,
+    airline_color_id: m.airline_color_id ?? null,
   }));
 }
 

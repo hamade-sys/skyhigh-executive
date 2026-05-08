@@ -61,6 +61,9 @@ export interface GameMemberRow {
   display_name: string | null;
   connected_at: string;
   last_seen_at: string;
+  // Phase 9 — server-enforced unique color id from the AIRLINE_COLOR_PALETTE.
+  // Nullable so legacy rows (pre-0004) and pre-pick rows don't break the type.
+  airline_color_id: string | null;
 }
 
 export interface GameMemberInsert {
@@ -70,6 +73,7 @@ export interface GameMemberInsert {
   role?: GameMemberRow["role"];
   team_id?: string | null;
   display_name?: string | null;
+  airline_color_id?: string | null;
 }
 
 /** Snapshot of the engine GameState. The `state_json` shape matches
