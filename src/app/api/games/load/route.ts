@@ -2,25 +2,23 @@
  * GET /api/games/load?gameId=...&includeState=1 — fetch a game's row,
  * members, and (when permitted) the engine state snapshot.
  *
- * IMPORTANT (Phase 1 hardening): the previous version returned every
- * caller the full game row + every member's session_id + the full
- * state JSON, with no auth gating. Anyone with a `gameId` could read
- * private game state and harvest other players' identifiers. The
- * fixed version:
+ * Visibility rules:
  *
- *   - Public lobbies in `status='lobby'`: any caller (signed-in or
- *     anonymous) gets game row + redacted members (display name +
- *     role only, NO session_id). State is NEVER returned to non-members.
- *   - Private lobbies, or any game in `status='playing'` / `'ended'`:
- *     caller MUST be signed in AND a member (or host/facilitator).
- *     Members get state + a members list with their OWN session_id
- *     unredacted; other members' session_ids are still redacted.
- *     Host/facilitator additionally see all session_ids unredacted
- *     (they need them to administer the cohort).
+ *   - Public games (any status): browsable by ANY caller, signed in
+ *     or not. Members + host/facilitator additionally get state JSON
+ *     (and full session_ids for the privileged roles); non-members
+ *     get state JSON for spectator mode but with all session_ids
+ *     redacted except their own (when signed in). Spectators can
+ *     watch — they just can't mutate (no chat send, no claim color,
+ *     no forfeit, no state push; those endpoints all assert
+ *     membership separately).
+ *   - Private games (any status): caller MUST be signed in AND a
+ *     member (or host/facilitator). 403 otherwise. Members get state
+ *     + their own session_id; host/facilitator also see all
+ *     session_ids unredacted so they can administer the cohort.
  *
- * The lobby + play page contracts changed to handle the redacted
- * shape — they only need their own session_id (which auth gives
- * them) and other members' display names + roles.
+ * The lobby + play pages handle the spectator shape (no team claim,
+ * no mutation buttons) — see GameCanvas's `isObserver` branch.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -86,12 +84,14 @@ export async function GET(req: NextRequest) {
       userId !== null && game.facilitator_session_id === userId;
     const isPrivileged = isHost || isFacilitator;
 
-    // Public lobbies in 'lobby' status are browsable — but ONLY the
-    // game row + redacted members are returned to non-members. The
-    // engine state is never exposed to non-members regardless of
-    // visibility / status.
-    const isPublicBrowsable =
-      game.visibility === "public" && game.status === "lobby";
+    // Public games (any status, including playing/ended) are
+    // browsable by anyone — non-members get spectator access. They
+    // see state JSON so the canvas / leaderboard / map render in
+    // observer mode, but session_ids stay redacted (only caller's
+    // own + privileged are unredacted) and mutation endpoints
+    // (chat/send, claim-color, forfeit, state-update) still
+    // assert membership separately.
+    const isPublicBrowsable = game.visibility === "public";
 
     if (!isMember && !isPrivileged && !isPublicBrowsable) {
       return NextResponse.json(
@@ -102,11 +102,12 @@ export async function GET(req: NextRequest) {
 
     const redacted = redactMembers(members, userId, isPrivileged);
 
-    // State JSON is only returned to members + host/facilitator.
-    // Non-member browsers viewing a public lobby see the seat count
-    // and a redacted member list, nothing else.
-    const stateForCaller =
-      includeState && (isMember || isPrivileged) ? state : undefined;
+    // State JSON is returned to members, host/facilitator, AND
+    // spectators of public games — observers need state to render
+    // the canvas. Mutation paths still gate on membership at their
+    // own endpoints, so spectators can watch but not act.
+    const canSeeState = isMember || isPrivileged || isPublicBrowsable;
+    const stateForCaller = includeState && canSeeState ? state : undefined;
 
     return NextResponse.json({
       game,
