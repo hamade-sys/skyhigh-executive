@@ -22,11 +22,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useCallback, use } from "react";
 import { CITIES } from "@/data/cities";
-import {
-  hubPickableCities,
-  hubPriceUsd,
-  hubTierLabel,
-} from "@/lib/hub-pricing";
+import { hubPickableCities, hubPriceUsd } from "@/lib/hub-pricing";
 import { useRouter } from "next/navigation";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import {
@@ -558,36 +554,20 @@ export default function GameLobbyPage({
                   >
                     {pickableHubs.map((c) => (
                       <option key={c.code} value={c.code}>
-                        {c.code} — {c.name} · {hubTierLabel(c)} · {fmtHubPrice(hubPriceUsd(c))}
+                        {c.code} — {c.name} · {fmtHubPrice(hubPriceUsd(c))}
                       </option>
                     ))}
                   </select>
                   {(() => {
                     const selected = pickableHubs.find((c) => c.code === airlineHub);
                     if (!selected) return null;
-                    const tier = hubTierLabel(selected);
-                    const isPremium = tier === "Premium gateway";
-                    const isT1 = tier === "Tier 1 hub";
-                    const isT2 = tier === "Tier 2 hub";
-                    const tint = isPremium
-                      ? "bg-violet-50 text-violet-700 ring-violet-100"
-                      : isT1
-                        ? "bg-cyan-50 text-cyan-700 ring-cyan-100"
-                        : isT2
-                          ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-                          : "bg-amber-50 text-amber-700 ring-amber-100";
                     return (
                       <div className="flex items-center gap-2 mt-2">
-                        <span
-                          className={
-                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 text-[0.6875rem] font-semibold " +
-                            tint
-                          }
-                        >
-                          {tier}
-                        </span>
                         <span className="text-[0.6875rem] font-mono tabular text-slate-700">
                           {fmtHubPrice(hubPriceUsd(selected))} hub fee
+                        </span>
+                        <span className="text-[0.6875rem] text-slate-500">
+                          · {selected.regionName}
                         </span>
                       </div>
                     );

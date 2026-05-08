@@ -11,9 +11,7 @@ import { cn } from "@/lib/cn";
 import {
   hubPickableCities,
   hubPriceUsd,
-  hubTierLabel,
   ONBOARDING_TOTAL_BUDGET_USD,
-  PREMIUM_HUB_CODES,
 } from "@/lib/hub-pricing";
 import type { DoctrineId, Team } from "@/types/game";
 import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
@@ -421,7 +419,7 @@ export default function Onboarding() {
                     v={(() => {
                       const hubCity = CITIES.find((c) => c.code === hubCode);
                       if (!hubCity) return "—";
-                      return `${hubCity.name} · ${hubCity.code} (${hubTierLabel(hubCity)} · ${fmtMoney(hubPriceUsd(hubCity))})`;
+                      return `${hubCity.name} · ${hubCity.code} (${fmtMoney(hubPriceUsd(hubCity))})`;
                     })()}
                   />
                   <Row k="Market focus" v={marketFocus} />
@@ -595,26 +593,27 @@ function HubPickerStep({
         c.regionName.toLowerCase().includes(q),
     );
   }, [query, pickable]);
-  // Group by region for the collapsed view, with premium gateways
-  // pulled out into their own section first.
+  // Group purely by geographic region. Premium gateways used to get
+  // pulled out into their own "Premium gateways" section, but that
+  // surfaced the tier system to players (the user explicitly wants
+  // tiers hidden — players see price only). Sort each region by
+  // price desc so the most expensive hub in that region leads.
   const grouped = useMemo(() => {
-    const premium = filtered.filter((c) => PREMIUM_HUB_CODES.has(c.code));
-    const others = filtered.filter((c) => !PREMIUM_HUB_CODES.has(c.code));
-    const byRegion = new Map<string, typeof others>();
-    for (const c of others) {
+    const byRegion = new Map<string, typeof filtered>();
+    for (const c of filtered) {
       const list = byRegion.get(c.regionName) ?? [];
       list.push(c);
       byRegion.set(c.regionName, list);
     }
-    // Sort each region by tier asc then name
     for (const list of byRegion.values()) {
       list.sort((a, b) => {
-        if (a.tier !== b.tier) return a.tier - b.tier;
+        const priceDelta = hubPriceUsd(b) - hubPriceUsd(a);
+        if (priceDelta !== 0) return priceDelta;
         return a.name.localeCompare(b.name);
       });
     }
     const regions = Array.from(byRegion.entries()).sort(([a], [b]) => a.localeCompare(b));
-    return { premium, regions };
+    return { regions };
   }, [filtered]);
 
   const selected = pickable.find((c) => c.code === hubCode);
@@ -676,7 +675,6 @@ function HubPickerStep({
         {selected && (
           <div className="text-[0.6875rem] text-ink-2 mt-2">
             <strong className="text-ink">{selected.name}</strong> ({selected.code})
-            {" · "}{hubTierLabel(selected)}
             {" · "}{selected.regionName}
           </div>
         )}
@@ -726,16 +724,11 @@ function HubPickerStep({
       />
 
       <div className="max-h-[28rem] overflow-auto space-y-4 pb-2">
-        {/* Premium gateways always lead */}
-        {grouped.premium.length > 0 && (
-          <RegionGroup
-            label="Premium gateways"
-            sub="$300M · global business benchmarks"
-            cities={grouped.premium}
-            hubCode={hubCode}
-            onPick={setHubCode}
-          />
-        )}
+        {/* Cities grouped by region only — tier metadata stays
+            invisible to the player so they don't pre-judge picks
+            ("oh that's a Tier 3, must be weak"). The price still
+            shows on each card; bigger hubs cost more, and that's
+            the only signal players need. */}
         {grouped.regions.map(([regionName, cities]) => (
           <RegionGroup
             key={regionName}
@@ -788,7 +781,7 @@ function RegionGroup({
               type="button"
               role="radio"
               aria-checked={active}
-              aria-label={`${city.name} (${city.code}), ${city.regionName}, ${hubTierLabel(city)}, ${fmtMoney(price)}`}
+              aria-label={`${city.name} (${city.code}), ${city.regionName}, ${fmtMoney(price)}`}
               onClick={() => onPick(city.code)}
               className={cn(
                 "flex items-center justify-between rounded-md border px-3 py-2 text-left transition-colors",
@@ -804,7 +797,7 @@ function RegionGroup({
                   <span className="font-medium text-ink text-[0.875rem] truncate">{city.name}</span>
                 </div>
                 <div className="text-[0.6875rem] text-ink-muted truncate">
-                  {hubTierLabel(city)}
+                  {city.regionName}
                 </div>
               </div>
               <div className="text-right shrink-0">
