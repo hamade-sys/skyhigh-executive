@@ -1347,7 +1347,7 @@ function SecondaryMarket({
       })}
 
       {/* Confirm purchase of used aircraft */}
-      <Modal open={!!confirmListing} onClose={() => setConfirmId(null)}>
+      <Modal open={!!confirmListing} onClose={() => setConfirmId(null)} stack>
         {confirmListing && confirmSpec && (() => {
           const ageQ = currentQuarter - confirmListing.manufactureQuarter;
           const remainingQ = Math.max(0, confirmListing.retirementQuarter - currentQuarter);

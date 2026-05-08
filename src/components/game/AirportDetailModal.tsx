@@ -630,7 +630,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
         </div>
       </section>
 
-      <Modal open={confirmSell} onClose={() => setConfirmSell(false)}>
+      <Modal open={confirmSell} onClose={() => setConfirmSell(false)} stack>
         <ModalHeader>
           <h2 className="font-display text-[1.5rem] text-ink">
             Sell {city.name} airport?
@@ -776,7 +776,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
       </div>
     </section>
 
-    <Modal open={confirmBuy} onClose={() => setConfirmBuy(false)}>
+    <Modal open={confirmBuy} onClose={() => setConfirmBuy(false)} stack>
       <ModalHeader>
         <h2 className="font-display text-[1.5rem] text-ink">
           Submit bid for {city.name} airport?
