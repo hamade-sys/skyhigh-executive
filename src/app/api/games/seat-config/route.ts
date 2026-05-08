@@ -27,6 +27,13 @@ interface SeatConfigEntry {
   index: number;
   type: "human" | "bot";
   difficulty?: "easy" | "medium" | "hard";
+  /** Phase-9 follow-up: optional host-controlled color override for
+   *  bot seats. Persisted into plannedSeats[i].botColorOverride; the
+   *  start route honors it when seeding bot teams. Validated against
+   *  the AIRLINE_COLOR_PALETTE id list at write-time, but stored as a
+   *  raw string here so seat-config doesn't need a runtime dep on the
+   *  airline-colors module. */
+  botColorOverride?: string | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -90,10 +97,16 @@ export async function POST(req: NextRequest) {
     const session = (stateJson.session as Record<string, unknown> | undefined) ?? {};
 
     // Build updated plannedSeats from the incoming configs.
+    // Color override is stored only for bot seats; human seats clear it
+    // so a seat-type flip from bot→human doesn't leave stale color hints.
     const plannedSeats = (seatConfigs as SeatConfigEntry[]).map((s, i) => ({
       id: `seat-${s.index ?? i}`,
       type: s.type === "bot" ? "bot" : "human",
       botDifficulty: s.type === "bot" ? (s.difficulty ?? "medium") : undefined,
+      botColorOverride:
+        s.type === "bot" && typeof s.botColorOverride === "string"
+          ? s.botColorOverride
+          : undefined,
     }));
 
     const updatedState = {

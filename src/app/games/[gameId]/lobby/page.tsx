@@ -32,12 +32,15 @@ import { getBrowserClient } from "@/lib/supabase/browser";
 import {
   ArrowLeft, ArrowRight, Lock, Unlock, Copy, Sparkles, Globe2,
   Loader2, AlertCircle, Play, Trash2, CheckCircle2, Plane, Bot, User,
+  RefreshCw,
 } from "lucide-react";
+import { DOCTRINES as DOCTRINE_META, DOCTRINE_ICON_TINT } from "@/data/doctrines";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
 import {
   AIRLINE_COLOR_BY_ID,
+  AIRLINE_COLOR_PALETTE,
   type AirlineColorId,
   isAirlineColorId,
   pickNextAvailableColor,
@@ -53,6 +56,12 @@ interface SeatConfig {
   index: number;   // 0-based
   type: SeatType;
   difficulty: Difficulty;
+  // Optional host-controlled bot color override. When set + valid +
+  // not claimed by any human, the lobby preview AND the start-route
+  // bot seeder use this color instead of pickNextAvailableColor's
+  // deterministic fallback. Refresh button on the bot SeatCard
+  // re-rolls this to a random unclaimed palette id.
+  botColorOverride?: AirlineColorId | null;
 }
 
 // Names assigned to bots in seat order — mirrors BOT_DEFAULTS in the start route.
@@ -67,12 +76,19 @@ const BOT_NAMES = [
   "Firth Pacific",
 ] as const;
 
-const DOCTRINES: { id: DoctrineId; label: string; desc: string }[] = [
-  { id: "premium-service",  label: "Premium",     desc: "Higher fares, loyal business travellers" },
-  { id: "budget-expansion", label: "Budget",       desc: "High volume, secondary markets" },
-  { id: "cargo-dominance",  label: "Cargo",        desc: "Freight focus, resilient in downturns" },
-  { id: "global-network",   label: "Global Network", desc: "Breadth pays — routes compound" },
-];
+// Compact doctrine cards for the multiplayer lobby — same metadata as
+// the solo onboarding flow (icons, taglines, effect bubbles), but
+// rendered in a tighter 2-column layout with only the 3 most
+// distinctive effects per doctrine. Per workshop feedback: the simple
+// label/desc rows didn't carry enough strategic weight.
+const DOCTRINE_LOBBY_CARDS = DOCTRINE_META.map((d) => ({
+  ...d,
+  // Pick the 3 most player-relevant effects per doctrine. The 4th+
+  // effects in each list tend to be edge-case nuance (e.g. "Higher
+  // staff cost" on premium) — we keep those for the solo flow which
+  // has more vertical space.
+  primaryEffects: d.effects.slice(0, 3),
+}));
 
 interface LobbyResponse {
   game: GameRow;
@@ -168,16 +184,20 @@ export default function GameLobbyPage({
     const planned = (
       (data.state?.state_json as Record<string, unknown> | undefined)
         ?.session as Record<string, unknown> | undefined
-    )?.plannedSeats as Array<{ type?: string; botDifficulty?: string }> | undefined;
+    )?.plannedSeats as
+      | Array<{ type?: string; botDifficulty?: string; botColorOverride?: string | null }>
+      | undefined;
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSeatConfigs(
       Array.from({ length: maxTeams }, (_, i) => {
         const p = planned?.[i];
+        const override = p?.botColorOverride;
         return {
           index: i,
           type: (p?.type === "bot" ? "bot" : "human") as SeatType,
           difficulty: ((p?.botDifficulty ?? "medium") as Difficulty),
+          botColorOverride: isAirlineColorId(override) ? override : null,
         };
       }),
     );
@@ -530,15 +550,6 @@ export default function GameLobbyPage({
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">
                     Home hub airport
-                    {(() => {
-                      const selected = pickableHubs.find((c) => c.code === airlineHub);
-                      if (!selected) return null;
-                      return (
-                        <span className="ml-2 font-normal text-slate-500">
-                          · {hubTierLabel(selected)} · {fmtHubPrice(hubPriceUsd(selected))}
-                        </span>
-                      );
-                    })()}
                   </label>
                   <select
                     value={airlineHub}
@@ -551,6 +562,36 @@ export default function GameLobbyPage({
                       </option>
                     ))}
                   </select>
+                  {(() => {
+                    const selected = pickableHubs.find((c) => c.code === airlineHub);
+                    if (!selected) return null;
+                    const tier = hubTierLabel(selected);
+                    const isPremium = tier === "Premium gateway";
+                    const isT1 = tier === "Tier 1 hub";
+                    const isT2 = tier === "Tier 2 hub";
+                    const tint = isPremium
+                      ? "bg-violet-50 text-violet-700 ring-violet-100"
+                      : isT1
+                        ? "bg-cyan-50 text-cyan-700 ring-cyan-100"
+                        : isT2
+                          ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                          : "bg-amber-50 text-amber-700 ring-amber-100";
+                    return (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span
+                          className={
+                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 text-[0.6875rem] font-semibold " +
+                            tint
+                          }
+                        >
+                          {tier}
+                        </span>
+                        <span className="text-[0.6875rem] font-mono tabular text-slate-700">
+                          {fmtHubPrice(hubPriceUsd(selected))} hub fee
+                        </span>
+                      </div>
+                    );
+                  })()}
                   <p className="text-[0.6875rem] text-slate-500 mt-1">
                     All {pickableHubs.length} playable cities — bigger hubs cost more upfront but seed brand and slot advantages.
                   </p>
@@ -558,23 +599,53 @@ export default function GameLobbyPage({
 
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-2">Strategy doctrine</label>
-                  <div className="grid sm:grid-cols-2 gap-2">
-                    {DOCTRINES.map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => setAirlineDoctrine(d.id)}
-                        className={
-                          "text-left rounded-lg border p-3 text-xs transition-all " +
-                          (airlineDoctrine === d.id
-                            ? "border-cyan-400 bg-cyan-50 ring-2 ring-cyan-200"
-                            : "border-slate-200 bg-slate-50 hover:border-slate-300")
-                        }
-                      >
-                        <div className="font-semibold text-slate-800 mb-0.5">{d.label}</div>
-                        <div className="text-slate-500">{d.desc}</div>
-                      </button>
-                    ))}
+                  <div className="grid sm:grid-cols-2 gap-2.5">
+                    {DOCTRINE_LOBBY_CARDS.map((d) => {
+                      const Icon = d.Icon;
+                      const tint = DOCTRINE_ICON_TINT[d.iconAccent];
+                      const selected = airlineDoctrine === d.id;
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => setAirlineDoctrine(d.id)}
+                          className={
+                            "text-left rounded-xl border p-3 transition-all flex gap-3 items-start " +
+                            (selected
+                              ? "border-cyan-400 bg-cyan-50/60 ring-2 ring-cyan-200 shadow-sm"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/40")
+                          }
+                        >
+                          <span
+                            className={
+                              "shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ring-4 " +
+                              tint
+                            }
+                            aria-hidden
+                          >
+                            <Icon className="w-4 h-4" />
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[0.8125rem] font-semibold text-slate-900 leading-tight">
+                              {d.name}
+                            </span>
+                            <span className="block text-[0.6875rem] italic text-slate-500 mt-0.5 leading-snug">
+                              &ldquo;{d.tagline}&rdquo;
+                            </span>
+                            <span className="mt-1.5 flex flex-wrap gap-1">
+                              {d.primaryEffects.map((eff) => (
+                                <span
+                                  key={eff}
+                                  className="inline-block text-[0.625rem] uppercase tracking-wide font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded"
+                                >
+                                  {eff}
+                                </span>
+                              ))}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -658,11 +729,22 @@ export default function GameLobbyPage({
               const botColorByIndex = new Map<number, AirlineColorId>();
               for (let i = 0; i < game.max_teams; i++) {
                 const memberAtSeat = playerMembers[i];
-                const seatType =
-                  seatConfigs[i]?.type ??
-                  ("human" as SeatType);
+                const cfgI = seatConfigs[i];
+                const seatType = cfgI?.type ?? ("human" as SeatType);
                 if (!memberAtSeat && seatType === "bot") {
-                  const c = pickNextAvailableColor(claimedSoFar);
+                  // If host explicitly chose a color via the refresh
+                  // button (botColorOverride), honor it as long as no
+                  // human has claimed the same hue. Otherwise fall
+                  // back to the deterministic next-available rule
+                  // that mirrors /api/games/start at game-start.
+                  const override = cfgI?.botColorOverride ?? null;
+                  const overrideUsable =
+                    override != null &&
+                    isAirlineColorId(override) &&
+                    !claimedSoFar.includes(override);
+                  const c = overrideUsable
+                    ? override
+                    : pickNextAvailableColor(claimedSoFar);
                   botColorByIndex.set(i, c);
                   claimedSoFar.push(c);
                 }
@@ -695,7 +777,27 @@ export default function GameLobbyPage({
                     seatConfig={cfg}
                     botColorPreview={botColorByIndex.get(i) ?? null}
                     canEditConfig={(isHost || isFacilitator) && !member && game.status === "lobby"}
+                    canRerollBotColor={(isHost || isFacilitator) && !member && cfg.type === "bot" && game.status === "lobby"}
                     onConfigChange={(patch) => handleSeatConfigChange(i, patch)}
+                    onRerollBotColor={() => {
+                      // Random unclaimed color, excluding the current
+                      // preview so a click always visibly changes the
+                      // hue. Falls through to "any unclaimed" if the
+                      // current preview is the only free option (rare,
+                      // cohort=8 with 7 humans+1 bot).
+                      const taken = new Set(claimedSoFar);
+                      const current = botColorByIndex.get(i) ?? null;
+                      const candidates = AIRLINE_COLOR_PALETTE.filter(
+                        (c) => !taken.has(c.id) && c.id !== current,
+                      );
+                      const fallback = AIRLINE_COLOR_PALETTE.filter(
+                        (c) => !taken.has(c.id),
+                      );
+                      const pool = candidates.length > 0 ? candidates : fallback;
+                      if (pool.length === 0) return;
+                      const next = pool[Math.floor(Math.random() * pool.length)].id;
+                      handleSeatConfigChange(i, { botColorOverride: next });
+                    }}
                   />
                 );
               });
@@ -855,7 +957,8 @@ function HostPanel({
 }
 
 function SeatCard({
-  index, member, isMe, hasSetup, seatLabel, seatConfig, botColorPreview, canEditConfig, onConfigChange,
+  index, member, isMe, hasSetup, seatLabel, seatConfig, botColorPreview,
+  canEditConfig, canRerollBotColor, onConfigChange, onRerollBotColor,
 }: {
   index: number;
   member: GameMemberRow | null;
@@ -865,7 +968,9 @@ function SeatCard({
   seatConfig: SeatConfig;
   botColorPreview: AirlineColorId | null;
   canEditConfig: boolean;
+  canRerollBotColor: boolean;
   onConfigChange: (patch: Partial<SeatConfig>) => void;
+  onRerollBotColor: () => void;
 }) {
   const claimed = !!member;
   const isBot = !claimed && seatConfig.type === "bot";
@@ -1010,6 +1115,20 @@ function SeatCard({
           }>
             {hasSetup ? "✓ Ready" : "Setting up…"}
           </div>
+        )}
+        {isBot && canRerollBotColor && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRerollBotColor();
+            }}
+            aria-label="Re-roll bot color"
+            title="Pick a different color for this bot"
+            className="shrink-0 p-1.5 rounded-md text-slate-500 hover:bg-white/60 hover:text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
         )}
         {isBot && (
           <span className={
