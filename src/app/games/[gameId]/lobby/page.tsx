@@ -34,6 +34,7 @@ import {
   AIRLINE_COLOR_BY_ID,
   type AirlineColorId,
   isAirlineColorId,
+  pickNextAvailableColor,
 } from "@/lib/games/airline-colors";
 import { useHeartbeat } from "@/lib/games/use-heartbeat";
 import { awayIndicator } from "@/lib/games/away-indicator";
@@ -622,6 +623,30 @@ export default function GameLobbyPage({
               const playerMembers = data.members.filter(
                 (m) => m.role !== "spectator" && m.role !== "facilitator",
               );
+              // Phase 9 — pre-allocate a color preview for every bot seat
+              // in the lobby, mirroring what /api/games/start will do at
+              // game-start: humans get first dibs (their picked color
+              // wins), bots take the next free palette slot in seat order,
+              // skipping anything humans claimed. The preview is purely
+              // visual; the authoritative assignment still happens server-
+              // side at start, but rendering the same algorithm here means
+              // the lobby preview matches the played game (assuming no
+              // human flips their pick between now and start).
+              const claimedSoFar: AirlineColorId[] = playerMembers
+                .map((m) => m.airline_color_id)
+                .filter((c): c is AirlineColorId => isAirlineColorId(c));
+              const botColorByIndex = new Map<number, AirlineColorId>();
+              for (let i = 0; i < game.max_teams; i++) {
+                const memberAtSeat = playerMembers[i];
+                const seatType =
+                  seatConfigs[i]?.type ??
+                  ("human" as SeatType);
+                if (!memberAtSeat && seatType === "bot") {
+                  const c = pickNextAvailableColor(claimedSoFar);
+                  botColorByIndex.set(i, c);
+                  claimedSoFar.push(c);
+                }
+              }
               return Array.from({ length: game.max_teams }).map((_, i) => {
                 const member = playerMembers[i];
                 const isMe = member ? member.session_id === sessionId : false;
@@ -635,6 +660,7 @@ export default function GameLobbyPage({
                     isMe={isMe}
                     hasSetup={hasSetup}
                     seatConfig={cfg}
+                    botColorPreview={botColorByIndex.get(i) ?? null}
                     canEditConfig={(isHost || isFacilitator) && !member && game.status === "lobby"}
                     onConfigChange={(patch) => handleSeatConfigChange(i, patch)}
                   />
@@ -796,13 +822,14 @@ function HostPanel({
 }
 
 function SeatCard({
-  index, member, isMe, hasSetup, seatConfig, canEditConfig, onConfigChange,
+  index, member, isMe, hasSetup, seatConfig, botColorPreview, canEditConfig, onConfigChange,
 }: {
   index: number;
   member: GameMemberRow | null;
   isMe: boolean;
   hasSetup: boolean;
   seatConfig: SeatConfig;
+  botColorPreview: AirlineColorId | null;
   canEditConfig: boolean;
   onConfigChange: (patch: Partial<SeatConfig>) => void;
 }) {
@@ -810,13 +837,16 @@ function SeatCard({
   const isBot = !claimed && seatConfig.type === "bot";
   const botName = BOT_NAMES[(index - 1) % BOT_NAMES.length];
   // Phase 9 — once a claimant has chosen a color, tint their seat
-  // tile + avatar square with that hex. Falls back to the legacy
-  // cyan-for-me / slate-for-others palette when no color is set
-  // (pre-Phase-9 saves or before the picker step).
+  // tile + avatar square with that hex. Bot seats also get a tint
+  // from the parent's color allocator (preview of what /api/games/start
+  // will assign). Falls back to the legacy cyan-for-me / slate-for-
+  // others palette when no color is set (pre-Phase-9 saves).
   const memberColor =
     claimed && member.airline_color_id && isAirlineColorId(member.airline_color_id)
       ? AIRLINE_COLOR_BY_ID[member.airline_color_id]
-      : null;
+      : isBot && botColorPreview
+        ? AIRLINE_COLOR_BY_ID[botColorPreview]
+        : null;
   const tileStyle: React.CSSProperties | undefined = memberColor
     ? {
         borderColor: memberColor.hex,
@@ -915,8 +945,20 @@ function SeatCard({
             </>
           ) : isBot ? (
             <>
-              <div className="text-sm font-semibold text-violet-900 truncate">{botName}</div>
-              <div className="text-xs text-violet-600">AI Bot</div>
+              <div
+                className={
+                  "text-sm font-semibold truncate " +
+                  (memberColor ? "" : "text-violet-900")
+                }
+                style={memberColor ? { color: memberColor.hex } : undefined}
+              >
+                {botName}
+              </div>
+              <div
+                className={"text-xs " + (memberColor ? "text-slate-500" : "text-violet-600")}
+              >
+                AI Bot
+              </div>
             </>
           ) : (
             <div className="text-sm font-medium text-slate-400 italic">
