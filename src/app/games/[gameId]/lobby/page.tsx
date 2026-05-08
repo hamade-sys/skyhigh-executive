@@ -31,6 +31,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { DOCTRINES as DOCTRINE_META, DOCTRINE_ICON_TINT } from "@/data/doctrines";
+import { lobbyPreviewName } from "@/data/airline-names";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
@@ -60,17 +61,11 @@ interface SeatConfig {
   botColorOverride?: AirlineColorId | null;
 }
 
-// Names assigned to bots in seat order — mirrors BOT_DEFAULTS in the start route.
-const BOT_NAMES = [
-  "Aurora Airways",
-  "Sundial Carriers",
-  "Meridian Air",
-  "Pacific Crest",
-  "Transit Nordique",
-  "Solstice Wings",
-  "Vermilion Air",
-  "Firth Pacific",
-] as const;
+// Names for the lobby seat-preview cards come from the shared
+// 100-name pool via lobbyPreviewName(seatIndex). Cached per browser
+// in localStorage so the host doesn't see name churn between
+// renders, but the authoritative names at game start are picked
+// fresh server-side by /api/games/start.
 
 // Compact doctrine cards for the multiplayer lobby — same metadata as
 // the solo onboarding flow (icons, taglines, effect bubbles), but
@@ -954,7 +949,11 @@ function SeatCard({
 }) {
   const claimed = !!member;
   const isBot = !claimed && seatConfig.type === "bot";
-  const botName = BOT_NAMES[(index - 1) % BOT_NAMES.length];
+  // Stable per-seat random pick from the 100-name pool — see
+  // src/data/airline-names.ts. Cached per browser via localStorage
+  // so re-renders don't churn the displayed name; the authoritative
+  // bot name is picked again server-side at /api/games/start.
+  const botName = lobbyPreviewName(index - 1);
   // Phase 9 — once a claimant has chosen a color, tint their seat
   // tile + avatar square with that hex. Bot seats also get a tint
   // from the parent's color allocator (preview of what /api/games/start

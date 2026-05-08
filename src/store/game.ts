@@ -92,6 +92,7 @@ import {
 } from "@/lib/hub-pricing";
 import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
 import { pickNextAvailableColor, type AirlineColorId } from "@/lib/games/airline-colors";
+import { pickAirlineNames } from "@/data/airline-names";
 import { fetchWithRetry } from "@/lib/games/fetch-with-retry";
 import { captureEvent } from "@/lib/telemetry";
 import type {
@@ -116,16 +117,16 @@ import type {
 } from "@/types/game";
 
 // ─── Mocked competitor names for single-team leaderboard ────
-const MOCK_COMPETITOR_NAMES: Array<{ name: string; code: string; color: string; hub: string }> = [
-  { name: "Aurora Airways",    code: "AUR", color: "#2B6B88", hub: "SIN" },
-  { name: "Sundial Carriers",  code: "SND", color: "#7A4B2E", hub: "LHR" },
-  { name: "Meridian Air",      code: "MRD", color: "#1E6B5C", hub: "DXB" },
-  { name: "Pacific Crest",     code: "PCC", color: "#C38A1E", hub: "NRT" },
-  { name: "Transit Nordique",  code: "TND", color: "#4A6480", hub: "CPH" },
-  { name: "Solstice Wings",    code: "SOL", color: "#9A7D3D", hub: "JNB" },
-  { name: "Vermilion Air",     code: "VML", color: "#C23B1F", hub: "GRU" },
-  { name: "Firth Pacific",     code: "FTH", color: "#6B5F88", hub: "HKG" },
-  { name: "Anchor Continental", code: "ACT", color: "#4B7A2E", hub: "ORD" },
+// Hub + brand-color cycle for solo-game competitors. Names are
+// picked fresh from the 100-name pool at game-start (see
+// pickAirlineNames in src/data/airline-names) so two consecutive
+// solo runs almost never see the same competitor names.
+const MOCK_COMPETITOR_HUBS: ReadonlyArray<string> = [
+  "SIN", "LHR", "DXB", "NRT", "CPH", "JNB", "GRU", "HKG", "ORD",
+];
+const MOCK_COMPETITOR_HEXES: ReadonlyArray<string> = [
+  "#2B6B88", "#7A4B2E", "#1E6B5C", "#C38A1E", "#4A6480",
+  "#9A7D3D", "#C23B1F", "#6B5F88", "#4B7A2E",
 ];
 
 // ─── Game store ─────────────────────────────────────────────
@@ -938,13 +939,22 @@ export const useGame = create<GameStore>()(
         // Mock competitors
         const rivals: Team[] = [];
         const rivalCount = Math.max(0, Math.min(9, teamCount - 1));
+        // Pick distinct rival names up-front from the 100-name pool,
+        // excluding the player's own airline name so the cohort never
+        // reads as if there are two of the same airline.
+        const rivalNames = pickAirlineNames(
+          rivalCount,
+          new Set([airlineName.trim()]),
+        );
         for (let i = 0; i < rivalCount; i++) {
-          const meta = MOCK_COMPETITOR_NAMES[i];
+          const meta = rivalNames[i];
           if (!meta) break;
+          const fallbackHub = MOCK_COMPETITOR_HUBS[i % MOCK_COMPETITOR_HUBS.length];
+          const fallbackHex = MOCK_COMPETITOR_HEXES[i % MOCK_COMPETITOR_HEXES.length];
           // Make sure competitor hub doesn't collide with player hub
-          const hub = meta.hub === hubCode
-            ? MOCK_COMPETITOR_NAMES[(i + 5) % MOCK_COMPETITOR_NAMES.length].hub
-            : meta.hub;
+          const hub = fallbackHub === hubCode
+            ? MOCK_COMPETITOR_HUBS[(i + 5) % MOCK_COMPETITOR_HUBS.length]
+            : fallbackHub;
           // Spread rival doctrines so the leaderboard has visible diversity
           // of strategies competing on revenue/margin/fuel sensitivity.
           const rivalDoctrines: DoctrineId[] = [
@@ -960,7 +970,7 @@ export const useGame = create<GameStore>()(
           const rivalColorId = pickNextAvailableColor(takenColorIds);
           const r = makeStartingTeam({
             airlineName: meta.name, code: meta.code, doctrine,
-            hubCode: hub, isPlayer: false, color: meta.color,
+            hubCode: hub, isPlayer: false, color: fallbackHex,
             airlineColorId: rivalColorId,
           });
           // Spread rival difficulties so the cohort feels mixed: a 5-rival
