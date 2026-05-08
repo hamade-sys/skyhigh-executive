@@ -5,11 +5,34 @@ import { useGame } from "@/store/game";
 import { cn } from "@/lib/cn";
 
 /**
- * Tick driver (mounts once inside the canvas). Runs a 1-Hz interval that
- * calls tickQuarterTimer when the timer is active and not paused.
+ * Tick driver — also responsible for auto-starting the per-quarter
+ * timer based on the game's `session.quarterTimerSeconds`. Mounts
+ * once inside the canvas. Runs a 1-Hz interval that calls
+ * tickQuarterTimer when the timer is active and not paused. When
+ * the user-supplied timer hits 0, the engine auto-closes the
+ * quarter (see store: tickQuarterTimer).
  */
 export function QuarterTimerDriver() {
   const tick = useGame((s) => s.tickQuarterTimer);
+  const phase = useGame((s) => s.phase);
+  const start = useGame((s) => s.startQuarterTimer);
+  const seconds = useGame((s) => s.quarterTimerSecondsRemaining);
+  const configuredSeconds = useGame(
+    (s) => s.session?.quarterTimerSeconds,
+  );
+  // Auto-start the timer when the game enters playing phase if the
+  // session has a configured per-quarter timer. 0 means "no timer"
+  // (Game Master closes manually) — skip the auto-start in that
+  // case. Re-fires on each phase transition into "playing" (which
+  // happens after closeQuarter → advanceToNext loops back to the
+  // next round).
+  useEffect(() => {
+    if (phase !== "playing") return;
+    if (seconds !== null) return; // already running
+    if (typeof configuredSeconds !== "number" || configuredSeconds <= 0) return;
+    start(configuredSeconds);
+  }, [phase, seconds, configuredSeconds, start]);
+
   useEffect(() => {
     const id = setInterval(() => tick(1), 1000);
     return () => clearInterval(id);
@@ -25,13 +48,23 @@ export function QuarterTimerChip() {
   const pause = useGame((s) => s.pauseQuarterTimer);
   const resume = useGame((s) => s.resumeQuarterTimer);
   const extend = useGame((s) => s.extendQuarterTimer);
+  // Default the manual "Start timer" button to whatever the host
+  // configured at game creation (if anything); otherwise fall back
+  // to the legacy 30 minutes.
+  const configuredSeconds = useGame(
+    (s) => s.session?.quarterTimerSeconds,
+  );
+  const fallbackStart =
+    typeof configuredSeconds === "number" && configuredSeconds > 0
+      ? configuredSeconds
+      : 1800;
 
   if (seconds === null) {
     return (
       <button
-        onClick={() => start(1800)}
+        onClick={() => start(fallbackStart)}
         className="text-[0.6875rem] font-medium px-2 py-1 rounded-md border border-line bg-surface-2 text-ink-2 hover:text-ink"
-        title="Start 30m quarter timer"
+        title={`Start ${Math.round(fallbackStart / 60)}m quarter timer`}
       >
         Start timer
       </button>

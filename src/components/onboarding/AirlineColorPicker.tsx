@@ -1,27 +1,32 @@
 "use client";
 
 /**
- * Airline color picker — Phase 9 of the enterprise-readiness plan.
+ * Airline color picker — slim swatch row.
  *
- * 8-tile grid surfaced in onboarding. Each tile previews a brand
- * color (the same hex used downstream for leaderboard chips, route
- * ribbons, multi-airline chart lines, chat avatar). The selected
- * color highlights with a thicker ring and a checkmark.
+ * Compact dot picker (8 small circles inline) instead of the chunky
+ * grid of square tiles. Each tile is a 28×28 swatch with a thin
+ * ring; the selected one gets a thicker ring + checkmark inside.
+ * Disabled (already-taken) swatches go to ~25% opacity with a tiny
+ * lock icon. The whole picker now takes one row instead of
+ * dominating the form.
  *
- * Multiplayer-aware: when `takenColorIds` is non-empty, those tiles
- * are visually muted and unclickable. Server-side
- * `/api/games/claim-color` (lobby flow) enforces uniqueness on race
- * conditions; this component handles the local UX.
+ * Multiplayer-aware: when `gameId` is set, clicks call
+ * /api/games/claim-color server-side before applying locally. On
+ * 409 the picker surfaces an inline error and refreshes via the
+ * `onTakenConflict` callback. On 5xx (e.g. the airline_color_id
+ * column doesn't exist yet because migration 0004 hasn't been
+ * applied), the error is downgraded to a soft toast — local
+ * onChange still fires so the rest of the onboarding flow isn't
+ * blocked.
  *
- * Solo flow: the parent passes an empty `takenColorIds` and just
- * tracks the selection locally — uniqueness isn't a concern.
+ * Solo flow: the parent passes no `gameId` and tracks the
+ * selection locally — uniqueness isn't a concern.
  *
  * Accessibility:
- *   - Tiles are buttons in a `radiogroup` with `aria-checked`.
- *   - Each tile's aria-label includes the color name + airline name
- *     (e.g. "Blue — Meridian Air") so screen readers announce who
- *     this color identifies.
- *   - Disabled tiles get aria-disabled + a "Already taken" tooltip.
+ *   - Buttons in a `radiogroup` with `aria-checked`.
+ *   - Each tile's aria-label includes color name + airline name
+ *     so screen readers announce who this color identifies.
+ *   - Disabled tiles get aria-disabled + tooltip.
  */
 
 import { useState } from "react";
@@ -52,8 +57,8 @@ interface Props {
    *  solo flows; in solo, onChange runs immediately with no network. */
   gameId?: string | null;
   /** Optional callback fired when the server-side claim collides
-   *  with another player's. The parent should re-fetch the takenColorIds
-   *  set so the picker greys out the right tiles. */
+   *  with another player's. The parent should re-fetch the
+   *  takenColorIds set so the picker greys out the right tiles. */
   onTakenConflict?: () => void;
 }
 
@@ -93,24 +98,37 @@ export function AirlineColorPicker({
         onTakenConflict?.();
         return;
       }
+      if (res.status === 503) {
+        // Schema migration 0004 hasn't been applied yet — the
+        // server explicitly tagged this as a "schema offline"
+        // diagnostic. Apply locally, surface a soft hint.
+        onChange(id);
+        setError(
+          "Color saved locally. Server color sync turns on once the operator applies migration 0004.",
+        );
+        return;
+      }
       if (!res.ok) {
         setError(json?.error ?? "Couldn't claim that color. Try again.");
         return;
       }
       onChange(id);
     } catch {
-      setError("Network error claiming color. Try again.");
+      // Network blip — don't block the onboarding flow. Apply
+      // locally and surface a soft warning.
+      onChange(id);
+      setError("Network blip. Color saved locally; will sync when you reconnect.");
     } finally {
       setClaiming(null);
     }
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <div
         role="radiogroup"
         aria-label="Airline brand color"
-        className="grid grid-cols-4 sm:grid-cols-8 gap-2"
+        className="inline-flex flex-wrap items-center gap-2"
       >
         {AIRLINE_COLOR_PALETTE.map((c) => {
           const isSelected = value === c.id;
@@ -130,28 +148,27 @@ export function AirlineColorPicker({
               disabled={isDisabled}
               onClick={() => !isDisabled && handleSelect(c.id)}
               aria-label={ariaLabel}
-              title={isTaken ? "Already chosen by another airline" : c.label}
+              title={isTaken ? `${c.label} (taken)` : c.label}
               className={cn(
-                "relative aspect-square rounded-xl transition-all",
-                "min-h-[44px] min-w-[44px]",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+                "relative w-7 h-7 rounded-full transition-all shrink-0",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
                 isSelected
-                  ? "ring-2 ring-offset-2 ring-offset-surface scale-[1.05]"
-                  : "hover:scale-[1.03] focus-visible:ring-primary",
-                isDisabled && !isClaiming && "opacity-30 cursor-not-allowed",
+                  ? "scale-110 ring-2 ring-offset-2 ring-offset-surface"
+                  : "ring-1 ring-line hover:scale-105 hover:ring-2 hover:ring-line-strong",
+                isDisabled && !isClaiming && "opacity-30 cursor-not-allowed hover:scale-100",
                 isClaiming && "opacity-70",
               )}
               style={{
                 backgroundColor: c.hex,
-                boxShadow: isSelected
-                  ? `0 0 0 2px ${c.hex}, 0 0 0 4px white, 0 0 0 6px ${c.hex}`
-                  : undefined,
+                ...(isSelected
+                  ? { boxShadow: `0 0 0 2px ${c.hex}` }
+                  : {}),
               }}
             >
               {isClaiming ? (
                 <Loader2
                   className={cn(
-                    "absolute inset-0 m-auto w-5 h-5 animate-spin",
+                    "absolute inset-0 m-auto w-3.5 h-3.5 animate-spin",
                     c.textOn === "white" ? "text-white" : "text-slate-900",
                   )}
                   aria-hidden
@@ -159,7 +176,7 @@ export function AirlineColorPicker({
               ) : isSelected ? (
                 <Check
                   className={cn(
-                    "absolute inset-0 m-auto w-5 h-5",
+                    "absolute inset-0 m-auto w-3.5 h-3.5",
                     c.textOn === "white" ? "text-white" : "text-slate-900",
                   )}
                   strokeWidth={3}
@@ -167,7 +184,7 @@ export function AirlineColorPicker({
                 />
               ) : isTaken ? (
                 <Lock
-                  className="absolute inset-0 m-auto w-3.5 h-3.5 text-white"
+                  className="absolute inset-0 m-auto w-2.5 h-2.5 text-white"
                   strokeWidth={2.5}
                   aria-hidden
                 />
@@ -180,7 +197,7 @@ export function AirlineColorPicker({
       {error && (
         <p
           role="alert"
-          className="text-[0.75rem] text-rose-600 leading-relaxed"
+          className="text-[0.6875rem] text-amber-700 leading-snug"
         >
           {error}
         </p>

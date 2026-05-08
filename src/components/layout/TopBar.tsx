@@ -680,11 +680,60 @@ function GameMenu() {
   const resetGame = useGame((g) => g.resetGame);
   const phase = useGame((g) => g.phase);
   const sessionGameId = useGame((g) => g.session?.gameId ?? null);
+  const sessionGameMasterId = useGame(
+    (g) => g.session?.gameMasterSessionId ?? g.session?.facilitatorSessionId ?? null,
+  );
+  const localSessionId = useGame((g) => g.localSessionId);
   const isMultiplayer = sessionGameId !== null;
+  // Game Master = the session owner who can force-end the whole game.
+  const isGameMaster =
+    isMultiplayer &&
+    !!sessionGameMasterId &&
+    !!localSessionId &&
+    sessionGameMasterId === localSessionId;
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [forceEndConfirmOpen, setForceEndConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  /**
+   * Game Master: force-end the entire game for everyone. Calls
+   * /api/games/delete (which already supports lobby OR ended games;
+   * we extend it to also accept playing games when the caller is the
+   * Game Master). Clears all local state, routes home, and the
+   * cohort gets the next refresh from Realtime / postgres_changes.
+   */
+  async function handleForceEnd() {
+    if (!sessionGameId) return;
+    setErrorMsg(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/games/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gameId: sessionGameId, force: true }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setErrorMsg(
+          json?.error ?? "Couldn't end the game. Try again or refresh.",
+        );
+        setSubmitting(false);
+        return;
+      }
+      resetGame();
+      setSubmitting(false);
+      setForceEndConfirmOpen(false);
+      setOpen(false);
+      router.replace("/");
+    } catch {
+      setErrorMsg(
+        "Network error — game state preserved. Check your connection and try again.",
+      );
+      setSubmitting(false);
+    }
+  }
 
   /**
    * "End game" semantics — Phase 8.2 of the enterprise-readiness plan.
@@ -804,12 +853,32 @@ function GameMenu() {
                   {isMultiplayer ? "Forfeit & leave game" : "End game & start over"}
                 </span>
               </button>
+              {/* Game Master only — force-end the entire game for
+                  every player. Uses /api/games/delete with `force:
+                  true`. Renders rose so it's visually distinct from
+                  the regular forfeit. */}
+              {isGameMaster && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    setForceEndConfirmOpen(true);
+                  }}
+                  className="w-full text-left px-3 py-2 text-[0.8125rem] text-rose-700 hover:bg-rose-50 flex items-center gap-2"
+                >
+                  <X size={13} className="text-rose-500" />
+                  <span>End game for everyone</span>
+                </button>
+              )}
               <div className="px-3 py-1.5 text-[0.6875rem] text-ink-muted leading-snug border-t border-line/40 mt-1 pt-2">
                 {phase === "endgame"
                   ? "Resets the saved run and returns to onboarding."
-                  : isMultiplayer
-                    ? "A bot takes over your airline so the cohort can keep playing."
-                    : "Wipes the current saved run. Cannot be undone."}
+                  : isGameMaster
+                    ? "Forfeit replaces you with a bot. End for everyone closes the game cohort-wide."
+                    : isMultiplayer
+                      ? "A bot takes over your airline so the cohort can keep playing."
+                      : "Wipes the current saved run. Cannot be undone."}
               </div>
             </div>
           </>
@@ -878,6 +947,55 @@ function GameMenu() {
               : isMultiplayer
                 ? "Forfeit & leave"
                 : "End game & start over"}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Game Master force-end modal — separate from forfeit so the
+          confirmation copy is unambiguous (this affects EVERY player
+          in the cohort, not just the GM). */}
+      <Modal
+        open={forceEndConfirmOpen}
+        onClose={() => !submitting && setForceEndConfirmOpen(false)}
+      >
+        <ModalHeader>End the game for everyone?</ModalHeader>
+        <ModalBody>
+          <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
+            This closes the game for every team — your cohort gets
+            routed to the endgame summary on their next refresh. The
+            game state is preserved for the recap; nobody loses
+            history. There&rsquo;s no undo: you can&rsquo;t resume
+            from here.
+          </p>
+          <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
+            Use this when the workshop is over, the room ran out of
+            time, or the cohort is no longer engaged. For your own
+            airline only, use Forfeit & leave above instead.
+          </p>
+          {errorMsg && (
+            <div
+              role="alert"
+              className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[0.8125rem] text-rose-700"
+            >
+              {errorMsg}
+            </div>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="ghost"
+            onClick={() => setForceEndConfirmOpen(false)}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleForceEnd}
+            disabled={submitting}
+          >
+            <X size={14} className="mr-1" />
+            {submitting ? "Working…" : "End game for everyone"}
           </Button>
         </ModalFooter>
       </Modal>

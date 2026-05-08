@@ -4,7 +4,7 @@
  * Player gets +$200M onboarding capital on top of the $150M base
  * (so $350M total to spend), and pays for their hub airport from
  * that pool. Bigger hubs cost more upfront but seed brand/route
- * advantages later. T4 cities are not pickable as hubs.
+ * advantages later. ALL playable cities (T1–T4) are pickable.
  *
  * Premium hubs ($300M):  London (LHR), Paris (CDG), New York (JFK),
  *                        San Francisco (SFO), Dubai (DXB).
@@ -13,12 +13,14 @@
  *                        premium list).
  * Tier 2 ($100M):        Tier-2 cities.
  * Tier 3 ($50M):         Tier-3 cities.
+ * Tier 4 ($25M):         Smallest tier — niche / hometown bet.
  *
  * Effective starting cash = 150M base + 200M onboarding − hubCost.
  *   Premium hub:  $50M starting cash · best amplifier
  *   T1:          $150M starting cash
  *   T2:          $250M starting cash
- *   T3:          $300M starting cash · cheapest, smallest market
+ *   T3:          $300M starting cash
+ *   T4:          $325M starting cash · cheapest, smallest market
  */
 
 import type { City, CityTier } from "@/types/game";
@@ -42,8 +44,8 @@ export function hubPriceUsd(city: City): number {
     case 1: return 200_000_000;
     case 2: return 100_000_000;
     case 3: return 50_000_000;
-    case 4:
-    default: return Number.POSITIVE_INFINITY; // not pickable
+    case 4: return 25_000_000;
+    default: return 25_000_000;
   }
 }
 
@@ -54,18 +56,18 @@ export function hubTierLabel(city: City): string {
   if (city.tier === 1) return "Tier 1 hub";
   if (city.tier === 2) return "Tier 2 hub";
   if (city.tier === 3) return "Tier 3 hub";
-  return "Not pickable as hub";
+  if (city.tier === 4) return "Tier 4 hub";
+  return "Hub";
 }
 
-/** Cities playable as a hub — any non-T4 city. Sorted by price desc
- *  then name asc inside each tier so premium hubs lead. */
+/** Every playable city is pickable as a hub (T1 through T4). Sorted
+ *  by price desc then name asc inside each tier so premium hubs
+ *  lead and ties resolve alphabetically. */
 export function hubPickableCities(cities: City[]): City[] {
-  return cities
-    .filter((c) => c.tier !== 4)
-    .sort((a, b) => {
-      const ap = hubPriceUsd(a);
-      const bp = hubPriceUsd(b);
-      if (ap !== bp) return bp - ap;
-      return a.name.localeCompare(b.name);
-    });
+  return [...cities].sort((a, b) => {
+    const ap = hubPriceUsd(a);
+    const bp = hubPriceUsd(b);
+    if (ap !== bp) return bp - ap;
+    return a.name.localeCompare(b.name);
+  });
 }

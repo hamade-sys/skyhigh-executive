@@ -61,14 +61,35 @@ export async function POST(req: NextRequest) {
 
     // Step 1: peek for conflicts BEFORE writing. Cheaper than the
     // CAS-style approach for a tiny 8-row keyspace.
-    const { data: existing } = await supa
+    const peekResult = await supa
       .from("game_members")
       .select("session_id, airline_color_id")
       .eq("game_id", gameId)
       .eq("airline_color_id", colorId)
       .neq("session_id", userId)
       .maybeSingle();
-    if (existing) {
+    if (peekResult.error) {
+      const msg = peekResult.error.message ?? "";
+      // The most common runtime error here is "column 'airline_color_id'
+      // does not exist" — that's migration 0004 not yet applied. The
+      // client picker treats this softly (saves locally + warns the
+      // user). Surface a clean diagnostic instead of the raw PG msg.
+      if (
+        msg.toLowerCase().includes("airline_color_id") ||
+        msg.toLowerCase().includes("does not exist") ||
+        msg.toLowerCase().includes("undefined column")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Color sync is offline — the airline_color_id column is missing on game_members. Operator action: apply migration 0004_airline_colors.sql against Supabase, then this endpoint comes online.",
+          },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+    if (peekResult.data) {
       return NextResponse.json(
         { error: "Color already taken by another airline." },
         { status: 409 },
@@ -83,7 +104,21 @@ export async function POST(req: NextRequest) {
       .eq("game_id", gameId)
       .eq("session_id", userId);
     if (writeErr) {
-      return NextResponse.json({ error: writeErr.message }, { status: 500 });
+      const msg = writeErr.message ?? "";
+      if (
+        msg.toLowerCase().includes("airline_color_id") ||
+        msg.toLowerCase().includes("does not exist") ||
+        msg.toLowerCase().includes("undefined column")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Color sync is offline — the airline_color_id column is missing on game_members. Operator action: apply migration 0004_airline_colors.sql against Supabase, then this endpoint comes online.",
+          },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json({ error: msg }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, colorId });
