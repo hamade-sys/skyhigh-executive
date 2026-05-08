@@ -12,9 +12,17 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { Info, X } from "lucide-react";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import type { City, Team, Route } from "@/types/game";
 import { cn } from "@/lib/cn";
+
+// Map-legend disclosure — auto-collapses to a tiny "Legend" pill once
+// the player has advanced past the first quarter (they've seen the
+// key, no need to keep eating screen real estate). User can re-open
+// any time with the pill click. Preference is per-browser via
+// localStorage so the choice persists across reloads.
+const LEGEND_DISMISSED_KEY = "skyforce:mapLegendDismissed:v1";
 
 // Phase 7 P2 — gold accent for the in-flight pending-route ribbon.
 // Slightly brighter than the leaderboard's --gold token (#d4a017)
@@ -459,6 +467,53 @@ export function WorldMap({
   const [hoverCode, setHoverCode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Legend disclosure state — start visible only on Q1, then respect
+  // a stored "I dismissed this" flag. Players who clicked the X stay
+  // collapsed across reloads. New games (Q1) always open expanded so
+  // first-timers see the route-colour key.
+  const [legendOpen, setLegendOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    if (currentQuarter <= 1) return true;
+    return window.localStorage.getItem(LEGEND_DISMISSED_KEY) !== "1";
+  });
+
+  // When the quarter advances past Q1, auto-collapse the legend ONCE
+  // (until the user re-opens). We don't run this every render —
+  // a stable ref-style guard via a useEffect with the quarter as
+  // dep keeps re-collapse from fighting the user's manual re-open.
+  const autoCollapsedRef = useRef(false);
+  useEffect(() => {
+    if (currentQuarter > 1 && !autoCollapsedRef.current) {
+      autoCollapsedRef.current = true;
+      if (typeof window !== "undefined") {
+        // First-time-past-Q1 housekeeping happens synchronously so
+        // the next render reflects it. The lint rule warns about
+        // sync setState in effects, but here it's bounded by the
+        // ref-guarded one-shot above — we won't loop. Suppress for
+        // this single intended path.
+        const dismissed = window.localStorage.getItem(LEGEND_DISMISSED_KEY) === "1";
+        if (!dismissed) {
+          window.localStorage.setItem(LEGEND_DISMISSED_KEY, "1");
+        }
+      }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLegendOpen(false);
+    }
+  }, [currentQuarter]);
+
+  function dismissLegend() {
+    setLegendOpen(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LEGEND_DISMISSED_KEY, "1");
+    }
+  }
+  function openLegend() {
+    setLegendOpen(true);
+    // Don't clear the dismissed flag — opening is treated as a
+    // one-shot peek; next quarter advance still respects "user
+    // dismissed it once."
+  }
+
   const flightsByCity = useMemo(() => dailyFlightsByCity(team), [team]);
 
   const ownNetworkCodes = useMemo(() => {
@@ -883,8 +938,20 @@ export function WorldMap({
         })}
       </MapContainer>
 
-      {/* Legend */}
-      <div className="absolute bottom-3 left-3 z-[400] flex items-center gap-3 rounded-md border border-line bg-surface/90 backdrop-blur px-3 py-2 text-[0.75rem] pointer-events-none flex-wrap max-w-[calc(100vw-2rem)]">
+      {/* Legend — collapsed pill until clicked. Auto-hides after Q1. */}
+      {!legendOpen && (
+        <button
+          type="button"
+          onClick={openLegend}
+          aria-label="Show map legend"
+          className="absolute bottom-3 left-3 z-[400] flex items-center gap-1.5 rounded-full border border-line bg-surface/90 backdrop-blur px-3 py-1.5 text-[0.75rem] text-ink-2 hover:bg-surface hover:text-ink transition shadow-sm"
+        >
+          <Info size={12} />
+          <span className="font-medium">Legend</span>
+        </button>
+      )}
+      {legendOpen && (
+      <div className="absolute bottom-3 left-3 z-[400] flex items-center gap-3 rounded-md border border-line bg-surface/90 backdrop-blur pl-3 pr-1.5 py-2 text-[0.75rem] flex-wrap max-w-[calc(100vw-2rem)]">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full border-2 border-white" style={{ background: team.color }} />
           <span className="text-ink font-medium">Hub</span>
@@ -946,7 +1013,16 @@ export function WorldMap({
         <span className="hidden lg:inline text-ink-muted border-l border-line pl-3">
           Drag to pan · scroll to zoom · world wraps
         </span>
+        <button
+          type="button"
+          onClick={dismissLegend}
+          aria-label="Hide map legend"
+          className="ml-1 p-1 rounded text-ink-muted hover:bg-line/40 hover:text-ink transition"
+        >
+          <X size={12} />
+        </button>
       </div>
+      )}
     </div>
   );
 }
