@@ -31,31 +31,22 @@ import {
   pickNextAvailableColor,
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
+import { pickAirlineNames } from "@/data/airline-names";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // ── Default airline data for auto-seeded human players ──────────────────────
-const HUMAN_DEFAULTS = [
-  { name: "SkyForce One",       code: "SK1", hub: "IST", doctrine: "premium-service",    color: "#14355E" },
-  { name: "Atlas Air",          code: "ATL", hub: "AMS", doctrine: "global-network",      color: "#2B6B88" },
-  { name: "Orion Airways",      code: "ORI", hub: "FRA", doctrine: "budget-expansion",    color: "#1E6B5C" },
-  { name: "Horizon Express",    code: "HRZ", hub: "DXB", doctrine: "cargo-dominance",     color: "#7A4B2E" },
-  { name: "Zenith Airlines",    code: "ZNT", hub: "LHR", doctrine: "premium-service",    color: "#C38A1E" },
-  { name: "Polaris Air",        code: "POL", hub: "CDG", doctrine: "global-network",      color: "#4A6480" },
-  { name: "Apex Carriers",      code: "APX", hub: "NRT", doctrine: "budget-expansion",    color: "#9A7D3D" },
-  { name: "Vantage Global",     code: "VAN", hub: "SIN", doctrine: "cargo-dominance",     color: "#C23B1F" },
-] as const;
-
-const BOT_DEFAULTS = [
-  { name: "Aurora Airways",     code: "AUR", hub: "SIN", doctrine: "premium-service",    color: "#6B5F88" },
-  { name: "Sundial Carriers",   code: "SND", hub: "LHR", doctrine: "budget-expansion",   color: "#4B7A2E" },
-  { name: "Meridian Air",       code: "MRD", hub: "DXB", doctrine: "cargo-dominance",    color: "#2E5C7A" },
-  { name: "Pacific Crest",      code: "PCC", hub: "NRT", doctrine: "global-network",     color: "#C38A1E" },
-  { name: "Transit Nordique",   code: "TND", hub: "CDG", doctrine: "premium-service",    color: "#4A6480" },
-  { name: "Solstice Wings",     code: "SOL", hub: "FRA", doctrine: "budget-expansion",   color: "#9A7D3D" },
-  { name: "Vermilion Air",      code: "VML", hub: "GRU", doctrine: "cargo-dominance",    color: "#C23B1F" },
-  { name: "Firth Pacific",      code: "FTH", hub: "HKG", doctrine: "global-network",     color: "#7A4B2E" },
+// Used when a player joined the lobby but never completed their setup form.
+// Hub + doctrine cycle by index; name + code come from the shared 100-name
+// pool at seed time so even fallback humans don't recycle the same shortlist.
+const HUMAN_DEFAULT_HUBS = ["IST", "AMS", "FRA", "DXB", "LHR", "CDG", "NRT", "SIN"] as const;
+const BOT_HUBS = ["SIN", "LHR", "DXB", "NRT", "CDG", "FRA", "GRU", "HKG"] as const;
+// Brand color hex (for legacy team.color field — the airline-color
+// system uses airlineColorId / palette lookups for the visible chrome).
+const BOT_BRAND_HEXES = [
+  "#6B5F88", "#4B7A2E", "#2E5C7A", "#C38A1E",
+  "#4A6480", "#9A7D3D", "#C23B1F", "#7A4B2E",
 ] as const;
 
 type DoctrineId = "premium-service" | "budget-expansion" | "cargo-dominance" | "global-network";
@@ -155,6 +146,27 @@ export async function POST(req: NextRequest) {
       const seededTeams: unknown[] = [];
       const claimedColorIds: Array<AirlineColorId | null | undefined> = [];
 
+      // Pre-pick distinct airline names from the 100-name pool for
+      // every team that DIDN'T already supply its own (humans without
+      // a saved setup + every bot). Names typed by players in the
+      // lobby setup form take precedence — we exclude those from the
+      // pool so a randomly-picked bot can't accidentally collide.
+      const humanSuppliedNames = new Set<string>(
+        humanMembers
+          .map((m) => playerSetups[m.session_id]?.airlineName?.trim())
+          .filter((n): n is string => !!n && n.length > 0),
+      );
+      const namesNeeded =
+        humanMembers.filter((m) => !playerSetups[m.session_id]?.airlineName).length +
+        botsToSeed;
+      const pickedNamePool = pickAirlineNames(namesNeeded, humanSuppliedNames);
+      let nameCursor = 0;
+
+      const HUMAN_FALLBACK_DOCTRINES: DoctrineId[] = [
+        "premium-service", "global-network", "budget-expansion", "cargo-dominance",
+        "premium-service", "global-network", "budget-expansion", "cargo-dominance",
+      ];
+
       // Seed human teams — one per member who joined.
       // Phase 9: thread airlineColorId through. Each member's choice from
       // the lobby is in playerSetups[].airlineColorId. If null/missing
@@ -162,8 +174,10 @@ export async function POST(req: NextRequest) {
       // palette color so the cohort still renders distinctly.
       for (let i = 0; i < humanMembers.length; i++) {
         const member = humanMembers[i];
-        const defaults = HUMAN_DEFAULTS[i % HUMAN_DEFAULTS.length];
         const setup = playerSetups[member.session_id];
+        const fallbackName = pickedNamePool[nameCursor];
+        const usingFallback = !setup?.airlineName;
+        if (usingFallback && fallbackName) nameCursor++;
         const setupColor = isAirlineColorId(setup?.airlineColorId)
           ? setup.airlineColorId
           : null;
@@ -172,12 +186,12 @@ export async function POST(req: NextRequest) {
         claimedColorIds.push(memberColorId);
         const team = createInitializedTeamFromOnboarding({
           airlineName: setup?.airlineName ?? (member.display_name
-            ? `${member.display_name}'s Airline`
-            : defaults.name),
-          code: setup?.code ?? defaults.code,
-          doctrine: (setup?.doctrine as DoctrineId) ?? defaults.doctrine,
-          hubCode: setup?.hub ?? defaults.hub,
-          color: defaults.color,
+            ? `${member.display_name}'s Airlines`
+            : (fallbackName?.name ?? "Skyforce Airlines")),
+          code: setup?.code ?? fallbackName?.code ?? "SKF",
+          doctrine: (setup?.doctrine as DoctrineId) ?? HUMAN_FALLBACK_DOCTRINES[i % HUMAN_FALLBACK_DOCTRINES.length],
+          hubCode: setup?.hub ?? HUMAN_DEFAULT_HUBS[i % HUMAN_DEFAULT_HUBS.length],
+          color: BOT_BRAND_HEXES[i % BOT_BRAND_HEXES.length],
           controlledBy: "human",
           claimedBySessionId: member.session_id,
           playerDisplayName: member.display_name ?? null,
@@ -196,7 +210,12 @@ export async function POST(req: NextRequest) {
       // skipping anything humans already claimed.
       const botPlannedSeats = plannedSeats.filter((s) => s.type === "bot");
       for (let i = 0; i < botsToSeed; i++) {
-        const meta = BOT_DEFAULTS[i % BOT_DEFAULTS.length];
+        // Random distinct name from the 100-name pool (already pre-
+        // picked above to avoid colliding with human-supplied names
+        // and other bots in the same game).
+        const namePick = pickedNamePool[nameCursor++];
+        const fallbackHub = BOT_HUBS[i % BOT_HUBS.length];
+        const fallbackHex = BOT_BRAND_HEXES[i % BOT_BRAND_HEXES.length];
         const botDoctrines: DoctrineId[] = [
           "premium-service", "budget-expansion", "cargo-dominance", "global-network",
         ];
@@ -217,11 +236,11 @@ export async function POST(req: NextRequest) {
           : pickNextAvailableColor(claimedColorIds);
         claimedColorIds.push(botColorId);
         const team = createInitializedTeamFromOnboarding({
-          airlineName: meta.name,
-          code: meta.code,
+          airlineName: namePick?.name ?? `Bot Airlines ${i + 1}`,
+          code: namePick?.code ?? `B${i.toString().padStart(2, "0")}`,
           doctrine,
-          hubCode: meta.hub,
-          color: meta.color,
+          hubCode: fallbackHub,
+          color: fallbackHex,
           controlledBy: "bot",
           claimedBySessionId: null,
           playerDisplayName: null,
