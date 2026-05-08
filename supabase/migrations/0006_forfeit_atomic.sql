@@ -71,11 +71,11 @@ begin
   -- has been created yet at lobby phase.
   if v_game.status = 'lobby' then
     delete from public.game_members
-    where game_id = p_game_id and session_id = p_session_id;
+    where game_id = p_game_id and session_id = p_session_id::text;
 
     insert into public.game_events (game_id, actor_session_id, type, payload_json)
     values (
-      p_game_id, p_session_id, 'game.forfeited',
+      p_game_id, p_session_id::text, 'game.forfeited',
       jsonb_build_object('from', 'lobby')
     );
 
@@ -133,11 +133,11 @@ begin
   -- Just delete the member row + audit.
   if v_team_index = -1 then
     delete from public.game_members
-    where game_id = p_game_id and session_id = p_session_id;
+    where game_id = p_game_id and session_id = p_session_id::text;
 
     insert into public.game_events (game_id, actor_session_id, type, payload_json)
     values (
-      p_game_id, p_session_id, 'game.forfeited',
+      p_game_id, p_session_id::text, 'game.forfeited',
       jsonb_build_object('from', 'playing', 'note', 'no_team_claimed')
     );
 
@@ -205,7 +205,7 @@ begin
 
   -- Delete the member row.
   delete from public.game_members
-  where game_id = p_game_id and session_id = p_session_id;
+  where game_id = p_game_id and session_id = p_session_id::text;
 
   -- Flip the games row when fully ended.
   if v_game_ended then
@@ -217,7 +217,7 @@ begin
   -- Audit events.
   insert into public.game_events (game_id, actor_session_id, actor_team_id, type, payload_json)
   values (
-    p_game_id, p_session_id, v_team_id, 'game.forfeited',
+    p_game_id, p_session_id::text, v_team_id, 'game.forfeited',
     jsonb_build_object(
       'from', 'playing',
       'teamId', v_team_id,

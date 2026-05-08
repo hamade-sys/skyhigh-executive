@@ -52,7 +52,9 @@ create policy chat_select_members on public.game_chat_messages
       select 1
       from public.game_members m
       where m.game_id = game_chat_messages.game_id
-        and m.session_id = auth.uid()
+        -- game_members.session_id is text (browser-anchored uuid stored
+        -- as text — see migration 0001). Cast auth.uid() to match.
+        and m.session_id = auth.uid()::text
     )
   );
 
@@ -67,7 +69,7 @@ create policy chat_insert_members on public.game_chat_messages
       select 1
       from public.game_members m
       where m.game_id = game_chat_messages.game_id
-        and m.session_id = auth.uid()
+        and m.session_id = auth.uid()::text
     )
     -- Author must match the authenticated user — no impersonation
     -- via direct browser → Supabase writes.
@@ -84,7 +86,7 @@ create policy chat_update_facilitator on public.game_chat_messages
       select 1
       from public.games g
       where g.id = game_chat_messages.game_id
-        and g.facilitator_session_id = auth.uid()
+        and g.facilitator_session_id = auth.uid()::text
     )
   )
   with check (
@@ -92,7 +94,7 @@ create policy chat_update_facilitator on public.game_chat_messages
       select 1
       from public.games g
       where g.id = game_chat_messages.game_id
-        and g.facilitator_session_id = auth.uid()
+        and g.facilitator_session_id = auth.uid()::text
     )
   );
 
