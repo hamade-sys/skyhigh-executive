@@ -10,11 +10,33 @@ type ModalProps = {
   /** Accessible label if there's no visible title inside the modal content. */
   ariaLabel?: string;
   className?: string;
+  /**
+   * Default `false`. When true, this modal is allowed to render on
+   * top of another already-open modal (used for inline confirms like
+   * "Sell aircraft? — yes/no" that are nested INSIDE a parent modal
+   * and need to layer above it).
+   *
+   * When false (the default), opening this modal automatically
+   * requests every other open modal to close — which fixes the
+   * top-layer stacking issue where pressing Help while Close-Quarter
+   * was open left both modals layered with their backdrops fighting
+   * for the same z-stack. The result was an unreadable mess.
+   */
+  stack?: boolean;
 };
+
+// Module-level coordinator: each rendered Modal that is currently
+// `open` registers its `onClose` callback here. When a NEW non-stack
+// Modal opens, it walks the registry and invokes every previous
+// onClose, then registers itself. Inline confirms with `stack` set
+// skip this flush so a nested confirmation can layer on its parent.
+const openModalCloseCallbacks = new Set<() => void>();
 
 /**
  * Modal built on native <dialog> — free focus trap, Escape close, top-layer
  * rendering so overflow-hidden ancestors don't clip it.
+ *
+ * Mutually-exclusive by default — see `stack` prop docs above.
  */
 export function Modal({
   open,
@@ -22,6 +44,7 @@ export function Modal({
   children,
   ariaLabel,
   className,
+  stack = false,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   // Phase 7 P2 — focus restoration. Native <dialog>'s showModal()
@@ -32,11 +55,30 @@ export function Modal({
   // restore it on close so keyboard users land back exactly where
   // they were.
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Latest onClose, kept in a ref so the open-effect below can call
+  // it without becoming a re-run trigger.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     const dlg = dialogRef.current;
     if (!dlg) return;
+    // Stable handle for this Modal's "please close yourself" callback.
+    const myCloseHandle = () => onCloseRef.current();
     if (open && !dlg.open) {
+      // Mutual exclusion: tell every other open modal to close
+      // BEFORE we register ourselves. `stack` opts out so an inline
+      // confirmation can layer on its parent without dismissing it.
+      if (!stack) {
+        // Snapshot to a local array so `cb()` can synchronously
+        // mutate the registry without breaking iteration.
+        const callbacks = Array.from(openModalCloseCallbacks);
+        openModalCloseCallbacks.clear();
+        for (const cb of callbacks) {
+          try { cb(); } catch { /* a stale onClose throwing shouldn't block us */ }
+        }
+      }
+      openModalCloseCallbacks.add(myCloseHandle);
       // Capture the element that had focus right before opening.
       const active = typeof document !== "undefined" ? document.activeElement : null;
       triggerRef.current =
@@ -46,6 +88,7 @@ export function Modal({
       dlg.showModal();
     }
     if (!open && dlg.open) {
+      openModalCloseCallbacks.delete(myCloseHandle);
       dlg.close();
       // Defer focus restoration to the next paint so any close
       // animation / reflow has settled. If the trigger is still in
@@ -60,7 +103,10 @@ export function Modal({
         });
       }
     }
-  }, [open]);
+    return () => {
+      openModalCloseCallbacks.delete(myCloseHandle);
+    };
+  }, [open, stack]);
 
   useEffect(() => {
     const dlg = dialogRef.current;

@@ -214,23 +214,11 @@ export function TopBar() {
         <NotificationCenter />
         <button
           type="button"
-          onClick={() => {
-            // UX cleanup — pressing the help button while another
-            // modal is open used to stack 2+ <dialog> elements in
-            // the top layer (close-quarter check + route-config +
-            // help cheat sheet, all visible at once = "glitchy").
-            // Force-close every other open dialog first so help is
-            // the only thing on screen when it opens. Operations on
-            // unrelated dialogs that need a save (route config,
-            // etc.) lose their unsaved drafts — acceptable tradeoff
-            // since pressing help mid-edit is an explicit signal
-            // the user wants to step out of that flow.
-            if (typeof document !== "undefined") {
-              const openDialogs = document.querySelectorAll<HTMLDialogElement>("dialog[open]");
-              openDialogs.forEach((d) => d.close());
-            }
-            setHelpOpen(true);
-          }}
+          // The Modal primitive (src/components/ui/Modal.tsx) makes
+          // top-level modals mutually exclusive by default — opening
+          // help automatically tells any other open modal to close
+          // itself. So no DOM-level coordination is needed here.
+          onClick={() => setHelpOpen(true)}
           aria-label="Help &amp; reference"
           aria-haspopup="dialog"
           aria-expanded={helpOpen}

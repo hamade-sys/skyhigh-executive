@@ -203,7 +203,7 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
           Previously a single click committed the spend; this now
           spells out target hub + cost + effect before the player
           commits. The HubInvestmentsModal stays mounted underneath. */}
-      <Modal open={!!confirmInvestment} onClose={() => setConfirmInvestment(null)}>
+      <Modal open={!!confirmInvestment} onClose={() => setConfirmInvestment(null)} stack>
         {confirmInvestment && (() => {
           const cantAfford = player.cashUsd < confirmInvestment.cost;
           return (
