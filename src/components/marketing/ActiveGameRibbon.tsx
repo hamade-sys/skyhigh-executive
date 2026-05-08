@@ -46,9 +46,12 @@ export function ActiveGameRibbon() {
   const [game, setGame] = useState<ActiveGame | null>(null);
 
   // Hide the ribbon when the user is already IN their game — the
-  // /games/[id]/play and /games/[id]/lobby routes have their own
-  // chrome. Showing "Resume game" while you're inside it is silly.
-  const insideActiveGame = (pathname ?? "").startsWith("/games/");
+  // /games/[id]/play, /games/[id]/lobby, AND /endgame routes have
+  // their own chrome. Showing "Resume game" while sitting on the
+  // post-game scoring screen is especially confusing — that game
+  // just ended; there's no resume.
+  const path = pathname ?? "";
+  const insideActiveGame = path.startsWith("/games/") || path.startsWith("/endgame");
 
   useEffect(() => {
     if (authLoading) return;

@@ -12,36 +12,31 @@ interface Props {
  *  Aimed at the facilitator running a live session and any player who
  *  needs a refresher on what each panel does.
  *
- *  Layout note: the Modal primitive already constrains us to
- *  `max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden`, so the
- *  body section gets `flex-1` and scrolls within. Earlier the body
- *  also tried to set `max-h-[70vh]` which fought with the parent
- *  cap — on shorter viewports (13" laptops) the inner cap won and
- *  pushed the header off-screen, leaving users staring at the middle
- *  of the cheat sheet with no visible close affordance. Removed the
- *  inner cap and added an explicit X close button in the header so
- *  there's always a one-click escape regardless of stacking quirks
- *  with concurrent route-config dialogs. */
+ *  Layout note: the X close button is rendered as a position-absolute
+ *  overlay anchored to the dialog's top-right corner (above all body
+ *  content via z-10). Earlier we put it inside ModalHeader, but on
+ *  some viewport heights / dialog stacking orders the header would
+ *  scroll out of view and the user lost their escape route. Floating
+ *  the X over the corner makes it always visible regardless of which
+ *  section of the body is currently scrolled into view. */
 export function HelpModal({ open, onClose }: Props) {
   return (
-    <Modal open={open} onClose={onClose} className="max-w-2xl">
-      <ModalHeader className="flex items-start justify-between gap-3">
-        <div>
-          <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
-            ICAN Simulations reference
-          </span>
-          <h2 className="font-display text-[1.5rem] text-ink leading-tight mt-1">
-            Quick-reference cheat sheet
-          </h2>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close help"
-          className="shrink-0 -m-1 p-2 rounded-lg text-ink-2 hover:bg-line/40 hover:text-ink transition"
-        >
-          <X size={18} />
-        </button>
+    <Modal open={open} onClose={onClose} className="max-w-2xl relative">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close help"
+        className="absolute top-3 right-3 z-10 p-2 rounded-lg bg-surface/95 backdrop-blur text-ink-2 hover:bg-line/60 hover:text-ink transition shadow-sm"
+      >
+        <X size={18} />
+      </button>
+      <ModalHeader>
+        <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
+          ICAN Simulations reference
+        </span>
+        <h2 className="font-display text-[1.5rem] text-ink leading-tight mt-1">
+          Quick-reference cheat sheet
+        </h2>
       </ModalHeader>
 
       <ModalBody className="space-y-5">
