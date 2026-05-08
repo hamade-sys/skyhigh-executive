@@ -159,6 +159,11 @@ export interface CreateGameArgs {
   /** Total rounds the game runs for. Default 40. The create-game
    *  form offers 8/16/24/40 presets. */
   totalRounds?: number;
+  /** Per-quarter timer in seconds. 0 = no timer (Game Master closes
+   *  manually). Self-guided games auto-advance when this hits 0;
+   *  the timer's max product (timerSec * totalRounds) bounds the
+   *  total game length so a workshop can't run forever. */
+  quarterTimerSeconds?: number;
   /** Whether the boardroom decisions surface is enabled. Defaults
    *  to true when GM is on, false otherwise — but explicit override
    *  always wins. */
@@ -308,6 +313,11 @@ export async function createGame(args: CreateGameArgs): Promise<
       gameMasterSessionId: gmSessionId,
       facilitatorSessionId: gmSessionId,  // legacy alias
       totalRounds,
+      // Per-quarter timer chosen at create time. 0 = no timer (Game
+      // Master closes manually). When set, self-guided games auto-
+      // advance when the local tick reaches 0 — that's how a non-
+      // facilitator game terminates instead of running forever.
+      quarterTimerSeconds: args.quarterTimerSeconds ?? 1800,
       plannedSeats: (args.plannedSeats ?? []).map((s, i) => ({
         id: s.id ?? `seat-${i}`,
         type: s.type,
@@ -524,6 +534,11 @@ export interface JoinableGameRow extends GameRow {
   member_count: number;
 }
 
+/** Lobby is considered STALE (and gets filtered + queued for cleanup)
+ *  when its newest member's `last_seen_at` is more than this many ms
+ *  in the past. 2 hours per the user's rule. */
+const LOBBY_IDLE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
+
 export async function listPublicLobby(args?: {
   limit?: number;
 }): Promise<ApiResult<JoinableGameRow[]>> {
@@ -542,31 +557,78 @@ export async function listPublicLobby(args?: {
   const games = (gameRows ?? []) as GameRow[];
   if (games.length === 0) return { ok: true, data: [] };
 
-  // Step 2: per-game member count (excludes spectators + facilitators
-  // — they don't consume a playable seat). Single batched query.
+  // Step 2: per-game member count + freshness. We need both:
+  //   (a) playable-seat count (excludes spectator/facilitator) — for
+  //       the "3/6 joined" badge + the empty-lobby filter.
+  //   (b) the most-recent last_seen_at across non-spectator/non-
+  //       facilitator members — drives the 2-hour idle cleanup.
   const gameIds = games.map((g) => g.id);
   const { data: memberRows } = await supa
     .from("game_members")
-    .select("game_id, role")
+    .select("game_id, role, last_seen_at")
     .in("game_id", gameIds);
 
   const memberCount = new Map<string, number>();
-  for (const row of (memberRows ?? []) as { game_id: string; role: string }[]) {
+  const newestSeenAt = new Map<string, number>();
+  for (const row of (memberRows ?? []) as {
+    game_id: string;
+    role: string;
+    last_seen_at: string | null;
+  }[]) {
     if (row.role === "spectator" || row.role === "facilitator") continue;
     memberCount.set(row.game_id, (memberCount.get(row.game_id) ?? 0) + 1);
+    if (row.last_seen_at) {
+      const ts = Date.parse(row.last_seen_at);
+      if (Number.isFinite(ts)) {
+        const prev = newestSeenAt.get(row.game_id) ?? 0;
+        if (ts > prev) newestSeenAt.set(row.game_id, ts);
+      }
+    }
   }
 
-  // Step 3: enrich, filter full active games, and sort.
+  const now = Date.now();
+  const idleGameIds: string[] = [];
+
+  // Step 3: enrich, filter empty/stale lobbies + full playing games,
+  // sort.
   const enriched: JoinableGameRow[] = games
     .map((g) => ({ ...g, member_count: memberCount.get(g.id) ?? 0 }))
-    // Hide already-full active games — nothing to join, surface only
-    // games where there's a real reason to click in.
     .filter((g) => {
+      // Rule from user task #1 — lobbies with zero active humans
+      // shouldn't be advertised. Either the host abandoned, or
+      // everyone forfeited; in both cases there's nothing to join.
+      if (g.status === "lobby" && g.member_count === 0) {
+        idleGameIds.push(g.id);
+        return false;
+      }
+      // Rule from user task #4 — lobby idle > 2h with no member
+      // heartbeat = host walked away, kill it. Playing games keep
+      // showing regardless of last_seen_at.
+      if (g.status === "lobby") {
+        const newest = newestSeenAt.get(g.id);
+        const idleMs = newest ? now - newest : now - Date.parse(g.created_at);
+        if (Number.isFinite(idleMs) && idleMs > LOBBY_IDLE_THRESHOLD_MS) {
+          idleGameIds.push(g.id);
+          return false;
+        }
+      }
+      // Existing rule — hide already-full active games (nothing to
+      // join, surface only games with a reason to click in).
       if (g.status === "playing" && g.member_count >= g.max_teams) {
         return false;
       }
       return true;
     });
+
+  // Background sweep — fire-and-forget, don't block the response.
+  // Garbage-collects empty / 2-hour-idle lobbies so the table doesn't
+  // accumulate ghost rows. Errors are logged to console only; the
+  // next list call will retry.
+  if (idleGameIds.length > 0) {
+    void Promise.all(
+      idleGameIds.map((id) => cleanupEmptyLobby(id).catch(() => undefined)),
+    ).then(() => undefined);
+  }
 
   enriched.sort((a, b) => {
     if (a.status !== b.status) {
@@ -642,10 +704,16 @@ export async function forfeitMember(args: {
 }
 
 /**
- * Garbage-collect a fully-empty lobby. If the game has zero remaining
- * non-spectator/facilitator members AND status === 'lobby', tear it
- * down completely (members + state + events + game row). This keeps
- * /lobby tidy when everyone leaves before the game starts.
+ * Garbage-collect a stale lobby. Tears down (members + state +
+ * events + game row) when ANY of these are true:
+ *   1. Zero non-spectator/facilitator members remain (everyone left
+ *      before the game started).
+ *   2. The newest member's `last_seen_at` is more than 2 hours old —
+ *      the host walked away and never started.
+ *
+ * Only operates on `status='lobby'` games. Playing games are
+ * preserved regardless of staleness so a long-running workshop
+ * doesn't get garbage-collected.
  */
 export async function cleanupEmptyLobby(gameId: string): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -653,21 +721,45 @@ export async function cleanupEmptyLobby(gameId: string): Promise<void> {
 
   const { data: game } = await supa
     .from("games")
-    .select("status")
+    .select("status, created_at")
     .eq("id", gameId)
     .maybeSingle();
-  if (!game || (game as { status: string }).status !== "lobby") return;
+  if (!game) return;
+  const g = game as { status: string; created_at: string };
+  if (g.status !== "lobby") return;
 
-  const { count } = await supa
+  // Pull all playable-seat members + their last_seen_at — the
+  // freshness signal. If there are zero rows OR the newest row is
+  // > 2 hours stale, the lobby is dead weight.
+  const { data: memberRows } = await supa
     .from("game_members")
-    .select("session_id", { count: "exact", head: true })
-    .eq("game_id", gameId)
-    .neq("role", "spectator")
-    .neq("role", "facilitator");
+    .select("last_seen_at, role")
+    .eq("game_id", gameId);
 
-  if ((count ?? 0) > 0) return;
+  const playableMembers = ((memberRows ?? []) as {
+    last_seen_at: string | null;
+    role: string;
+  }[]).filter((m) => m.role !== "spectator" && m.role !== "facilitator");
 
-  // Empty lobby — delete dependents then the row.
+  const now = Date.now();
+  let shouldCleanup = false;
+  if (playableMembers.length === 0) {
+    shouldCleanup = true;
+  } else {
+    let newest = 0;
+    for (const m of playableMembers) {
+      if (!m.last_seen_at) continue;
+      const ts = Date.parse(m.last_seen_at);
+      if (Number.isFinite(ts) && ts > newest) newest = ts;
+    }
+    const idleMs = newest > 0 ? now - newest : now - Date.parse(g.created_at);
+    if (Number.isFinite(idleMs) && idleMs > LOBBY_IDLE_THRESHOLD_MS) {
+      shouldCleanup = true;
+    }
+  }
+  if (!shouldCleanup) return;
+
+  // Tear down — delete dependents then the row.
   await supa.from("game_members").delete().eq("game_id", gameId);
   await supa.from("game_state").delete().eq("game_id", gameId);
   await supa.from("game_events").delete().eq("game_id", gameId);

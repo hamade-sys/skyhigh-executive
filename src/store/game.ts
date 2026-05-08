@@ -5082,8 +5082,12 @@ export const useGame = create<GameStore>()(
           phase: "playing",
           lastCloseResult: null,
           airportSlots: tickedSlots,
-          // Reset quarter timer for next cycle
-          quarterTimerSecondsRemaining: s.quarterTimerSecondsRemaining !== null ? 1800 : null,
+          // Reset quarter timer for next cycle. Set to null so the
+          // QuarterTimerDriver's auto-start effect picks up the
+          // session's configured per-quarter duration. Leaves the
+          // legacy "host-provided 1800" path alone for solo runs
+          // that pre-date session.quarterTimerSeconds.
+          quarterTimerSecondsRemaining: null,
           quarterTimerPaused: false,
         });
 

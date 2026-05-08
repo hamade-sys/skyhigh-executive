@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       gameMasterSessionId,
       beGameMaster,
       totalRounds,
+      quarterTimerSeconds,
       boardDecisionsEnabled,
       plannedSeats,
       initialState,
@@ -60,6 +61,20 @@ export async function POST(req: NextRequest) {
     if (totalRounds !== undefined && (typeof totalRounds !== "number" || totalRounds < 4 || totalRounds > 80)) {
       return NextResponse.json({ error: "Total rounds must be 4-80." }, { status: 400 });
     }
+    // Quarter timer: 0 means "no timer" (Game Master closes manually).
+    // Range cap at 4 hours per quarter to prevent typos that would
+    // otherwise create games that never end.
+    if (
+      quarterTimerSeconds !== undefined &&
+      (typeof quarterTimerSeconds !== "number" ||
+        quarterTimerSeconds < 0 ||
+        quarterTimerSeconds > 14_400)
+    ) {
+      return NextResponse.json(
+        { error: "Quarter timer must be 0-14400 seconds (0-4 hours)." },
+        { status: 400 },
+      );
+    }
     if (initialState === undefined || initialState === null) {
       return NextResponse.json(
         { error: "Initial state required." },
@@ -76,6 +91,8 @@ export async function POST(req: NextRequest) {
       gameMasterSessionId,
       beGameMaster: typeof beGameMaster === "boolean" ? beGameMaster : undefined,
       totalRounds,
+      quarterTimerSeconds:
+        typeof quarterTimerSeconds === "number" ? quarterTimerSeconds : undefined,
       boardDecisionsEnabled:
         typeof boardDecisionsEnabled === "boolean" ? boardDecisionsEnabled : undefined,
       plannedSeats: Array.isArray(plannedSeats) ? plannedSeats : undefined,

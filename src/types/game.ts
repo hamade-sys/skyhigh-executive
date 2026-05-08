@@ -756,6 +756,17 @@ export interface GameSession {
    *  Engine reads this in place of the legacy TOTAL_GAME_ROUNDS
    *  constant once the create-game form lands. */
   totalRounds: number;
+  /** Per-quarter timer in seconds. Drives auto-advance in self-
+   *  guided games — when the local tick reaches 0, the engine
+   *  auto-closes the quarter. Set to 0 (or undefined for legacy
+   *  saves) to disable the timer; in that case advancement only
+   *  happens when every human player marks ready (or a Game
+   *  Master closes manually).
+   *
+   *  The product `quarterTimerSeconds × totalRounds` is also the
+   *  hard upper bound on total game length, so a workshop can't
+   *  run forever. */
+  quarterTimerSeconds?: number;
   /** Configured seat plan from the create-game form. Each entry
    *  represents one seat in the lobby; humans claim, bots auto-fill
    *  when the host clicks Start. The order maps 1:1 to lobby seat

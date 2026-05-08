@@ -28,6 +28,16 @@ const ROUND_PRESETS = [
   { value: 40, label: "40 rounds", sub: "10 years · full decade" },
 ] as const;
 
+/** Per-quarter timer presets (seconds). 0 = no timer. */
+const QUARTER_TIMER_PRESETS = [
+  { value: 300,  label: "5 min",  sub: "Sprint" },
+  { value: 600,  label: "10 min", sub: "Quick" },
+  { value: 900,  label: "15 min", sub: "Standard" },
+  { value: 1800, label: "30 min", sub: "Relaxed" },
+  { value: 3600, label: "60 min", sub: "Workshop" },
+  { value: 0,    label: "Off",    sub: "GM closes" },
+] as const;
+
 export default function CreateGamePage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -56,6 +66,13 @@ function CreateGameForm() {
   const [totalRounds, setTotalRounds] = useState(40);
   // Just a seat count — human/bot config is done in the pre-game lobby
   const [seatCount, setSeatCount] = useState(2);
+  // Per-quarter timer in SECONDS. 0 = no timer (game master closes
+  // manually). Default 30 minutes for a relaxed pace; presets cover
+  // 5/10/15/30/60 minutes for typical workshop tempos. When set,
+  // self-guided games auto-close the quarter when the timer hits 0
+  // — that's how a non-facilitator game terminates instead of
+  // running forever.
+  const [quarterTimerSeconds, setQuarterTimerSeconds] = useState(1800);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +107,7 @@ function CreateGameForm() {
           visibility,
           maxTeams: seatCount,
           totalRounds,
+          quarterTimerSeconds,
           boardDecisionsEnabled,
           beGameMaster,
           plannedSeats: [],   // all human by default — lobby configures each seat
@@ -98,6 +116,7 @@ function CreateGameForm() {
             phase: "idle",
             currentQuarter: 1,
             totalRounds,
+            quarterTimerSeconds,
             teams: [],
             session: null,
           },
@@ -251,6 +270,49 @@ function CreateGameForm() {
                 </button>
               ))}
             </div>
+          </Field>
+
+          {/* 5b. Quarter timer — drives auto-advance in self-guided
+                games + bounds total game length. 0 = no timer (only
+                makes sense with a Game Master who closes manually). */}
+          <Field
+            label="Quarter timer"
+            hint={
+              quarterTimerSeconds === 0
+                ? "No timer · Game Master closes each quarter manually"
+                : `${Math.round(quarterTimerSeconds / 60)} min per quarter · max game ${Math.round((quarterTimerSeconds * totalRounds) / 60)} min`
+            }
+          >
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+              {QUARTER_TIMER_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setQuarterTimerSeconds(p.value)}
+                  className={
+                    "rounded-xl border p-3 text-left transition-all " +
+                    (quarterTimerSeconds === p.value
+                      ? "border-slate-900 bg-white ring-2 ring-slate-900/10"
+                      : "border-slate-200 bg-white hover:border-slate-300")
+                  }
+                >
+                  <div className="text-base font-display font-bold text-slate-900">
+                    {p.label}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">
+                    {p.sub}
+                  </div>
+                </button>
+              ))}
+            </div>
+            {!beGameMaster && quarterTimerSeconds === 0 && (
+              <p className="text-xs text-amber-700 mt-2">
+                Heads up: with no Game Master and no timer, the only
+                way to advance the quarter is for every human player
+                to mark ready. Pick a timer or enable Game Master to
+                avoid stalling.
+              </p>
+            )}
           </Field>
 
           {/* 6. Number of seats */}
