@@ -912,11 +912,11 @@ export const useGame = create<GameStore>()(
         } = args;
 
         // Phase 9 — color allocation. Player picks at onboarding (or
-        // defaults to teal — first in the palette). Bot rivals fill
-        // the next available colors deterministically so a solo run
-        // visually matches a multiplayer cohort: player teal, then
-        // sky/amber/emerald/etc.
-        const playerColorId = airlineColorId ?? "teal";
+        // defaults to "sky" / Blue — first in the post-revision
+        // palette). Bot rivals fill the next available colors
+        // deterministically so a solo run visually matches a
+        // multiplayer cohort.
+        const playerColorId = airlineColorId ?? "sky";
 
         // Player team — built via the shared factory so a solo run
         // produces the SAME starting position as a player joining a

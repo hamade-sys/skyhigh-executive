@@ -43,7 +43,7 @@ export default function Onboarding() {
   const [airlineName, setAirlineName] = useState("");
   const [code, setCode] = useState("");
   const [tagline, setTagline] = useState("");
-  const [airlineColorId, setAirlineColorId] = useState<AirlineColorId>("teal");
+  const [airlineColorId, setAirlineColorId] = useState<AirlineColorId>("sky");
   // Step 2 — doctrine
   const [doctrine, setDoctrine] = useState<DoctrineId>("premium-service");
   // Step 3 — hub (now with cost-tier deduction)

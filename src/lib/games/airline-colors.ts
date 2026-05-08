@@ -40,26 +40,42 @@ export interface AirlineColor {
   ring: string;
 }
 
+// Palette revision (post-PR #19 workshop feedback):
+//
+//   1. Teal is reserved for ICAN brand chrome and is NO LONGER a player
+//      color. Players who legacy-have airlineColorId="teal" or
+//      airlineColorId="indigo" hash-fallback through `airlineColorFor`
+//      to a deterministic new-palette pick on render.
+//   2. Eight nicely-distinct hues at workshop projection distance:
+//      blue, red, orange, yellow, green, dark grey, pink, purple. Two
+//      of these (slate, violet/purple) come from the ICAN brand
+//      palette; the rest are independent hexes chosen for cohort
+//      legibility.
+//   3. Stable ids are preserved where the semantic color is close
+//      enough (sky→Blue, amber→Orange, emerald→Green, rose→Red,
+//      violet→Purple, slate→Dark grey) so existing in-flight games
+//      don't reset color assignments. Two new ids (yellow, pink)
+//      replace dropped (teal, indigo).
 export const AIRLINE_COLOR_PALETTE: readonly AirlineColor[] = [
-  { id: "teal",    label: "Teal",    hex: "#00C2CB", textOn: "white",      tint: "#E0F8F9", ring: "#80E0E5" },
-  { id: "sky",     label: "Sky",     hex: "#0EA5E9", textOn: "white",      tint: "#E0F2FE", ring: "#7DD3FC" },
-  { id: "amber",   label: "Amber",   hex: "#D97706", textOn: "white",      tint: "#FEF3C7", ring: "#FCD34D" },
-  { id: "emerald", label: "Emerald", hex: "#059669", textOn: "white",      tint: "#D1FAE5", ring: "#6EE7B7" },
-  { id: "rose",    label: "Rose",    hex: "#E11D48", textOn: "white",      tint: "#FFE4E6", ring: "#FDA4AF" },
-  { id: "violet",  label: "Violet",  hex: "#7C3AED", textOn: "white",      tint: "#EDE9FE", ring: "#C4B5FD" },
-  { id: "indigo",  label: "Indigo",  hex: "#4338CA", textOn: "white",      tint: "#E0E7FF", ring: "#A5B4FC" },
-  { id: "slate",   label: "Slate",   hex: "#475569", textOn: "white",      tint: "#F1F5F9", ring: "#94A3B8" },
+  { id: "sky",     label: "Blue",      hex: "#2563EB", textOn: "white",      tint: "#DBEAFE", ring: "#93C5FD" },
+  { id: "rose",    label: "Red",       hex: "#DC2626", textOn: "white",      tint: "#FEE2E2", ring: "#FCA5A5" },
+  { id: "amber",   label: "Orange",    hex: "#EA580C", textOn: "white",      tint: "#FFEDD5", ring: "#FDBA74" },
+  { id: "yellow",  label: "Yellow",    hex: "#CA8A04", textOn: "white",      tint: "#FEF9C3", ring: "#FDE047" },
+  { id: "emerald", label: "Green",     hex: "#16A34A", textOn: "white",      tint: "#DCFCE7", ring: "#86EFAC" },
+  { id: "slate",   label: "Dark grey", hex: "#334155", textOn: "white",      tint: "#E2E8F0", ring: "#94A3B8" },
+  { id: "pink",    label: "Pink",      hex: "#DB2777", textOn: "white",      tint: "#FCE7F3", ring: "#F9A8D4" },
+  { id: "violet",  label: "Purple",    hex: "#7C3AED", textOn: "white",      tint: "#EDE9FE", ring: "#C4B5FD" },
 ] as const;
 
 export type AirlineColorId =
-  | "teal"
   | "sky"
-  | "amber"
-  | "emerald"
   | "rose"
-  | "violet"
-  | "indigo"
-  | "slate";
+  | "amber"
+  | "yellow"
+  | "emerald"
+  | "slate"
+  | "pink"
+  | "violet";
 
 /** O(1) lookup for any color metadata. Use this everywhere — never
  *  parse hex out of the array directly. */
