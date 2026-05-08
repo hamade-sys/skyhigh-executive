@@ -204,7 +204,17 @@ export async function POST(req: NextRequest) {
         const difficulty =
           (botPlannedSeats[i]?.botDifficulty as "easy" | "medium" | "hard" | undefined) ??
           "medium";
-        const botColorId = pickNextAvailableColor(claimedColorIds);
+        // Honor the host's color override (set via the refresh button
+        // in the lobby) when it's present, valid, and not already
+        // claimed by a human or earlier bot in this loop. Otherwise
+        // fall back to the deterministic next-available rule.
+        const overrideRaw = (botPlannedSeats[i] as { botColorOverride?: string } | undefined)
+          ?.botColorOverride;
+        const overrideUsable =
+          isAirlineColorId(overrideRaw) && !claimedColorIds.includes(overrideRaw as AirlineColorId);
+        const botColorId: AirlineColorId = overrideUsable
+          ? (overrideRaw as AirlineColorId)
+          : pickNextAvailableColor(claimedColorIds);
         claimedColorIds.push(botColorId);
         const team = createInitializedTeamFromOnboarding({
           airlineName: meta.name,
