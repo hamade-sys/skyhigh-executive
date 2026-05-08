@@ -832,6 +832,23 @@ export async function submitStateMutation(args: {
       error: "Stale state — someone else modified the game while you were thinking. Refresh and try again.",
     };
   }
+  // Endgame auto-cleanup: when a state-write moves the engine into
+  // `phase: "endgame"` (final round closeQuarter, or facilitator
+  // force-end), flip the games row to status='ended' so the home-page
+  // "Resume game" ribbon and the public lobby browser stop surfacing
+  // a finished game as active. Members keep their rows so they can
+  // revisit /endgame for the recap; the 0003 cleanup migration prunes
+  // them later as needed. Idempotent — `.neq("status", "ended")`
+  // means a re-run is a no-op.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const phase = (args.newState as any)?.phase;
+  if (phase === "endgame") {
+    await supa
+      .from("games")
+      .update({ status: "ended", ended_at: new Date().toISOString() })
+      .eq("id", args.gameId)
+      .neq("status", "ended");
+  }
   await appendEvent({
     gameId: args.gameId,
     actorSessionId: args.actorSessionId,

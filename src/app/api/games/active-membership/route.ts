@@ -68,22 +68,45 @@ export async function GET(req: NextRequest) {
       .neq("role", "spectator")
       .neq("role", "facilitator");
 
-    // Step 4: pull totalRounds from the game state (it's stored in
-    // session.totalRounds on the state JSON, not on the games row).
-    // Best-effort — if the lookup fails we just omit the round
-    // total from the ribbon.
+    // Step 4: pull totalRounds + phase from the game state.
+    //   - totalRounds is stored in session.totalRounds (not on the
+    //     games row), used by the ribbon to render "Round 7 / 16".
+    //   - phase guards against a stale "Resume game" CTA: if the
+    //     engine has already moved into `phase === "endgame"` but the
+    //     games.status flip didn't land (legacy games created before
+    //     the submitStateMutation auto-flip shipped, or a writer that
+    //     bypassed it), opportunistically flip status here AND return
+    //     `game: null` so the home-page ribbon stops surfacing it.
     let totalRounds: number | null = null;
+    let phase: string | null = null;
     try {
       const { data: stateRow } = await supa
         .from("game_state")
         .select("state_json")
         .eq("game_id", (game as { id: string }).id)
         .maybeSingle();
-      const session = (stateRow?.state_json as { session?: { totalRounds?: number } } | null)?.session;
-      if (session && typeof session.totalRounds === "number") {
-        totalRounds = session.totalRounds;
+      const sj = (stateRow?.state_json as
+        | { session?: { totalRounds?: number }; phase?: string }
+        | null) ?? null;
+      if (sj?.session && typeof sj.session.totalRounds === "number") {
+        totalRounds = sj.session.totalRounds;
+      }
+      if (typeof sj?.phase === "string") {
+        phase = sj.phase;
       }
     } catch { /* ignore */ }
+
+    if (phase === "endgame") {
+      // Auto-heal: flip the games row to ended so future calls take
+      // the cheap path via the existing status filter, and return
+      // null to hide the ribbon for THIS call too.
+      await supa
+        .from("games")
+        .update({ status: "ended", ended_at: new Date().toISOString() })
+        .eq("id", (game as { id: string }).id)
+        .neq("status", "ended");
+      return NextResponse.json({ game: null });
+    }
 
     return NextResponse.json({
       game: {
