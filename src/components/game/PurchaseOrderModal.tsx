@@ -9,7 +9,7 @@ import {
   ModalFooter,
   ModalHeader,
 } from "@/components/ui";
-import { fmtMoney } from "@/lib/format";
+import { fmtMoney, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
 import { useGame, selectPlayer } from "@/store/game";
@@ -492,6 +492,7 @@ function PurchaseOrderBody({
             </span>
           </div>
           <CashAffordabilityRow totalCost={totalCost} />
+          <DeliveryAndRetirementRow quantity={quantity} />
         </div>
       </ModalBody>
 
@@ -504,6 +505,57 @@ function PurchaseOrderBody({
         />
       </ModalFooter>
     </Modal>
+  );
+}
+
+/** Delivery + retirement readout — sets expectations on when the
+ *  airframe shows up and how long it operates before forced retire.
+ *
+ *  Background: aircraft are delivered next quarter (currentQuarter +
+ *  1) and retire 28 quarters / 7 years after delivery. The reviewer
+ *  flagged that the 28-quarter constant clashed with player intuition
+ *  around "4-year aircraft life" and warped ROI math. Surfacing both
+ *  the delivery and retirement quarter on the order screen makes the
+ *  asset-life decision explicit at the moment it matters — before
+ *  the player commits cash. The constant itself stays at 28Q (the
+ *  store's `retirementQuarter: deliveryQuarter + 28` invariant) so
+ *  in-flight games keep their aircraft on schedule. */
+function DeliveryAndRetirementRow({ quantity }: { quantity: number }) {
+  const currentQuarter = useGame((g) => g.currentQuarter);
+  const totalRounds = useGame((g) => getTotalRounds(g));
+  const deliveryQuarter = currentQuarter + 1;
+  const retirementQuarter = deliveryQuarter + 28;
+  const operatingQuartersInThisGame = Math.min(
+    28,
+    Math.max(0, totalRounds - currentQuarter),
+  );
+  return (
+    <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 mt-2 text-[0.75rem]">
+      <div className="flex items-baseline justify-between gap-3 mb-0.5">
+        <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+          Delivery
+        </span>
+        <span className="font-mono tabular text-ink">
+          {fmtQuarter(deliveryQuarter)}
+          {quantity > 1 ? ` · ${quantity} airframes` : ""}
+        </span>
+      </div>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+          Retires
+        </span>
+        <span className="font-mono tabular text-ink-2">
+          {fmtQuarter(retirementQuarter)} · 28 quarters of operating life
+        </span>
+      </div>
+      {operatingQuartersInThisGame < 28 && (
+        <div className="text-[0.6875rem] text-ink-muted leading-snug mt-1.5">
+          This game ends at {fmtQuarter(totalRounds)} — the airframe
+          will only operate {operatingQuartersInThisGame} of its 28
+          quarters before the campaign closes. Plan ROI accordingly.
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -28,8 +28,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowRight, Sparkles, Plane, Trophy, MapPin, Wallet, Users,
-  Zap, Gem, PackageCheck, Globe2, ClipboardList,
+  ArrowRight, Sparkles, Plane, Trophy, MapPin, Wallet, Users, Users2,
+  Zap, Gem, PackageCheck, Globe2, ClipboardList, KeyRound,
   Clock, Landmark, Hotel, Wheat, Building2, Stethoscope,
   type LucideIcon,
 } from "lucide-react";
@@ -186,19 +186,72 @@ function Hero() {
             Estate, and Healthcare are next.
           </p>
 
-          <div className="flex items-center gap-3 flex-wrap mb-4">
-            {/* Single primary CTA — every entry path lives inside the
-                /lobby (browse public games, enter a private code, or
-                hit Create game). */}
+          {/* Mode-choice grid — four distinct entry paths, replacing the
+              earlier "Join game / How it works" pair. The reviewer
+              flagged that the old single-CTA flow shoved anonymous
+              users toward /lobby even though Create + Facilitate
+              require auth, leaving the actual mode unclear until
+              after they clicked. Now each tile carries its mode in
+              the title + sub, and the destination matches. */}
+          <div className="grid sm:grid-cols-2 gap-3 max-w-2xl mb-6">
             <Link
-              href="/lobby"
-              className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#00C2CB] text-white text-sm font-semibold rounded-full hover:bg-[#00a9b1] transition-colors shadow-[0_8px_30px_-8px_rgba(0,194,203,0.5)]"
+              href="/onboarding"
+              className="group flex items-start gap-3 px-5 py-4 bg-[#00C2CB] hover:bg-[#00a9b1] text-white rounded-xl transition-colors shadow-[0_8px_30px_-8px_rgba(0,194,203,0.5)]"
             >
-              Join game <ArrowRight className="w-4 h-4" />
+              <Zap className="w-5 h-5 shrink-0 mt-0.5" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold">Solo practice</span>
+                <span className="block text-[0.6875rem] text-white/85 mt-0.5">
+                  Run a 40-quarter campaign on your own. No sign-in.
+                </span>
+              </span>
+              <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 opacity-70 group-hover:opacity-100 transition" />
             </Link>
             <Link
+              href="/lobby"
+              className="group flex items-start gap-3 px-5 py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-colors border border-white/10"
+            >
+              <Globe2 className="w-5 h-5 shrink-0 mt-0.5 text-cyan-300" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold">Browse public games</span>
+                <span className="block text-[0.6875rem] text-white/70 mt-0.5">
+                  Open lobbies you can join right now.
+                </span>
+              </span>
+              <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 opacity-70 group-hover:opacity-100 transition" />
+            </Link>
+            <Link
+              href="/lobby?mode=join"
+              className="group flex items-start gap-3 px-5 py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-colors border border-white/10"
+            >
+              <KeyRound className="w-5 h-5 shrink-0 mt-0.5 text-cyan-300" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold">Join with code</span>
+                <span className="block text-[0.6875rem] text-white/70 mt-0.5">
+                  Have a 6-digit invite from a host? Enter it here.
+                </span>
+              </span>
+              <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 opacity-70 group-hover:opacity-100 transition" />
+            </Link>
+            <Link
+              href="/games/new"
+              className="group flex items-start gap-3 px-5 py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-colors border border-white/10"
+            >
+              <Users2 className="w-5 h-5 shrink-0 mt-0.5 text-cyan-300" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold">Facilitate a cohort</span>
+                <span className="block text-[0.6875rem] text-white/70 mt-0.5">
+                  Set up a workshop, configure seats, run the room.
+                  Sign-in required.
+                </span>
+              </span>
+              <ArrowRight className="w-4 h-4 shrink-0 mt-0.5 opacity-70 group-hover:opacity-100 transition" />
+            </Link>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap mb-4">
+            <Link
               href="/about"
-              className="inline-flex items-center gap-2 px-6 py-3 border border-white/20 text-white text-sm font-semibold rounded-full hover:bg-white/5 transition-colors"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-white/80 text-xs font-semibold hover:text-white transition-colors underline-offset-4 hover:underline"
             >
               How it works
             </Link>

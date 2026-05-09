@@ -138,7 +138,20 @@ export function TopBar() {
         <Kpi
           label="Debt"
           value={fmtMoney(displayTeam.totalDebtUsd)}
-          tone={displayTeam.totalDebtUsd > 0 ? "neg" : undefined}
+          // 3-state risk ladder per workshop feedback. Replaces the
+          // binary "any debt = red" signal that warned for healthy
+          // leverage. Thresholds:
+          //   < 0.5× airline value          → no tone (safe)
+          //   0.5 — 1.0× OR RCF drawn       → warn (stretched)
+          //   > 1.0× airline value          → neg  (distressed)
+          tone={(() => {
+            if (displayTeam.totalDebtUsd <= 0) return undefined;
+            if (airlineValue <= 0) return "neg" as const;
+            const ratio = displayTeam.totalDebtUsd / airlineValue;
+            if (ratio > 1.0) return "neg" as const;
+            if (ratio >= 0.5 || displayTeam.rcfBalanceUsd > 0) return "warn" as const;
+            return undefined;
+          })()}
         />
         <Divider />
         <Kpi label="Airline value" value={fmtMoney(airlineValue)} emphasize />
