@@ -7,18 +7,21 @@ import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { useGame, selectPlayer, selectActiveTeam } from "@/store/game";
 import { computeAirlineValue, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
-import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
+import { SCENARIOS_BY_ID } from "@/data/scenarios";
 import { Award, TrendingUp, TrendingDown, Trophy, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { airlineColorFor } from "@/lib/games/airline-colors";
 import { MultiAirlineAnalytics } from "@/components/endgame/MultiAirlineAnalytics";
 
-/** Legacy titles by final Brand Value band. */
-function legacyTitle(bv: number): { title: string; sub: string } {
+/** Legacy titles by final Brand Value band. The "Survivor" sub-line
+ *  used to hardcode "Q4 2024" — fine when every game was 40 rounds,
+ *  wrong for 8 / 16 / 24-round formats. Now takes the final quarter
+ *  label so the copy reads correctly regardless of game length. */
+function legacyTitle(bv: number, finalQuarterLabel: string): { title: string; sub: string } {
   if (bv >= 85) return { title: "The Legend", sub: "A new benchmark for the industry. Regulators write case studies. Rivals study your playbook." };
   if (bv >= 72) return { title: "The Architect", sub: "Built a carrier that will outlive you. Your moves define the next decade." };
   if (bv >= 60) return { title: "The Operator", sub: "Solid, respected, durable. The airline that investors trust." };
-  if (bv >= 45) return { title: "The Survivor", sub: "You took the hits and made it to Q4 2024. That counts." };
+  if (bv >= 45) return { title: "The Survivor", sub: `You took the hits and made it to ${finalQuarterLabel}. That counts.` };
   if (bv >= 30) return { title: "The Cautionary Tale", sub: "Your story will be taught — as a lesson in what not to do." };
   return { title: "The Grounded", sub: "The board convenes next week. The conversation will be short." };
 }
@@ -84,7 +87,8 @@ export default function Endgame() {
   const focusCardMult = focusAwards.reduce((m, a) => m * a.airlineValueMult, 1);
   const focusFinalAirlineValue = computeAirlineValue(focusTeam) * focusCardMult;
   const finalRank = ranked.findIndex((t) => t.id === focusTeam.id) + 1;
-  const { title, sub } = legacyTitle(focusTeam.brandValue);
+  const finalQuarterLabel = fmtQuarter(getTotalRounds(s));
+  const { title, sub } = legacyTitle(focusTeam.brandValue, finalQuarterLabel);
   const totalProfit = focusTeam.financialsByQuarter.reduce((s, q) => s + q.netProfit, 0);
   // Backwards-compatible alias for legacy display fragments below
   const adjustedBV = focusTeam.brandValue;
@@ -112,7 +116,7 @@ export default function Endgame() {
         <div className="flex items-baseline gap-3">
           <span className="font-display text-xl text-ink">ICAN Simulations</span>
           <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
-            {isObserver ? "Game Master · Final Results" : "Final scoring · Q4 2024 closed"}
+            {isObserver ? "Game Master · Final Results" : `Final scoring · ${finalQuarterLabel} closed`}
           </span>
         </div>
       </header>
@@ -441,7 +445,7 @@ export default function Endgame() {
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="font-display text-[1.5rem] text-ink">Career arc</h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-                  {fmtQuarter(1)} → {fmtQuarter(40)} brand value
+                  {fmtQuarter(1)} → {finalQuarterLabel} brand value
                 </span>
               </div>
               {(() => {
@@ -600,8 +604,10 @@ export default function Endgame() {
             .sort((a, b) => a.quarter - b.quarter)
             .slice(0, 3);
           for (const d of earlyDecisions) {
-            const scenario = (SCENARIOS_BY_QUARTER[d.quarter] ?? [])
-              .find((sc) => sc.id === d.scenarioId);
+            // Look up by scenario id, not quarter — short-format games
+            // (8 / 16 / 24 rounds) record decisions at the proportional
+            // quarter, not the absolute one the scenario was authored at.
+            const scenario = SCENARIOS_BY_ID[d.scenarioId];
             if (!scenario) continue;
             highlights.push({
               quarter: d.quarter,
@@ -672,8 +678,11 @@ export default function Endgame() {
                 {[...focusTeam.decisions]
                   .sort((a, b) => a.quarter - b.quarter)
                   .map((d) => {
-                    const scenario = (SCENARIOS_BY_QUARTER[d.quarter] ?? [])
-                      .find((sc) => sc.id === d.scenarioId);
+                    // Same id-based lookup pattern as the highlights
+                    // section above — robust across 8/16/24/40-round
+                    // formats where decision quarters don't equal the
+                    // scenario's authored absolute quarter.
+                    const scenario = SCENARIOS_BY_ID[d.scenarioId];
                     const opt = scenario?.options.find((o) => o.id === d.optionId);
                     return (
                       <div key={`${d.scenarioId}-${d.quarter}`} className="flex items-baseline justify-between gap-3 py-1.5 border-b border-line last:border-0 text-[0.875rem]">

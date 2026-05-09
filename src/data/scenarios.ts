@@ -880,6 +880,19 @@ export const SCENARIOS_BY_QUARTER: Record<number, Scenario[]> = SCENARIOS.reduce
   {} as Record<number, Scenario[]>,
 );
 
+/** Lookup by id, used to render past decisions on the endgame screen
+ *  regardless of game length. The original `SCENARIOS_BY_QUARTER[d.quarter]`
+ *  pattern broke for 8 / 16 / 24-round games because decisions in those
+ *  formats fire at proportional quarters, not the absolute quarters
+ *  the scenario was authored at. Looking up by id sidesteps that. */
+export const SCENARIOS_BY_ID: Record<string, Scenario> = SCENARIOS.reduce(
+  (acc, s) => {
+    acc[s.id] = s;
+    return acc;
+  },
+  {} as Record<string, Scenario>,
+);
+
 /**
  * Phase 3 — scenarios scaled to a configurable game length. The
  * SCENARIOS list is keyed by absolute quarters 3..37 across a 40-round

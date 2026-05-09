@@ -97,6 +97,7 @@ export function DecisionsPanel() {
             <ScenarioCard
               key={sc.id}
               scenario={sc}
+              firingQuarter={s.currentQuarter}
               player={player}
               submittedOptionId={submitted?.optionId ?? null}
               flags={player.flags}
@@ -138,9 +139,16 @@ export function DecisionsPanel() {
 }
 
 function ScenarioCard({
-  scenario, player, submittedOptionId, onSubmit, flags, cargoFleetCount,
+  scenario, firingQuarter, player, submittedOptionId, onSubmit, flags, cargoFleetCount,
 }: {
   scenario: (typeof SCENARIOS)[number];
+  /** The actual quarter the scenario is firing in for THIS game.
+   *  May differ from `scenario.quarter` (the absolute 40-round
+   *  authored quarter) — short-format games re-map scenarios to a
+   *  proportional quarter. The boardroom eyebrow uses this for the
+   *  "Q3 2017"-style label so it matches what the player sees on
+   *  the topbar quarter counter. */
+  firingQuarter: number;
   player: Team;
   submittedOptionId: string | null;
   flags: Team["flags"];
@@ -192,7 +200,7 @@ function ScenarioCard({
       <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
         <div className="flex items-baseline gap-2">
           <span className="text-[0.5625rem] uppercase tracking-[0.22em] text-accent font-bold">
-            Boardroom · {fmtQuarter(scenario.quarter)}
+            Boardroom · {fmtQuarter(firingQuarter)}
           </span>
           <span className="font-mono text-[0.625rem] text-ink-muted">{scenario.id}</span>
         </div>

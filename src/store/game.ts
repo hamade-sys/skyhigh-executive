@@ -3361,7 +3361,15 @@ export const useGame = create<GameStore>()(
         // or the cargo-fleet requirement) for any scenario the player
         // didn't explicitly answer. Calls submitDecision so all the
         // dedup + eligibility logic from above also applies.
-        {
+        //
+        // SKIP entirely when board decisions are disabled for this
+        // session (self-guided games choose to opt out). The Decisions
+        // panel UI hides scenarios in that mode, but until this gate
+        // landed the engine still auto-resolved them on close — leaving
+        // self-guided cohorts subject to scenario consequences they
+        // never saw, the exact "ghost decision" gap reviewers flagged.
+        const boardDecisionsEnabled = s.session?.boardDecisionsEnabled ?? true;
+        if (boardDecisionsEnabled) {
           // Phase 3: pull scenarios from the scaled lookup so short-
           // format games see their proportional scenarios at the right
           // quarter (not always the absolute 40-round target).
@@ -4233,7 +4241,15 @@ export const useGame = create<GameStore>()(
         // their choices. Deferred / acquire / refinance effects are
         // not yet wired for bots — those need more plumbing and aren't
         // needed for the leaderboard signal.
-        const scenariosThisQuarter = scenariosForQuarter(s.currentQuarter, getTotalRounds(s));
+        //
+        // Same gate as the human auto-submit above: when board
+        // decisions are disabled for the session (self-guided mode),
+        // skip bot scenario application too. Otherwise bots gain
+        // brand / cash / loyalty advantages from scenarios that human
+        // players in the same cohort can't see or respond to.
+        const scenariosThisQuarter = boardDecisionsEnabled
+          ? scenariosForQuarter(s.currentQuarter, getTotalRounds(s))
+          : [];
         const teamsAfterBotScenarios = teamsAfterBotTurns.map((t) => {
           if (!t.botDifficulty) return t;
           if (scenariosThisQuarter.length === 0) return t;
