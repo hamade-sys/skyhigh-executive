@@ -956,6 +956,65 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                 {projection.tone === "warn" && "Consider lowering frequency or adjusting fares."}
                 {projection.tone === "pos" && "Strong occupancy projected."}
               </div>
+              {/* Why this route is good/bad — qualitative bullets the
+                  reviewer asked for. Mostly consume signals we already
+                  computed (shortfall, occupancy, plane assignment) and
+                  surface them as a single readable list so the player
+                  doesn't have to assemble the picture themselves. */}
+              {(() => {
+                const why: Array<{ icon: "ok" | "warn" | "info"; text: string }> = [];
+                // Slot shortfall — if any, bidding will be required.
+                const totalShortfall = shortfall.atOrigin + shortfall.atDest;
+                if (totalShortfall > 0) {
+                  why.push({
+                    icon: "warn",
+                    text: `Slot shortfall: ${totalShortfall} weekly slots need auction bids — route stays pending until next quarter close.`,
+                  });
+                }
+                // Aircraft already on another route — opening this
+                // would reassign and (silently) close the old route.
+                const busy = selectedPlaneIds.filter((id) => {
+                  const f = player.fleet.find((p) => p.id === id);
+                  return f && f.routeId != null && f.status === "active";
+                });
+                if (busy.length > 0) {
+                  why.push({
+                    icon: "warn",
+                    text: `${busy.length} of ${selectedPlaneIds.length} aircraft are currently on another route — they'll be reassigned here.`,
+                  });
+                }
+                // Quick occupancy heuristics already in the projection
+                // tone — surface as plain English.
+                if (projection.tone === "neg") {
+                  why.push({
+                    icon: "warn",
+                    text: `Projected occupancy below 25% — break-even fares would need to be much higher than the doctrine ceiling.`,
+                  });
+                } else if (projection.tone === "warn") {
+                  why.push({
+                    icon: "info",
+                    text: `Mid-range occupancy — small fare lifts or a frequency cut could push this into the profitable band.`,
+                  });
+                } else if (projection.tone === "pos") {
+                  why.push({
+                    icon: "ok",
+                    text: `Headroom for higher fares — load factor above 55% suggests the demand pool can absorb a premium tier bump.`,
+                  });
+                }
+                if (why.length === 0) return null;
+                return (
+                  <ul className="mt-2 pt-2 border-t border-current/15 space-y-1 text-[0.6875rem] leading-snug">
+                    {why.map((w, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <span aria-hidden className="shrink-0">
+                          {w.icon === "ok" ? "✓" : w.icon === "warn" ? "⚠" : "ℹ"}
+                        </span>
+                        <span>{w.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
             </div>
           );
         })()}

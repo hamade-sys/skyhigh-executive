@@ -1,31 +1,56 @@
-# SkyForce — Full Product Requirements Document
-## ICAN · International Civil Aviation Network
-### Executive Simulation Platform — Claude Code Product Brief
+# ICAN Simulations · Airline — Full Product Requirements Document
+## ICAN MENA · Executive Development Platform
+### Product Brief — kept current; supersedes the original SkyForce PRD
+
+> **2026 update:** This document originated as a 20-quarter / 5-team
+> spec ("SkyForce"). The shipped product has evolved meaningfully since:
+>
+>   - **Configurable game length.** Hosts pick 8 / 16 / 24 / 40 rounds at
+>     game-create time. Default for new games is 40. Scenarios re-map
+>     proportionally so short formats see a proper rhythm of board
+>     decisions instead of a sparse front-loaded set. The 20-quarter
+>     numbers below are kept for original-design reference but are NOT
+>     authoritative for current code.
+>   - **Modes.** Solo practice (anonymous, local), Self-guided cohort
+>     (host + up to 8 humans, no facilitator), and Facilitated
+>     cohort (Game Master with admin tools, board decisions). Each
+>     mode has its own quarter loop nuances.
+>   - **9-color airline palette.** Teal first (host default), then
+>     Blue / Red / Orange / Yellow / Green / Dark grey / Pink / Purple.
+>     Server enforces uniqueness per game.
+>   - **All 103 cities are pickable as hubs.** Tiers (1–4 + Premium)
+>     drive pricing and structural advantages but are NOT exposed to
+>     players in the picker copy — players see price + region only.
+>   - **Aircraft operating life is 28 quarters from delivery.** Older
+>     drafts implied 4 years; the order modal now surfaces both
+>     delivery and retirement quarter so the constant matches player
+>     expectations.
+>
+> See `docs/V2-PLAN.md` for the current implementation plan and
+> `docs/AUDIT-FINDINGS.md` for the most recent third-party review.
 
 ---
 
 ## 1. PRODUCT OVERVIEW
 
-**Product Name:** SkyForce  
-**Client:** ICAN — International Civil Aviation Network  
-**Purpose:** A 20-quarter airline business simulation for senior executive development. 5 teams of 4 players build and operate competing airlines from scratch, responding to board decisions, world events, market forces, and live facilitated scenarios over 1.5 days.  
-**Stack:** Next.js 14, TypeScript, Tailwind CSS, Supabase (PostgreSQL + Realtime), Vercel  
-**Visual Identity:** ICAN brand system — Teal (#00C2CB), Charcoal (#545454), white backgrounds, Inter font, clean management-consultancy aesthetic  
+**Product Name:** ICAN Simulations · Airline (originally codenamed SkyForce)
+**Client:** ICAN MENA — boutique HR consulting + executive development firm, GCC + MENA region
+**Purpose:** A configurable-length airline business simulation for senior executive development. Up to 8-team cohorts (humans + AI bots) build and operate competing airlines from scratch, responding to board decisions, world events, market forces, and live facilitated scenarios. Solo and self-guided modes also supported.
+**Stack:** Next.js 16 (App Router) + Turbopack, TypeScript strict, Tailwind v4, Supabase (Postgres + Realtime), Vercel
+**Visual Identity:** ICAN brand system — Teal (#00C2CB), Dark grey (slate-700), Purple (violet-600), white backgrounds, Inter font, clean management-consultancy aesthetic
 
 ---
 
 ## 2. STRUCTURAL OVERVIEW
 
 ### 2.1 Participants
-- **5 teams** of 4 players each = 20 participants total
-- Each team has 4 **roles**: CEO, CFO, CMO, CHRO
-- **1 shared account per team** — all 4 role-players access the platform from one login. There is no individual role-based login. The team operates the airline collectively from a single interface.
-- Roles determine who gets specific sealed briefs in live simulations (handled offline by facilitators — not enforced in the platform)
+- **Up to 8 player seats per cohort** (humans + bots in any mix). Solo runs are 1 human + N bots. Facilitator role is in addition to the 8 player seats.
+- Original spec assumed 5 teams of 4 players sharing a single login; the shipped product allows 1 player per seat (auth-bound). Roles (CEO, CFO, CMO, CHRO) are an offline workshop convention — not enforced by the platform.
 
 ### 2.2 Game Duration
-- **20 Quarters** = 5 simulated game years
-- Each game year = 5 real-world years from the year 2000 (for aircraft timeline mapping only)
-- Physical simulation runs over **1.5 days**
+- **Configurable: 8 / 16 / 24 / 40 quarters.** Host picks at game-create. Default is 40.
+- Each game year = 5 real-world years from the year 2000 (for aircraft timeline mapping only).
+- Physical simulation runs over: ~30 min (8Q) / ~1 hr (16Q) / ~2 hrs (24Q) / ~3.5 hrs (40Q) depending on facilitator pacing.
 
 ### 2.3 Game Flow by Quarter
 
