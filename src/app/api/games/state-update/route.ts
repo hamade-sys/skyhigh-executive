@@ -38,6 +38,7 @@ import {
   submitStateMutation,
 } from "@/lib/games/api";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
+import { getServerClient } from "@/lib/supabase/server";
 import { broadcastGameEvent } from "@/lib/games/realtime-broadcast";
 
 export const runtime = "nodejs";
@@ -51,6 +52,15 @@ interface NewStateTeamShape {
 
 interface NewStateShape {
   teams?: NewStateTeamShape[];
+}
+
+// Shape we read from the CURRENT stored game_state row to authorise
+// mutations against. We trust THIS, not whatever the client claims
+// the team owner is in the submitted payload.
+interface StoredTeam {
+  id?: string;
+  claimedBySessionId?: string | null;
+  controlledBy?: string | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -96,35 +106,82 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: membership.error }, { status: 403 });
     }
 
-    // Verify per-team ownership of any team mutations. Facilitators
+    // Verify per-team ownership of any team mutations against the
+    // CANONICAL STORED state, not the submitted payload. Facilitators
     // (role === 'facilitator') are exempt — they can apply admin
     // overrides across all teams. Other roles can only modify teams
-    // claimed by their own session.
+    // whose stored row says claimedBySessionId === their userId, OR
+    // teams the stored row says are bot-controlled (the local engine
+    // runs bot turns on the active player's browser).
+    //
+    // SECURITY NOTE: previously this check trusted
+    // newState.teams[].claimedBySessionId — meaning a malicious client
+    // could submit a payload with their own userId stamped on a victim
+    // team and bypass the gate, OR flip any team's controlledBy to
+    // "bot" and bypass via the bot lane. Both bypasses are now closed
+    // by ignoring the submitted ownership fields entirely and reading
+    // them only from the stored game_state row.
     const isFacilitator = membership.data.role === "facilitator";
     if (!isFacilitator) {
-      const teams = (newState as NewStateShape).teams ?? [];
-      // We allow human teams claimed by THIS user to be mutated, plus
-      // bot teams (controlledBy === "bot") because the local engine
-      // runs bot turns on the active player's browser today. Human
-      // teams claimed by OTHER users are off-limits.
-      for (const t of teams) {
-        if (t && typeof t === "object") {
-          const claimedBy = typeof t.claimedBySessionId === "string"
-            ? t.claimedBySessionId
-            : null;
-          const controlledBy = typeof t.controlledBy === "string"
-            ? t.controlledBy
-            : null;
-          if (controlledBy === "bot") continue;
-          if (claimedBy && claimedBy !== userId) {
-            return NextResponse.json(
-              {
-                error:
-                  "Cannot mutate a team you do not own. Facilitator role required for cross-team writes.",
-              },
-              { status: 403 },
-            );
-          }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supa = getServerClient() as any;
+      const { data: storedRow, error: storedErr } = await supa
+        .from("game_state")
+        .select("state_json")
+        .eq("game_id", gameId)
+        .single();
+      if (storedErr || !storedRow) {
+        return NextResponse.json(
+          { error: "Game state not found." },
+          { status: 404 },
+        );
+      }
+      const storedTeamsRaw = (
+        (storedRow.state_json as Record<string, unknown> | undefined)?.teams as
+          | StoredTeam[]
+          | undefined
+      ) ?? [];
+      const storedById = new Map<string, StoredTeam>();
+      for (const t of storedTeamsRaw) {
+        if (t && typeof t.id === "string") storedById.set(t.id, t);
+      }
+
+      const submittedTeams = (newState as NewStateShape).teams ?? [];
+      for (const t of submittedTeams) {
+        if (!t || typeof t !== "object") continue;
+        const teamId = typeof t.id === "string" ? t.id : null;
+        if (!teamId) {
+          return NextResponse.json(
+            { error: "Submitted team is missing an id — refusing to apply." },
+            { status: 400 },
+          );
+        }
+        const stored = storedById.get(teamId);
+        if (!stored) {
+          // Team not in stored state. This isn't a normal play-time
+          // mutation — teams are seeded server-side at game start,
+          // never created by client state-update writes.
+          return NextResponse.json(
+            {
+              error:
+                "Cannot create new teams via state-update. Use the game-start path.",
+            },
+            { status: 403 },
+          );
+        }
+        // Bot teams (per STORED state) — allowed for everyone, since
+        // the local engine runs bot turns and pushes their results.
+        if (stored.controlledBy === "bot") continue;
+        // Human team — must be claimed by THIS user (per stored data).
+        const ownerInStore = stored.claimedBySessionId ?? null;
+        if (ownerInStore && ownerInStore !== userId) {
+          return NextResponse.json(
+            {
+              error:
+                "Cannot mutate a team you do not own. Facilitator role required for cross-team writes.",
+            },
+            { status: 403 },
+          );
         }
       }
     }
