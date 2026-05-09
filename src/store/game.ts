@@ -4104,6 +4104,40 @@ export const useGame = create<GameStore>()(
               const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
               const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
               const isCargo = acSpec?.family === "cargo";
+              // Mirror the player flow: routes that need a slot
+              // auction to resolve start as "pending" and earn no
+              // revenue until the auction lands. Earlier the bot
+              // path skipped this entirely — bots inserted every
+              // route as "active" immediately, gaining instant
+              // revenue while their human counterparts waited a
+              // full quarter for slot allocations. That's the
+              // fairness gap the reviewer flagged.
+              const weeklyNeed = dailyFreq * 7;
+              const pendingBidPrices: Record<string, number> = {};
+              const pendingBidSlots: Record<string, number> = {};
+              let willBePending = false;
+              for (const code of [rp.origin, rp.dest]) {
+                const held = updated.airportLeases?.[code]?.slots ?? 0;
+                const used = committedSlotsAtCode[code] ?? 0;
+                const deficit = Math.max(0, used + weeklyNeed - held);
+                committedSlotsAtCode[code] = used + weeklyNeed;
+                if (deficit > 0) {
+                  const price = botSlotBidPrice(t.botDifficulty, code);
+                  // Bot auction bid into the cohort-wide pool — same
+                  // place player bids land.
+                  const cur = newBids[code];
+                  newBids[code] = {
+                    slots: (cur?.slots ?? 0) + Math.ceil(deficit),
+                    price: Math.max(cur?.price ?? 0, price),
+                  };
+                  // Per-route record so the route can show its own
+                  // "Pending: $X for N slots at AAA" copy on the bot's
+                  // routes panel (mirror player UX).
+                  pendingBidPrices[code] = price;
+                  pendingBidSlots[code] = Math.ceil(deficit);
+                  willBePending = true;
+                }
+              }
               const route: Route = {
                 id: mkId("route"),
                 originCode: rp.origin,
@@ -4116,7 +4150,8 @@ export const useGame = create<GameStore>()(
                 busFare: null,
                 firstFare: null,
                 cargoRatePerTonne: null,
-                status: "active",
+                // Pending if any deficit; active otherwise.
+                status: willBePending ? "pending" : "active",
                 openQuarter: s.currentQuarter,
                 avgOccupancy: 0,
                 quarterlyRevenue: 0,
@@ -4125,22 +4160,9 @@ export const useGame = create<GameStore>()(
                 isCargo,
                 consecutiveQuartersActive: 0,
                 consecutiveLosingQuarters: 0,
+                pendingBidPrices: willBePending ? pendingBidPrices : undefined,
+                pendingBidSlots: willBePending ? pendingBidSlots : undefined,
               };
-              const weeklyNeed = dailyFreq * 7;
-              for (const code of [rp.origin, rp.dest]) {
-                const held = updated.airportLeases?.[code]?.slots ?? 0;
-                const used = committedSlotsAtCode[code] ?? 0;
-                const deficit = Math.max(0, used + weeklyNeed - held);
-                committedSlotsAtCode[code] = used + weeklyNeed;
-                if (deficit > 0) {
-                  const cur = newBids[code];
-                  const price = botSlotBidPrice(t.botDifficulty, code);
-                  newBids[code] = {
-                    slots: (cur?.slots ?? 0) + Math.ceil(deficit),
-                    price: Math.max(cur?.price ?? 0, price),
-                  };
-                }
-              }
               // Register this OD as claimed for subsequent bots this quarter
               const odKey = rp.origin < rp.dest
                 ? `${rp.origin}|${rp.dest}`
