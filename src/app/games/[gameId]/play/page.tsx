@@ -104,6 +104,15 @@ export default function GamePlayPage({
   // hence the disable.
   useEffect(() => {
     if (!data || !sessionId || hydrated) return;
+    if (data.game.status === "ended") {
+      // Game has already ended (force-end, auto-end, or bulk-end via
+      // ops SQL). The hydration path requires status='playing'; without
+      // this branch, the page sits on "Loading game canvas…" forever.
+      // Send the player to /endgame where the recap is rendered from
+      // whatever state_json is left over.
+      router.replace("/endgame");
+      return;
+    }
     if (data.game.status !== "playing") return;
     if (!data.state) {
       // Game row says "playing" but state row missing — probably a
@@ -131,7 +140,7 @@ export default function GamePlayPage({
     // which game this player belongs to; no localStorage key needed.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
-  }, [data, sessionId, hydrated, hydrateFromServerState]);
+  }, [data, sessionId, hydrated, hydrateFromServerState, router]);
 
   // Step 3 — Supabase Realtime: re-hydrate whenever any player pushes
   // new state for this game. Each game has its own game_state row

@@ -70,8 +70,23 @@ export function Modal({
       // BEFORE we register ourselves. `stack` opts out so an inline
       // confirmation can layer on its parent without dismissing it.
       if (!stack) {
-        // Snapshot to a local array so `cb()` can synchronously
-        // mutate the registry without breaking iteration.
+        // Belt: close every other open <dialog> at the DOM level
+        // RIGHT NOW so the visual stacking clears in the same frame
+        // as showModal() runs for us. Pure React-state close-others
+        // worked logically but left a frame where the user could see
+        // multiple stacked dialogs.
+        if (typeof document !== "undefined") {
+          const otherDialogs = document.querySelectorAll<HTMLDialogElement>("dialog[open]");
+          otherDialogs.forEach((d) => {
+            if (d !== dlg) {
+              try { d.close(); } catch { /* close() can throw if already closed */ }
+            }
+          });
+        }
+        // Suspenders: ALSO ask each registered modal to flip its
+        // React `open` state to false so the dialog stays closed
+        // through the next render. Otherwise a parent re-render
+        // with stale open=true would re-call showModal().
         const callbacks = Array.from(openModalCloseCallbacks);
         openModalCloseCallbacks.clear();
         for (const cb of callbacks) {
