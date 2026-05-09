@@ -169,8 +169,14 @@ export default function GameLobbyPage({
   useEffect(() => { load(); }, [load]);
 
   // Initialise seatConfigs from the server's plannedSeats once data loads.
+  // Skip the re-init while a seat-config save is mid-flight — otherwise a
+  // Realtime echo from our own write triggers `load()` → `setData()` → this
+  // effect → `setSeatConfigs(...)` with the server's PRE-write state, which
+  // visibly flickers the bot color back to the previous value before the
+  // server's post-write echo arrives a moment later.
   useEffect(() => {
     if (!data) return;
+    if (seatConfigSaving) return;
     const maxTeams = data.game.max_teams;
     const planned = (
       (data.state?.state_json as Record<string, unknown> | undefined)
@@ -193,6 +199,9 @@ export default function GameLobbyPage({
       }),
     );
   // Only re-init when the game data changes from the server (e.g. after reload).
+  // seatConfigSaving is intentionally a guard, not a dep — listing it in
+  // deps would re-fire the effect when the save resolves and re-clobber
+  // our local state.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.game.id, data?.state]);
 
