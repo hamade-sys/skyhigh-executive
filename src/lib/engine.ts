@@ -1647,14 +1647,27 @@ export function computeRouteEconomics(
   let bellyCargoRevenue = 0;
   let bellyCargoTonnesUsed = 0;
   const bellyCapacityMultiplier = isDoctrine(team, "cargo-dominance") ? 1.20 : 1.0;
-  const totalBellyTonnesPerFlight = planes.reduce((sum, p) => {
+  // Belly cargo capacity must be AVERAGED across the assigned passenger
+  // aircraft (the same pattern seats and fuel use above), NOT summed.
+  // Each flight uses ONE plane's belly hold; multiplying by
+  // route.dailyFrequency already accounts for the multi-flight scaling.
+  // The previous version summed across planes AND multiplied by
+  // frequency — on a 2-plane route this was 2× the real belly capacity
+  // (and revenue), warping the cargo economy on every multi-aircraft
+  // passenger route.
+  let passengerPlaneCount = 0;
+  const bellyTonnesSum = planes.reduce((sum, p) => {
     const spec = AIRCRAFT_BY_ID[p.specId];
     if (!spec || spec.family !== "passenger") return sum;
+    passengerPlaneCount += 1;
     const totalSeats = (p.customSeats?.first ?? spec.seats.first)
       + (p.customSeats?.business ?? spec.seats.business)
       + (p.customSeats?.economy ?? spec.seats.economy);
     return sum + cargoBellyTonnes(totalSeats, p.cargoBelly) * bellyCapacityMultiplier;
   }, 0);
+  const totalBellyTonnesPerFlight = passengerPlaneCount > 0
+    ? bellyTonnesSum / passengerPlaneCount
+    : 0;
   if (totalBellyTonnesPerFlight > 0) {
     const bellyDailyCapacity = totalBellyTonnesPerFlight * route.dailyFrequency;
     // Cargo demand at this OD pair (re-using the cargo path's demand
