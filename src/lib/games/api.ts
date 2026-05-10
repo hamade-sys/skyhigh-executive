@@ -344,11 +344,21 @@ export async function createGame(args: CreateGameArgs): Promise<
   // Host as the first member. Role: game-master if they claimed it,
   // otherwise plain host.
   const hostRole = gmSessionId === args.hostSessionId ? "facilitator" : "host";
-  await supa.from("game_members").insert({
+  const { error: memberErr } = await supa.from("game_members").insert({
     game_id: game.id,
     session_id: args.hostSessionId,
     role: hostRole,
   });
+  // A failed membership insert means the creator can't push state
+  // (assertMembership would reject them with 403). Fail the entire
+  // create so the caller knows and can retry rather than silently
+  // producing a broken game.
+  if (memberErr) {
+    return {
+      ok: false,
+      error: `Game created but host membership registration failed: ${memberErr.message}`,
+    };
+  }
 
   await appendEvent({
     gameId: game.id,

@@ -25,6 +25,7 @@ import {
   submitStateMutation,
 } from "@/lib/games/api";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
+import { getServerClient } from "@/lib/supabase/server";
 import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
 import {
   isAirlineColorId,
@@ -77,6 +78,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: auth.error }, { status });
     }
     const actorSessionId = userId;
+
+    // ── Belt-and-suspenders: ensure the actor has a game_members row ──────
+    // createGame inserts the host into game_members, but that insert is
+    // best-effort and could fail silently on transient DB errors. If the
+    // row is missing, assertMembership in every subsequent state-update
+    // call would return 403 "Not a member". Upserting here is idempotent
+    // and guarantees membership is established before the game begins.
+    {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supa = getServerClient() as any;
+      await supa.from("game_members").upsert(
+        {
+          game_id: gameId,
+          session_id: actorSessionId,
+          role: auth.data.isFacilitator ? "facilitator" : "host",
+        },
+        { onConflict: "game_id,session_id" },
+      );
+    }
 
     // ── Load current game + state ──────────────────────────────────────────
     const loaded = await loadGame(gameId);
@@ -143,14 +163,24 @@ export async function POST(req: NextRequest) {
       const botSeatsCount = plannedSeats.filter((s) => s.type === "bot").length;
       const botsToSeed = botSeatsCount;
 
+      // If no eligible humans AND no configured bot seats, the normal seeding
+      // paths produce 0 teams. This happens most commonly when the Game Master
+      // (facilitator role — excluded from human seeding) starts a game alone
+      // without first toggling any seats to "bot" in the lobby. A game with 0
+      // teams cannot run — guarantee at least `max_teams` bot rivals so the
+      // engine always has something to hydrate.
+      const fallbackBotCount =
+        humanMembers.length === 0 && botsToSeed === 0 ? Math.max(1, game.max_teams) : 0;
+
       const seededTeams: unknown[] = [];
       const claimedColorIds: Array<AirlineColorId | null | undefined> = [];
 
       // Pre-pick distinct airline names from the 100-name pool for
       // every team that DIDN'T already supply its own (humans without
-      // a saved setup + every bot). Names typed by players in the
-      // lobby setup form take precedence — we exclude those from the
-      // pool so a randomly-picked bot can't accidentally collide.
+      // a saved setup + every bot + any fallback bots). Names typed by
+      // players in the lobby setup form take precedence — we exclude
+      // those from the pool so a randomly-picked bot can't accidentally
+      // collide.
       const humanSuppliedNames = new Set<string>(
         humanMembers
           .map((m) => playerSetups[m.session_id]?.airlineName?.trim())
@@ -158,7 +188,8 @@ export async function POST(req: NextRequest) {
       );
       const namesNeeded =
         humanMembers.filter((m) => !playerSetups[m.session_id]?.airlineName).length +
-        botsToSeed;
+        botsToSeed +
+        fallbackBotCount;
       const pickedNamePool = pickAirlineNames(namesNeeded, humanSuppliedNames);
       let nameCursor = 0;
 
@@ -256,6 +287,40 @@ export async function POST(req: NextRequest) {
         seededTeams.push(botTeam);
       }
 
+      // ── Fallback: auto-seed bots when normal paths produced 0 teams ────
+      // Triggered when the host is a Game Master (facilitator, excluded from
+      // human seeding) and no explicit bot seats were configured. Without
+      // this, the game starts with teams:[] and the play page always shows
+      // "State has no teams — game not yet seeded." for every GM-only start.
+      if (seededTeams.length === 0 && fallbackBotCount > 0) {
+        const fallbackDoctrines: DoctrineId[] = [
+          "premium-service", "budget-expansion", "cargo-dominance", "global-network",
+        ];
+        for (let i = 0; i < fallbackBotCount; i++) {
+          const namePick = pickedNamePool[nameCursor++];
+          const fallbackBotColorId: AirlineColorId = pickNextAvailableColor(claimedColorIds);
+          claimedColorIds.push(fallbackBotColorId);
+          const team = createInitializedTeamFromOnboarding({
+            airlineName: namePick?.name ?? `Bot Airlines ${i + 1}`,
+            code: namePick?.code ?? `B${i.toString().padStart(2, "0")}`,
+            doctrine: fallbackDoctrines[i % fallbackDoctrines.length],
+            hubCode: BOT_HUBS[i % BOT_HUBS.length],
+            color: BOT_BRAND_HEXES[i % BOT_BRAND_HEXES.length],
+            controlledBy: "bot",
+            claimedBySessionId: null,
+            playerDisplayName: null,
+            airlineColorId: fallbackBotColorId,
+          });
+          seededTeams.push({
+            ...team,
+            isPlayer: false,
+            controlledBy: "bot" as const,
+            botDifficulty: "medium" as const,
+            flags: Array.from(team.flags ?? []),
+          });
+        }
+      }
+
       // Write teams into the server state before starting
       const newStateJson = {
         ...stateJson,
@@ -271,7 +336,7 @@ export async function POST(req: NextRequest) {
         eventType: "game.teamsSeeded",
         eventPayload: {
           humanCount: humanMembers.length,
-          botCount: botsToSeed,
+          botCount: seededTeams.length - humanMembers.length,
         },
       });
       // If the write fails (e.g. version conflict from a concurrent player-setup
