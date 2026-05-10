@@ -10,6 +10,10 @@ import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { classFareRangeForDoctrine, distanceBetween, effectiveRangeKm, maxRouteDailyFrequency, routeDemandPerDay } from "@/lib/engine";
 import type { CityTier, PricingTier } from "@/types/game";
 import { cn } from "@/lib/cn";
+import {
+  airlineColorFor,
+  type AirlineColorId,
+} from "@/lib/games/airline-colors";
 import { AlertTriangle, Pause, Play, Plus, X } from "lucide-react";
 import { RouteSetupModal, BidRow } from "@/components/game/RouteSetupModal";
 import { PanelSubheader } from "@/components/game/PanelSubheader";
@@ -1838,7 +1842,12 @@ function CompetitorsTable({
                   <td className="px-2 py-1.5">
                     <span
                       className="inline-block w-4 h-4 rounded-sm align-middle mr-1.5"
-                      style={{ background: player.color }}
+                      style={{
+                        background: airlineColorFor({
+                          colorId: player.airlineColorId as AirlineColorId | undefined,
+                          fallbackKey: player.id,
+                        }).hex,
+                      }}
                     />
                     <span className="font-semibold text-ink">{player.name}</span>
                     <span className="ml-1 text-[0.6875rem] text-accent uppercase tracking-wider font-bold">YOU</span>
@@ -1881,7 +1890,12 @@ function CompetitorsTable({
                   <td className="px-2 py-1.5">
                     <span
                       className="inline-block w-4 h-4 rounded-sm align-middle mr-1.5"
-                      style={{ background: team.color }}
+                      style={{
+                        background: airlineColorFor({
+                          colorId: team.airlineColorId as AirlineColorId | undefined,
+                          fallbackKey: team.id,
+                        }).hex,
+                      }}
                     />
                     <span className="text-ink-2 truncate">{team.name}</span>
                   </td>
