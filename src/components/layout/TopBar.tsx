@@ -13,7 +13,7 @@ import { ChatPanel } from "@/components/game/ChatPanel";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { scenariosForQuarter } from "@/data/scenarios";
 import { getTotalRounds } from "@/lib/format";
-import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash, MessageCircle } from "lucide-react";
+import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash, MessageCircle, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { airlineColorFor } from "@/lib/games/airline-colors";
@@ -311,6 +311,13 @@ function CloseQuarterButton() {
   // every human has flipped ready. Solo + facilitated keep the
   // existing instant-close flow.
   const sessionMode = useGame((s) => s.session?.mode ?? null);
+  // When the session has board decisions disabled (self-guided cohorts
+  // that opt out of scenarios), the close-quarter pre-flight should
+  // not include the decisions row. Defaults to true for legacy saves
+  // and solo runs that didn't set the flag explicitly.
+  const boardDecisionsEnabled = useGame(
+    (s) => s.session?.boardDecisionsEnabled ?? true,
+  );
   const humanCount = useGame(
     (s) => s.teams.filter((t) => t.controlledBy === "human").length,
   );
@@ -334,6 +341,14 @@ function CloseQuarterButton() {
   // player sees decisions / dormant routes / cash risk / losing
   // routes / pending auctions all in one frame before committing.
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Loading-overlay state for the moment between clicking "Close
+  // quarter →" and the digest modal appearing. closeQuarter is a
+  // synchronous engine sim that can take 1-3 seconds for an 8-team
+  // cohort; without a paint-yield in between, the user sees a frozen
+  // page. We yield twice with requestAnimationFrame so React paints
+  // `pendingClose=true` (overlay visible) BEFORE we kick off the
+  // heavy compute, then drop the overlay once the digest opens.
+  const [pendingClose, setPendingClose] = useState(false);
 
   if (!player) return null;
   // activeTeamId fallback already handled above; just satisfy TS
@@ -373,16 +388,25 @@ function CloseQuarterButton() {
     cta?: string;
   };
   const checks: Check[] = [
-    {
-      id: "decisions",
-      label: pending.length === 0 ? "All board decisions resolved" : `${pending.length} board decision${pending.length === 1 ? "" : "s"} pending`,
-      detail: pending.length === 0
-        ? "Every scenario this quarter has been answered."
-        : "Unanswered scenarios auto-submit to a sensible default at close.",
-      status: pending.length === 0 ? "ok" : "warn",
-      panel: "decisions",
-      cta: "Open Decisions",
-    },
+    // Decisions row — only relevant when the session has board
+    // decisions enabled. Self-guided cohorts that opted out should
+    // never see this row mentioned (it's confusing to surface a
+    // "decisions resolved" check when the mode says decisions
+    // don't exist for this game).
+    ...(boardDecisionsEnabled
+      ? [
+          {
+            id: "decisions",
+            label: pending.length === 0 ? "All board decisions resolved" : `${pending.length} board decision${pending.length === 1 ? "" : "s"} pending`,
+            detail: pending.length === 0
+              ? "Every scenario this quarter has been answered."
+              : "Unanswered scenarios auto-submit to a sensible default at close.",
+            status: (pending.length === 0 ? "ok" : "warn") as CheckStatus,
+            panel: "decisions" as import("@/store/ui").PanelId,
+            cta: "Open Decisions",
+          },
+        ]
+      : []),
     {
       id: "dormant",
       label: dormantRoutes.length === 0
@@ -564,7 +588,17 @@ function CloseQuarterButton() {
                 // closeQuarter when every human team is ready.
                 setActiveTeamReady(true);
               } else {
-                closeQuarter();
+                // Show loading overlay, yield twice so React commits
+                // the paint, then run the heavy synchronous compute.
+                // After closeQuarter the digest modal opens; clear
+                // the overlay so it doesn't double-cover the digest.
+                setPendingClose(true);
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    closeQuarter();
+                    setPendingClose(false);
+                  });
+                });
               }
             }}
           >
@@ -574,7 +608,36 @@ function CloseQuarterButton() {
           </Button>
         </ModalFooter>
       </Modal>
+      {pendingClose && <QuarterCloseLoadingOverlay />}
     </>
+  );
+}
+
+/** Branded loading overlay shown while the engine sim runs between
+ *  the pre-flight modal closing and the quarter-close digest opening.
+ *  Fixed-position so it sits above the canvas without competing for
+ *  the dialog top-layer (which the digest modal claims). */
+function QuarterCloseLoadingOverlay() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label="Closing quarter…"
+      className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-slate-950/40 backdrop-blur-[2px] motion-reduce:backdrop-blur-none"
+    >
+      <div className="rounded-2xl bg-surface px-8 py-6 shadow-[var(--shadow-4)] flex flex-col items-center gap-3 max-w-[min(360px,calc(100vw-2rem))] text-center">
+        <Loader2 className="w-6 h-6 text-accent animate-spin" aria-hidden />
+        <div>
+          <div className="text-[0.9375rem] font-semibold text-ink">
+            Closing the quarter
+          </div>
+          <p className="text-[0.75rem] text-ink-2 mt-0.5 leading-snug">
+            Running the engine across every airline. The digest opens
+            in a moment.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
