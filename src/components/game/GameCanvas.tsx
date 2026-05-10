@@ -29,7 +29,6 @@ import { AdminPanel } from "@/components/panels/AdminPanel";
 import { RouteSetupModal } from "@/components/game/RouteSetupModal";
 import { AirportDetailModal } from "@/components/game/AirportDetailModal";
 import { RouteLaunchBar } from "@/components/game/RouteLaunchBar";
-import { MapCommandHud } from "@/components/game/MapCommandHud";
 import { QuarterTimerDriver } from "@/components/game/QuarterTimer";
 import { Toaster } from "@/components/game/Toaster";
 import { useShallow } from "zustand/react/shallow";
@@ -445,21 +444,6 @@ function CanvasInner() {
             </button>
           )}
         </div>
-      )}
-
-      {/* Bottom-right command HUD — scaffolds the route-launch flow and
-          tells the player exactly what to do at each step. Hidden for
-          observers since they cannot create routes. */}
-      {!isObserver && canvasPlayer && (
-        <MapCommandHud
-          origin={origin}
-          dest={dest}
-          hubCode={canvasPlayer.hubCode}
-          activeRouteCount={
-            canvasPlayer.routes.filter((r) => r.status !== "closed").length
-          }
-          compact={!!currentPanel}
-        />
       )}
 
       {/* Floating route launch bar — hidden for observers. */}
