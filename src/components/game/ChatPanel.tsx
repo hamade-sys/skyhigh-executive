@@ -255,6 +255,16 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
     }
   }
 
+  // Body scroll lock while the panel is open — same pattern HelpModal
+  // uses. Without this, scrolling inside the message list could leak
+  // through to the map / canvas underneath, which feels glitchy.
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
   if (!open) return null;
   if (!sessionGameId) return null;
 
@@ -302,8 +312,21 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
           className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-2"
         >
           {messages.length === 0 ? (
-            <div className="text-center text-[0.8125rem] text-ink-muted py-12">
-              No messages yet — say hi to your fellow airlines.
+            // Empty-state placeholder — centered in the message column
+            // with an icon so the panel doesn't read as a blank box. The
+            // earlier flat text-only version blended into the white
+            // surface and looked like a layout bug.
+            <div className="h-full flex flex-col items-center justify-center text-center px-6">
+              <div className="w-12 h-12 rounded-full bg-[var(--accent-soft)] flex items-center justify-center mb-3">
+                <MessageCircle size={20} className="text-accent" aria-hidden />
+              </div>
+              <p className="text-[0.875rem] font-semibold text-ink mb-1">
+                No messages yet
+              </p>
+              <p className="text-[0.75rem] text-ink-muted leading-relaxed max-w-[14rem]">
+                Say hi to your fellow airlines, share a sneaky fare,
+                or ask the room how their Q1 went.
+              </p>
             </div>
           ) : (
             messages.map((m) => (
