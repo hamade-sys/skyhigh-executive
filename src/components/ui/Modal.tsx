@@ -176,32 +176,36 @@ export function Modal({
     <dialog
       ref={dialogRef}
       aria-label={ariaLabel}
+      // IMPORTANT: do NOT put `flex`, `grid`, or any other display class
+      // directly on <dialog>. Tailwind display utilities override the
+      // browser's built-in `display:none` for closed dialogs, which makes
+      // ALL modals visible in the DOM from page load regardless of their
+      // `open` prop. Layout (flex-col, overflow, max-height) lives on the
+      // inner wrapper div below so the dialog element stays display:block
+      // when open and display:none when closed (browser default).
       className={cn(
         "m-auto p-0 rounded-xl bg-surface text-ink shadow-[var(--shadow-4)]",
         "backdrop:bg-[rgba(16,37,63,0.32)] backdrop:backdrop-blur-sm",
-        // Width: cap to viewport minus 2rem of breathing room.
         "max-w-[calc(100vw-2rem)] w-[32rem]",
-        // Height: cap to dynamic viewport height (handles mobile
-        // browser chrome resize correctly), with a hard fallback to
-        // the static vh for older browsers. flex flex-col lets
-        // header + footer pin while body scrolls inside. Inline
-        // style as defense — `<dialog>` user-agent stylesheets
-        // sometimes override Tailwind tokens with !important rules,
-        // so an inline maxHeight is the belt-and-suspenders way to
-        // ensure the dialog can't grow past the viewport (which is
-        // what was clipping HelpModal headers earlier).
-        "max-h-[calc(100dvh-2rem)] max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden",
-        className,
       )}
-      style={{
-        maxHeight: "calc(100dvh - 2rem)",
-      }}
       onClick={(e) => {
         // Click on backdrop (dialog element itself, not children) closes
         if (e.target === dialogRef.current) onClose();
       }}
     >
-      {children}
+      {/* Inner wrapper carries the flex layout and height constraints.
+          Keeping these OFF the <dialog> element is what prevents the
+          Tailwind flex class from breaking closed-dialog visibility. */}
+      <div
+        className={cn(
+          "flex flex-col overflow-hidden",
+          "max-h-[calc(100dvh-2rem)]",
+          className,
+        )}
+        style={{ maxHeight: "calc(100dvh - 2rem)" }}
+      >
+        {children}
+      </div>
     </dialog>
   );
 }
