@@ -6,21 +6,30 @@
  * that pool. Bigger hubs cost more upfront but seed brand/route
  * advantages later. ALL playable cities (T1–T4) are pickable.
  *
- * Premium hubs ($300M):  London (LHR), Paris (CDG), New York (JFK),
+ * Compressed price curve (workshop feedback May 2026): highest hub
+ * is $100M, lowest is $20M, in $20M steps. Earlier the spread was
+ * $300M → $25M which left Premium-hub players with ~$50M operating
+ * cash and made the upfront fee dominate strategic differentiation.
+ * The structural advantages of a high-tier hub (slot pool, demand
+ * bonus, airport ownership economics — see `src/lib/slots.ts` and
+ * `src/lib/airport-ownership.ts`) still strongly reward the bigger
+ * pick; the upfront fee no longer needs to do that job alone.
+ *
+ * Premium hubs ($100M):  London (LHR), Paris (CDG), New York (JFK),
  *                        San Francisco (SFO), Dubai (DXB).
- * Tier 1 ($200M):        Other tier-1 hubs (HKG, LAX, ORD, SIN,
+ * Tier 1  ($80M):        Other tier-1 hubs (HKG, LAX, ORD, SIN,
  *                        FRA, AMS, NRT — anything tier 1 not in the
  *                        premium list).
- * Tier 2 ($100M):        Tier-2 cities.
- * Tier 3 ($50M):         Tier-3 cities.
- * Tier 4 ($25M):         Smallest tier — niche / hometown bet.
+ * Tier 2  ($60M):        Tier-2 cities.
+ * Tier 3  ($40M):        Tier-3 cities.
+ * Tier 4  ($20M):        Smallest tier — niche / hometown bet.
  *
  * Effective starting cash = 150M base + 200M onboarding − hubCost.
- *   Premium hub:  $50M starting cash · best amplifier
- *   T1:          $150M starting cash
- *   T2:          $250M starting cash
- *   T3:          $300M starting cash
- *   T4:          $325M starting cash · cheapest, smallest market
+ *   Premium hub:  $250M starting cash · best amplifier
+ *   T1:           $270M starting cash
+ *   T2:           $290M starting cash
+ *   T3:           $310M starting cash
+ *   T4:           $330M starting cash · cheapest, smallest market
  */
 
 import type { City, CityTier } from "@/types/game";
@@ -39,13 +48,13 @@ export const ONBOARDING_TOTAL_BUDGET_USD =
   ONBOARDING_BASE_CASH_USD + ONBOARDING_HUB_BUDGET_USD;
 
 export function hubPriceUsd(city: City): number {
-  if (PREMIUM_HUB_CODES.has(city.code)) return 300_000_000;
+  if (PREMIUM_HUB_CODES.has(city.code)) return 100_000_000;
   switch (city.tier as CityTier) {
-    case 1: return 200_000_000;
-    case 2: return 100_000_000;
-    case 3: return 50_000_000;
-    case 4: return 25_000_000;
-    default: return 25_000_000;
+    case 1: return 80_000_000;
+    case 2: return 60_000_000;
+    case 3: return 40_000_000;
+    case 4: return 20_000_000;
+    default: return 20_000_000;
   }
 }
 
