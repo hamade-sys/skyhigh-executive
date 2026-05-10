@@ -94,6 +94,15 @@ export function Modal({
         }
       }
       openModalCloseCallbacks.add(myCloseHandle);
+      // Cross-component mutex broadcast — non-dialog overlays
+      // (HelpModal slide-panel, ChatPanel, etc.) listen for this
+      // event and close themselves so help-panel + close-quarter
+      // dialog can't show simultaneously. Dialog ↔ dialog mutex
+      // is already handled by the registry walk above; this event
+      // covers dialog → non-dialog.
+      if (!stack && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("ican:overlay-opened"));
+      }
       // Capture the element that had focus right before opening.
       const active = typeof document !== "undefined" ? document.activeElement : null;
       triggerRef.current =

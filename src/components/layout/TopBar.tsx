@@ -227,11 +227,24 @@ export function TopBar() {
         <NotificationCenter />
         <button
           type="button"
-          // The Modal primitive (src/components/ui/Modal.tsx) makes
-          // top-level modals mutually exclusive by default — opening
-          // help automatically tells any other open modal to close
-          // itself. So no DOM-level coordination is needed here.
-          onClick={() => setHelpOpen(true)}
+          // HelpModal is a slide-in side panel (NOT a native dialog).
+          // Native dialog stacking proved fragile — see HelpModal.tsx
+          // header comment. To prevent any open `<dialog>` from
+          // stacking with the help panel, we DOM-close every
+          // `dialog[open]` in the same frame as we open help. The
+          // Modal primitive's React-state mutex handles dialog-on-
+          // dialog mutual exclusion; the panel-on-dialog direction is
+          // handled here.
+          onClick={() => {
+            if (typeof document !== "undefined") {
+              document
+                .querySelectorAll<HTMLDialogElement>("dialog[open]")
+                .forEach((d) => {
+                  try { d.close(); } catch { /* already closed */ }
+                });
+            }
+            setHelpOpen(true);
+          }}
           aria-label="Help &amp; reference"
           aria-haspopup="dialog"
           aria-expanded={helpOpen}
