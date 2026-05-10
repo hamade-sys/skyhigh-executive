@@ -16,7 +16,7 @@ import { getTotalRounds } from "@/lib/format";
 import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash, MessageCircle, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
-import { airlineColorFor } from "@/lib/games/airline-colors";
+import { airlineColorFor, type AirlineColorId } from "@/lib/games/airline-colors";
 
 export function TopBar() {
   // Fine-grained subscriptions so unrelated store writes don't re-render this.
@@ -724,13 +724,30 @@ function AirlineSwitcher({
                   : "border-line hover:bg-surface-hover",
               )}
             >
-              <span
-                aria-hidden="true"
-                className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shrink-0"
-                style={{ background: t.color }}
-              >
-                {t.code}
-              </span>
+              {(() => {
+                // Use the airline-palette color (the one the player
+                // picked at onboarding / lobby) instead of the legacy
+                // hex stored on team.color, so chips throughout the
+                // app render with the player's chosen brand identity.
+                // textOn carries the contrast-aware foreground so the
+                // 3-letter code stays readable on light pastels.
+                const ac = airlineColorFor({
+                  colorId: t.airlineColorId as AirlineColorId | undefined,
+                  fallbackKey: t.id,
+                });
+                return (
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold shrink-0"
+                    style={{
+                      background: ac.hex,
+                      color: ac.textOn === "white" ? "#ffffff" : "#0f172a",
+                    }}
+                  >
+                    {t.code}
+                  </span>
+                );
+              })()}
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-ink text-[0.875rem] truncate">
                   {t.name}

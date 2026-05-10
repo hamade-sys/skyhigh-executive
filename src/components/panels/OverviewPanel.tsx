@@ -8,6 +8,7 @@ import { scenariosForQuarter } from "@/data/scenarios";
 import { computeAirlineValue, fleetCount, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { DOCTRINES, DOCTRINE_BY_ID, DOCTRINE_ICON_TINT } from "@/data/doctrines";
 import { CITIES_BY_CODE } from "@/data/cities";
+import { airlineColorFor, type AirlineColorId } from "@/lib/games/airline-colors";
 import { useUi, type PanelId } from "@/store/ui";
 import { SecondaryHubModal } from "@/components/game/SecondaryHubModal";
 import { HubInvestmentsModal } from "@/components/game/HubInvestmentsModal";
@@ -182,12 +183,24 @@ export function OverviewPanel() {
           Airline
         </div>
         <div className="flex items-center gap-3">
-          <span
-            className="inline-block w-9 h-9 rounded-md flex items-center justify-center font-mono text-[0.75rem] font-semibold text-primary-fg"
-            style={{ background: player.color }}
-          >
-            {player.code}
-          </span>
+          {(() => {
+            // Player's chosen brand color, with contrast-aware text.
+            const ac = airlineColorFor({
+              colorId: player.airlineColorId as AirlineColorId | undefined,
+              fallbackKey: player.id,
+            });
+            return (
+              <span
+                className="inline-block w-9 h-9 rounded-md flex items-center justify-center font-mono text-[0.75rem] font-semibold"
+                style={{
+                  background: ac.hex,
+                  color: ac.textOn === "white" ? "#ffffff" : "#0f172a",
+                }}
+              >
+                {player.code}
+              </span>
+            );
+          })()}
           <div>
             <div className="font-display text-[1.25rem] text-ink leading-tight">
               {player.name}
@@ -748,9 +761,23 @@ function NetworkOverviewSection({
 
         <div className="border-t border-line p-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <NetworkPill tone="primary" style={{ background: player.color }}>
-              <MapPin size={11} /> HUB · {player.hubCode}
-            </NetworkPill>
+            {(() => {
+              const ac = airlineColorFor({
+                colorId: player.airlineColorId as AirlineColorId | undefined,
+                fallbackKey: player.id,
+              });
+              return (
+                <NetworkPill
+                  tone="primary"
+                  style={{
+                    background: ac.hex,
+                    color: ac.textOn === "white" ? "#ffffff" : "#0f172a",
+                  }}
+                >
+                  <MapPin size={11} /> HUB · {player.hubCode}
+                </NetworkPill>
+              );
+            })()}
             {player.secondaryHubCodes.map((code) => (
               <NetworkPill key={code}>
                 <MapPin size={11} /> HUB 2 · {code}

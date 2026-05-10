@@ -16,6 +16,10 @@ import { Info, X } from "lucide-react";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import type { City, Team, Route } from "@/types/game";
 import { cn } from "@/lib/cn";
+import {
+  airlineColorFor,
+  type AirlineColorId,
+} from "@/lib/games/airline-colors";
 
 // Map-legend disclosure — auto-collapses to a tiny "Legend" pill once
 // the player has advanced past the first quarter (they've seen the
@@ -467,6 +471,15 @@ export function WorldMap({
   const [hoverCode, setHoverCode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Resolve the team's airline-palette color once so hub pills, route
+  // ribbons, and the legend swatch all draw from the same source.
+  // Falls back to a deterministic hash from team.id for legacy saves
+  // that pre-date the Phase 9 color-id assignment.
+  const teamColor = airlineColorFor({
+    colorId: team.airlineColorId as AirlineColorId | undefined,
+    fallbackKey: team.id,
+  }).hex;
+
   // Legend disclosure state — start visible only on Q1, then respect
   // a stored "I dismissed this" flag. Players who clicked the X stay
   // collapsed across reloads. New games (Q1) always open expanded so
@@ -886,7 +899,7 @@ export function WorldMap({
                   {isHub && (
                     <span
                       className="sf-hub-pill"
-                      style={{ background: team.color }}
+                      style={{ background: teamColor }}
                     >
                       HUB
                     </span>
@@ -896,8 +909,8 @@ export function WorldMap({
                       className="sf-hub-pill"
                       style={{
                         background: "var(--bg)",
-                        color: team.color,
-                        border: `1px dashed ${team.color}`,
+                        color: teamColor,
+                        border: `1px dashed ${teamColor}`,
                       }}
                     >
                       HUB·2
@@ -953,11 +966,11 @@ export function WorldMap({
       {legendOpen && (
       <div className="absolute bottom-3 left-3 z-[400] flex items-center gap-3 rounded-md border border-line bg-surface/90 backdrop-blur pl-3 pr-1.5 py-2 text-[0.75rem] flex-wrap max-w-[calc(100vw-2rem)]">
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full border-2 border-white" style={{ background: team.color }} />
+          <span className="w-3 h-3 rounded-full border-2 border-white" style={{ background: teamColor }} />
           <span className="text-ink font-medium">Hub</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ background: team.color }} />
+          <span className="w-2.5 h-2.5 rounded-full" style={{ background: teamColor }} />
           <span className="text-ink-2">Network</span>
         </span>
         <span className="flex items-center gap-1.5">

@@ -9,6 +9,20 @@ import { CITIES } from "@/data/cities";
 import { runQuarterClose } from "@/lib/engine";
 import { toast } from "@/store/toasts";
 import { cn } from "@/lib/cn";
+import {
+  airlineColorFor,
+  type AirlineColorId,
+} from "@/lib/games/airline-colors";
+
+/** Resolve a team's brand color from the airline palette. Used by
+ *  every team-swatch render in this panel so the colors match the
+ *  player's pick instead of legacy seed hexes. */
+function teamSwatch(t: { id: string; airlineColorId?: string | null }): string {
+  return airlineColorFor({
+    colorId: t.airlineColorId as AirlineColorId | undefined,
+    fallbackKey: t.id,
+  }).hex;
+}
 
 export function AdminPanel() {
   const s = useGame();
@@ -259,7 +273,7 @@ export function AdminPanel() {
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-[0.625rem] text-primary-fg"
-                  style={{ background: t.color }}
+                  style={{ background: teamSwatch(t) }}
                 >
                   {t.code}
                 </span>
@@ -428,7 +442,7 @@ export function AdminPanel() {
                   >
                     <span
                       className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-[0.625rem] text-primary-fg shrink-0"
-                      style={{ background: t.color }}
+                      style={{ background: teamSwatch(t) }}
                     >
                       {t.code}
                     </span>
@@ -912,7 +926,7 @@ function FullCounterOfferAdmin() {
             >
               <span
                 className="inline-flex w-5 h-5 rounded items-center justify-center font-mono text-[0.5625rem] font-semibold text-primary-fg shrink-0"
-                style={{ background: t.color }}
+                style={{ background: teamSwatch(t) }}
                 aria-hidden="true"
               >
                 {t.code}
@@ -997,7 +1011,7 @@ function StaffSurchargeAdmin() {
             >
               <span
                 className="inline-flex w-5 h-5 rounded items-center justify-center font-mono text-[0.5625rem] font-semibold text-primary-fg shrink-0"
-                style={{ background: t.color }}
+                style={{ background: teamSwatch(t) }}
                 aria-hidden="true"
               >
                 {t.code}

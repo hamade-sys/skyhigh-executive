@@ -62,6 +62,17 @@ export function HelpModal({ open, onClose }: Props) {
     return () => window.removeEventListener("ican:overlay-opened", handler);
   }, [open, onClose]);
 
+  // Body scroll lock while the panel is open. The panel itself owns
+  // its own scroll region (the body section); without a body lock,
+  // scrolling the wheel inside the panel could "leak" through to the
+  // map / canvas underneath, which feels glitchy. Restored on close.
+  useEffect(() => {
+    if (!open || typeof document === "undefined") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
   if (!open) return null;
 
   return (
