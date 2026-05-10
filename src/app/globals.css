@@ -15,6 +15,19 @@
 
 @import "tailwindcss";
 
+/* ── Dialog visibility fix ─────────────────────────────────────────────────
+   Tailwind's `flex` utility class (applied to <dialog> in Modal.tsx for
+   layout) sets `display: flex`, which overrides the browser's built-in
+   `display: none` for closed <dialog> elements. The result: every Modal
+   in the DOM is visually rendered whether or not it has been opened via
+   .showModal(), causing all modals to appear on page load.
+   This rule restores the browser's correct default: closed dialogs are
+   always hidden, regardless of any Tailwind display class on them.
+   ─────────────────────────────────────────────────────────────────────── */
+dialog:not([open]) {
+  display: none !important;
+}
+
 /* ───────────────────────────────────────────────────────────────
    :root — raw tokens. White surfaces, ICAN teal accent (#00C2CB),
    charcoal text scale. Brand teal mirrors the marketing site so
