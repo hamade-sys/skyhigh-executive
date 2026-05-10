@@ -73,7 +73,18 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-white">
+    // Fixed-position overlay so the underlying GameCanvas can mount
+    // and warm up while the player reads the lineup. When the user
+    // clicks "Begin simulation", revealDismissed flips to true and
+    // this overlay unmounts — the canvas underneath is already
+    // rendered, so the transition feels instant instead of triggering
+    // a fresh canvas mount.
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Cohort starting grid"
+      className="fixed inset-0 z-[70] overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-white"
+    >
       <div className="max-w-5xl mx-auto px-6 py-10 md:py-14">
         {/* Header */}
         <div className="text-center mb-10">

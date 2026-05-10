@@ -80,19 +80,47 @@ export default function GamePlayPage({
   const lastVersionRef = useRef<number>(-1);
 
   // Step 1 — fetch the server snapshot.
+  // Timing instrumentation: every phase logs to console with a tag so
+  // a slow-load complaint can be diagnosed by sharing the console
+  // output. Total wait = fetchMs + parseMs + hydrateMs + the gap until
+  // React re-renders. Logged at info level so they're visible without
+  // turning on verbose mode.
   useEffect(() => {
     let cancelled = false;
+    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     (async () => {
       try {
+        const fetchStart = typeof performance !== "undefined" ? performance.now() : Date.now();
         const res = await fetch(
           `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
           { cache: "no-store" },
         );
+        const fetchEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
+        const parseStart = fetchEnd;
         const json = await res.json();
+        const parseEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
         if (cancelled) return;
         if (!res.ok) {
           setError(json.error ?? "Game not found.");
         } else {
+          // Approximate state-payload size for the diagnostic log.
+          // JSON.stringify on the parsed object is the closest we can
+          // get to byte size from the client; we only do it once.
+          let stateBytes = 0;
+          try {
+            stateBytes = JSON.stringify(json.state?.state_json ?? {}).length;
+          } catch { /* ignore — bigint keys etc. */ }
+          // eslint-disable-next-line no-console
+          console.info(
+            "[play] load timing",
+            {
+              fetchMs: Math.round(fetchEnd - fetchStart),
+              parseMs: Math.round(parseEnd - parseStart),
+              totalMs: Math.round(parseEnd - t0),
+              stateBytes,
+              teams: Array.isArray(json.state?.state_json?.teams) ? json.state.state_json.teams.length : 0,
+            },
+          );
           setData(json);
         }
       } catch (e) {
@@ -132,6 +160,7 @@ export default function GamePlayPage({
       setError("Game state missing on the server. Try refreshing in a moment.");
       return;
     }
+    const hydrateStart = typeof performance !== "undefined" ? performance.now() : Date.now();
     const result = hydrateFromServerState({
       stateJson: data.state.state_json,
       mySessionId: sessionId,
@@ -140,6 +169,11 @@ export default function GamePlayPage({
       // (which diverges after the start/seed writes) is used and every GM
       // push gets a 409 "stale write" on the very first try.
       dbVersion: data.state.version,
+    });
+    const hydrateEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
+    // eslint-disable-next-line no-console
+    console.info("[play] hydrate timing", {
+      hydrateMs: Math.round(hydrateEnd - hydrateStart),
     });
     if (!result.ok) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -334,27 +368,18 @@ export default function GamePlayPage({
     );
   }
 
-  // Cohort reveal — first time the player lands on /play for this game,
-  // show the starting-grid lineup with each airline's brand color, hub,
-  // and doctrine. After they click "Begin simulation", we set the
-  // revealDismissed flag (and persist via sessionStorage so a browser
-  // reload doesn't show it again) and proceed to the canvas. Only fires
-  // when teams are actually loaded (Q1 is the natural trigger but the
-  // teamsCount > 0 guard also handles late-joiners gracefully).
-  if (!revealDismissed && teams.length > 0 && phase === "playing") {
-    return (
-      <CohortReveal
-        gameId={gameId}
-        teams={teams}
-        onContinue={() => setRevealDismissed(true)}
-      />
-    );
-  }
-
-  // Full game canvas — exact same shell solo runs use, with the
-  // multiplayer-aware activeTeamId bound during hydrate.
+  // Cohort reveal + GameCanvas — the canvas ALWAYS mounts after
+  // hydrate completes. The cohort reveal renders as a fixed-position
+  // overlay ON TOP, so the heavy canvas + its child trees (map,
+  // panels, TopBar, NavRail) start warming up in parallel with the
+  // user reading the lineup. When the user clicks "Begin simulation"
+  // the overlay unmounts and the canvas — already painted underneath
+  // — is instantly interactive. Earlier shape returned `<CohortReveal />`
+  // standalone, which meant the canvas didn't begin mounting until
+  // dismissal: classic load-then-load lag.
+  const showReveal = !revealDismissed && teams.length > 0 && phase === "playing";
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex-1 min-h-0 flex flex-col relative">
       {/* Game Master observer banner */}
       {isFacilitator && (
         <div className="bg-violet-900 text-violet-100 text-xs font-medium px-4 py-1.5 flex items-center gap-2 shrink-0">
@@ -368,6 +393,13 @@ export default function GamePlayPage({
           GameCanvas), which produced a duplicated header strip and
           off-by-h-14 map/panel offsets. */}
       <GameCanvas />
+      {showReveal && (
+        <CohortReveal
+          gameId={gameId}
+          teams={teams}
+          onContinue={() => setRevealDismissed(true)}
+        />
+      )}
     </div>
   );
 }
