@@ -148,6 +148,30 @@ export function Modal({
     };
   }, [onClose]);
 
+  // Belt-and-suspenders-and-cape: on every render of an open non-stack
+  // Modal, close any other open <dialog>. This is the third defensive
+  // layer (the first two — open-time DOM close and React-state callback
+  // walk — are above). Three previous attempts to coordinate native
+  // dialog stacking didn't actually fix the user's experience; this
+  // unconditional per-render sweep guarantees the cohort can never
+  // see two non-stack <dialog>s at once. Idempotent — no-op when
+  // there's only our dialog or none. The runtime cost is one DOM
+  // querySelectorAll per render of an open Modal, which is dwarfed
+  // by every other render path in the canvas.
+  useEffect(() => {
+    if (!open || stack) return;
+    if (typeof document === "undefined") return;
+    const dlg = dialogRef.current;
+    if (!dlg || !dlg.open) return;
+    document
+      .querySelectorAll<HTMLDialogElement>("dialog[open]")
+      .forEach((d) => {
+        if (d !== dlg) {
+          try { d.close(); } catch { /* already closed — fine */ }
+        }
+      });
+  });
+
   return (
     <dialog
       ref={dialogRef}
