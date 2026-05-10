@@ -34,6 +34,7 @@ import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { GameCanvas } from "@/components/game/GameCanvas";
 import { useGameRealtime } from "@/lib/games/use-game-realtime";
 import { useHeartbeat } from "@/lib/games/use-heartbeat";
+import { CohortReveal, hasSeenCohortReveal } from "@/components/game/CohortReveal";
 // TopBar import removed — GameCanvas mounts it internally (Phase 4.7).
 
 interface LoadResponse {
@@ -54,6 +55,15 @@ export default function GamePlayPage({
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
   const phase = useGame((s) => s.phase);
   const teamsCount = useGame((s) => s.teams.length);
+  const teams = useGame((s) => s.teams);
+  // Cohort reveal — shown once per game per browser, immediately after
+  // hydration completes. The lazy useState initialiser reads
+  // sessionStorage exactly once at first mount and skips any
+  // synchronous setState-in-effect dance that would trip the
+  // react-hooks/set-state-in-effect rule.
+  const [revealDismissed, setRevealDismissed] = useState<boolean>(
+    () => hasSeenCohortReveal(gameId),
+  );
   const [data, setData] = useState<LoadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -321,6 +331,23 @@ export default function GamePlayPage({
           </p>
         )}
       </CenteredMessage>
+    );
+  }
+
+  // Cohort reveal — first time the player lands on /play for this game,
+  // show the starting-grid lineup with each airline's brand color, hub,
+  // and doctrine. After they click "Begin simulation", we set the
+  // revealDismissed flag (and persist via sessionStorage so a browser
+  // reload doesn't show it again) and proceed to the canvas. Only fires
+  // when teams are actually loaded (Q1 is the natural trigger but the
+  // teamsCount > 0 guard also handles late-joiners gracefully).
+  if (!revealDismissed && teams.length > 0 && phase === "playing") {
+    return (
+      <CohortReveal
+        gameId={gameId}
+        teams={teams}
+        onContinue={() => setRevealDismissed(true)}
+      />
     );
   }
 
