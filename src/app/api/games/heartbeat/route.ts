@@ -19,14 +19,17 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
-import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
+// High-frequency endpoint (every 30s per active player). Use the
+// cookie-decode auth so we don't spend 100ms per heartbeat hitting
+// GoTrue. Cheaper at scale; see server-auth.ts for security caveats.
+import { getSessionUserId } from "@/lib/supabase/server-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = await getAuthenticatedUserId();
+    const userId = await getSessionUserId();
     if (!userId) {
       // Anonymous heartbeat is a no-op — the row doesn't exist for
       // them anyway. Return 200 silently so the client's interval

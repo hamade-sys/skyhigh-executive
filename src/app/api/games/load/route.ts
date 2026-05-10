@@ -23,7 +23,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { loadGame } from "@/lib/games/api";
-import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
+// Read paths use getSessionUserId (cookie-decode, ~0ms) instead of
+// getAuthenticatedUserId (network roundtrip to GoTrue, ~50-200ms).
+// Mutations stay on the strong-revalidation variant. See server-auth
+// docstrings for the security trade-off.
+import { getSessionUserId } from "@/lib/supabase/server-auth";
 import type { GameMemberRow } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -75,7 +79,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "gameId required" }, { status: 400 });
     }
 
-    const userId = await getAuthenticatedUserId();
+    const userId = await getSessionUserId();
     const result = await loadGame(gameId);
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 404 });
