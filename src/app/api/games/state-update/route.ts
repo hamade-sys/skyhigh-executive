@@ -35,6 +35,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   assertMembership,
+  assertHostOrFacilitator,
   submitStateMutation,
 } from "@/lib/games/api";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
@@ -99,11 +100,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify membership before any write. assertMembership checks
-    // game_members for (gameId, userId) — if no row, the caller is
-    // either not in this game or has been kicked.
+    // game_members for (gameId, userId) — if no row, fall back to
+    // assertHostOrFacilitator: the game creator's authenticated user.id
+    // may differ from the anonymous session_id stored in game_members
+    // (e.g. when the host created the game before OAuth sign-in). The
+    // host/facilitator check reads directly from the games table so it
+    // is safe and cannot be spoofed by the body payload.
+    let isFacilitator = false;
+    let memberTeamId: string | undefined;
     const membership = await assertMembership(gameId, userId);
     if (!membership.ok) {
-      return NextResponse.json({ error: membership.error }, { status: 403 });
+      const hostCheck = await assertHostOrFacilitator(gameId, userId);
+      if (!hostCheck.ok) {
+        return NextResponse.json({ error: membership.error }, { status: 403 });
+      }
+      // Host/facilitator acting outside a game_members row — treat as
+      // facilitator so they can advance bot rounds and apply admin writes.
+      isFacilitator = true;
+    } else {
+      isFacilitator = membership.data.role === "facilitator";
+      memberTeamId = membership.data.team_id ?? undefined;
     }
 
     // Verify per-team ownership of any team mutations against the
@@ -121,7 +137,6 @@ export async function POST(req: NextRequest) {
     // "bot" and bypass via the bot lane. Both bypasses are now closed
     // by ignoring the submitted ownership fields entirely and reading
     // them only from the stored game_state row.
-    const isFacilitator = membership.data.role === "facilitator";
     if (!isFacilitator) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supa = getServerClient() as any;
@@ -193,7 +208,7 @@ export async function POST(req: NextRequest) {
       // Identity is server-derived — pass the authenticated userId
       // so the audit log records the real actor, not a body param.
       actorSessionId: userId,
-      actorTeamId: membership.data.team_id ?? undefined,
+      actorTeamId: memberTeamId,
       eventType,
       eventPayload,
     });

@@ -5752,6 +5752,10 @@ export const useGame = create<GameStore>()(
       // ── Quarter snapshots (V1.5: rollback + reconnect resync) ──
       saveQuarterSnapshot: () => {
         const s = get();
+        // Snapshots are solo-play only (rewind/reconnect). In a
+        // multiplayer session the server state is the source of truth;
+        // writing 40 × ~200 KB blobs would exhaust localStorage quota.
+        if (s.isMultiplayerSession) return;
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         const ctx = player
           ? `${s.teams.length} team${s.teams.length === 1 ? "" : "s"} · ${player.code} ${fmtMoneyPlain(player.cashUsd)}`
