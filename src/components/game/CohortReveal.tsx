@@ -83,7 +83,7 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label="Cohort starting grid"
-      className="fixed inset-0 z-[70] overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-white"
+      className="fixed inset-0 z-[1300] overflow-y-auto bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-white"
     >
       <div className="max-w-5xl mx-auto px-6 py-10 md:py-14">
         {/* Header */}
