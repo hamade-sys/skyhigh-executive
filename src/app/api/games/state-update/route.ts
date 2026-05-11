@@ -178,7 +178,21 @@ export async function POST(req: NextRequest) {
     // "bot" and bypass via the bot lane. Both bypasses are now closed
     // by ignoring the submitted ownership fields entirely and reading
     // them only from the stored game_state row.
-    if (!isFacilitator) {
+    // Quarter-close simulation runs on one browser and produces post-simulation
+    // state for ALL teams (routes settle, cash updates, bot AI turns, etc.).
+    // That browser then pushes every team's new state in a single atomic write.
+    // Exempting this event from the per-team ownership check is safe because:
+    //   1. CAS (expectedVersion) serialises concurrent closes — only one push
+    //      per version lands; the loser 409s and re-syncs.
+    //   2. closeQuarter() has its own isClosing re-entrancy guard.
+    //   3. The simulation logic is read-only for other teams' strategic choices
+    //      (it only applies deterministic quarterly accounting, not decisions).
+    // Without this exemption, any human player's closeQuarter push is rejected
+    // with 403 because simulation necessarily changes the other player's team
+    // state (cash, routes, fleet status) which they don't "own".
+    const isQuarterClose = eventType === "game.quarterClosed";
+
+    if (!isFacilitator && !isQuarterClose) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supa = getServerClient() as any;
       const { data: storedRow, error: storedErr } = await supa

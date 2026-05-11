@@ -294,6 +294,8 @@ function LeaderboardButton() {
 
 function CloseQuarterButton() {
   const closeQuarter = useGame((s) => s.closeQuarter);
+  const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
+  const localSessionId = useGame((s) => s.localSessionId);
   const currentQuarter = useGame((s) => s.currentQuarter);
   // Phase 3: pull totalRounds from session for the scaled scenario
   // lookup below.
@@ -338,20 +340,93 @@ function CloseQuarterButton() {
   // activeTeamId fallback already handled above; just satisfy TS
   void activeTeamId;
 
-  // ── Countdown ticker ────────────────────────────────────────────────
-  // Ticks every second when a peer has requested a quarter close.
-  // When it reaches 0, we auto-close (same as clicking "Close Now").
-  const triggerClose = useCallback(() => {
-    setQuarterCloseRequest(null);
-    setCountdownSec(null);
+  // ── Shared pre-close helper: fetch fresh state → sync version → close ──
+  //
+  // WHY THIS EXISTS:
+  // closeQuarter() pushes the full post-simulation state via pushStateToServer.
+  // That push uses `serverStateVersion` as the CAS expectedVersion. Between
+  // the moment a player last hydrated and the moment they call closeQuarter(),
+  // at least one other DB write landed (the mark-ready/request-quarter-close
+  // that bumped the version). If we close with the stale version we get 409
+  // → pushStateToServer calls hydrateFromServerState → state reset → the
+  // digest modal disappears and the player is back at the old quarter.
+  //
+  // Fix: before running closeQuarter(), re-fetch the latest state and hydrate
+  // so serverStateVersion matches the DB. If the quarter already advanced
+  // (someone else closed first), skip the close entirely.
+  const syncAndClose = useCallback(async () => {
+    const quarterBeforeSync = currentQuarter;
     setPendingClose(true);
+
+    if (isMultiplayerSelfGuided && gameId && localSessionId) {
+      try {
+        const loadRes = await fetch(
+          `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
+          { cache: "no-store" },
+        );
+        if (loadRes.ok) {
+          const json = await loadRes.json();
+          if (json?.state?.state_json) {
+            hydrateFromServerState({
+              stateJson: json.state.state_json,
+              mySessionId: localSessionId,
+              dbVersion: typeof json.state.version === "number"
+                ? json.state.version
+                : undefined,
+            });
+          }
+          // If the quarter already advanced while we were fetching (another
+          // player closed first), skip the simulation — we'll get the new
+          // state from Realtime.
+          const freshQuarter = (json?.state?.state_json as { currentQuarter?: number } | null)
+            ?.currentQuarter ?? quarterBeforeSync;
+          if (freshQuarter > quarterBeforeSync) {
+            setPendingClose(false);
+            return;
+          }
+        }
+      } catch {
+        // Network error — proceed with whatever version we have; the CAS
+        // will catch a conflict and re-sync gracefully.
+      }
+    }
+
+    // Yield two animation frames so React paints the loading overlay
+    // before the heavy synchronous simulation starts.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         closeQuarter();
         setPendingClose(false);
       });
     });
-  }, [closeQuarter, setQuarterCloseRequest]);
+  }, [
+    gameId,
+    isMultiplayerSelfGuided,
+    localSessionId,
+    currentQuarter,
+    closeQuarter,
+    hydrateFromServerState,
+  ]);
+
+  // ── Countdown ticker ────────────────────────────────────────────────
+  // Ticks every second when a peer has requested a quarter close.
+  // When it reaches 0, we auto-close (same as clicking "Close Now").
+  const triggerClose = useCallback(() => {
+    setQuarterCloseRequest(null);
+    setCountdownSec(null);
+    // Mark ourselves ready first, then sync & close.
+    if (isMultiplayerSelfGuided && gameId) {
+      fetch("/api/games/mark-ready", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ gameId }),
+      }).catch(() => {/* non-fatal */}).finally(() => {
+        void syncAndClose();
+      });
+    } else {
+      void syncAndClose();
+    }
+  }, [gameId, isMultiplayerSelfGuided, syncAndClose, setQuarterCloseRequest]);
 
   useEffect(() => {
     if (!quarterCloseRequest || iRequested) return;
@@ -482,14 +557,8 @@ function CloseQuarterButton() {
   //   • returns allReady=true if everyone was already ready
   async function handleRequestClose() {
     if (!gameId) {
-      // Fallback: no gameId — just close locally (shouldn't happen in MP)
-      setPendingClose(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          closeQuarter();
-          setPendingClose(false);
-        });
-      });
+      // Solo fallback — close directly.
+      void syncAndClose();
       return;
     }
     setIRequested(true);
@@ -502,31 +571,25 @@ function CloseQuarterButton() {
       });
       if (!res.ok) {
         console.warn("[SkyForce] request-quarter-close failed", res.status);
-        // Still close locally so the player isn't stuck
-        setPendingClose(true);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => { closeQuarter(); setPendingClose(false); });
-        });
+        // Server error — fall back to direct close so the player isn't stuck.
+        void syncAndClose();
         return;
       }
       const { allReady } = await res.json() as { allReady: boolean; deadlineAt: string };
       if (allReady) {
-        // Everyone is ready — close immediately, no countdown needed.
-        setPendingClose(true);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => { closeQuarter(); setPendingClose(false); });
-        });
+        // Every human is ready — sync version from server then close
+        // immediately. syncAndClose re-fetches the authoritative state
+        // (which now includes our own ready-flag write that bumped the
+        // DB version) so closeQuarter's CAS push uses the correct version.
+        void syncAndClose();
       }
-      // If not allReady: other browser(s) still need to react.
-      // They get a 30s countdown via the broadcast; we wait for the
-      // Realtime "game.stateChanged" (quarterClosed) to hydrate our state.
-      // The requesting player sees the "Waiting for cohort..." indicator.
+      // If not allReady: the 30s countdown broadcast has been sent to peers.
+      // We stay in "Waiting for cohort…" until the peer closes or the timer
+      // expires on their end and they auto-close (which broadcasts the new
+      // quarter back to us via game.stateChanged).
     } catch {
       console.warn("[SkyForce] request-quarter-close network error");
-      setPendingClose(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => { closeQuarter(); setPendingClose(false); });
-      });
+      void syncAndClose();
     }
   }
 
@@ -542,47 +605,81 @@ function CloseQuarterButton() {
 
   return (
     <>
-      {/* Peer countdown banner — shown when another player ended their quarter */}
-      {showCountdown && quarterCloseRequest && (
-        <div
-          className={cn(
-            "fixed bottom-4 left-1/2 -translate-x-1/2 z-[80]",
-            "flex items-center gap-3 rounded-xl border border-warning/40",
-            "bg-surface px-4 py-3 shadow-[var(--shadow-4)]",
-            "text-[0.875rem] max-w-[min(480px,calc(100vw-2rem))]",
-          )}
-          role="status"
-          aria-live="polite"
-        >
-          {/* Progress ring / countdown number */}
-          <span
+      {/* ── Peer quarter-close countdown banner ──────────────────────────
+           Shown on every browser EXCEPT the one that initiated the close.
+           Positioned just below the TopBar (top-14) so it's always
+           visible and never hidden behind canvas controls at the bottom.
+           z-[110] keeps it above panels and modals.                    */}
+      {showCountdown && quarterCloseRequest && (() => {
+        const total = 30;
+        const remaining = countdownSec ?? total;
+        const pct = Math.max(0, Math.min(100, (remaining / total) * 100));
+        const urgent = remaining <= 10;
+        return (
+          <div
             className={cn(
-              "shrink-0 w-10 h-10 rounded-full border-2 flex items-center justify-center",
-              "font-mono font-bold text-[0.875rem] tabular",
-              (countdownSec ?? 30) > 10
-                ? "border-warning text-warning"
-                : "border-negative text-negative animate-pulse",
+              "fixed top-14 inset-x-0 z-[110] flex justify-center px-4 pointer-events-none",
             )}
+            role="status"
+            aria-live="assertive"
           >
-            {countdownSec ?? "…"}
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-ink leading-snug">
-              {quarterCloseRequest.byTeamName} is ending the quarter
-            </p>
-            <p className="text-ink-muted text-[0.75rem]">
-              Closing automatically in {countdownSec ?? "…"}s — or close now.
-            </p>
+            <div
+              className={cn(
+                "pointer-events-auto w-full max-w-md",
+                "rounded-xl border shadow-[var(--shadow-4)] overflow-hidden",
+                urgent
+                  ? "border-negative/50 bg-[var(--negative-soft)]/10"
+                  : "border-warning/40 bg-surface",
+              )}
+            >
+              {/* Progress bar across the top — drains left-to-right */}
+              <div className="h-1 w-full bg-line">
+                <div
+                  className={cn(
+                    "h-full transition-all duration-1000 ease-linear",
+                    urgent ? "bg-negative" : "bg-warning",
+                  )}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+
+              <div className="flex items-center gap-3 px-4 py-3">
+                {/* Large countdown number */}
+                <span
+                  className={cn(
+                    "shrink-0 w-12 h-12 rounded-full flex flex-col items-center justify-center",
+                    "font-mono font-bold tabular leading-none border-2",
+                    urgent
+                      ? "border-negative text-negative animate-pulse"
+                      : "border-warning text-warning",
+                  )}
+                >
+                  <span className="text-[1.25rem]">{remaining}</span>
+                  <span className="text-[0.5rem] font-normal opacity-70">sec</span>
+                </span>
+
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-ink text-[0.9375rem] leading-snug truncate">
+                    {quarterCloseRequest.byTeamName} ended their quarter
+                  </p>
+                  <p className="text-ink-muted text-[0.75rem] mt-0.5">
+                    Round closes automatically — or close now to jump in.
+                  </p>
+                </div>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={triggerClose}
+                  className="shrink-0"
+                >
+                  Close Now
+                </Button>
+              </div>
+            </div>
           </div>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={triggerClose}
-          >
-            Close Now
-          </Button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Primary button — "End Quarter →" in multiplayer, "Next Quarter →" in solo */}
       <Button
