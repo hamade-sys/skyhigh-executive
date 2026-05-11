@@ -391,7 +391,16 @@ export default function GamePlayPage({
   // server-authoritative team list, currentQuarter, fuel index, etc.
   // Facilitators have no team (teamsCount may still be 0 if seeding just
   // happened), but we still render the canvas so they can observe the game.
-  if (!hydrated || (phase !== "playing" && phase !== "endgame") || (!isFacilitator && teamsCount === 0)) {
+  // Keep the live canvas mounted during quarter close so the digest modal
+  // can render. Earlier this gate only allowed "playing" and "endgame",
+  // which meant a legitimate transition to "quarter-closing" blanked the
+  // canvas back to "Loading game canvas…" on every peer right after a
+  // successful close.
+  if (
+    !hydrated ||
+    (phase !== "playing" && phase !== "quarter-closing" && phase !== "endgame") ||
+    (!isFacilitator && teamsCount === 0)
+  ) {
     return (
       <CenteredMessage>
         <Loader2 className="w-6 h-6 text-slate-400 animate-spin mb-3" />
