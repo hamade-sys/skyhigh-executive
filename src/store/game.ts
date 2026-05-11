@@ -6232,47 +6232,60 @@ export const useGame = create<GameStore>()(
             }
             const json = await res.json().catch(() => ({}));
             if (res.status === 409) {
-              console.warn(
-                `[state-update] stale write — server rejected event ${eventType}. ` +
-                  `Auto-refetching authoritative state.`,
-              );
-              // Refetch + hydrate so this browser snaps to the cohort's
-              // canonical state. The local mutation is lost; the user
-              // sees a clear toast and retries.
-              try {
-                const loadRes = await fetch(
-                  `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
-                  { cache: "no-store" },
-                );
-                if (loadRes.ok) {
-                  const loadJson = await loadRes.json();
-                  if (loadJson?.state?.state_json) {
-                    get().hydrateFromServerState({
-                      stateJson: loadJson.state.state_json,
-                      mySessionId: sessionId,
-                      // Pass the real DB version so the next push uses
-                      // the correct expectedVersion rather than looping
-                      // with the same wrong value.
-                      dbVersion: loadJson.state.version,
-                    });
-                  }
-                }
-              } catch (refetchErr) {
-                console.warn("[state-update] refetch after 409 failed:", refetchErr);
-              }
               // Non-gameplay-critical events (timer adjustments, minor state
-              // saves) silently re-sync — the Realtime subscription will
-              // deliver the authoritative state anyway and no user action is
-              // required. Only surfacing the "out of sync" toast for events
-              // where the user needs to explicitly retry something.
+              // saves) can legitimately race with a larger authoritative
+              // write like game.quarterClosed. Re-hydrating on those benign
+              // conflicts is actively harmful: e.g. the quarter timer's
+              // auto-start push can lose a CAS race against quarterClosed,
+              // and a full hydrate in that tiny window briefly wipes the
+              // just-advanced local state, kicking /play back to its loading
+              // gate. Let Realtime / the winning write catch us up instead.
               const SILENT_409_EVENTS = new Set([
+                "game.timerStarted",
                 "game.timerPaused",
                 "game.timerResumed",
                 "game.timerExtended",
                 "player.savedSliders",
                 "game.colorClaimed",
               ]);
-              if (!SILENT_409_EVENTS.has(eventType)) {
+              const shouldHydrateAfter409 = !SILENT_409_EVENTS.has(eventType);
+
+              console.warn(
+                `[state-update] stale write — server rejected event ${eventType}. ` +
+                  (shouldHydrateAfter409
+                    ? "Auto-refetching authoritative state."
+                    : "Waiting for authoritative state via the winning write / Realtime."),
+              );
+
+              if (shouldHydrateAfter409) {
+                // Refetch + hydrate so this browser snaps to the cohort's
+                // canonical state. The local mutation is lost; the user
+                // sees a clear toast and retries.
+                try {
+                  const loadRes = await fetch(
+                    `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
+                    { cache: "no-store" },
+                  );
+                  if (loadRes.ok) {
+                    const loadJson = await loadRes.json();
+                    if (loadJson?.state?.state_json) {
+                      get().hydrateFromServerState({
+                        stateJson: loadJson.state.state_json,
+                        mySessionId: sessionId,
+                        // Pass the real DB version so the next push uses
+                        // the correct expectedVersion rather than looping
+                        // with the same wrong value.
+                        dbVersion: loadJson.state.version,
+                      });
+                    }
+                  }
+                } catch (refetchErr) {
+                  console.warn("[state-update] refetch after 409 failed:", refetchErr);
+                }
+              }
+              // Only surface the "out of sync" toast for events where the
+              // user needs to explicitly retry something.
+              if (shouldHydrateAfter409) {
                 toast.warning(
                   "Game state out of sync",
                   "The cohort advanced before your action landed. We've pulled the latest state — please retry your action.",
