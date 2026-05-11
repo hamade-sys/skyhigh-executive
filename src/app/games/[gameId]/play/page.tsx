@@ -315,8 +315,8 @@ export default function GamePlayPage({
     // browser so the player knows the round is closing and can act.
     // The CloseQuarterButton component reads quarterCloseRequest from the
     // store and renders the banner + auto-close timer.
-    onQuarterCloseRequested: ({ byTeamId, byTeamName, deadlineAt }) => {
-      setQuarterCloseRequest({ byTeamId, byTeamName, deadlineAt });
+    onQuarterCloseRequested: ({ byTeamId, byTeamName, deadlineAt, requestedQuarter }) => {
+      setQuarterCloseRequest({ byTeamId, byTeamName, deadlineAt, requestedQuarter });
     },
   });
 

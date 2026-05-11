@@ -643,6 +643,13 @@ export interface SecondHandListing {
   retirementQuarter: number;
 }
 
+export interface QuarterCloseRequestState {
+  byTeamId: string;
+  byTeamName: string;
+  deadlineAt: string; // ISO timestamp
+  requestedQuarter: number;
+}
+
 // ─── Game phase ──────────────────────────────────────────
 export type GamePhase =
   | "idle"          // pre-setup
@@ -939,6 +946,11 @@ export interface GameState {
    *  overrides spec.productionCapPerQuarter for that spec for ALL future
    *  delivery batches. Used to cool off or surge supply. */
   productionCapOverrides: Record<string, number>;
+
+  /** Self-guided multiplayer quarter-close coordination. Persisted in the
+   *  shared game state so reconnects and missed broadcasts still recover
+   *  the active countdown request from the server snapshot. */
+  quarterCloseRequest: QuarterCloseRequestState | null;
 }
 
 /** Subsidiary business types — each one is a non-aviation revenue

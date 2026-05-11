@@ -347,6 +347,10 @@ function CloseQuarterButton() {
   // Whether we sent the close request (suppresses showing our own banner)
   const [iRequested, setIRequested] = useState(false);
   const autoCloseAttemptedQuarterRef = useRef<number | null>(null);
+  const requestCameFromMe =
+    quarterCloseRequest !== null &&
+    memberTeamId !== null &&
+    quarterCloseRequest.byTeamId === memberTeamId;
 
   // activeTeamId fallback already handled above; just satisfy TS
   void activeTeamId;
@@ -444,7 +448,7 @@ function CloseQuarterButton() {
   }, [gameId, isMultiplayerSelfGuided, syncAndClose, setQuarterCloseRequest]);
 
   useEffect(() => {
-    if (!quarterCloseRequest || iRequested) return;
+    if (!quarterCloseRequest || iRequested || requestCameFromMe) return;
     const deadline = Date.parse(quarterCloseRequest.deadlineAt);
     if (!Number.isFinite(deadline)) return;
 
@@ -461,7 +465,7 @@ function CloseQuarterButton() {
     tick(); // immediate paint
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [quarterCloseRequest, iRequested, triggerClose]);
+  }, [quarterCloseRequest, iRequested, requestCameFromMe, triggerClose]);
 
   // Reset iRequested when the quarter actually advances (store
   // clears quarterCloseRequest and hydrateFromServerState fires).
@@ -638,7 +642,11 @@ function CloseQuarterButton() {
 
   // ── Peer-triggered countdown banner ─────────────────────────────────
   // Shown on every browser EXCEPT the one that initiated the close.
-  const showCountdown = isMultiplayerSelfGuided && quarterCloseRequest !== null && !iRequested;
+  const showCountdown =
+    isMultiplayerSelfGuided &&
+    quarterCloseRequest !== null &&
+    !iRequested &&
+    !requestCameFromMe;
 
   return (
     <>

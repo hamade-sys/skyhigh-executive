@@ -105,10 +105,35 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      const humanTeams = updatedTeams.filter((t) => t.controlledBy === "human");
+      const allReady =
+        humanTeams.length > 0 &&
+        humanTeams.every(
+          (t) =>
+            t.readyForNextQuarter === true &&
+            t.readyForQuarter === currentQuarter,
+        );
+      const existingQuarterCloseRequest =
+        typeof stateJson.quarterCloseRequest === "object" &&
+        stateJson.quarterCloseRequest !== null
+          ? stateJson.quarterCloseRequest as Record<string, unknown>
+          : null;
+      const nextQuarterCloseRequest =
+        allReady
+          ? null
+          : existingQuarterCloseRequest &&
+              existingQuarterCloseRequest.requestedQuarter === currentQuarter
+            ? existingQuarterCloseRequest
+            : null;
+
       const { data: written, error: writeErr } = await supa
         .from("game_state")
         .update({
-          state_json: { ...stateJson, teams: updatedTeams },
+          state_json: {
+            ...stateJson,
+            teams: updatedTeams,
+            quarterCloseRequest: nextQuarterCloseRequest,
+          },
           version: row.version + 1,
         })
         .eq("game_id", gameId)

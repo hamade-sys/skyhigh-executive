@@ -113,10 +113,37 @@ export async function POST(req: NextRequest) {
         });
       }
 
+      // Check if all human teams are now ready (after our flag is set).
+      const humanTeams = updatedTeams.filter(
+        (t) => t.controlledBy === "human",
+      );
+      const allReady =
+        humanTeams.length > 0 &&
+        humanTeams.every(
+          (t) =>
+            t.readyForNextQuarter === true &&
+            t.readyForQuarter === currentQuarter,
+        );
+      const deadlineAt = new Date(
+        Date.now() + COUNTDOWN_SECONDS * 1000,
+      ).toISOString();
+      const nextQuarterCloseRequest = allReady
+        ? null
+        : {
+            byTeamId: myTeamId,
+            byTeamName: myTeamName,
+            deadlineAt,
+            requestedQuarter: currentQuarter,
+          };
+
       const { data: written, error: writeErr } = await supa
         .from("game_state")
         .update({
-          state_json: { ...stateJson, teams: updatedTeams },
+          state_json: {
+            ...stateJson,
+            teams: updatedTeams,
+            quarterCloseRequest: nextQuarterCloseRequest,
+          },
           version: row.version + 1,
         })
         .eq("game_id", gameId)
@@ -137,22 +164,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Check if all human teams are now ready (after our flag is set).
-      const humanTeams = updatedTeams.filter(
-        (t) => t.controlledBy === "human",
-      );
-      const allReady =
-        humanTeams.length > 0 &&
-        humanTeams.every(
-          (t) =>
-            t.readyForNextQuarter === true &&
-            t.readyForQuarter === currentQuarter,
-        );
-
-      const deadlineAt = new Date(
-        Date.now() + COUNTDOWN_SECONDS * 1000,
-      ).toISOString();
-
       if (allReady) {
         // All players were already ready — just tell the caller to close
         // immediately (no countdown needed). Still broadcast stateChanged
@@ -172,6 +183,7 @@ export async function POST(req: NextRequest) {
             byTeamId: myTeamId,
             byTeamName: myTeamName,
             deadlineAt,
+            requestedQuarter: currentQuarter,
             version: written.version,
           },
         });

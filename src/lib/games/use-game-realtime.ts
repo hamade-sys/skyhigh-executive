@@ -45,6 +45,7 @@ export interface GameRealtimeHandlers {
     byTeamId: string;
     byTeamName: string;
     deadlineAt: string; // ISO timestamp
+    requestedQuarter: number;
   }) => void;
 }
 
@@ -95,6 +96,7 @@ export function useGameRealtime(
             byTeamId: String(p.byTeamId ?? ""),
             byTeamName: String(p.byTeamName ?? ""),
             deadlineAt: String(p.deadlineAt ?? ""),
+            requestedQuarter: Number(p.requestedQuarter ?? 0),
           });
           break;
       }

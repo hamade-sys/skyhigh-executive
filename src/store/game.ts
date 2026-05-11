@@ -108,6 +108,7 @@ import type {
   LoanInstrument,
   PreOrder,
   PricingTier,
+  QuarterCloseRequestState,
   Route,
   ScenarioDecision,
   SecondHandListing,
@@ -170,11 +171,7 @@ export interface GameStore extends GameState {
    * quarter actually advances (hydrateFromServerState sees a new
    * currentQuarter) or when this browser itself initiates a close.
    */
-  quarterCloseRequest: {
-    byTeamId: string;
-    byTeamName: string;
-    deadlineAt: string; // ISO timestamp
-  } | null;
+  quarterCloseRequest: QuarterCloseRequestState | null;
   /** Local browser's member-bound team id. Never shared with peers; used
    *  to recover the correct seat if a server snapshot temporarily loses
    *  claimedBySessionId during hydration. */
@@ -5237,6 +5234,7 @@ export const useGame = create<GameStore>()(
           // that pre-date session.quarterTimerSeconds.
           quarterTimerSecondsRemaining: null,
           quarterTimerPaused: false,
+          quarterCloseRequest: null,
         });
 
         // Auto-snapshot at the start of every new round. Stored in a
@@ -5663,6 +5661,7 @@ export const useGame = create<GameStore>()(
           sessionSlots: [],
           preOrders: [],
           productionCapOverrides: {},
+          quarterCloseRequest: null,
         });
       },
 
@@ -6124,6 +6123,11 @@ export const useGame = create<GameStore>()(
           const quarterAdvanced =
             typeof restored.currentQuarter === "number" &&
             restored.currentQuarter > (currentState.currentQuarter ?? 0);
+          const syncedQuarterCloseRequest =
+            restored.quarterCloseRequest &&
+            restored.quarterCloseRequest.requestedQuarter === restored.currentQuarter
+              ? restored.quarterCloseRequest
+              : null;
 
           set({
             ...restored,
@@ -6159,10 +6163,10 @@ export const useGame = create<GameStore>()(
             // by any push from any browser in the cohort) will un-stick
             // them automatically without needing a page reload.
             isClosing: false,
-            // Clear any pending quarter-close countdown banner when the
-            // quarter actually advances. The countdown is no longer
-            // relevant once the round has already moved forward.
-            ...(quarterAdvanced ? { quarterCloseRequest: null } : {}),
+            // Reconstruct the countdown banner from the authoritative
+            // server snapshot so reconnects and missed broadcasts still
+            // recover the active self-guided close request.
+            quarterCloseRequest: quarterAdvanced ? null : syncedQuarterCloseRequest,
           } as Partial<GameStore>);
 
           return { ok: true };
@@ -6218,6 +6222,7 @@ export const useGame = create<GameStore>()(
           sessionSlots: s.sessionSlots,
           preOrders: s.preOrders,
           productionCapOverrides: s.productionCapOverrides,
+          quarterCloseRequest: s.quarterCloseRequest,
           // Mirror the session block forward so subsequent hydrates
           // pick up the bumped version + any session metadata changes.
           session: { ...session, version: session.version + 1 },
@@ -7229,6 +7234,22 @@ export const useGame = create<GameStore>()(
             );
           } else {
             toast.warning("Quarter timer expired", "Closing quarter automatically.");
+          }
+          const isSelfGuidedMultiplayer =
+            s.session?.mode === "self_guided" &&
+            s.teams.filter((t) => t.controlledBy === "human").length >= 2 &&
+            Boolean(s.session?.gameId);
+          if (isSelfGuidedMultiplayer && s.session?.gameId) {
+            setTimeout(() => {
+              void fetch("/api/games/request-quarter-close", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ gameId: s.session?.gameId }),
+              }).catch(() => {
+                console.warn("[SkyForce] timer expiry request-quarter-close failed");
+              });
+            }, 400);
+            return;
           }
           // Auto-close quarter
           setTimeout(() => get().closeQuarter(), 400);

@@ -202,6 +202,18 @@ export async function POST(req: NextRequest) {
       "game.timerExtended",
     ]);
     const isTeamNeutralEvent = TEAM_NEUTRAL_EVENTS.has(eventType);
+    const TIMER_STATE_EVENTS = new Set([
+      "game.timerStarted",
+      "game.timerPaused",
+      "game.timerResumed",
+      "game.timerExtended",
+      "game.quarterClosed",
+      "game.botRoundAdvanced",
+    ]);
+    const QUARTER_CLOSE_COORDINATION_EVENTS = new Set([
+      "game.quarterClosed",
+      "game.botRoundAdvanced",
+    ]);
 
     // Load the canonical stored teams once so we can both authorise writes
     // and preserve multiplayer identity fields (`claimedBySessionId`,
@@ -284,10 +296,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const submittedState = newState as Record<string, unknown>;
+    const storedState = storedRow.state_json as Record<string, unknown>;
     const submittedTeams = (newState as NewStateShape).teams;
+    const sanitizedBaseState: Record<string, unknown> = {
+      ...submittedState,
+      ...(!TIMER_STATE_EVENTS.has(eventType)
+        ? {
+            quarterTimerSecondsRemaining:
+              storedState.quarterTimerSecondsRemaining ?? null,
+            quarterTimerPaused: storedState.quarterTimerPaused ?? false,
+          }
+        : {}),
+      ...(!QUARTER_CLOSE_COORDINATION_EVENTS.has(eventType)
+        ? {
+            quarterCloseRequest: storedState.quarterCloseRequest ?? null,
+          }
+        : {}),
+    };
     const sanitizedState = Array.isArray(submittedTeams)
       ? {
-          ...(newState as Record<string, unknown>),
+          ...sanitizedBaseState,
           teams: isTeamNeutralEvent
             ? (storedTeamsRaw as unknown as NewStateTeamShape[])
             : submittedTeams.map((t) => {
@@ -308,7 +337,7 @@ export async function POST(req: NextRequest) {
                 };
               }),
         }
-      : newState;
+      : sanitizedBaseState;
 
     const result = await submitStateMutation({
       gameId,
