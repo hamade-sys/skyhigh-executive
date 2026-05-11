@@ -632,6 +632,11 @@ const mkId = mkIdShared;
 // isObserver:false (so closeQuarter's guard passes and bots actually run)
 // while still doing exactly one atomic write at the end.
 let _suppressGmPush = false;
+// Guard against re-entry: set true just before the single atomic push
+// inside gmAdvanceQuarter, cleared once the promise settles (success or
+// failure). Prevents the BotAutoAdvanceBanner from firing a second advance
+// while the first push is still in flight (e.g. on a slow connection).
+let _gmAdvanceInFlight = false;
 
 function fmtMoneyPlain(n: number): string {
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
@@ -1132,6 +1137,23 @@ export const useGame = create<GameStore>()(
           airportBids: [],
           worldCupHostCode,
           olympicHostCode,
+          // Always reset multiplayer residue when starting a fresh solo
+          // run. If the user was previously a Game Master (isObserver:
+          // true) or a regular multiplayer player, these flags being left
+          // over block every game action (all mutations guard on
+          // `isObserver`) and cause phantom state-update pushes to the
+          // old multiplayer game's DB row. resetGame() clears these too,
+          // but startNewGame is called directly from the onboarding page
+          // without a preceding resetGame, so we must clear them here.
+          isObserver: false,
+          isMultiplayerSession: false,
+          localSessionId: null,
+          serverStateVersion: 0,
+          session: null,
+          // Re-entrancy guard must be false — if the previous session
+          // crashed mid-close leaving isClosing: true, the very first
+          // closeQuarter call in the new solo run would silently no-op.
+          isClosing: false,
         });
 
         // Welcome toast — surface the hub purchase + remaining cash
@@ -3285,6 +3307,21 @@ export const useGame = create<GameStore>()(
         if (s.isClosing) return;
         set({ isClosing: true });
 
+        // Safety net: if anything throws inside closeQuarter (bad data,
+        // unexpected undefined access, engine bug), we MUST release the
+        // re-entrancy guard so the user can retry rather than being
+        // permanently stuck with a frozen "Close Quarter" button.
+        // Normal exit paths already call set({ isClosing: false }) as
+        // part of their atomic state update — this catch only fires on
+        // truly unexpected errors and shows a recoverable warning.
+        let _closeCompleted = false;
+        const _ensureReleased = () => {
+          if (!_closeCompleted) {
+            set({ isClosing: false });
+          }
+        };
+        try {
+
         // Phase 6 P1 — timing telemetry. closeQuarter is the
         // heaviest hot path in the engine. Log every close's
         // wall-clock time and warn loudly when it crosses 60s so
@@ -3335,6 +3372,7 @@ export const useGame = create<GameStore>()(
             (syntheticPlayer.botDifficulty != null ||
               syntheticPlayer.controlledBy === "bot");
           if (humanCount === 0 && !isGmSimAdvance) {
+            _closeCompleted = true;
             set({ phase: "endgame", lastCloseResult: null, isClosing: false });
             toast.warning(
               "All players forfeited",
@@ -3347,6 +3385,7 @@ export const useGame = create<GameStore>()(
 
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) {
+          _closeCompleted = true;
           set({ isClosing: false });
           reportTiming();
           return;
@@ -4845,6 +4884,7 @@ export const useGame = create<GameStore>()(
           };
         });
 
+        _closeCompleted = true; // mark before the set so finally sees it
         set({
           teams: teamsWithRank,
           cargoContracts: updatedCargoContracts,
@@ -4880,6 +4920,20 @@ export const useGame = create<GameStore>()(
         }
 
         reportTiming();
+        } catch (err) {
+          // Unhandled engine error during quarter close. Log it so the
+          // team can reproduce it; surface a recoverable warning so the
+          // player isn't stuck forever.
+          console.error("[closeQuarter] unexpected error:", err);
+          toast.warning(
+            "Quarter close error",
+            "Something went wrong processing this round. Please try again — your data has not changed.",
+          );
+        } finally {
+          // Guarantee the re-entrancy guard is released even if an
+          // unhandled exception bypassed the normal release paths.
+          _ensureReleased();
+        }
       },
 
       advanceToNext: () => {
@@ -5213,6 +5267,10 @@ export const useGame = create<GameStore>()(
         // Only for GM/facilitators in a live multiplayer session.
         if (!s.isObserver || !s.isMultiplayerSession) return;
         if (s.phase !== "playing") return;
+        // Re-entry guard: if the previous round's push is still in flight
+        // (e.g. countdown fired while on a slow connection), skip silently.
+        // The banner will remount for the new quarter once state settles.
+        if (_gmAdvanceInFlight) return;
 
         // We need at least one bot team to simulate. If all teams are
         // human (none joined a bot-only slot) there's nothing to run.
@@ -5265,11 +5323,18 @@ export const useGame = create<GameStore>()(
         // are async (fire after paint), so this synchronous window is
         // invisible to the UI. _suppressGmPush=false allows the push through.
         _suppressGmPush = false;
+        _gmAdvanceInFlight = true;
         set({ isObserver: false });
-        get().pushStateToServer("game.botRoundAdvanced", {
+        const pushPromise = get().pushStateToServer("game.botRoundAdvanced", {
           quarter: get().currentQuarter,
         });
         set({ isObserver: true });
+        // Clear the in-flight guard once the push settles (success or 409).
+        // Using void + .finally so this is truly fire-and-forget from the
+        // caller's perspective but the guard is always released.
+        void (pushPromise as Promise<unknown>).finally(() => {
+          _gmAdvanceInFlight = false;
+        });
       },
 
       // setAirlineColor is defined earlier in this file (line ~5147 in
@@ -5875,6 +5940,12 @@ export const useGame = create<GameStore>()(
             // actions check this flag and return early so the GM can
             // spectate without accidentally changing any team's state.
             isObserver: !claimed,
+            // Always release the re-entrancy guard on hydration. If a
+            // player's closeQuarter threw an unhandled error and left
+            // isClosing: true, the next Realtime re-hydration (triggered
+            // by any push from any browser in the cohort) will un-stick
+            // them automatically without needing a page reload.
+            isClosing: false,
           } as Partial<GameStore>);
           return { ok: true };
         } catch (err) {
@@ -5977,10 +6048,16 @@ export const useGame = create<GameStore>()(
             if (res.ok) {
               const cur = get();
               if (cur.session?.gameId === gameId) {
-                // Increment both the DB-version tracker and the legacy
-                // session.version so future hydrates and pushes stay aligned.
+                // Use Math.max so that if Supabase Realtime delivered the
+                // postgres_changes notification *before* this HTTP response
+                // arrived (hydrateFromServerState already set serverStateVersion
+                // to expectedVersion+1), we don't double-increment to
+                // expectedVersion+2 and cause a 409 on the very next push.
                 set({
-                  serverStateVersion: cur.serverStateVersion + 1,
+                  serverStateVersion: Math.max(
+                    cur.serverStateVersion,
+                    expectedVersion + 1,
+                  ),
                   session: cur.session
                     ? { ...cur.session, version: cur.session.version + 1 }
                     : cur.session,
@@ -6018,10 +6095,24 @@ export const useGame = create<GameStore>()(
               } catch (refetchErr) {
                 console.warn("[state-update] refetch after 409 failed:", refetchErr);
               }
-              toast.warning(
-                "Game state out of sync",
-                "The cohort advanced before your action landed. We've pulled the latest state — please retry your action.",
-              );
+              // Non-gameplay-critical events (timer adjustments, minor state
+              // saves) silently re-sync — the Realtime subscription will
+              // deliver the authoritative state anyway and no user action is
+              // required. Only surfacing the "out of sync" toast for events
+              // where the user needs to explicitly retry something.
+              const SILENT_409_EVENTS = new Set([
+                "game.timerPaused",
+                "game.timerResumed",
+                "game.timerExtended",
+                "player.savedSliders",
+                "game.colorClaimed",
+              ]);
+              if (!SILENT_409_EVENTS.has(eventType)) {
+                toast.warning(
+                  "Game state out of sync",
+                  "The cohort advanced before your action landed. We've pulled the latest state — please retry your action.",
+                );
+              }
               return { ok: false as const, error: "stale state", status: 409 };
             }
             console.warn(

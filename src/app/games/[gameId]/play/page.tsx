@@ -269,6 +269,12 @@ export default function GamePlayPage({
           hydrateRef.current({
             stateJson: json.state.state_json,
             mySessionId: sessionId,
+            // Pass the real DB version so the next pushStateToServer
+            // uses the correct expectedVersion and doesn't immediately
+            // 409 after a team-forfeit refetch.
+            dbVersion: typeof json.state.version === "number"
+              ? json.state.version
+              : undefined,
           });
         }
       } catch {

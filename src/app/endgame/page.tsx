@@ -169,6 +169,116 @@ export default function Endgame() {
           </div>
         )}
 
+        {/* ── Head-to-head comparison — surfaced only for 2-team games
+            so the runner-up gets equal billing alongside the winner.
+            Each row compares a key final metric; the better side is
+            bolded so readers can skim who dominated each dimension. */}
+        {ranked.length === 2 && (() => {
+          const w = ranked[0];
+          const l = ranked[1];
+          const wAw = resolveEndgameAwards(w);
+          const lAw = resolveEndgameAwards(l);
+          const wFav = computeAirlineValue(w) * wAw.reduce((m, a) => m * a.airlineValueMult, 1);
+          const lFav = computeAirlineValue(l) * lAw.reduce((m, a) => m * a.airlineValueMult, 1);
+          const wRev = w.financialsByQuarter.reduce((s, q) => s + q.revenue, 0);
+          const lRev = l.financialsByQuarter.reduce((s, q) => s + q.revenue, 0);
+          const wProfit = w.financialsByQuarter.reduce((s, q) => s + q.netProfit, 0);
+          const lProfit = l.financialsByQuarter.reduce((s, q) => s + q.netProfit, 0);
+          const wRoutes = w.routes.filter((r) => r.status === "active").length;
+          const lRoutes = l.routes.filter((r) => r.status === "active").length;
+          const wFleet = w.fleet.filter((f) => f.status === "active").length;
+          const lFleet = l.fleet.filter((f) => f.status === "active").length;
+          const wCol = airlineColorFor({ colorId: w.airlineColorId, fallbackKey: w.id });
+          const lCol = airlineColorFor({ colorId: l.airlineColorId, fallbackKey: l.id });
+
+          type H2HRow = { label: string; wVal: string; lVal: string; wNum: number; lNum: number; lowerWins?: boolean };
+          const h2hRows: H2HRow[] = [
+            { label: "Airline Value",     wVal: fmtMoney(wFav),                    lVal: fmtMoney(lFav),                    wNum: wFav,                    lNum: lFav },
+            { label: "Brand Value",       wVal: w.brandValue.toFixed(1),            lVal: l.brandValue.toFixed(1),            wNum: w.brandValue,            lNum: l.brandValue },
+            { label: "Cash",              wVal: fmtMoney(w.cashUsd),                lVal: fmtMoney(l.cashUsd),                wNum: w.cashUsd,               lNum: l.cashUsd },
+            { label: "Total Debt",        wVal: w.totalDebtUsd > 0 ? fmtMoney(w.totalDebtUsd) : "None", lVal: l.totalDebtUsd > 0 ? fmtMoney(l.totalDebtUsd) : "None", wNum: w.totalDebtUsd, lNum: l.totalDebtUsd, lowerWins: true },
+            { label: "Lifetime Revenue",  wVal: fmtMoney(wRev),                    lVal: fmtMoney(lRev),                    wNum: wRev,                    lNum: lRev },
+            { label: "Net Profit",        wVal: fmtMoney(wProfit),                 lVal: fmtMoney(lProfit),                 wNum: wProfit,                 lNum: lProfit },
+            { label: "Customer Loyalty",  wVal: fmtPct(w.customerLoyaltyPct, 0),   lVal: fmtPct(l.customerLoyaltyPct, 0),   wNum: w.customerLoyaltyPct,    lNum: l.customerLoyaltyPct },
+            { label: "Active Routes",     wVal: `${wRoutes}`,                      lVal: `${lRoutes}`,                      wNum: wRoutes,                 lNum: lRoutes },
+            { label: "Active Fleet",      wVal: `${wFleet}`,                       lVal: `${lFleet}`,                       wNum: wFleet,                  lNum: lFleet },
+          ];
+
+          return (
+            <Card className="mb-8">
+              <CardBody>
+                <div className="flex items-baseline justify-between mb-5">
+                  <h2 className="font-display text-[1.5rem] text-ink">Head-to-head</h2>
+                  <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Final stats · both airlines</span>
+                </div>
+                {/* Team name headers */}
+                <div className="grid grid-cols-[1fr_6rem_1fr] gap-3 mb-1 pb-3 border-b border-line">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded font-mono text-[0.625rem] font-semibold"
+                      style={{ background: wCol.hex, color: wCol.textOn === "white" ? "#fff" : "#0f172a" }}
+                    >
+                      {w.code}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-[0.9375rem] font-semibold text-ink truncate">{w.name}</div>
+                      <div className="text-[0.625rem] uppercase tracking-wide text-positive font-semibold mt-0.5">🥇 Winner</div>
+                    </div>
+                  </div>
+                  <div className="text-center self-center text-[0.75rem] font-display text-ink-muted">vs</div>
+                  <div className="flex items-center gap-2 justify-end text-right">
+                    <div className="min-w-0">
+                      <div className="text-[0.9375rem] font-semibold text-ink truncate">{l.name}</div>
+                      <div className="text-[0.625rem] uppercase tracking-wide text-ink-muted font-semibold mt-0.5">🥈 Runner-up</div>
+                    </div>
+                    <span
+                      className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded font-mono text-[0.625rem] font-semibold"
+                      style={{ background: lCol.hex, color: lCol.textOn === "white" ? "#fff" : "#0f172a" }}
+                    >
+                      {l.code}
+                    </span>
+                  </div>
+                </div>
+                {/* Metric rows */}
+                <div>
+                  {h2hRows.map((row) => {
+                    const tied = row.wNum === row.lNum;
+                    const wWins = !tied && (row.lowerWins ? row.wNum < row.lNum : row.wNum > row.lNum);
+                    const lWins = !tied && (row.lowerWins ? row.lNum < row.wNum : row.lNum > row.wNum);
+                    return (
+                      <div
+                        key={row.label}
+                        className="grid grid-cols-[1fr_6rem_1fr] gap-3 items-center py-2.5 border-b border-line last:border-0"
+                      >
+                        {/* Winner side value */}
+                        <div className={cn(
+                          "tabular font-mono text-[0.9375rem] flex items-center gap-1.5",
+                          wWins ? "text-ink font-semibold" : "text-ink-2",
+                        )}>
+                          {row.wVal}
+                          {wWins && <span className="text-[0.5625rem] text-positive">▲</span>}
+                        </div>
+                        {/* Metric label */}
+                        <div className="text-center text-[0.625rem] uppercase tracking-wider text-ink-muted leading-snug">
+                          {row.label}
+                        </div>
+                        {/* Runner-up side value */}
+                        <div className={cn(
+                          "tabular font-mono text-[0.9375rem] flex items-center gap-1.5 justify-end",
+                          lWins ? "text-ink font-semibold" : "text-ink-2",
+                        )}>
+                          {lWins && <span className="text-[0.5625rem] text-positive">▲</span>}
+                          {row.lVal}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardBody>
+            </Card>
+          );
+        })()}
+
         <Badge tone="accent">
           {isObserver
             ? `🏆 Winner: ${ranked[0]?.name ?? "—"}`
@@ -295,6 +405,7 @@ export default function Endgame() {
                 teams={ranked}
                 totalRounds={getTotalRounds(s)}
                 defaultMetric="brandValue"
+                highlightTeamIds={[ranked[0]?.id, ranked[1]?.id].filter((id): id is string => !!id)}
               />
             </CardBody>
           </Card>
@@ -438,41 +549,67 @@ export default function Endgame() {
           );
         })()}
 
-        {/* Career arc — brand value trajectory across all 40 rounds */}
-        {focusTeam.financialsByQuarter.length >= 2 && (
+        {/* Career arc — brand value trajectory across all rounds.
+            For 2-team games, both airlines' arcs are shown side-by-side
+            so neither team's story is omitted. For 3+ teams, only the
+            focusTeam (winner in observer mode, player otherwise) is
+            shown — the MultiAirlineAnalytics chart above covers the rest. */}
+        {(ranked.length === 2 ? ranked : [focusTeam]).some(
+          (t) => t.financialsByQuarter.length >= 2,
+        ) && (
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="font-display text-[1.5rem] text-ink">Career arc</h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-                  {fmtQuarter(1)} → {finalQuarterLabel} brand value
+                  {fmtQuarter(1)} → {finalQuarterLabel} · brand value trajectory
                 </span>
               </div>
-              {(() => {
-                const series = focusTeam.financialsByQuarter.map((q) => q.brandValue);
-                const profitSeries = focusTeam.financialsByQuarter.map((q) => q.netProfit);
-                const cashSeries = focusTeam.financialsByQuarter.map((q) => q.cash);
-                const peakBV = Math.max(...series);
-                const peakBVQ = focusTeam.financialsByQuarter.find((q) => q.brandValue === peakBV)?.quarter ?? 1;
-                const trough = Math.min(...profitSeries);
-                const peak = Math.max(...profitSeries);
-                const bestQ = focusTeam.financialsByQuarter.find((q) => q.netProfit === peak);
-                const worstQ = focusTeam.financialsByQuarter.find((q) => q.netProfit === trough);
-                return (
-                  <>
-                    <div className="grid grid-cols-3 gap-4 mb-4">
-                      <ArcStat label="Brand peak" value={`${peakBV.toFixed(1)} (Q${peakBVQ})`} icon={<TrendingUp size={14} />} />
-                      <ArcStat label="Best quarter" value={bestQ ? `${fmtMoney(peak)} (Q${bestQ.quarter})` : "—"} icon={<Trophy size={14} />} tone="positive" />
-                      <ArcStat label="Worst quarter" value={worstQ ? `${fmtMoney(trough)} (Q${worstQ.quarter})` : "—"} icon={<TrendingDown size={14} />} tone={trough < 0 ? "negative" : "default"} />
+              {(ranked.length === 2 ? ranked : [focusTeam])
+                .filter((t) => t.financialsByQuarter.length >= 2)
+                .map((arcTeam, teamIdx) => {
+                  const arcCol = airlineColorFor({ colorId: arcTeam.airlineColorId, fallbackKey: arcTeam.id });
+                  const series = arcTeam.financialsByQuarter.map((q) => q.brandValue);
+                  const profitSeries = arcTeam.financialsByQuarter.map((q) => q.netProfit);
+                  const cashSeries = arcTeam.financialsByQuarter.map((q) => q.cash);
+                  const peakBV = Math.max(...series);
+                  const peakBVQ = arcTeam.financialsByQuarter.find((q) => q.brandValue === peakBV)?.quarter ?? 1;
+                  const trough = Math.min(...profitSeries);
+                  const peak = Math.max(...profitSeries);
+                  const bestQ = arcTeam.financialsByQuarter.find((q) => q.netProfit === peak);
+                  const worstQ = arcTeam.financialsByQuarter.find((q) => q.netProfit === trough);
+                  return (
+                    <div key={arcTeam.id} className={teamIdx > 0 ? "mt-6 pt-6 border-t border-line" : ""}>
+                      {/* Team label — only shown when comparing 2 airlines */}
+                      {ranked.length === 2 && (
+                        <div className="flex items-center gap-2 mb-3">
+                          <span
+                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded font-mono text-[0.5625rem] font-semibold"
+                            style={{
+                              background: arcCol.hex,
+                              color: arcCol.textOn === "white" ? "#fff" : "#0f172a",
+                            }}
+                          >
+                            {arcTeam.code}
+                          </span>
+                          <span className="text-[0.875rem] font-semibold text-ink">{arcTeam.name}</span>
+                          {teamIdx === 0 && <Badge tone="accent">Winner</Badge>}
+                          {teamIdx === 1 && <span className="text-[0.6875rem] text-ink-muted uppercase tracking-wide">Runner-up</span>}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-3 gap-4 mb-4">
+                        <ArcStat label="Brand peak" value={`${peakBV.toFixed(1)} (Q${peakBVQ})`} icon={<TrendingUp size={14} />} />
+                        <ArcStat label="Best quarter" value={bestQ ? `${fmtMoney(peak)} (Q${bestQ.quarter})` : "—"} icon={<Trophy size={14} />} tone="positive" />
+                        <ArcStat label="Worst quarter" value={worstQ ? `${fmtMoney(trough)} (Q${worstQ.quarter})` : "—"} icon={<TrendingDown size={14} />} tone={trough < 0 ? "negative" : "default"} />
+                      </div>
+                      <div className="grid grid-cols-1 gap-3">
+                        <ArcSpark label="Brand value" values={series} color={arcCol.hex} />
+                        <ArcSpark label="Cash position" values={cashSeries} color="var(--primary)" />
+                        <ArcSpark label="Quarterly profit" values={profitSeries} color={trough < 0 ? "var(--negative)" : "var(--positive)"} />
+                      </div>
                     </div>
-                    <div className="grid grid-cols-1 gap-3">
-                      <ArcSpark label="Brand value" values={series} color="var(--accent)" />
-                      <ArcSpark label="Cash position" values={cashSeries} color="var(--primary)" />
-                      <ArcSpark label="Quarterly profit" values={profitSeries} color={trough < 0 ? "var(--negative)" : "var(--positive)"} />
-                    </div>
-                  </>
-                );
-              })()}
+                  );
+                })}
             </CardBody>
           </Card>
         )}

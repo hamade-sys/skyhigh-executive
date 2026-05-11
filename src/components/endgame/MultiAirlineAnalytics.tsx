@@ -4,29 +4,18 @@
  * MultiAirlineAnalytics — endgame analytics block with toggleable
  * metrics across all teams, plotted quarter-by-quarter.
  *
- * Replaces the previous single-metric `<MultiAirlineChart>` (which
- * only showed airline value). The room can now compare teams on:
+ * Supports nine metrics: Brand value, Cash, Revenue, Net profit,
+ * Cumulative profit, Operating margin, Customer loyalty, Rank
+ * trajectory, and Airline value.
  *
- *   - Brand value
- *   - Cash position
- *   - Quarterly revenue
- *   - Net profit
- *   - Cumulative net profit (running sum — surfaces the slow burn
- *     vs. the late-game spike)
- *   - Operating margin (netProfit / revenue per quarter)
- *   - Customer loyalty
- *   - Rank trajectory (inverted Y so #1 is at the top)
- *   - Airline value (the legacy view, kept as a tab)
+ * When a cohort has more teams than MAX_CHART_LINES, the chart draws
+ * only the top N lines (by final metric value) at full opacity and
+ * fades the rest — the room can still read who pulled ahead without
+ * the chart becoming a spaghetti of 40 overlapping lines. A toggle
+ * reveals all lines when needed.
  *
- * Each line is the player's own airline color (Phase 9 palette) so
- * the room can quickly say "the teal airline pulled away in Q22".
- *
- * The hover tooltip surfaces every team's value at the hovered
- * quarter — the headline insight is "who was where, when".
- *
- * This is a finished-game retrospective, not an in-game live chart;
- * we don't bother with realtime. Pure render of immutable
- * `financialsByQuarter` data.
+ * The legend caps at MAX_LEGEND_ROWS and shows "+N more" overflow so
+ * it never pushes the chart off-screen.
  */
 
 import { useMemo, useState } from "react";
@@ -71,14 +60,8 @@ interface MetricConfig {
   key: MetricKey;
   label: string;
   description: string;
-  /** Format a single value for axis labels + tooltip. */
   format: (n: number) => string;
-  /** When true, lower values render at the top (e.g. rank #1 above #5). */
   invertY?: boolean;
-  /** Compute the series value for a quarter, given the team's full
-   *  history up to and including that quarter. Allows running sums
-   *  and ratios. Returns null when the metric is undefined for the
-   *  quarter (e.g. operating margin on zero-revenue quarter). */
   compute: (
     q: AnalyticsTeam["financialsByQuarter"][number],
     history: AnalyticsTeam["financialsByQuarter"],
@@ -89,7 +72,7 @@ const METRIC_CONFIGS: MetricConfig[] = [
   {
     key: "brandValue",
     label: "Brand Value",
-    description: "Composite brand health (0-100).",
+    description: "Composite brand health (0–100).",
     format: (n) => n.toFixed(1),
     compute: (q) => q.brandValue,
   },
@@ -153,7 +136,7 @@ const METRIC_CONFIGS: MetricConfig[] = [
   {
     key: "airlineValue",
     label: "Airline value",
-    description: "Cash − debt + 1M × brand value (the legacy view).",
+    description: "Cash − debt + 1M × brand value.",
     format: (n) => fmtMoney(n),
     compute: (q) =>
       q.airlineValue != null
@@ -162,21 +145,31 @@ const METRIC_CONFIGS: MetricConfig[] = [
   },
 ];
 
+// How many teams to draw at full opacity before fading the rest.
+const MAX_CHART_LINES = 8;
+// How many legend rows to show before "+N more" overflow.
+const MAX_LEGEND_ROWS = 10;
+
 export function MultiAirlineAnalytics({
   teams,
   totalRounds,
   defaultMetric = "brandValue",
+  highlightTeamIds,
 }: {
   teams: AnalyticsTeam[];
   totalRounds: number;
   defaultMetric?: MetricKey;
+  /** When provided, these teams are always shown at full opacity and
+   *  listed first in the legend — useful for emphasising winner/runner-up. */
+  highlightTeamIds?: string[];
 }) {
   const [metric, setMetric] = useState<MetricKey>(defaultMetric);
   const [hoverQuarter, setHoverQuarter] = useState<number | null>(null);
+  const [showAllLines, setShowAllLines] = useState(false);
 
   const config = METRIC_CONFIGS.find((m) => m.key === metric)!;
 
-  // Derive series for the active metric.
+  // Build (team, points) pairs for every team.
   const series = useMemo(() => {
     return teams.map((t) => {
       const points: Array<{ q: number; v: number }> = [];
@@ -190,11 +183,29 @@ export function MultiAirlineAnalytics({
     });
   }, [teams, config]);
 
+  // Sort by final value — best first (or worst-first for inverted metrics).
+  const seriesSorted = useMemo(() => {
+    return [...series].sort((a, b) => {
+      const lastA = a.points[a.points.length - 1]?.v ?? 0;
+      const lastB = b.points[b.points.length - 1]?.v ?? 0;
+      return config.invertY ? lastA - lastB : lastB - lastA;
+    });
+  }, [series, config.invertY]);
+
+  // Which team IDs are "prominent" — shown at full opacity and drawn last
+  // (on top). Priority: explicitly highlighted > top MAX_CHART_LINES by value.
+  const prominentIds = useMemo(() => {
+    const ids = new Set<string>(highlightTeamIds ?? []);
+    for (const s of seriesSorted) {
+      if (ids.size >= MAX_CHART_LINES) break;
+      ids.add(s.team.id);
+    }
+    return ids;
+  }, [seriesSorted, highlightTeamIds]);
+
   const allValues = series.flatMap((s) => s.points.map((p) => p.v));
   const yMin = allValues.length > 0 ? Math.min(...allValues) : 0;
   const yMax = allValues.length > 0 ? Math.max(...allValues) : 1;
-  // Pad the y-range slightly so the top/bottom lines don't touch the
-  // chart edges. Also handle the degenerate "all values equal" case.
   const yRangeRaw = yMax - yMin;
   const yPad = yRangeRaw === 0 ? Math.abs(yMax) * 0.1 || 1 : yRangeRaw * 0.05;
   const yLow = config.invertY ? yMax + yPad : yMin - yPad;
@@ -211,16 +222,13 @@ export function MultiAirlineAnalytics({
   const innerH = H - padT - padB;
 
   const xDivisor = Math.max(1, totalRounds - 1);
-  const x = (q: number) => padL + ((q - 1) / xDivisor) * innerW;
-  const y = (v: number) => padT + ((v - yLow) / yRange) * innerH;
+  const xPos = (q: number) => padL + ((q - 1) / xDivisor) * innerW;
+  const yPos = (v: number) => padT + ((v - yLow) / yRange) * innerH;
 
-  // Five evenly-spaced y-axis ticks. Use the actual data range, not
-  // the padded one, so the labels show clean numbers.
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(
     (frac) => yMin + (yMax - yMin) * (config.invertY ? 1 - frac : frac),
   );
 
-  // X ticks — target ~6 across the campaign length.
   const xTicks = useMemo(() => {
     const tickCount = Math.min(7, Math.max(3, Math.round(totalRounds / 6)));
     const step = Math.max(1, Math.floor((totalRounds - 1) / (tickCount - 1)));
@@ -230,7 +238,6 @@ export function MultiAirlineAnalytics({
     return ticks;
   }, [totalRounds]);
 
-  // Translate mouseX → quarter for the hover tooltip.
   function handleMove(e: React.MouseEvent<SVGSVGElement>) {
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
@@ -244,35 +251,45 @@ export function MultiAirlineAnalytics({
     setHoverQuarter(Math.max(1, Math.min(totalRounds, q)));
   }
 
-  // Sort teams for the tooltip + legend by their value at the
-  // hovered quarter (highest first). Legend sorts by final value.
   const tooltipRows = useMemo(() => {
     if (hoverQuarter == null) return null;
-    return series
+    // Show only prominent teams in tooltip to avoid a 42-row popup.
+    return seriesSorted
+      .filter((s) => prominentIds.has(s.team.id))
       .map((s) => {
         const point = s.points.find((p) => p.q === hoverQuarter);
         return point ? { team: s.team, value: point.v } : null;
       })
-      .filter((r): r is { team: AnalyticsTeam; value: number } => r !== null)
-      .sort((a, b) =>
-        config.invertY ? a.value - b.value : b.value - a.value,
-      );
-  }, [hoverQuarter, series, config.invertY]);
+      .filter((r): r is { team: AnalyticsTeam; value: number } => r !== null);
+  }, [hoverQuarter, seriesSorted, prominentIds]);
 
+  // Legend: highlight first, then remaining sorted by value, capped.
   const legendRows = useMemo(() => {
-    return [...teams].sort((a, b) => {
-      const lastA = a.financialsByQuarter[a.financialsByQuarter.length - 1];
-      const lastB = b.financialsByQuarter[b.financialsByQuarter.length - 1];
-      const va = lastA ? config.compute(lastA, a.financialsByQuarter) ?? 0 : 0;
-      const vb = lastB ? config.compute(lastB, b.financialsByQuarter) ?? 0 : 0;
-      return config.invertY ? va - vb : vb - va;
-    });
-  }, [teams, config]);
+    const highlighted = seriesSorted.filter((s) =>
+      (highlightTeamIds ?? []).includes(s.team.id),
+    );
+    const rest = seriesSorted.filter(
+      (s) => !(highlightTeamIds ?? []).includes(s.team.id),
+    );
+    return [...highlighted, ...rest].map((s) => s.team);
+  }, [seriesSorted, highlightTeamIds]);
+
+  const legendVisible = legendRows.slice(0, MAX_LEGEND_ROWS);
+  const legendOverflow = legendRows.length - legendVisible.length;
+
+  // Determine which series to render faded vs. prominent. Faded series
+  // draw first (behind), prominent draw last (in front).
+  const fadedSeries = showAllLines
+    ? [] // show all at full opacity when toggled
+    : seriesSorted.filter((s) => !prominentIds.has(s.team.id));
+  const prominentSeries = showAllLines
+    ? seriesSorted
+    : seriesSorted.filter((s) => prominentIds.has(s.team.id));
+  const hasHiddenLines = !showAllLines && fadedSeries.length > 0;
 
   return (
     <div>
-      {/* Metric switcher — horizontal scroll on small viewports so 9
-          options don't crush the chart. */}
+      {/* Metric switcher */}
       <div
         role="tablist"
         aria-label="Analytics metric"
@@ -319,25 +336,13 @@ export function MultiAirlineAnalytics({
           >
             {/* Y gridlines + labels */}
             {yTicks.map((tickVal, i) => {
-              const ty = y(tickVal);
+              const ty = yPos(tickVal);
               return (
                 <g key={i}>
-                  <line
-                    x1={padL}
-                    y1={ty}
-                    x2={W - padR}
-                    y2={ty}
-                    stroke="var(--line)"
-                    strokeWidth="0.5"
-                  />
-                  <text
-                    x={padL - 8}
-                    y={ty + 3}
-                    textAnchor="end"
-                    fontSize="9"
-                    fill="var(--ink-muted)"
-                    className="font-mono tabular"
-                  >
+                  <line x1={padL} y1={ty} x2={W - padR} y2={ty}
+                    stroke="var(--line)" strokeWidth="0.5" />
+                  <text x={padL - 8} y={ty + 3} textAnchor="end"
+                    fontSize="9" fill="var(--ink-muted)" className="font-mono tabular">
                     {config.format(tickVal)}
                   </text>
                 </g>
@@ -346,77 +351,57 @@ export function MultiAirlineAnalytics({
 
             {/* X-axis ticks */}
             {xTicks.map((q) => (
-              <text
-                key={q}
-                x={x(q)}
-                y={H - padB + 16}
-                textAnchor="middle"
-                fontSize="9"
-                fill="var(--ink-muted)"
-                className="font-mono tabular"
-              >
+              <text key={q} x={xPos(q)} y={H - padB + 16}
+                textAnchor="middle" fontSize="9" fill="var(--ink-muted)"
+                className="font-mono tabular">
                 {fmtQuarter(q)}
               </text>
             ))}
 
-            {/* Zero baseline if range crosses zero */}
+            {/* Zero baseline */}
             {yMin < 0 && yMax > 0 && (
-              <line
-                x1={padL}
-                y1={y(0)}
-                x2={W - padR}
-                y2={y(0)}
-                stroke="var(--ink-muted)"
-                strokeWidth="0.5"
-                strokeDasharray="3 3"
-              />
+              <line x1={padL} y1={yPos(0)} x2={W - padR} y2={yPos(0)}
+                stroke="var(--ink-muted)" strokeWidth="0.5" strokeDasharray="3 3" />
             )}
 
             {/* X-axis baseline */}
-            <line
-              x1={padL}
-              y1={H - padB}
-              x2={W - padR}
-              y2={H - padB}
-              stroke="var(--line)"
-              strokeWidth="1"
-            />
+            <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB}
+              stroke="var(--line)" strokeWidth="1" />
 
-            {/* One polyline per team */}
-            {series.map(({ team, points }) => {
+            {/* Faded background lines — non-prominent teams */}
+            {fadedSeries.map(({ team, points }) => {
               if (points.length < 2) return null;
               const teamColor = airlineColorFor({
                 colorId: team.airlineColorId,
                 fallbackKey: team.id,
               }).hex;
               const d = points
-                .map(
-                  (p, i) =>
-                    `${i === 0 ? "M" : "L"} ${x(p.q).toFixed(1)} ${y(p.v).toFixed(1)}`,
-                )
+                .map((p, i) => `${i === 0 ? "M" : "L"} ${xPos(p.q).toFixed(1)} ${yPos(p.v).toFixed(1)}`)
                 .join(" ");
               return (
+                <path key={team.id} d={d}
+                  stroke={teamColor} strokeWidth="1" fill="none"
+                  opacity="0.18" strokeLinejoin="round" strokeLinecap="round"
+                />
+              );
+            })}
+
+            {/* Prominent lines — drawn on top, full opacity */}
+            {prominentSeries.map(({ team, points }) => {
+              if (points.length < 2) return null;
+              const teamColor = airlineColorFor({
+                colorId: team.airlineColorId,
+                fallbackKey: team.id,
+              }).hex;
+              const d = points
+                .map((p, i) => `${i === 0 ? "M" : "L"} ${xPos(p.q).toFixed(1)} ${yPos(p.v).toFixed(1)}`)
+                .join(" ");
+              const last = points[points.length - 1];
+              return (
                 <g key={team.id}>
-                  <path
-                    d={d}
-                    stroke={teamColor}
-                    strokeWidth="2"
-                    fill="none"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  {/* End-point marker */}
-                  {(() => {
-                    const last = points[points.length - 1];
-                    return (
-                      <circle
-                        cx={x(last.q)}
-                        cy={y(last.v)}
-                        r="3"
-                        fill={teamColor}
-                      />
-                    );
-                  })()}
+                  <path d={d} stroke={teamColor} strokeWidth="2" fill="none"
+                    strokeLinejoin="round" strokeLinecap="round" />
+                  <circle cx={xPos(last.q)} cy={yPos(last.v)} r="3" fill={teamColor} />
                 </g>
               );
             })}
@@ -424,17 +409,10 @@ export function MultiAirlineAnalytics({
             {/* Hover indicator */}
             {hoverQuarter != null && (
               <>
-                <line
-                  x1={x(hoverQuarter)}
-                  y1={padT}
-                  x2={x(hoverQuarter)}
-                  y2={H - padB}
-                  stroke="var(--ink-muted)"
-                  strokeWidth="0.5"
-                  strokeDasharray="2 2"
-                />
-                {/* Dots at every team's value at the hovered quarter */}
-                {series.map(({ team, points }) => {
+                <line x1={xPos(hoverQuarter)} y1={padT}
+                  x2={xPos(hoverQuarter)} y2={H - padB}
+                  stroke="var(--ink-muted)" strokeWidth="0.5" strokeDasharray="2 2" />
+                {prominentSeries.map(({ team, points }) => {
                   const point = points.find((p) => p.q === hoverQuarter);
                   if (!point) return null;
                   const teamColor = airlineColorFor({
@@ -442,24 +420,16 @@ export function MultiAirlineAnalytics({
                     fallbackKey: team.id,
                   }).hex;
                   return (
-                    <circle
-                      key={team.id}
-                      cx={x(point.q)}
-                      cy={y(point.v)}
-                      r="4"
-                      fill={teamColor}
-                      stroke="white"
-                      strokeWidth="1.5"
-                    />
+                    <circle key={team.id}
+                      cx={xPos(point.q)} cy={yPos(point.v)}
+                      r="4" fill={teamColor} stroke="white" strokeWidth="1.5" />
                   );
                 })}
               </>
             )}
           </svg>
 
-          {/* Tooltip — positioned to the right of the cursor when
-              hovered. Uses absolute positioning so it overlays the
-              chart without resizing it. */}
+          {/* Hover tooltip */}
           {hoverQuarter != null && tooltipRows && tooltipRows.length > 0 && (
             <div
               className="absolute top-2 right-2 rounded-md border border-line bg-surface/95 backdrop-blur-sm shadow-[var(--shadow-2)] p-2 pointer-events-none"
@@ -475,17 +445,11 @@ export function MultiAirlineAnalytics({
                     fallbackKey: row.team.id,
                   }).hex;
                   return (
-                    <div
-                      key={row.team.id}
-                      className="flex items-center gap-2 text-[0.75rem]"
-                    >
-                      <span
-                        className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
-                        style={{ background: teamColor }}
-                      />
-                      <span className="text-ink-2 truncate flex-1 min-w-0">
-                        {row.team.code}
-                      </span>
+                    <div key={row.team.id} className="flex items-center gap-2 text-[0.75rem]">
+                      <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                        style={{ background: teamColor }} />
+                      <span className="font-mono text-ink-2 shrink-0">{row.team.code}</span>
+                      <span className="text-ink-2 truncate flex-1 min-w-0">{row.team.name}</span>
                       <span className="font-mono tabular text-ink shrink-0">
                         {config.format(row.value)}
                       </span>
@@ -495,28 +459,61 @@ export function MultiAirlineAnalytics({
               </div>
             </div>
           )}
+
+          {/* "Show all / top N" toggle — only relevant for large cohorts */}
+          {teams.length > MAX_CHART_LINES && (
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={() => setShowAllLines((v) => !v)}
+                className="text-[0.75rem] text-primary hover:underline focus-visible:outline-none"
+              >
+                {showAllLines
+                  ? `Show top ${MAX_CHART_LINES} only`
+                  : `Show all ${teams.length} teams`}
+              </button>
+              {!showAllLines && (
+                <span className="text-[0.6875rem] text-ink-muted">
+                  · {fadedSeries.length} team{fadedSeries.length !== 1 ? "s" : ""} faded
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Legend — sorted by final value of the active metric. */}
+      {/* Legend */}
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 px-2">
-        {legendRows.map((t) => {
+        {legendVisible.map((t) => {
           const teamColor = airlineColorFor({
             colorId: t.airlineColorId,
             fallbackKey: t.id,
           }).hex;
+          const isHighlighted = (highlightTeamIds ?? []).includes(t.id);
+          const isProminent = prominentIds.has(t.id);
           return (
-            <div key={t.id} className="flex items-center gap-1.5 text-[0.75rem]">
-              <span
-                className="inline-block w-3 h-3 rounded-sm"
-                style={{ background: teamColor }}
-                aria-hidden
-              />
+            <div key={t.id}
+              className={cn(
+                "flex items-center gap-1.5 text-[0.75rem]",
+                !isProminent && hasHiddenLines && "opacity-40",
+              )}
+            >
+              <span className={cn(
+                "inline-block w-3 h-3 rounded-sm",
+                isHighlighted && "ring-1 ring-offset-1 ring-current",
+              )}
+                style={{ background: teamColor }} aria-hidden />
               <span className="font-mono text-ink-muted">{t.code}</span>
-              <span className="text-ink-2">{t.name}</span>
+              <span className={cn("text-ink-2", isHighlighted && "font-semibold text-ink")}>
+                {t.name}
+              </span>
             </div>
           );
         })}
+        {legendOverflow > 0 && (
+          <span className="text-[0.75rem] text-ink-muted italic">
+            +{legendOverflow} more team{legendOverflow !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
     </div>
   );
