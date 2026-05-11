@@ -33,6 +33,7 @@ import {
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
 import { pickAirlineNames } from "@/data/airline-names";
+import { broadcastGameEvent } from "@/lib/games/realtime-broadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -358,6 +359,11 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
+    // Tell every browser in the lobby immediately — broadcast fires
+    // ~200ms faster than the postgres_changes CDC path the lobby page
+    // also listens on. Both paths route to /play; the broadcast just
+    // makes the transition feel instant for all participants.
+    await broadcastGameEvent({ gameId, event: "game.started" });
     return NextResponse.json({ game: result.data });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

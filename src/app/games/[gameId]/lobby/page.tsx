@@ -44,6 +44,7 @@ import {
 } from "@/lib/games/airline-colors";
 import { useHeartbeat } from "@/lib/games/use-heartbeat";
 import { awayIndicator } from "@/lib/games/away-indicator";
+import { useGameRealtime } from "@/lib/games/use-game-realtime";
 
 type DoctrineId = "premium-service" | "budget-expansion" | "cargo-dominance" | "global-network";
 type SeatType = "human" | "bot";
@@ -277,6 +278,24 @@ export default function GameLobbyPage({
 
     return () => { supa.removeChannel(channel); };
   }, [gameId, load]);
+
+  // Fast-path broadcast listener — fires ~200ms before the postgres_changes
+  // CDC events above land. The two systems are complementary: postgres_changes
+  // is the reliable fallback; broadcast is the low-latency first signal.
+  //
+  //   onStarted   — game host clicked Start → route to /play immediately
+  //   onLocked /
+  //   onUnlocked  — host toggled the lobby lock → refresh member badges
+  //   onStateChanged — a player saved their setup OR the host changed a
+  //                    seat config → refresh so badges + names update instantly
+  useGameRealtime(gameId, {
+    onStarted: () => {
+      router.replace(`/games/${gameId}/play`);
+    },
+    onLocked: () => { load(); },
+    onUnlocked: () => { load(); },
+    onStateChanged: () => { load(); },
+  });
 
   // Claim a seat as soon as we have a session id and the game is in lobby.
   // The join API is idempotent — re-joining with the same session id is

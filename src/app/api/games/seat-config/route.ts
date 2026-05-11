@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertHostOrFacilitator } from "@/lib/games/api";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
 import { getServerClient } from "@/lib/supabase/server";
+import { broadcastGameEvent } from "@/lib/games/realtime-broadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -137,6 +138,15 @@ export async function POST(req: NextRequest) {
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
     }
+
+    // Broadcast so every other browser in the lobby sees the seat
+    // change instantly (bot ↔ human toggle, difficulty, name). Without
+    // this they wait for the slower postgres_changes CDC on game_state.
+    await broadcastGameEvent({
+      gameId,
+      event: "game.stateChanged",
+      payload: { eventType: "seat.configUpdated" },
+    });
 
     return NextResponse.json({ ok: true });
   } catch (e) {

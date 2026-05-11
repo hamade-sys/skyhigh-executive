@@ -281,6 +281,29 @@ export default function GamePlayPage({
         // Best-effort — postgres_changes will catch us up.
       }
     },
+    // If a GM locks the game mid-session (e.g. to prevent late joiners
+    // from dropping into an active round) re-fetch so the member list
+    // and any lock-gated UI reflects the new state immediately.
+    onLocked: async () => {
+      try {
+        const res = await fetch(
+          `/api/games/load?gameId=${encodeURIComponent(gameId)}`,
+          { cache: "no-store" },
+        );
+        const json = await res.json();
+        if (res.ok) setData(json);
+      } catch { /* non-fatal */ }
+    },
+    onUnlocked: async () => {
+      try {
+        const res = await fetch(
+          `/api/games/load?gameId=${encodeURIComponent(gameId)}`,
+          { cache: "no-store" },
+        );
+        const json = await res.json();
+        if (res.ok) setData(json);
+      } catch { /* non-fatal */ }
+    },
   });
 
   // Auth gate — must be signed in to play

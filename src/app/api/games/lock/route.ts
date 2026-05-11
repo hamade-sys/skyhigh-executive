@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertHostOrFacilitator, setLocked } from "@/lib/games/api";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
+import { broadcastGameEvent } from "@/lib/games/realtime-broadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,6 +56,13 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
+    // Broadcast so every lobby browser reflects the new lock state
+    // immediately — without this, participants wait for the slower
+    // postgres_changes CDC event on the games table.
+    await broadcastGameEvent({
+      gameId,
+      event: locked ? "game.locked" : "game.unlocked",
+    });
     return NextResponse.json({ game: result.data });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

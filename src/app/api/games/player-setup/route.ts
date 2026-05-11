@@ -25,6 +25,7 @@ import { assertMembership, submitStateMutation } from "@/lib/games/api";
 import { getServerClient } from "@/lib/supabase/server";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
 import { isAirlineColorId } from "@/lib/games/airline-colors";
+import { broadcastGameEvent } from "@/lib/games/realtime-broadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -128,6 +129,15 @@ export async function POST(req: NextRequest) {
       const status = result.error.toLowerCase().includes("stale state") ? 409 : 400;
       return NextResponse.json({ error: result.error }, { status });
     }
+
+    // Broadcast so every other browser in the lobby flips this player's
+    // seat badge to "✓ Ready" immediately instead of waiting for the
+    // slower postgres_changes CDC path on game_state.
+    await broadcastGameEvent({
+      gameId,
+      event: "game.stateChanged",
+      payload: { eventType: "player.setupSaved" },
+    });
 
     return NextResponse.json({ ok: true });
   } catch (e) {

@@ -5652,6 +5652,13 @@ export const useGame = create<GameStore>()(
             t.id === meId ? { ...t, readyForNextQuarter: ready } : t,
           ),
         });
+        // Sync the ready flag to the server immediately so every other
+        // browser in the cohort sees it via the Realtime channel. Without
+        // this push each browser only sees its own player as ready and the
+        // all-ready gate never fires — the multiplayer ready deadlock.
+        if (s.isMultiplayerSession) {
+          get().pushStateToServer("player.markedReady", { teamId: meId });
+        }
         // Re-evaluate after the set so allActiveTeamsReady reads the
         // fresh team list. Only fire auto-advance when:
         //   - the flip was a "true" (player marked ready, not unmarked)
@@ -5960,6 +5967,31 @@ export const useGame = create<GameStore>()(
             // them automatically without needing a page reload.
             isClosing: false,
           } as Partial<GameStore>);
+
+          // ── Multiplayer self-guided all-ready re-check ──
+          // A Realtime push from another player may carry their
+          // readyForNextQuarter: true. After we hydrate that into local
+          // state, check if every human is now ready and fire closeQuarter()
+          // if so. setTimeout(0) lets the set() commit flush before
+          // closeQuarter() reads fresh state. The isClosing guard inside
+          // closeQuarter() prevents double-firing if two browsers race.
+          const afterHydrate = get();
+          if (
+            !afterHydrate.isObserver &&
+            !afterHydrate.isClosing &&
+            afterHydrate.session?.mode === "self_guided"
+          ) {
+            const hydHumans = afterHydrate.teams.filter(
+              (t) => t.controlledBy === "human",
+            );
+            if (
+              hydHumans.length >= 2 &&
+              hydHumans.every((t) => t.readyForNextQuarter === true)
+            ) {
+              setTimeout(() => get().closeQuarter(), 0);
+            }
+          }
+
           return { ok: true };
         } catch (err) {
           return {
