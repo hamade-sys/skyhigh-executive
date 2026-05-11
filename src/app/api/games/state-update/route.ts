@@ -209,10 +209,12 @@ export async function POST(req: NextRequest) {
       "game.timerExtended",
       "game.quarterClosed",
       "game.botRoundAdvanced",
+      "game.ended",
     ]);
     const QUARTER_CLOSE_COORDINATION_EVENTS = new Set([
       "game.quarterClosed",
       "game.botRoundAdvanced",
+      "game.ended",
     ]);
 
     // Load the canonical stored teams once so we can both authorise writes

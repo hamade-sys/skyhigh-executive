@@ -3412,7 +3412,18 @@ export const useGame = create<GameStore>()(
               syntheticPlayer.controlledBy === "bot");
           if (humanCount === 0 && !isGmSimAdvance) {
             _closeCompleted = true;
-            set({ phase: "endgame", lastCloseResult: null, isClosing: false });
+            set({
+              phase: "endgame",
+              lastCloseResult: null,
+              isClosing: false,
+              quarterCloseRequest: null,
+              quarterTimerSecondsRemaining: null,
+              quarterTimerPaused: false,
+            });
+            void get().pushStateToServer("game.ended", {
+              reason: "allPlayersForfeited",
+              finalQuarter: s.currentQuarter,
+            });
             toast.warning(
               "All players forfeited",
               "Game ended — no human players remain.",
@@ -4983,7 +4994,17 @@ export const useGame = create<GameStore>()(
         // round games end at their configured stop, not always at 40.
         const totalRounds = getTotalRounds(s);
         if (s.currentQuarter >= totalRounds) {
-          set({ phase: "endgame", lastCloseResult: null });
+          set({
+            phase: "endgame",
+            lastCloseResult: null,
+            quarterCloseRequest: null,
+            quarterTimerSecondsRemaining: null,
+            quarterTimerPaused: false,
+          });
+          void get().pushStateToServer("game.ended", {
+            reason: "finalRoundComplete",
+            finalQuarter: s.currentQuarter,
+          });
           toast.accent("Final round complete", "Your legacy is sealed.");
           return;
         }
