@@ -20,12 +20,14 @@ import {
   airlineColorFor,
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
+import { getGamePreference, setGamePreference } from "@/lib/client-preferences";
+import { useGame } from "@/store/game";
 
 // Map-legend disclosure — auto-collapses to a tiny "Legend" pill once
 // the player has advanced past the first quarter (they've seen the
 // key, no need to keep eating screen real estate). User can re-open
-// any time with the pill click. Preference is per-browser via
-// localStorage so the choice persists across reloads.
+// any time with the pill click. When signed in, the dismissal lives in
+// the database rather than browser storage.
 const LEGEND_DISMISSED_KEY = "skyforce:mapLegendDismissed:v1";
 
 // Phase 7 P2 — gold accent for the in-flight pending-route ribbon.
@@ -470,6 +472,7 @@ export function WorldMap({
 }: WorldMapProps) {
   const [hoverCode, setHoverCode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const gameId = useGame((s) => s.session?.gameId ?? null);
 
   // Resolve the team's airline-palette color once so hub pills, route
   // ribbons, and the legend swatch all draw from the same source.
@@ -480,15 +483,24 @@ export function WorldMap({
     fallbackKey: team.id,
   }).hex;
 
-  // Legend disclosure state — start visible only on Q1, then respect
-  // a stored "I dismissed this" flag. Players who clicked the X stay
-  // collapsed across reloads. New games (Q1) always open expanded so
-  // first-timers see the route-colour key.
-  const [legendOpen, setLegendOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    if (currentQuarter <= 1) return true;
-    return window.sessionStorage.getItem(LEGEND_DISMISSED_KEY) !== "1";
-  });
+  // Legend disclosure state — Q1 always starts open. Later rounds load
+  // the signed-in user's dismissal preference from the database.
+  const [legendOpen, setLegendOpen] = useState<boolean>(currentQuarter <= 1);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (currentQuarter <= 1 || !gameId) {
+      setLegendOpen(true);
+      return;
+    }
+    void getGamePreference(gameId, LEGEND_DISMISSED_KEY).then((value) => {
+      if (cancelled) return;
+      setLegendOpen(value !== true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentQuarter, gameId]);
 
   // When the quarter advances past Q1, auto-collapse the legend ONCE
   // (until the user re-opens). We don't run this every render —
@@ -498,17 +510,6 @@ export function WorldMap({
   useEffect(() => {
     if (currentQuarter > 1 && !autoCollapsedRef.current) {
       autoCollapsedRef.current = true;
-      if (typeof window !== "undefined") {
-        // First-time-past-Q1 housekeeping happens synchronously so
-        // the next render reflects it. The lint rule warns about
-        // sync setState in effects, but here it's bounded by the
-        // ref-guarded one-shot above — we won't loop. Suppress for
-        // this single intended path.
-        const dismissed = window.sessionStorage.getItem(LEGEND_DISMISSED_KEY) === "1";
-        if (!dismissed) {
-          window.sessionStorage.setItem(LEGEND_DISMISSED_KEY, "1");
-        }
-      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLegendOpen(false);
     }
@@ -516,9 +517,7 @@ export function WorldMap({
 
   function dismissLegend() {
     setLegendOpen(false);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(LEGEND_DISMISSED_KEY, "1");
-    }
+    if (gameId) void setGamePreference(gameId, LEGEND_DISMISSED_KEY, true);
   }
   function openLegend() {
     setLegendOpen(true);

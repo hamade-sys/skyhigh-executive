@@ -163,9 +163,8 @@ export function pickAirlineNames(
 }
 
 /** Deterministic seat-index → airline entry (name + code) for the lobby
- *  preview before bots are seeded server-side. Stable across reloads
- *  in the same browser via a localStorage cache, so a host glancing
- *  at the lobby doesn't see name churn between renders.
+ *  preview before bots are seeded server-side. Purely deterministic so
+ *  the preview stays stable without any browser storage dependency.
  *
  *  The host's browser is the source of truth for preview names: the
  *  names are saved into `plannedSeats` via `/api/games/seat-config`
@@ -173,24 +172,8 @@ export function pickAirlineNames(
 const LOBBY_PREVIEW_KEY = "skyforce:lobbyBotNames:v2";
 
 export function lobbyPreviewEntry(seatIndex: number): AirlineNameEntry {
-  const fallback = AIRLINE_NAME_POOL[seatIndex % AIRLINE_NAME_POOL.length];
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.sessionStorage.getItem(LOBBY_PREVIEW_KEY);
-    const cached: Array<{ name: string; code: string } | null> = raw ? JSON.parse(raw) : [];
-    if (cached[seatIndex]?.name && cached[seatIndex]?.code) {
-      return cached[seatIndex] as AirlineNameEntry;
-    }
-    // Backfill — pick a random entry not already in cache.
-    const takenNames = new Set(cached.filter(Boolean).map((e) => (e as AirlineNameEntry).name));
-    const next = pickAirlineNames(1, takenNames);
-    const picked = next[0] ?? fallback;
-    cached[seatIndex] = { name: picked.name, code: picked.code };
-    window.sessionStorage.setItem(LOBBY_PREVIEW_KEY, JSON.stringify(cached));
-    return picked;
-  } catch {
-    return fallback;
-  }
+  void LOBBY_PREVIEW_KEY;
+  return AIRLINE_NAME_POOL[seatIndex % AIRLINE_NAME_POOL.length];
 }
 
 /** Convenience wrapper — returns only the name string (backwards compat). */

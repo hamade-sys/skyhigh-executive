@@ -892,7 +892,7 @@ export interface GameState {
 
   /** Supabase user.id for the current player in a multiplayer session.
    *  Set during hydrateFromServerState and read by pushStateToServer
-   *  as actorSessionId. Null in solo runs. Never a localStorage UUID. */
+   *  as actorSessionId. Null in solo runs. Never a browser-storage UUID. */
   localSessionId: string | null;
 
   /** True when the current user is a Game Master spectating without a

@@ -165,6 +165,7 @@ function FacilitatorContent() {
   const s = useGame();
   const player = selectPlayer(s);
   const setActiveTeam = useGame((g) => g.setActiveTeam);
+  const gameId = s.session?.gameId ?? null;
 
   const [section, setSection] = useState<"teams" | "admin" | "leaderboard" | "session" | "livesims" | "saves" | "airports">("session");
   // Auto-jump the facilitator to the Airports section if a new bid
@@ -326,7 +327,7 @@ function FacilitatorContent() {
               </CardBody>
             </Card>
           )}
-          {section === "saves" && <SavesView />}
+          {section === "saves" && <SavesView gameId={gameId} />}
           {section === "admin" && s.teams.length > 0 && (
             <Card>
               <CardBody>
@@ -731,58 +732,67 @@ function Row({ k, v, bold = false }: { k: string; v: string; bold?: boolean }) {
 /**
  * Quarter-snapshot facilitator surface.
  *
- * Lists every snapshot in localStorage (auto-saved at the start of each
+ * Lists every database-backed snapshot (auto-saved at the start of each
  * round, plus any manual saves) and exposes Restore / Export / Import /
  * Delete. Restore replaces the live game state with the snapshot's
  * payload; Export downloads the JSON for archival; Import lets the
- * facilitator load a previously-exported JSON, useful if the localStorage
- * was wiped or the cohort moved to a new machine.
+ * facilitator load a previously-exported JSON, useful if the cohort
+ * moved to a new machine or environment.
  */
-function SavesView() {
+function SavesView({ gameId }: { gameId: string | null }) {
   const saveQuarterSnapshot = useGame((s) => s.saveQuarterSnapshot);
   const restoreQuarterSnapshot = useGame((s) => s.restoreQuarterSnapshot);
   const deleteQuarterSnapshot = useGame((s) => s.deleteQuarterSnapshot);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const phase = useGame((s) => s.phase);
 
-  const [snapshots, setSnapshots] = useState<SnapshotMeta[]>(() => listSnapshots());
+  const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function refresh() {
-    setSnapshots(listSnapshots());
+  async function refresh() {
+    if (!gameId) {
+      setSnapshots([]);
+      return;
+    }
+    setSnapshots(await listSnapshots(gameId));
   }
 
-  function handleManualSave() {
-    saveQuarterSnapshot();
+  useEffect(() => {
+    void refresh();
+  }, [gameId]);
+
+  async function handleManualSave() {
+    await saveQuarterSnapshot();
     toast.accent("Snapshot saved", `Game saved at ${fmtQuarter(currentQuarter)}.`);
-    refresh();
+    await refresh();
   }
 
-  function handleRestore(id: string) {
+  async function handleRestore(id: string) {
     setPendingId(id);
-    const r = restoreQuarterSnapshot(id);
+    const r = await restoreQuarterSnapshot(id);
     setPendingId(null);
     if (!r.ok) {
       toast.negative("Restore failed", r.error ?? "Unknown error.");
     } else {
-      refresh();
+      await refresh();
       setConfirmRestoreId(null);
     }
   }
 
-  function handleDelete(id: string) {
-    deleteQuarterSnapshot(id);
-    refresh();
-    toast.info("Snapshot deleted", "Removed from local storage.");
+  async function handleDelete(id: string) {
+    await deleteQuarterSnapshot(id);
+    await refresh();
+    toast.info("Snapshot deleted", "Removed from the database.");
   }
 
-  function handleExport(id: string) {
-    const json = exportSnapshotJson(id);
+  async function handleExport(id: string) {
+    if (!gameId) return;
+    const json = await exportSnapshotJson(gameId, id);
     if (!json) {
-      toast.negative("Export failed", "Snapshot couldn't be read from storage.");
+      toast.negative("Export failed", "Snapshot couldn't be read from the database.");
       return;
     }
     const meta = snapshots.find((s) => s.id === id);
@@ -798,13 +808,14 @@ function SavesView() {
   }
 
   function handleImport(file: File) {
-    file.text().then((text) => {
-      const r = importSnapshotJson(text);
+    if (!gameId) return;
+    file.text().then(async (text) => {
+      const r = await importSnapshotJson(gameId, text);
       if (!r.ok) {
         toast.negative("Import failed", r.error);
         return;
       }
-      refresh();
+      await refresh();
       toast.accent("Snapshot imported", r.meta.quarterLabel);
     });
   }
@@ -814,14 +825,25 @@ function SavesView() {
       <header>
         <h1 className="font-display text-[1.75rem] text-ink mb-1">Game saves</h1>
         <p className="text-ink-2 text-[0.9375rem] leading-relaxed">
-          One snapshot per round, auto-saved when each round begins. Use
+          One snapshot per round, auto-saved into the database when each round begins. Use
           <span className="font-medium text-ink"> Restore</span> to roll the
           game back to that exact moment — useful for re-syncing a cohort
           after a disconnection or replaying a critical decision.
         </p>
       </header>
 
-      <Card>
+      {!gameId && (
+        <Card>
+          <CardBody>
+            <p className="text-[0.875rem] text-ink-muted leading-relaxed">
+              Snapshot persistence is database-backed now, so it only appears when this console
+              is attached to a real game session.
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
+      <Card className={!gameId ? "opacity-60 pointer-events-none" : undefined}>
         <CardBody>
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <Button
@@ -925,8 +947,8 @@ function SavesView() {
       </Card>
 
       <p className="text-[0.75rem] text-ink-muted leading-relaxed">
-        Snapshots live in your browser&apos;s local storage. To move a save
-        between machines, export it as JSON and import it on the new
+        Snapshots now live in the database. To move a save
+        between environments, export it as JSON and import it on the new
         machine. The schema is versioned — saves from incompatible builds
         are rejected at import time.
       </p>

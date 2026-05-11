@@ -9,6 +9,7 @@ import { brandRating, computeAirlineValue } from "@/lib/engine";
 import { MILESTONES_BY_ID } from "@/data/milestones";
 import { TrendingUp, TrendingDown, Newspaper, Plane, Award, Users, FileBarChart, NotebookPen } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { getGamePreference, setGamePreference } from "@/lib/client-preferences";
 
 type Tab = "overview" | "news" | "routes" | "people" | "pnl" | "notes";
 
@@ -28,6 +29,8 @@ export function QuarterCloseModal() {
   const [tab, setTab] = useState<Tab>("overview");
   const open = s.phase === "quarter-closing" && !!s.lastCloseResult;
   const result = s.lastCloseResult;
+  const gameId = s.session?.gameId ?? null;
+  const [milestonesShown, setMilestonesShown] = useState<Set<string>>(new Set());
 
   // ── Defensive milestone-shown ledger.
   //    The engine's `milestonesEarnedThisQuarter` is a diff between
@@ -35,21 +38,25 @@ export function QuarterCloseModal() {
   //    reported the same milestones surfacing every quarter (e.g. the
   //    "First Cargo Route" stayed showing every Q3). We belt-and-
   //    suspenders this at the UI layer: track every milestone we've
-  //    ever shown in localStorage and hide ones we've already paraded
-  //    past the player. Result: even if the engine's diff is wrong,
-  //    the modal won't repeat itself.
+  //    already shown in the database and hide ones we've already
+  //    paraded past the player. Result: even if the engine's diff is
+  //    wrong, the modal won't repeat itself.
   const SHOWN_KEY = "skyforce:milestonesShown:v1";
-  const milestonesShown = useMemo(() => {
-    if (typeof window === "undefined") return new Set<string>();
-    try {
-      const raw = window.sessionStorage.getItem(SHOWN_KEY);
-      if (!raw) return new Set<string>();
-      const arr = JSON.parse(raw);
-      return new Set<string>(Array.isArray(arr) ? arr : []);
-    } catch {
-      return new Set<string>();
+  useEffect(() => {
+    let cancelled = false;
+    if (!gameId) {
+      setMilestonesShown(new Set());
+      return;
     }
-  }, [result?.milestonesEarnedThisQuarter]);
+    void getGamePreference(gameId, SHOWN_KEY).then((value) => {
+      if (cancelled) return;
+      const arr = Array.isArray(value) ? value : [];
+      setMilestonesShown(new Set(arr.filter((v): v is string => typeof v === "string")));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, result?.quarter]);
   const milestonesActuallyNew = useMemo(() => {
     if (!result) return [];
     return result.milestonesEarnedThisQuarter.filter(
@@ -61,15 +68,11 @@ export function QuarterCloseModal() {
   // ledger immediately so any subsequent re-render won't show them
   // again. Effect runs only when the set of "new this time" changes.
   useEffect(() => {
-    if (typeof window === "undefined") return;
     if (milestonesActuallyNew.length === 0) return;
-    try {
-      const merged = Array.from(new Set([...milestonesShown, ...milestonesActuallyNew]));
-      window.sessionStorage.setItem(SHOWN_KEY, JSON.stringify(merged));
-    } catch {
-      // Quota errors etc. — non-fatal, just lose dedupe for this turn.
-    }
-  }, [milestonesActuallyNew, milestonesShown]);
+    const merged = Array.from(new Set([...milestonesShown, ...milestonesActuallyNew]));
+    setMilestonesShown(new Set(merged));
+    if (gameId) void setGamePreference(gameId, SHOWN_KEY, merged);
+  }, [gameId, milestonesActuallyNew, milestonesShown]);
 
   function continueNext() {
     if (!result) return;

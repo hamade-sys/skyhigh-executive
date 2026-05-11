@@ -108,6 +108,64 @@ export interface GameEventInsert {
   payload_json?: unknown;
 }
 
+export interface UserPreferenceRow {
+  id: string;
+  user_id: string;
+  pref_key: string;
+  value_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserPreferenceInsert {
+  id?: string;
+  user_id: string;
+  pref_key: string;
+  value_json?: unknown;
+}
+
+export interface GamePreferenceRow {
+  id: string;
+  game_id: string;
+  user_id: string;
+  pref_key: string;
+  value_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GamePreferenceInsert {
+  id?: string;
+  game_id: string;
+  user_id: string;
+  pref_key: string;
+  value_json?: unknown;
+}
+
+export interface GameSnapshotRow {
+  id: string;
+  game_id: string;
+  quarter: number;
+  saved_by_user_id: string;
+  label: string;
+  quarter_label: string;
+  team_count: number;
+  state_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GameSnapshotInsert {
+  id?: string;
+  game_id: string;
+  quarter: number;
+  saved_by_user_id: string;
+  label: string;
+  quarter_label: string;
+  team_count: number;
+  state_json: unknown;
+}
+
 /** Convenience union for the four tables — used by the typed client
  *  so a single helper can write to any of them with type safety.
  *  Shape mirrors what `supabase gen types` emits for v2 (postgrest 12)
@@ -142,6 +200,24 @@ export interface Database {
         Row: GameEventRow;
         Insert: GameEventInsert;
         Update: Partial<GameEventInsert>;
+        Relationships: [];
+      };
+      user_preferences: {
+        Row: UserPreferenceRow;
+        Insert: UserPreferenceInsert;
+        Update: Partial<UserPreferenceInsert>;
+        Relationships: [];
+      };
+      game_preferences: {
+        Row: GamePreferenceRow;
+        Insert: GamePreferenceInsert;
+        Update: Partial<GamePreferenceInsert>;
+        Relationships: [];
+      };
+      game_snapshots: {
+        Row: GameSnapshotRow;
+        Insert: GameSnapshotInsert;
+        Update: Partial<GameSnapshotInsert>;
         Relationships: [];
       };
     };

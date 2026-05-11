@@ -35,7 +35,7 @@ export default function Endgame() {
 
   // ── DB fetch for multiplayer ──────────────────────────────────────────
   // For multiplayer games the authoritative state lives in Supabase, not
-  // localStorage. Fetch it fresh every time the endgame page mounts so
+  // the database. Fetch it fresh every time the endgame page mounts so
   // the results always reflect what actually happened on the server, even
   // if the local Zustand store is stale from a previous game.
   const gameId = s.session?.gameId ?? null;

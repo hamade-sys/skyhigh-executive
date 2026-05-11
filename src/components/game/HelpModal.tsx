@@ -155,7 +155,7 @@ export function HelpModal({ open, onClose }: Props) {
           <Section icon={<Info size={14} />} title="If something breaks">
             <Row label="Buttons unresponsive" detail="Engine likely threw on a click. Hard refresh (Cmd+Shift+R)." />
             <Row label="Stuck on a modal" detail="Press Escape, or use the Reset Simulation button on the error card." />
-            <Row label="Save state corrupt" detail="Facilitator panel → Reset simulation wipes localStorage cleanly." />
+            <Row label="Save state corrupt" detail="Facilitator panel → Reset simulation clears the current in-memory view and reloads authoritative state." />
           </Section>
         </div>
 

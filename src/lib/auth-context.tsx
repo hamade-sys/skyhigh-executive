@@ -5,7 +5,7 @@
  *
  * Optional auth — anonymous play still works without signing in. When
  * a user IS signed in we use their auth user.id as the durable
- * session id (replacing the per-browser uuid in localStorage), so
+ * session id (replacing the old per-browser UUID path), so
  * their saved games + history follow them across devices.
  *
  * Three sign-in surfaces: Google OAuth, Microsoft OAuth (cohort
@@ -14,9 +14,9 @@
  * context so the LoginPage doesn't need to know which provider it's
  * driving.
  *
- * Keeps the existing `getOrCreateSessionId` localStorage path alive
- * for unsigned-in players, so the lobby doesn't break when Supabase
- * env vars aren't set.
+ * Auth-backed identity is now the primary path for active gameplay and
+ * persistence. Unsigned-in surfaces fall back to non-durable in-memory
+ * behavior rather than browser storage.
  */
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";

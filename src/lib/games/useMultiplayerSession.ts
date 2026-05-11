@@ -5,7 +5,7 @@
  *
  * All multiplayer pages (lobby, game lobby, play, facilitator) require
  * the player to be signed in. Identity is always Supabase user.id —
- * never a localStorage UUID, never an anonymous fallback.
+ * never a browser-storage UUID, never an anonymous fallback.
  *
  * Returns:
  *   sessionId  — user.id when signed in, null otherwise

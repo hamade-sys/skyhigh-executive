@@ -9,8 +9,9 @@
  *
  * Show-once-per-game-per-browser: the user sees this immediately after
  * the lobby flips to "playing", but if they reload the page mid-game
- * they shouldn't see it again. Tracked via a sessionStorage flag keyed
- * by gameId.
+ * they shouldn't see it again. The durable preference is now stored
+ * server-side; this module keeps a lightweight in-memory fast path so
+ * the current tab doesn't need to refetch before continuing.
  *
  * Trigger: dropped between the "Loading game canvas…" placeholder
  * and the actual `<GameCanvas />` render in `/games/[id]/play/page.tsx`.

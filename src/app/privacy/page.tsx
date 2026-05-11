@@ -35,18 +35,17 @@ export default function PrivacyPage() {
         <div className="prose prose-slate max-w-none space-y-6">
           <Section title="Anonymous play by default">
             <p>
-              ICAN Simulations don&rsquo;t require an account. Solo runs save to your
-              browser&rsquo;s <code>localStorage</code> only — nothing leaves
-              your device. Multiplayer lobbies use a per-browser session id
-              (a random UUID stored in localStorage) so you can reconnect to
-              your seat after a refresh. We don&rsquo;t link that id to a
-              real-world identity.
+              ICAN Simulations support lightweight browsing without an account,
+              but active game persistence now runs through our database rather
+              than browser storage. When you sign in, your game session is tied
+              to your authenticated account so you can reconnect across refreshes
+              and devices.
             </p>
           </Section>
           <Section title="What we collect when you play multiplayer">
             <ul>
               <li>The display name you type when you claim a seat</li>
-              <li>The browser session id that lets you reconnect</li>
+              <li>Your authenticated session/account id so we can reconnect you</li>
               <li>Game state — fleet, routes, decisions you submit</li>
               <li>Audit-log events — joins, ready toggles, quarter closes</li>
             </ul>
@@ -65,11 +64,9 @@ export default function PrivacyPage() {
           </Section>
           <Section title="Data retention">
             <p>
-              Solo state lives only on your browser; clearing site data wipes
-              it. Multiplayer game state is kept on our database for the life
-              of the run plus 90 days, after which finished runs are purged.
-              Cohort sessions hosted by a facilitator can have a custom
-              retention policy on request.
+              Active game state is kept in our database for the life of the run
+              plus 90 days, after which finished runs are purged. Cohort sessions
+              hosted by a facilitator can have a custom retention policy on request.
             </p>
           </Section>
           <Section title="Your rights">
@@ -79,8 +76,7 @@ export default function PrivacyPage() {
               <a className="text-cyan-700 underline" href="mailto:info@icanmena.com">
                 info@icanmena.com
               </a>{" "}
-              with the session id (visible in your browser&rsquo;s
-              localStorage under <code>skyforce:sessionId:v1</code>).
+              with your game code or signed-in account details.
             </p>
           </Section>
           <Section title="Questions">

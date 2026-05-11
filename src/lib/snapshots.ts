@@ -1,27 +1,10 @@
 /**
  * Quarter-versioned game snapshots.
  *
- * Stored independently from the live Zustand persist payload so that:
- *   1. The "rolling save" (one per round, capped at 40) doesn't bloat
- *      the main `skyforce:game` localStorage key.
- *   2. Snapshots survive a corrupt main save — the facilitator can
- *      restore from a known-good round even if the live state went
- *      sideways.
- *   3. Players who disconnect can be re-synced to the latest snapshot
- *      without losing the rest of the cohort's progress.
- *
- * Storage layout (localStorage):
- *   skyforce:snapshots:index   → JSON array of SnapshotMeta (small)
- *   skyforce:snapshots:<id>    → JSON of the full snapshot payload
- *
- * IDs are deterministic by round (`snap-q{quarter}`) so re-saving the
- * same round overwrites the previous snapshot — we keep one snapshot
- * per round, not one per `closeQuarter` invocation. That keeps the
- * index a clean 1-to-1 with the campaign timeline.
+ * Backed by the database through `/api/games/snapshots`, not browser
+ * storage. Facilitators can restore/export/import saves across devices
+ * and machines because snapshots now live with the game itself.
  */
-
-const INDEX_KEY = "skyforce:snapshots:index";
-const PAYLOAD_PREFIX = "skyforce:snapshots:";
 
 /** Lightweight metadata — what shows in the facilitator UI list. */
 export interface SnapshotMeta {
@@ -51,63 +34,8 @@ export interface SnapshotPayload {
 
 const SCHEMA_VERSION = 1;
 
-function isBrowser(): boolean {
-  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
-}
-
-function readIndex(): SnapshotMeta[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = window.sessionStorage.getItem(INDEX_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as SnapshotMeta[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch {
-    return [];
-  }
-}
-
-function writeIndex(index: SnapshotMeta[]): void {
-  if (!isBrowser()) return;
-  try {
-    window.sessionStorage.setItem(INDEX_KEY, JSON.stringify(index));
-  } catch (err) {
-    console.error("[snapshots] failed to write index", err);
-  }
-}
-
-/** Stable id for a quarter's snapshot. Re-saving same round overwrites. */
-export function snapshotIdForQuarter(quarter: number): string {
-  return `snap-q${quarter}`;
-}
-
-/** Read every snapshot's metadata. Sorted newest-first by savedAt. */
-export function listSnapshots(): SnapshotMeta[] {
-  return readIndex().slice().sort((a, b) => b.savedAt - a.savedAt);
-}
-
-/** Read one snapshot's full payload by id. Returns null if missing
- *  or unparseable — caller decides how to handle a corrupt save. */
-export function loadSnapshot(id: string): SnapshotPayload | null {
-  if (!isBrowser()) return null;
-  try {
-    const raw = window.sessionStorage.getItem(PAYLOAD_PREFIX + id);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as SnapshotPayload;
-    if (!parsed || typeof parsed !== "object") return null;
-    if (parsed.version !== SCHEMA_VERSION) {
-      console.warn("[snapshots] schema mismatch, ignoring snapshot", id, parsed.version);
-      return null;
-    }
-    return parsed;
-  } catch (err) {
-    console.error("[snapshots] failed to load", id, err);
-    return null;
-  }
-}
-
 interface SaveOpts {
+  gameId: string;
   quarter: number;
   /** State shape matching the persist `partialize`. */
   state: unknown;
@@ -118,84 +46,110 @@ interface SaveOpts {
   teamCount: number;
 }
 
+function rowToMeta(row: {
+  id: string;
+  quarter: number;
+  label: string;
+  quarter_label: string;
+  team_count: number;
+  created_at: string;
+}): SnapshotMeta {
+  return {
+    id: row.id,
+    quarter: row.quarter,
+    savedAt: Date.parse(row.created_at),
+    label: row.label,
+    quarterLabel: row.quarter_label,
+    teamCount: row.team_count,
+  };
+}
+
+/** Read every snapshot's metadata. Sorted newest-first by savedAt. */
+export async function listSnapshots(gameId: string): Promise<SnapshotMeta[]> {
+  const res = await fetch(`/api/games/snapshots?gameId=${encodeURIComponent(gameId)}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const json = await res.json().catch(() => ({}));
+  const rows = Array.isArray(json.snapshots) ? json.snapshots : [];
+  return rows.map(rowToMeta);
+}
+
+/** Read one snapshot's full payload by id. Returns null if missing. */
+export async function loadSnapshot(gameId: string, id: string): Promise<SnapshotPayload | null> {
+  const params = new URLSearchParams({ gameId, snapshotId: id });
+  const res = await fetch(`/api/games/snapshots?${params.toString()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const json = await res.json().catch(() => ({}));
+  const row = json.snapshot;
+  if (!row || typeof row !== "object") return null;
+  return {
+    meta: rowToMeta(row as {
+      id: string;
+      quarter: number;
+      label: string;
+      quarter_label: string;
+      team_count: number;
+      created_at: string;
+    }),
+    version: SCHEMA_VERSION,
+    state: (row as { state_json: unknown }).state_json,
+  };
+}
+
 /** Save a snapshot for the given quarter. Overwrites any existing
  *  snapshot for the same round (we keep one per round only). */
-export function saveSnapshot(opts: SaveOpts): SnapshotMeta {
-  const id = snapshotIdForQuarter(opts.quarter);
-  const meta: SnapshotMeta = {
-    id,
-    quarter: opts.quarter,
-    savedAt: Date.now(),
-    label: `${opts.quarterLabel} · ${opts.contextLabel}`,
-    quarterLabel: opts.quarterLabel,
-    teamCount: opts.teamCount,
-  };
-  const payload: SnapshotPayload = {
-    meta,
-    version: SCHEMA_VERSION,
-    state: opts.state,
-  };
-
-  if (isBrowser()) {
-    try {
-      window.sessionStorage.setItem(
-        PAYLOAD_PREFIX + id,
-        JSON.stringify(payload),
-      );
-    } catch (err) {
-      // Quota exceeded — most likely cause. Try evicting the oldest
-      // payload (lowest quarter) and retrying once. If we're at quota
-      // with the snapshots themselves the cohort has played 40+ rounds
-      // and something is wrong; better to swallow than corrupt.
-      console.error("[snapshots] write quota issue", err);
-      const idx = readIndex().sort((a, b) => a.quarter - b.quarter);
-      const oldest = idx[0];
-      if (oldest && oldest.id !== id) {
-        deleteSnapshot(oldest.id);
-        try {
-          window.sessionStorage.setItem(
-            PAYLOAD_PREFIX + id,
-            JSON.stringify(payload),
-          );
-        } catch {
-          // Give up silently after one retry.
-        }
-      }
-    }
-  }
-
-  // Update the index — replace existing entry for this id.
-  const idx = readIndex().filter((m) => m.id !== id);
-  idx.push(meta);
-  writeIndex(idx);
-
-  return meta;
+export async function saveSnapshot(opts: SaveOpts): Promise<SnapshotMeta | null> {
+  const res = await fetch("/api/games/snapshots", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      gameId: opts.gameId,
+      quarter: opts.quarter,
+      label: `${opts.quarterLabel} · ${opts.contextLabel}`,
+      quarterLabel: opts.quarterLabel,
+      teamCount: opts.teamCount,
+      stateJson: opts.state,
+    }),
+  });
+  if (!res.ok) return null;
+  const json = await res.json().catch(() => ({}));
+  const row = json.snapshot;
+  if (!row || typeof row !== "object") return null;
+  return rowToMeta(row as {
+    id: string;
+    quarter: number;
+    label: string;
+    quarter_label: string;
+    team_count: number;
+    created_at: string;
+  });
 }
 
-export function deleteSnapshot(id: string): void {
-  if (!isBrowser()) return;
-  try {
-    window.sessionStorage.removeItem(PAYLOAD_PREFIX + id);
-  } catch (err) {
-    console.error("[snapshots] delete payload failed", id, err);
-  }
-  writeIndex(readIndex().filter((m) => m.id !== id));
+export async function deleteSnapshot(gameId: string, id: string): Promise<void> {
+  await fetch("/api/games/snapshots", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ gameId, snapshotId: id }),
+  }).catch(() => {
+    // Non-fatal: callers refresh list after delete attempt.
+  });
 }
 
-/** Clear every snapshot. Used when starting a fresh campaign so old
- *  saves from the prior session don't pollute the picker. */
-export function clearAllSnapshots(): void {
-  if (!isBrowser()) return;
-  for (const m of readIndex()) {
-    try { window.sessionStorage.removeItem(PAYLOAD_PREFIX + m.id); } catch {}
+/** Clear every snapshot for a game. */
+export async function clearAllSnapshots(gameId: string): Promise<void> {
+  const snapshots = await listSnapshots(gameId);
+  for (const m of snapshots) {
+    await deleteSnapshot(gameId, m.id);
   }
-  writeIndex([]);
 }
 
 /** Serialize a snapshot to JSON for download (facilitator can email
  *  / archive a save). Returns null if the snapshot doesn't exist. */
-export function exportSnapshotJson(id: string): string | null {
-  const payload = loadSnapshot(id);
+export async function exportSnapshotJson(gameId: string, id: string): Promise<string | null> {
+  const payload = await loadSnapshot(gameId, id);
   if (!payload) return null;
   return JSON.stringify(payload, null, 2);
 }
@@ -203,9 +157,10 @@ export function exportSnapshotJson(id: string): string | null {
 /** Import a previously-exported snapshot JSON. Validates schema and
  *  writes it to the index + payload store. Returns the meta on
  *  success or an error string. */
-export function importSnapshotJson(
+export async function importSnapshotJson(
+  gameId: string,
   json: string,
-): { ok: true; meta: SnapshotMeta } | { ok: false; error: string } {
+): Promise<{ ok: true; meta: SnapshotMeta } | { ok: false; error: string }> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -230,18 +185,16 @@ export function importSnapshotJson(
   }
 
   const meta = p.meta as SnapshotMeta;
-  if (isBrowser()) {
-    try {
-      window.sessionStorage.setItem(PAYLOAD_PREFIX + meta.id, json);
-    } catch (err) {
-      return {
-        ok: false,
-        error: `Could not write snapshot to storage: ${err instanceof Error ? err.message : "unknown"}`,
-      };
-    }
+  const saved = await saveSnapshot({
+    gameId,
+    quarter: meta.quarter,
+    state: p.state,
+    contextLabel: meta.label.split(" · ").slice(1).join(" · ") || meta.label,
+    quarterLabel: meta.quarterLabel,
+    teamCount: meta.teamCount,
+  });
+  if (!saved) {
+    return { ok: false, error: "Could not write snapshot to the database." };
   }
-  const idx = readIndex().filter((m) => m.id !== meta.id);
-  idx.push(meta);
-  writeIndex(idx);
-  return { ok: true, meta };
+  return { ok: true, meta: saved };
 }

@@ -58,10 +58,9 @@ export default function GamePlayPage({
   const teamsCount = useGame((s) => s.teams.length);
   const teams = useGame((s) => s.teams);
   // Cohort reveal — shown once per game per browser, immediately after
-  // hydration completes. The lazy useState initialiser reads
-  // sessionStorage exactly once at first mount and skips any
-  // synchronous setState-in-effect dance that would trip the
-  // react-hooks/set-state-in-effect rule.
+  // hydration completes. The initial state comes from the in-memory
+  // tracker, and a later server-backed preference sync can refine it
+  // without blocking first paint.
   const [revealDismissed, setRevealDismissed] = useState<boolean>(
     () => hasSeenCohortReveal(gameId),
   );
@@ -184,7 +183,7 @@ export default function GamePlayPage({
       return;
     }
     // Hydration succeeded — the database is the source of truth for
-    // which game this player belongs to; no localStorage key needed.
+    // which game this player belongs to; no browser-side key needed.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setHydrated(true);
   }, [data, sessionId, hydrated, hydrateFromServerState, router]);

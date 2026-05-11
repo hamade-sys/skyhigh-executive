@@ -4,6 +4,7 @@ import { MapPin, Plane, Info, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { CITIES_BY_CODE } from "@/data/cities";
+import { getUserPreference, setUserPreference } from "@/lib/client-preferences";
 
 export interface MapCommandHudProps {
   origin: string | null;
@@ -29,22 +30,23 @@ export function MapCommandHud({ origin, dest, hubCode, activeRouteCount, compact
   const d = dest ? CITIES_BY_CODE[dest] : null;
   const hub = hubCode ? CITIES_BY_CODE[hubCode] : null;
 
-  // Manual dismissal — persists in localStorage so closing the HUD
-  // sticks across reloads. Player gets back the screen real estate
-  // once they've internalised the route flow.
+  // Manual dismissal — persisted server-side for signed-in players so
+  // it survives reloads without browser storage.
   const [manuallyDismissed, setManuallyDismissed] = useState<boolean>(false);
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
+    let cancelled = false;
+    void getUserPreference(DISMISSED_KEY).then((value) => {
+      if (cancelled) return;
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setManuallyDismissed(window.sessionStorage.getItem(DISMISSED_KEY) === "1");
-    } catch {}
+      setManuallyDismissed(value === true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
   function dismiss() {
     setManuallyDismissed(true);
-    if (typeof window !== "undefined") {
-      try { window.sessionStorage.setItem(DISMISSED_KEY, "1"); } catch {}
-    }
+    void setUserPreference(DISMISSED_KEY, true);
   }
 
   // Auto-hide once the player has 2+ active routes — they don't need

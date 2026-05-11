@@ -6,7 +6,7 @@
  * "lobby" or "playing").
  *
  * Used by the home page to redirect returning players straight back
- * into their game — replaces the old localStorage "skyforce:activeGame"
+ * into their game — replaces the old browser-stored "skyforce:activeGame"
  * key which only worked on the same device/browser.
  *
  * Response shapes:
