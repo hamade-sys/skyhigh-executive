@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
 import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { useGame, selectPlayer, selectActiveTeam } from "@/store/game";
 import { computeAirlineValue, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
 import { SCENARIOS_BY_ID } from "@/data/scenarios";
-import { Award, TrendingUp, TrendingDown, Trophy, Sparkles } from "lucide-react";
+import { Award, TrendingUp, TrendingDown, Trophy, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { airlineColorFor } from "@/lib/games/airline-colors";
 import { MultiAirlineAnalytics } from "@/components/endgame/MultiAirlineAnalytics";
+import type { Team } from "@/types/game";
 
 /** Legacy titles by final Brand Value band. The "Survivor" sub-line
  *  used to hardcode "Q4 2024" — fine when every game was 40 rounds,
@@ -29,22 +31,74 @@ function legacyTitle(bv: number, finalQuarterLabel: string): { title: string; su
 export default function Endgame() {
   const s = useGame();
   const router = useRouter();
-  // In multiplayer (GM/observer), playerTeamId may briefly be null while
-  // Realtime re-hydration is in-flight, or permanently null for an observer
-  // who never claimed a seat. Fall back to activeTeamId (the team the GM
-  // was watching) so the results screen always renders.
-  const player = selectActiveTeam(s) ?? selectPlayer(s) ?? (s.teams.length > 0 ? s.teams[0] : null);
-  const isObserver = s.isObserver;
   const reset = useGame((g) => g.resetGame);
 
-  // Multiplayer detection — if the engine carries a session.gameId,
-  // "play again" should route into the multiplayer entry (lobby or
-  // create) instead of the solo /onboarding flow. The latter would
-  // pull the player back through doctrine + hub onboarding pages
-  // which feel duplicative when they just finished a multiplayer run.
+  // ── DB fetch for multiplayer ──────────────────────────────────────────
+  // For multiplayer games the authoritative state lives in Supabase, not
+  // localStorage. Fetch it fresh every time the endgame page mounts so
+  // the results always reflect what actually happened on the server, even
+  // if the local Zustand store is stale from a previous game.
+  const gameId = s.session?.gameId ?? null;
+  const [dbTeams, setDbTeams] = useState<Team[] | null>(null);
+  const [dbSession, setDbSession] = useState<typeof s.session | null>(null);
+  const [dbLoading, setDbLoading] = useState<boolean>(!!gameId);
+
+  useEffect(() => {
+    if (!gameId) { setDbLoading(false); return; }
+    setDbLoading(true);
+    fetch(`/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const stateJson = data?.state?.state_json as Record<string, unknown> | undefined;
+        if (stateJson?.teams && Array.isArray(stateJson.teams)) {
+          // Reconstruct Set<string> flags — JSON serialises them as arrays.
+          const teams = (stateJson.teams as Array<Record<string, unknown>>).map((t) => ({
+            ...t,
+            flags: new Set(Array.isArray(t.flags) ? t.flags : []) as Set<string>,
+          })) as unknown as Team[];
+          setDbTeams(teams);
+        }
+        if (stateJson?.session) {
+          setDbSession(stateJson.session as typeof s.session);
+        }
+      })
+      .catch(() => { /* fall back to store */ })
+      .finally(() => setDbLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId]);
+
+  // ── Effective state ───────────────────────────────────────────────────
+  // DB data wins for teams + session; local store provides identity fields
+  // (playerTeamId, activeTeamId, isObserver) that are browser-bound.
+  const effectiveTeams: Team[] = dbTeams ?? s.teams;
+  const effectiveSession = dbSession ?? s.session;
+  // Expose a state-shaped object so helpers like getTotalRounds() work.
+  const stateForUtils = { ...s, teams: effectiveTeams, session: effectiveSession };
+
+  const isObserver = s.isObserver;
   const isMultiplayer = !!s.session?.gameId;
   const playAgainHref = isMultiplayer ? "/lobby" : "/onboarding";
   const playAgainLabel = isMultiplayer ? "Browse lobbies" : "Start a new simulation";
+
+  // ── Loading splash ────────────────────────────────────────────────────
+  if (dbLoading) {
+    return (
+      <main className="flex-1 min-h-0 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+      </main>
+    );
+  }
+
+  // ── Player resolution (uses effective teams, not store) ───────────────
+  const playerFromStore = s.playerTeamId
+    ? effectiveTeams.find((t) => t.id === s.playerTeamId) ?? null
+    : null;
+  const activeFromStore = s.activeTeamId
+    ? effectiveTeams.find((t) => t.id === s.activeTeamId) ?? null
+    : null;
+  const player = activeFromStore ?? playerFromStore ?? (effectiveTeams.length > 0 ? effectiveTeams[0] : null);
 
   if (!player) {
     return (
@@ -62,7 +116,7 @@ export default function Endgame() {
   const cardMult = awards.reduce((m, a) => m * a.airlineValueMult, 1);
   const baseAirlineValue = computeAirlineValue(player);
   const finalAirlineValue = baseAirlineValue * cardMult;
-  const rankedTeams = [...s.teams]
+  const rankedTeams = [...effectiveTeams]
     .map((t) => {
       const aw = resolveEndgameAwards(t);
       const m = aw.reduce((mm, a) => mm * a.airlineValueMult, 1);
@@ -87,9 +141,9 @@ export default function Endgame() {
   const focusCardMult = focusAwards.reduce((m, a) => m * a.airlineValueMult, 1);
   const focusFinalAirlineValue = computeAirlineValue(focusTeam) * focusCardMult;
   const finalRank = ranked.findIndex((t) => t.id === focusTeam.id) + 1;
-  const finalQuarterLabel = fmtQuarter(getTotalRounds(s));
+  const finalQuarterLabel = fmtQuarter(getTotalRounds(stateForUtils));
   const { title, sub } = legacyTitle(focusTeam.brandValue, finalQuarterLabel);
-  const totalProfit = focusTeam.financialsByQuarter.reduce((s, q) => s + q.netProfit, 0);
+  const totalProfit = focusTeam.financialsByQuarter.reduce((acc, q) => acc + q.netProfit, 0);
   // Backwards-compatible alias for legacy display fragments below
   const adjustedBV = focusTeam.brandValue;
   const airlineValue = isObserver ? focusFinalAirlineValue : finalAirlineValue;
@@ -282,7 +336,7 @@ export default function Endgame() {
         <Badge tone="accent">
           {isObserver
             ? `🏆 Winner: ${ranked[0]?.name ?? "—"}`
-            : finalRank === 1 ? "Winner" : `Finished #${finalRank} of ${s.teams.length}`}
+            : finalRank === 1 ? "Winner" : `Finished #${finalRank} of ${effectiveTeams.length}`}
         </Badge>
         <h1 className="font-display text-[clamp(3rem,7vw,5rem)] leading-[1.04] text-ink mt-4 mb-3">
           {isObserver ? `${ranked[0]?.name ?? "Winner"} wins!` : `${title}.`}
@@ -395,7 +449,7 @@ export default function Endgame() {
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="font-display text-[1.5rem] text-ink">
-                  Cohort analytics · {fmtQuarter(1)} → {fmtQuarter(getTotalRounds(s))}
+                  Cohort analytics · {fmtQuarter(1)} → {fmtQuarter(getTotalRounds(stateForUtils))}
                 </h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
                   All teams · {ranked.length}
@@ -403,7 +457,7 @@ export default function Endgame() {
               </div>
               <MultiAirlineAnalytics
                 teams={ranked}
-                totalRounds={getTotalRounds(s)}
+                totalRounds={getTotalRounds(stateForUtils)}
                 defaultMetric="brandValue"
                 highlightTeamIds={[ranked[0]?.id, ranked[1]?.id].filter((id): id is string => !!id)}
               />
@@ -480,7 +534,7 @@ export default function Endgame() {
           // Total quarters played
           facts.push({
             label: "Quarters operated",
-            value: `${focusTeam.financialsByQuarter.length} of ${getTotalRounds(s)}`,
+            value: `${focusTeam.financialsByQuarter.length} of ${getTotalRounds(stateForUtils)}`,
           });
           // Total decisions
           if (focusTeam.decisions.length > 0) {
@@ -925,7 +979,7 @@ export default function Endgame() {
         {/* MVP Award (PRD §15.2) */}
         {(() => {
           type MvpCandidate = { teamCode: string; teamName: string; teamColor: string; member: (typeof focusTeam.members)[number] };
-          const allMembers: MvpCandidate[] = s.teams.flatMap((t) =>
+          const allMembers: MvpCandidate[] = effectiveTeams.flatMap((t) =>
             t.members.map((m) => ({ teamCode: t.code, teamName: t.name, teamColor: t.color, member: m }))
           );
           const ranked = [...allMembers].sort((a, b) => b.member.mvpPts - a.member.mvpPts);
