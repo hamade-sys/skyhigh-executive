@@ -7067,11 +7067,17 @@ export const useGame = create<GameStore>()(
           try {
             // Check the isMultiplayerSession flag embedded in the
             // partialize payload. If true, silently skip the write so the
-            // solo save is left untouched.
+            // solo save is left untouched — EXCEPT when the game has just
+            // ended (phase:"endgame"). Allowing the write on game-end
+            // means a refresh of /endgame shows the correct final teams
+            // instead of stale localStorage data from a previous game.
             const parsed = JSON.parse(value) as {
-              state?: { isMultiplayerSession?: boolean };
+              state?: { isMultiplayerSession?: boolean; phase?: string };
             };
-            if (parsed?.state?.isMultiplayerSession === true) return;
+            if (
+              parsed?.state?.isMultiplayerSession === true &&
+              parsed?.state?.phase !== "endgame"
+            ) return;
             localStorage.setItem(name, value);
           } catch (err) {
             // Phase 7 P2 — surface a one-time failure event so the

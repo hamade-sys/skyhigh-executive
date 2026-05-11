@@ -66,7 +66,10 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
   function continueAndRemember() {
     if (typeof window !== "undefined") {
       try {
-        window.sessionStorage.setItem(SEEN_KEY_PREFIX + gameId, "1");
+        // Use localStorage (not sessionStorage) so the reveal is
+        // permanently suppressed for this game even after the tab is
+        // closed and the player re-enters mid-game.
+        window.localStorage.setItem(SEEN_KEY_PREFIX + gameId, "1");
       } catch { /* private mode / quota — fine, fall back to in-memory */ }
     }
     onContinue();
@@ -218,12 +221,13 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
   );
 }
 
-/** Has the user already seen the cohort reveal for this gameId in
- *  this browser session? */
+/** Has the user already seen the cohort reveal for this gameId?
+ *  Checked against localStorage so the reveal stays dismissed even
+ *  when the player closes the tab and re-enters the game mid-run. */
 export function hasSeenCohortReveal(gameId: string): boolean {
   if (typeof window === "undefined") return true; // SSR: don't block
   try {
-    return window.sessionStorage.getItem(SEEN_KEY_PREFIX + gameId) === "1";
+    return window.localStorage.getItem(SEEN_KEY_PREFIX + gameId) === "1";
   } catch {
     return false;
   }

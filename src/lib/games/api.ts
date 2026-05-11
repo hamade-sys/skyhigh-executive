@@ -556,13 +556,30 @@ export async function listPublicLobby(args?: {
   const supa = getServerClient() as any;
 
   // Step 1: pull the rows.
-  const { data: gameRows, error } = await supa
+  // Include recently-ended public games (last 48 h) so the lobby can
+  // show "Finished" badges — players can see that a game they might
+  // have been watching has concluded. Older ended games are excluded
+  // to prevent the lobby from filling up with stale results.
+  const endedCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+  const { data: activeRows, error: activeErr } = await supa
     .from("games")
     .select("*")
     .eq("visibility", "public")
     .in("status", ["lobby", "playing"])
     .limit(args?.limit ?? 50);
-  if (error) return { ok: false, error: error.message };
+  if (activeErr) return { ok: false, error: activeErr.message };
+
+  const { data: endedRows } = await supa
+    .from("games")
+    .select("*")
+    .eq("visibility", "public")
+    .eq("status", "ended")
+    .gte("ended_at", endedCutoff)
+    .order("ended_at", { ascending: false })
+    .limit(10); // cap recent-finished at 10 so they don't flood the lobby
+
+  const { data: gameRows, error } = { data: [...(activeRows ?? []), ...(endedRows ?? [])], error: null };
+  if (error) return { ok: false, error: (error as Error).message };
 
   const games = (gameRows ?? []) as GameRow[];
   if (games.length === 0) return { ok: true, data: [] };
@@ -627,6 +644,8 @@ export async function listPublicLobby(args?: {
       if (g.status === "playing" && g.member_count >= g.max_teams) {
         return false;
       }
+      // Ended games always pass — they're shown with a "Finished" badge
+      // so players can see concluded runs. Already time-capped in the query.
       return true;
     });
 
@@ -641,16 +660,22 @@ export async function listPublicLobby(args?: {
   }
 
   enriched.sort((a, b) => {
-    if (a.status !== b.status) {
-      // 'lobby' before 'playing' (alphabetical happens to put lobby
-      // first, but we make the intent explicit for clarity).
-      return a.status === "lobby" ? -1 : 1;
-    }
+    // Sort order: lobby → playing → ended.
+    const statusOrder = (s: string) =>
+      s === "lobby" ? 0 : s === "playing" ? 1 : 2;
+    if (a.status !== b.status) return statusOrder(a.status) - statusOrder(b.status);
     if (a.status === "lobby") {
+      // Oldest lobbies first (they've been waiting longest).
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     }
-    // both 'playing' — most-progressed first
-    return b.current_quarter - a.current_quarter;
+    if (a.status === "playing") {
+      // Most-progressed playing games first.
+      return b.current_quarter - a.current_quarter;
+    }
+    // ended — most-recently-finished first
+    const aEnd = a.ended_at ? new Date(a.ended_at).getTime() : 0;
+    const bEnd = b.ended_at ? new Date(b.ended_at).getTime() : 0;
+    return bEnd - aEnd;
   });
 
   const limited = enriched.slice(0, args?.limit ?? 25);

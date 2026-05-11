@@ -25,7 +25,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight, Plus, RefreshCw, Users, Lock, Sparkles, Globe2, Play,
-  KeyRound, Loader2,
+  KeyRound, Loader2, CheckCircle2,
 } from "lucide-react";
 import { isMultiplayerAvailable } from "@/lib/supabase/browser";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
@@ -240,25 +240,50 @@ export default function LobbyPage() {
 
 function GameCard({ game }: { game: JoinableGame }) {
   const playing = game.status === "playing";
+  const ended = game.status === "ended";
   const memberCount = game.member_count ?? 0;
   const seatsRemaining = game.max_teams - memberCount;
+
+  // Relative "finished X ago" label for ended games
+  const finishedAgo = (() => {
+    if (!ended || !game.ended_at) return null;
+    const diffMs = Date.now() - new Date(game.ended_at).getTime();
+    const mins = Math.round(diffMs / 60_000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(diffMs / 3_600_000);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(diffMs / 86_400_000)}d ago`;
+  })();
+
   return (
     <Link
       href={`/games/${game.id}/lobby`}
-      className="block rounded-xl border border-slate-200 bg-white p-5 hover:border-slate-300 hover:shadow-sm transition-all group"
+      className={`block rounded-xl border p-5 transition-all group ${
+        ended
+          ? "border-slate-200 bg-slate-50/60 hover:border-slate-300 opacity-75 hover:opacity-100"
+          : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+      }`}
     >
       <div className="flex items-center gap-4">
-        <div className="w-11 h-11 rounded-xl bg-cyan-50 ring-4 ring-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
+        <div className={`w-11 h-11 rounded-xl ring-4 flex items-center justify-center shrink-0 ${
+          ended
+            ? "bg-slate-100 ring-slate-100 text-slate-400"
+            : "bg-cyan-50 ring-cyan-100 text-cyan-700"
+        }`}>
           {game.mode === "facilitated" ? <Sparkles className="w-5 h-5" /> : <Globe2 className="w-5 h-5" />}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h3 className="text-base font-semibold text-slate-900 truncate group-hover:text-slate-700">
+            <h3 className={`text-base font-semibold truncate group-hover:text-slate-700 ${ended ? "text-slate-500" : "text-slate-900"}`}>
               {game.name}
             </h3>
-            {/* Phase 8.4 — primary status badge. Lobby vs in-progress
-                drives both color and the affordance copy below. */}
-            {playing ? (
+            {/* Status badge */}
+            {ended ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider bg-slate-100 text-slate-500">
+                <CheckCircle2 className="w-2.5 h-2.5" />
+                Finished{finishedAgo ? ` · ${finishedAgo}` : ""}
+              </span>
+            ) : playing ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider bg-amber-50 text-amber-700">
                 <Play className="w-2.5 h-2.5 fill-amber-700" />
                 In progress · Q{game.current_quarter}
@@ -275,7 +300,7 @@ function GameCard({ game }: { game: JoinableGame }) {
                 Game master
               </span>
             )}
-            {game.locked && (
+            {game.locked && !ended && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider bg-slate-100 text-slate-600">
                 <Lock className="w-2.5 h-2.5" />
                 Locked
@@ -289,16 +314,18 @@ function GameCard({ game }: { game: JoinableGame }) {
             </span>
             <span className="text-slate-300">·</span>
             <span>
-              {playing
-                ? "spectator-only"
-                : seatsRemaining > 0
-                  ? `${seatsRemaining} seat${seatsRemaining === 1 ? "" : "s"} open`
-                  : "lobby full"}
+              {ended
+                ? `${game.current_quarter} quarters played`
+                : playing
+                  ? "spectator-only"
+                  : seatsRemaining > 0
+                    ? `${seatsRemaining} seat${seatsRemaining === 1 ? "" : "s"} open`
+                    : "lobby full"}
             </span>
           </p>
         </div>
         <div className="text-xs font-semibold text-slate-400 group-hover:text-slate-900 hidden sm:block">
-          {playing ? "View →" : "Join →"}
+          {ended ? "Results →" : playing ? "View →" : "Join →"}
         </div>
       </div>
     </Link>
