@@ -77,6 +77,9 @@ export async function POST(req: NextRequest) {
       const teams = (
         stateJson.teams as Array<Record<string, unknown>> | undefined
       ) ?? [];
+      const currentQuarter = typeof stateJson.currentQuarter === "number"
+        ? stateJson.currentQuarter
+        : 0;
 
       // Only flip the flag for the team claimed by this user.
       // Every other team's flag is preserved exactly as it is in the DB.
@@ -84,7 +87,11 @@ export async function POST(req: NextRequest) {
       const updatedTeams = teams.map((t) => {
         if (t.claimedBySessionId === userId) {
           found = true;
-          return { ...t, readyForNextQuarter: true };
+          return {
+            ...t,
+            readyForNextQuarter: true,
+            readyForQuarter: currentQuarter,
+          };
         }
         return t;
       });

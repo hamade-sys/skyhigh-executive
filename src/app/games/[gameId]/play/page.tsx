@@ -162,9 +162,11 @@ export default function GamePlayPage({
       return;
     }
     const hydrateStart = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const fallbackTeamId = data.members.find((m) => m.session_id === sessionId)?.team_id ?? null;
     const result = hydrateFromServerState({
       stateJson: data.state.state_json,
       mySessionId: sessionId,
+      fallbackTeamId,
       // Pass the real game_state.version so pushStateToServer sends the
       // correct expectedVersion. Without this, the embedded session.version
       // (which diverges after the start/seed writes) is used and every GM
@@ -270,6 +272,10 @@ export default function GamePlayPage({
           hydrateRef.current({
             stateJson: json.state.state_json,
             mySessionId: sessionId,
+            fallbackTeamId:
+              (json.members as GameMemberRow[] | undefined)
+                ?.find((m) => m.session_id === sessionId)
+                ?.team_id ?? null,
             // Pass the real DB version so the next pushStateToServer
             // uses the correct expectedVersion and doesn't immediately
             // 409 after a team-forfeit refetch.

@@ -412,6 +412,9 @@ export interface Team {
    *  surfaces in the lobby/HUD so the facilitator can see who's still
    *  in their submission flow. Resets to false at every quarter close. */
   readyForNextQuarter?: boolean;
+  /** Quarter number this ready flag belongs to. Lets multiplayer ignore
+   *  stale "ready" flags that leaked across a round advance. */
+  readyForQuarter?: number;
 
   members: TeamMember[];         // CEO/CFO/CMO/CHRO with MVP tally
 

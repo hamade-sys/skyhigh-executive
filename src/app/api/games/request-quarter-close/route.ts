@@ -77,6 +77,9 @@ export async function POST(req: NextRequest) {
       const teams = (
         stateJson.teams as Array<Record<string, unknown>> | undefined
       ) ?? [];
+      const currentQuarter = typeof stateJson.currentQuarter === "number"
+        ? stateJson.currentQuarter
+        : 0;
 
       // Find the team owned by this user and their display name.
       let myTeamName = "A player";
@@ -87,7 +90,11 @@ export async function POST(req: NextRequest) {
           found = true;
           myTeamId = String(t.id ?? "");
           myTeamName = String(t.airlineName ?? t.name ?? "A player");
-          return { ...t, readyForNextQuarter: true };
+          return {
+            ...t,
+            readyForNextQuarter: true,
+            readyForQuarter: currentQuarter,
+          };
         }
         return t;
       });
@@ -130,7 +137,11 @@ export async function POST(req: NextRequest) {
       );
       const allReady =
         humanTeams.length > 0 &&
-        humanTeams.every((t) => t.readyForNextQuarter === true);
+        humanTeams.every(
+          (t) =>
+            t.readyForNextQuarter === true &&
+            t.readyForQuarter === currentQuarter,
+        );
 
       const deadlineAt = new Date(
         Date.now() + COUNTDOWN_SECONDS * 1000,

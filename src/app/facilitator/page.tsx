@@ -195,7 +195,9 @@ function FacilitatorContent() {
               how many seats finished their submission flow. */}
           {(() => {
             const humans = s.teams.filter((t) => t.controlledBy === "human");
-            const ready = humans.filter((t) => t.readyForNextQuarter === true).length;
+            const ready = humans.filter(
+              (t) => t.readyForNextQuarter === true && t.readyForQuarter === s.currentQuarter,
+            ).length;
             if (humans.length < 2) return null;
             const allReady = ready === humans.length;
             return (
@@ -291,6 +293,7 @@ function FacilitatorContent() {
             <TeamsView
               teams={s.teams}
               activeId={s.playerTeamId}
+              currentQuarter={s.currentQuarter}
               onSelectTeam={(id) => setActiveTeam(id)}
             />
           )}
@@ -566,10 +569,11 @@ function NavItem({
 }
 
 function TeamsView({
-  teams, activeId, onSelectTeam,
+  teams, activeId, currentQuarter, onSelectTeam,
 }: {
   teams: Team[];
   activeId: string | null;
+  currentQuarter: number;
   onSelectTeam: (id: string) => void;
 }) {
   return (
@@ -638,7 +642,9 @@ function TeamsView({
                         any pending route bids). Bots don't have a
                         ready state — they act in their own quarter
                         close hook. */}
-                    {t.controlledBy === "human" && t.readyForNextQuarter && (
+                    {t.controlledBy === "human" &&
+                      t.readyForNextQuarter === true &&
+                      t.readyForQuarter === currentQuarter && (
                       <Badge tone="positive">Ready</Badge>
                     )}
                   </div>

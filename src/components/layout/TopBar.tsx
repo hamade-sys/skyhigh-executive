@@ -370,6 +370,10 @@ function CloseQuarterButton() {
             hydrateFromServerState({
               stateJson: json.state.state_json,
               mySessionId: localSessionId,
+              fallbackTeamId:
+                (json.members as Array<{ session_id: string | null; team_id: string | null }> | undefined)
+                  ?.find((m) => m.session_id === localSessionId)
+                  ?.team_id ?? null,
               dbVersion: typeof json.state.version === "number"
                 ? json.state.version
                 : undefined,
@@ -447,6 +451,12 @@ function CloseQuarterButton() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [quarterCloseRequest, iRequested, triggerClose]);
+
+  // Reset iRequested when the quarter actually advances (store
+  // clears quarterCloseRequest and hydrateFromServerState fires).
+  // We detect this by watching currentQuarter.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setIRequested(false); }, [currentQuarter]);
 
   if (!player) return null;
 
@@ -592,12 +602,6 @@ function CloseQuarterButton() {
       void syncAndClose();
     }
   }
-
-  // Reset iRequested when the quarter actually advances (store
-  // clears quarterCloseRequest and hydrateFromServerState fires).
-  // We detect this by watching currentQuarter.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setIRequested(false); }, [currentQuarter]);
 
   // ── Peer-triggered countdown banner ─────────────────────────────────
   // Shown on every browser EXCEPT the one that initiated the close.

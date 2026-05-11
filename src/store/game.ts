@@ -175,6 +175,10 @@ export interface GameStore extends GameState {
     byTeamName: string;
     deadlineAt: string; // ISO timestamp
   } | null;
+  /** Local browser's member-bound team id. Never shared with peers; used
+   *  to recover the correct seat if a server snapshot temporarily loses
+   *  claimedBySessionId during hydration. */
+  memberTeamId: string | null;
 
   // ── Actions ───────────────────────────────────────────────
   startNewGame(args: {
@@ -478,6 +482,8 @@ export interface GameStore extends GameState {
   hydrateFromServerState(args: {
     stateJson: unknown;
     mySessionId: string;
+    /** Team id from the caller's `game_members` row when available. */
+    fallbackTeamId?: string | null;
     /** Actual game_state.version from the DB load/Realtime payload.
      *  When provided, overwrites serverStateVersion so pushStateToServer
      *  sends the correct expectedVersion on the very first write. */
@@ -893,6 +899,13 @@ function ensureStreaks(t: Team): Team {
   return { ...t, sliderStreaks: merged };
 }
 
+function isReadyForQuarter(
+  team: { readyForNextQuarter?: boolean; readyForQuarter?: number },
+  quarter: number,
+): boolean {
+  return team.readyForNextQuarter === true && team.readyForQuarter === quarter;
+}
+
 export const useGame = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -928,6 +941,7 @@ export const useGame = create<GameStore>()(
       serverStateVersion: 0, // set to game_state.version during hydrateFromServerState
       activeTeamId: null,
       localSessionId: null, // set to user.id during hydrateFromServerState; null in solo
+      memberTeamId: null,
       preOrders: [],
       productionCapOverrides: {},
       isMultiplayerSession: false,
@@ -1175,6 +1189,7 @@ export const useGame = create<GameStore>()(
           isObserver: false,
           isMultiplayerSession: false,
           localSessionId: null,
+          memberTeamId: null,
           serverStateVersion: 0,
           session: null,
           // Re-entrancy guard must be false — if the previous session
@@ -5202,7 +5217,9 @@ export const useGame = create<GameStore>()(
         // games would auto-fire closeQuarter again on the very next
         // setActiveTeamReady() call (since flags would still be true).
         const teamsWithReadyCleared = teamsWithPendingResolved.map((t) =>
-          t.readyForNextQuarter ? { ...t, readyForNextQuarter: false } : t,
+          t.readyForNextQuarter || typeof t.readyForQuarter === "number"
+            ? { ...t, readyForNextQuarter: false, readyForQuarter: undefined }
+            : t,
         );
 
         set({
@@ -5629,6 +5646,7 @@ export const useGame = create<GameStore>()(
           playerTeamId: null,
           activeTeamId: null,
           session: null,
+          memberTeamId: null,
           isMultiplayerSession: false,
           isObserver: false,
           lastCloseResult: null,
@@ -5667,7 +5685,13 @@ export const useGame = create<GameStore>()(
         if (!meId) return;
         set({
           teams: s.teams.map((t) =>
-            t.id === meId ? { ...t, readyForNextQuarter: ready } : t,
+            t.id === meId
+              ? {
+                  ...t,
+                  readyForNextQuarter: ready,
+                  readyForQuarter: ready ? s.currentQuarter : undefined,
+                }
+              : t,
           ),
         });
         if (!ready) return;
@@ -5723,8 +5747,10 @@ export const useGame = create<GameStore>()(
               controlledBy?: string;
               claimedBySessionId?: string | null;
               readyForNextQuarter?: boolean;
+              readyForQuarter?: number;
             };
             let serverHumans: ServerTeam[] = [];
+            let serverCurrentQuarter = get().currentQuarter;
             try {
               const loadRes = await fetch(
                 `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
@@ -5748,6 +5774,10 @@ export const useGame = create<GameStore>()(
                 serverHumans = (
                   (json.state?.state_json?.teams ?? []) as ServerTeam[]
                 ).filter((t) => t.controlledBy === "human");
+                serverCurrentQuarter =
+                  typeof json.state?.state_json?.currentQuarter === "number"
+                    ? json.state.state_json.currentQuarter
+                    : serverCurrentQuarter;
               }
             } catch {
               // Network error — fall back to local store so a blip
@@ -5760,12 +5790,13 @@ export const useGame = create<GameStore>()(
                   controlledBy: t.controlledBy,
                   claimedBySessionId: t.claimedBySessionId,
                   readyForNextQuarter: t.readyForNextQuarter,
+                  readyForQuarter: t.readyForQuarter,
                 }));
             }
 
             // Step 3: check if every human is ready (or long-away).
             const blockingHumans = serverHumans.filter((t) => {
-              if (t.readyForNextQuarter === true) return false;
+              if (isReadyForQuarter(t, serverCurrentQuarter)) return false;
               if (
                 t.claimedBySessionId &&
                 staleHumans.has(t.claimedBySessionId)
@@ -5821,7 +5852,7 @@ export const useGame = create<GameStore>()(
             (t) => t.controlledBy === "human",
           );
           const blockingHumans = freshHumans.filter((t) => {
-            if (t.readyForNextQuarter === true) return false;
+            if (isReadyForQuarter(t, fresh.currentQuarter)) return false;
             if (
               t.claimedBySessionId &&
               staleHumans.has(t.claimedBySessionId)
@@ -5852,7 +5883,7 @@ export const useGame = create<GameStore>()(
         // act in their own quarter-close hook.
         const humans = s.teams.filter((t) => t.controlledBy === "human");
         if (humans.length === 0) return false;
-        return humans.every((t) => t.readyForNextQuarter === true);
+        return humans.every((t) => isReadyForQuarter(t, s.currentQuarter));
       },
 
       // ── Quarter snapshots (V1.5: rollback + reconnect resync) ──
@@ -5974,7 +6005,7 @@ export const useGame = create<GameStore>()(
       // sessionId`; if no claim is found we leave activeTeamId null
       // and the player lands in spectator-y view-only mode (still
       // valuable for facilitators dropping in mid-game).
-      hydrateFromServerState: ({ stateJson, mySessionId, dbVersion }) => {
+      hydrateFromServerState: ({ stateJson, mySessionId, dbVersion, fallbackTeamId }) => {
         if (!stateJson || typeof stateJson !== "object") {
           return { ok: false, error: "Empty or invalid state payload." };
         }
@@ -5998,6 +6029,15 @@ export const useGame = create<GameStore>()(
           const claimedTeamId =
             restored.teams.find((t) => t.claimedBySessionId === mySessionId)
               ?.id ?? null;
+          const fallbackBoundTeamId = fallbackTeamId ?? currentState.memberTeamId;
+          const boundTeamId =
+            claimedTeamId ??
+            (fallbackBoundTeamId &&
+            restored.teams.some(
+              (t) => t.id === fallbackBoundTeamId && t.controlledBy === "human",
+            )
+              ? fallbackBoundTeamId
+              : null);
 
           // Mirror the onRehydrateStorage hook: flags arrays → Sets.
           const teams = restored.teams.map((t) => {
@@ -6012,6 +6052,15 @@ export const useGame = create<GameStore>()(
               ),
             } as Team;
 
+            // Ready flags are quarter-scoped. If the payload carries a
+            // stale ready=true flag from another round (or a legacy payload
+            // with no readyForQuarter metadata), drop it during hydrate so
+            // the next self-guided close starts from a clean slate.
+            if (!isReadyForQuarter(base, restored.currentQuarter ?? 0)) {
+              base.readyForNextQuarter = false;
+              base.readyForQuarter = undefined;
+            }
+
             // Preserve our own team's readyForNextQuarter=true when:
             //   • the incoming server state has it false (the mark-ready
             //     endpoint hasn't persisted our flag yet — another player's
@@ -6021,7 +6070,7 @@ export const useGame = create<GameStore>()(
             // Without this guard the TopBar briefly flips from "1/2" back
             // to "0/2" while the mark-ready write is in-flight.
             if (
-              t.id === claimedTeamId &&
+              t.id === boundTeamId &&
               base.readyForNextQuarter !== true
             ) {
               const localTeam = currentState.teams.find((lt) => lt.id === t.id);
@@ -6030,13 +6079,14 @@ export const useGame = create<GameStore>()(
                 (restored.currentQuarter ?? 0) === (currentState.currentQuarter ?? 0)
               ) {
                 base.readyForNextQuarter = true;
+                base.readyForQuarter = restored.currentQuarter;
               }
             }
 
             return base;
           }) as Team[];
 
-          const claimed = teams.find((t) => t.id === claimedTeamId);
+          const claimed = teams.find((t) => t.id === boundTeamId);
 
           // For observers (GM/facilitator), preserve the team they are
           // currently watching across live Realtime re-hydrations. Without
@@ -6052,7 +6102,7 @@ export const useGame = create<GameStore>()(
               ? (teams.some((t) => t.id === currentState.activeTeamId)
                   ? currentState.activeTeamId
                   : (teams[0]?.id ?? null))
-              : claimedTeamId;
+              : boundTeamId;
 
           const activeTeamId = preservedViewTarget;
           // Mirror activeTeamId into playerTeamId so the 75+ panel
@@ -6063,7 +6113,7 @@ export const useGame = create<GameStore>()(
           // own claim. Step 7 sweep migrated the critical surfaces
           // (TopBar, leaderboard, admin) but the panels still rely
           // on the legacy field.
-          const playerTeamId = activeTeamId ?? restored.playerTeamId ?? null;
+          const playerTeamId = activeTeamId;
 
           // Detect quarter advance so we can clear the pending close
           // request banner. If the incoming state has a higher quarter
@@ -6081,6 +6131,7 @@ export const useGame = create<GameStore>()(
             // Store the authenticated session ID so pushStateToServer
             // can use it as actorSessionId without touching localStorage.
             localSessionId: mySessionId,
+            memberTeamId: boundTeamId,
             // Use the actual DB game_state.version as the source of truth
             // for optimistic concurrency. The embedded session.version in
             // state_json diverges after the start/seed writes (those bump
