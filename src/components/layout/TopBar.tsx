@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useGame, selectPlayer, selectRivals, selectActiveTeam, selectOtherTeams } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { fmtMoney, fmtQuarter, fmtQuarterShort } from "@/lib/format";
@@ -304,13 +304,8 @@ function CloseQuarterButton() {
   const legacyPlayer = useGame(selectPlayer);
   const player = activeTeam ?? legacyPlayer;
   const openPanel = useUi((u) => u.openPanel);
-  // Multiplayer-aware ready flag wiring — when in self-guided mode
-  // with ≥2 humans, the Next Quarter button becomes a Ready toggle
-  // for the active player (instead of running closeQuarter directly).
-  // The auto-advance hook in setActiveTeamReady fires close once
-  // every human has flipped ready. Solo + facilitated keep the
-  // existing instant-close flow.
   const sessionMode = useGame((s) => s.session?.mode ?? null);
+  const gameId = useGame((s) => s.session?.gameId ?? null);
   // When the session has board decisions disabled (self-guided cohorts
   // that opt out of scenarios), the close-quarter pre-flight should
   // not include the decisions row. Defaults to true for legacy saves
@@ -321,48 +316,70 @@ function CloseQuarterButton() {
   const humanCount = useGame(
     (s) => s.teams.filter((t) => t.controlledBy === "human").length,
   );
-  // How many of those humans are ready right now — drives the
-  // "N of M ready" counter chip beside the Next Quarter / Mark Ready
-  // button, so each player can see cohort progress at a glance.
-  const readyCount = useGame(
-    (s) => s.teams.filter(
-      (t) => t.controlledBy === "human" && t.readyForNextQuarter === true,
-    ).length,
-  );
   const activeTeamId = useGame((s) => s.activeTeamId ?? s.playerTeamId);
-  const myReady = useGame(
-    (s) => s.teams.find((t) => t.id === (s.activeTeamId ?? s.playerTeamId))?.readyForNextQuarter ?? false,
-  );
-  const setActiveTeamReady = useGame((s) => s.setActiveTeamReady);
   const isMultiplayerSelfGuided = sessionMode === "self_guided" && humanCount >= 2;
-  // Quarter close readiness modal — replaces the simple "you have N
-  // pending decisions, close anyway?" prompt with a full pre-close
-  // checklist (recommendation #1: stronger quarter cockpit). The
-  // player sees decisions / dormant routes / cash risk / losing
-  // routes / pending auctions all in one frame before committing.
+
+  // Quarter-close request from a peer (set by onQuarterCloseRequested in
+  // play/page.tsx). Null in solo runs or when we initiated the close
+  // ourselves. Shows the countdown banner on this browser.
+  const quarterCloseRequest = useGame((s) => s.quarterCloseRequest);
+  const setQuarterCloseRequest = useGame((s) => s.setQuarterCloseRequest);
+
+  // Quarter close readiness modal
   const [confirmOpen, setConfirmOpen] = useState(false);
   // Loading-overlay state for the moment between clicking "Close
-  // quarter →" and the digest modal appearing. closeQuarter is a
-  // synchronous engine sim that can take 1-3 seconds for an 8-team
-  // cohort; without a paint-yield in between, the user sees a frozen
-  // page. We yield twice with requestAnimationFrame so React paints
-  // `pendingClose=true` (overlay visible) BEFORE we kick off the
-  // heavy compute, then drop the overlay once the digest opens.
+  // quarter →" and the digest modal appearing.
   const [pendingClose, setPendingClose] = useState(false);
+  // Countdown seconds remaining (for the peer-triggered banner)
+  const [countdownSec, setCountdownSec] = useState<number | null>(null);
+  // Whether we sent the close request (suppresses showing our own banner)
+  const [iRequested, setIRequested] = useState(false);
 
-  if (!player) return null;
   // activeTeamId fallback already handled above; just satisfy TS
   void activeTeamId;
+
+  // ── Countdown ticker ────────────────────────────────────────────────
+  // Ticks every second when a peer has requested a quarter close.
+  // When it reaches 0, we auto-close (same as clicking "Close Now").
+  const triggerClose = useCallback(() => {
+    setQuarterCloseRequest(null);
+    setCountdownSec(null);
+    setPendingClose(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        closeQuarter();
+        setPendingClose(false);
+      });
+    });
+  }, [closeQuarter, setQuarterCloseRequest]);
+
+  useEffect(() => {
+    if (!quarterCloseRequest || iRequested) return;
+    const deadline = Date.parse(quarterCloseRequest.deadlineAt);
+    if (!Number.isFinite(deadline)) return;
+
+    function tick() {
+      const remaining = Math.max(
+        0,
+        Math.round((deadline - Date.now()) / 1000),
+      );
+      setCountdownSec(remaining);
+      if (remaining <= 0) {
+        triggerClose();
+      }
+    }
+    tick(); // immediate paint
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [quarterCloseRequest, iRequested, triggerClose]);
+
+  if (!player) return null;
 
   const pending = scenariosForQuarter(currentQuarter, totalRounds).filter(
     (sc) => !player.decisions.some((d) => d.scenarioId === sc.id && d.quarter === currentQuarter),
   );
 
   // Readiness checks. Each yields {label, status, count, hint, openPanelId?}.
-  // status: "ok" / "warn" / "info". The button always opens the modal so
-  // the player gets the same frame whether everything is green or there
-  // are real issues — recommendation #1 specifically called for "ready
-  // to close?" as a journey, not a fork in the road.
   const activeRoutes = player.routes.filter((r) => r.status === "active");
   const dormantRoutes = activeRoutes.filter(
     (r) => r.aircraftIds.length === 0 ||
@@ -388,11 +405,6 @@ function CloseQuarterButton() {
     cta?: string;
   };
   const checks: Check[] = [
-    // Decisions row — only relevant when the session has board
-    // decisions enabled. Self-guided cohorts that opted out should
-    // never see this row mentioned (it's confusing to surface a
-    // "decisions resolved" check when the mode says decisions
-    // don't exist for this game).
     ...(boardDecisionsEnabled
       ? [
           {
@@ -463,71 +475,148 @@ function CloseQuarterButton() {
 
   const issueCount = checks.filter((c) => c.status === "warn" || c.status === "danger").length;
 
-  // In multiplayer self-guided mode, the primary CTA flips to a Ready
-  // toggle: clicking it marks the active player ready (so the cohort
-  // close fires when everyone's done) and clicking it again unmarks.
-  // The pre-flight modal still appears the FIRST time so the player
-  // sees the readiness checks; subsequent toggles bypass it.
-  const primaryLabel = isMultiplayerSelfGuided
-    ? (myReady ? "Ready ✓ — waiting on cohort" : "Mark Ready →")
-    : "Next Quarter →";
-  const primaryTitle = isMultiplayerSelfGuided
-    ? (myReady
-        ? "You're ready. Quarter advances automatically once every player marks ready. Click again to unmark."
-        : "Lock your decisions for this round. The quarter closes when every player has marked ready.")
-    : "Lock decisions + run quarter close.";
+  // ── Handler: player clicks "End Quarter →" (multiplayer) ────────────
+  // Calls /api/games/request-quarter-close which:
+  //   • atomically marks us ready on the server
+  //   • broadcasts the countdown to all other browsers
+  //   • returns allReady=true if everyone was already ready
+  async function handleRequestClose() {
+    if (!gameId) {
+      // Fallback: no gameId — just close locally (shouldn't happen in MP)
+      setPendingClose(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          closeQuarter();
+          setPendingClose(false);
+        });
+      });
+      return;
+    }
+    setIRequested(true);
+    setQuarterCloseRequest(null); // dismiss any incoming banner
+    try {
+      const res = await fetch("/api/games/request-quarter-close", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ gameId }),
+      });
+      if (!res.ok) {
+        console.warn("[SkyForce] request-quarter-close failed", res.status);
+        // Still close locally so the player isn't stuck
+        setPendingClose(true);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => { closeQuarter(); setPendingClose(false); });
+        });
+        return;
+      }
+      const { allReady } = await res.json() as { allReady: boolean; deadlineAt: string };
+      if (allReady) {
+        // Everyone is ready — close immediately, no countdown needed.
+        setPendingClose(true);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => { closeQuarter(); setPendingClose(false); });
+        });
+      }
+      // If not allReady: other browser(s) still need to react.
+      // They get a 30s countdown via the broadcast; we wait for the
+      // Realtime "game.stateChanged" (quarterClosed) to hydrate our state.
+      // The requesting player sees the "Waiting for cohort..." indicator.
+    } catch {
+      console.warn("[SkyForce] request-quarter-close network error");
+      setPendingClose(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { closeQuarter(); setPendingClose(false); });
+      });
+    }
+  }
+
+  // Reset iRequested when the quarter actually advances (store
+  // clears quarterCloseRequest and hydrateFromServerState fires).
+  // We detect this by watching currentQuarter.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setIRequested(false); }, [currentQuarter]);
+
+  // ── Peer-triggered countdown banner ─────────────────────────────────
+  // Shown on every browser EXCEPT the one that initiated the close.
+  const showCountdown = isMultiplayerSelfGuided && quarterCloseRequest !== null && !iRequested;
 
   return (
     <>
-      {/* Ready cohort counter — only shown in multiplayer self-guided
-          runs. Helps each player see how close the cohort is to the
-          auto-advance gate. The chip updates live as other players
-          mark/unmark — once realtime sync lands, this reflects every
-          browser's state. Today (no realtime), it reflects this
-          browser's local view. */}
-      {isMultiplayerSelfGuided && (
-        <span
+      {/* Peer countdown banner — shown when another player ended their quarter */}
+      {showCountdown && quarterCloseRequest && (
+        <div
           className={cn(
-            "inline-flex items-center gap-1 rounded-md px-2 py-1",
-            "text-[0.6875rem] font-mono font-semibold tabular border",
-            readyCount === humanCount
-              ? "border-positive/40 bg-[var(--positive-soft)]/40 text-positive"
-              : "border-line bg-surface-2 text-ink-2",
+            "fixed bottom-4 left-1/2 -translate-x-1/2 z-[80]",
+            "flex items-center gap-3 rounded-xl border border-warning/40",
+            "bg-surface px-4 py-3 shadow-[var(--shadow-4)]",
+            "text-[0.875rem] max-w-[min(480px,calc(100vw-2rem))]",
           )}
-          title={`${readyCount} of ${humanCount} players ready for the next round`}
-          aria-label={`${readyCount} of ${humanCount} players ready`}
+          role="status"
+          aria-live="polite"
         >
-          <span aria-hidden="true">{readyCount === humanCount ? "✓" : "·"}</span>
-          {readyCount}/{humanCount}
-        </span>
+          {/* Progress ring / countdown number */}
+          <span
+            className={cn(
+              "shrink-0 w-10 h-10 rounded-full border-2 flex items-center justify-center",
+              "font-mono font-bold text-[0.875rem] tabular",
+              (countdownSec ?? 30) > 10
+                ? "border-warning text-warning"
+                : "border-negative text-negative animate-pulse",
+            )}
+          >
+            {countdownSec ?? "…"}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-ink leading-snug">
+              {quarterCloseRequest.byTeamName} is ending the quarter
+            </p>
+            <p className="text-ink-muted text-[0.75rem]">
+              Closing automatically in {countdownSec ?? "…"}s — or close now.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={triggerClose}
+          >
+            Close Now
+          </Button>
+        </div>
       )}
+
+      {/* Primary button — "End Quarter →" in multiplayer, "Next Quarter →" in solo */}
       <Button
-        variant={isMultiplayerSelfGuided && myReady ? "ghost" : "primary"}
+        variant="primary"
         size="sm"
-        onClick={() => {
-          if (isMultiplayerSelfGuided && myReady) {
-            // Already ready — clicking unmarks. No modal.
-            setActiveTeamReady(false);
-            return;
-          }
-          // Open the readiness modal (solo + facilitated + first-mark
-          // multiplayer all surface the pre-flight check first).
-          setConfirmOpen(true);
-        }}
-        title={primaryTitle}
+        disabled={isMultiplayerSelfGuided && iRequested && !pendingClose}
+        onClick={() => setConfirmOpen(true)}
+        title={
+          isMultiplayerSelfGuided
+            ? "Review your decisions and end this quarter. Other players get 30s to close."
+            : "Lock decisions + run quarter close."
+        }
       >
-        {primaryLabel}
+        {isMultiplayerSelfGuided && iRequested && !pendingClose
+          ? "Waiting for cohort…"
+          : isMultiplayerSelfGuided
+            ? "End Quarter →"
+            : "Next Quarter →"}
       </Button>
 
+      {/* Pre-flight readiness modal */}
       <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} className="max-w-xl">
         <ModalHeader>
           <h2 className="font-display text-[1.5rem] text-ink">
             Close {fmtQuarter(currentQuarter)}?
           </h2>
           <p className="text-ink-muted text-[0.8125rem] mt-1">
-            {issueCount === 0
-              ? "Pre-flight checks all green. Locking decisions and running quarter close."
-              : `${issueCount} item${issueCount === 1 ? "" : "s"} flagged. Review or close anyway — auto-resolutions kick in for unfinished items.`}
+            {isMultiplayerSelfGuided
+              ? issueCount === 0
+                ? "Pre-flight checks all green. Ending the quarter will give cohort members 30s to close."
+                : `${issueCount} item${issueCount === 1 ? "" : "s"} flagged. Review or close anyway.`
+              : issueCount === 0
+                ? "Pre-flight checks all green. Locking decisions and running quarter close."
+                : `${issueCount} item${issueCount === 1 ? "" : "s"} flagged. Review or close anyway — auto-resolutions kick in for unfinished items.`}
           </p>
         </ModalHeader>
         <ModalBody className="space-y-1.5">
@@ -584,14 +673,10 @@ function CloseQuarterButton() {
             onClick={() => {
               setConfirmOpen(false);
               if (isMultiplayerSelfGuided) {
-                // Mark ready; the auto-advance hook in the store fires
-                // closeQuarter when every human team is ready.
-                setActiveTeamReady(true);
+                // Request close via server — broadcasts countdown to peers.
+                void handleRequestClose();
               } else {
-                // Show loading overlay, yield twice so React commits
-                // the paint, then run the heavy synchronous compute.
-                // After closeQuarter the digest modal opens; clear
-                // the overlay so it doesn't double-cover the digest.
+                // Solo / facilitated: close immediately with loading overlay.
                 setPendingClose(true);
                 requestAnimationFrame(() => {
                   requestAnimationFrame(() => {
@@ -603,7 +688,7 @@ function CloseQuarterButton() {
             }}
           >
             {isMultiplayerSelfGuided
-              ? (issueCount === 0 ? "Mark ready →" : "Mark ready anyway →")
+              ? (issueCount === 0 ? "End quarter →" : "End quarter anyway →")
               : (issueCount === 0 ? "Close quarter →" : "Close anyway →")}
           </Button>
         </ModalFooter>

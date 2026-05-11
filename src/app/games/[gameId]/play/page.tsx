@@ -53,6 +53,7 @@ export default function GamePlayPage({
   // Stable server-side identity — Supabase user.id only.
   const { sessionId, authReady } = useMultiplayerSession();
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
+  const setQuarterCloseRequest = useGame((s) => s.setQuarterCloseRequest);
   const phase = useGame((s) => s.phase);
   const teamsCount = useGame((s) => s.teams.length);
   const teams = useGame((s) => s.teams);
@@ -303,6 +304,13 @@ export default function GamePlayPage({
         const json = await res.json();
         if (res.ok) setData(json);
       } catch { /* non-fatal */ }
+    },
+    // A peer clicked "End Quarter →". Show the countdown banner on this
+    // browser so the player knows the round is closing and can act.
+    // The CloseQuarterButton component reads quarterCloseRequest from the
+    // store and renders the banner + auto-close timer.
+    onQuarterCloseRequested: ({ byTeamId, byTeamName, deadlineAt }) => {
+      setQuarterCloseRequest({ byTeamId, byTeamName, deadlineAt });
     },
   });
 

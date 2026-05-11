@@ -26,7 +26,8 @@ export type GameRealtimeEvent =
   | "game.stateChanged"
   | "game.locked"
   | "game.unlocked"
-  | "game.started";
+  | "game.started"
+  | "player.quarterCloseRequested";
 
 export async function broadcastGameEvent(args: {
   gameId: string;

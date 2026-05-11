@@ -37,6 +37,15 @@ export interface GameRealtimeHandlers {
   /** Lobby locked / unlocked. */
   onLocked?: () => void;
   onUnlocked?: () => void;
+  /**
+   * A player requested a quarter close. Other browsers show a countdown
+   * banner so they can close immediately or wait for the auto-close.
+   */
+  onQuarterCloseRequested?: (payload: {
+    byTeamId: string;
+    byTeamName: string;
+    deadlineAt: string; // ISO timestamp
+  }) => void;
 }
 
 export function useGameRealtime(
@@ -80,6 +89,13 @@ export function useGameRealtime(
           break;
         case "game.unlocked":
           handlers.onUnlocked?.();
+          break;
+        case "player.quarterCloseRequested":
+          handlers.onQuarterCloseRequested?.({
+            byTeamId: String(p.byTeamId ?? ""),
+            byTeamName: String(p.byTeamName ?? ""),
+            deadlineAt: String(p.deadlineAt ?? ""),
+          });
           break;
       }
     }

@@ -163,6 +163,19 @@ export interface GameStore extends GameState {
    *  faster than the server round-trip. */
   gmAdvanceInFlight: boolean;
 
+  /**
+   * Set by a peer browser's "End Quarter" action in multiplayer
+   * self-guided mode. When non-null, this browser shows a countdown
+   * banner ("X is closing in 30s — Close Now?").  Cleared when the
+   * quarter actually advances (hydrateFromServerState sees a new
+   * currentQuarter) or when this browser itself initiates a close.
+   */
+  quarterCloseRequest: {
+    byTeamId: string;
+    byTeamName: string;
+    deadlineAt: string; // ISO timestamp
+  } | null;
+
   // ── Actions ───────────────────────────────────────────────
   startNewGame(args: {
     airlineName: string;
@@ -429,6 +442,10 @@ export interface GameStore extends GameState {
    *  the close but can see who's submitted. Solo runs ignore this —
    *  the existing Next Quarter button advances directly. */
   setActiveTeamReady(ready: boolean): void;
+
+  /** Store a pending quarter-close request from a peer (shown as a
+   *  countdown banner on every other browser). Pass null to clear. */
+  setQuarterCloseRequest(req: GameStore["quarterCloseRequest"]): void;
 
   /** True when every active human team has marked ready. Self-guided
    *  quarter-close gate. Always false in solo runs (one team only,
@@ -917,6 +934,7 @@ export const useGame = create<GameStore>()(
       isObserver: false,
       isClosing: false,
       gmAdvanceInFlight: false,
+      quarterCloseRequest: null,
 
       startNewGame: (args) => {
         const {
@@ -5823,6 +5841,10 @@ export const useGame = create<GameStore>()(
         })();
       },
 
+      setQuarterCloseRequest: (req) => {
+        set({ quarterCloseRequest: req });
+      },
+
       allActiveTeamsReady: () => {
         const s = get();
         // Only humans count for the ready-gate. Bots fill empty
@@ -6043,6 +6065,14 @@ export const useGame = create<GameStore>()(
           // on the legacy field.
           const playerTeamId = activeTeamId ?? restored.playerTeamId ?? null;
 
+          // Detect quarter advance so we can clear the pending close
+          // request banner. If the incoming state has a higher quarter
+          // number than what we currently have, the close already
+          // happened — dismiss the countdown overlay immediately.
+          const quarterAdvanced =
+            typeof restored.currentQuarter === "number" &&
+            restored.currentQuarter > (currentState.currentQuarter ?? 0);
+
           set({
             ...restored,
             teams,
@@ -6076,6 +6106,10 @@ export const useGame = create<GameStore>()(
             // by any push from any browser in the cohort) will un-stick
             // them automatically without needing a page reload.
             isClosing: false,
+            // Clear any pending quarter-close countdown banner when the
+            // quarter actually advances. The countdown is no longer
+            // relevant once the round has already moved forward.
+            ...(quarterAdvanced ? { quarterCloseRequest: null } : {}),
           } as Partial<GameStore>);
 
           return { ok: true };
