@@ -67,10 +67,10 @@ interface SeatConfig {
 }
 
 // Names for the lobby seat-preview cards come from the shared
-// 100-name pool via lobbyPreviewName(seatIndex). Cached per browser
-// in localStorage so the host doesn't see name churn between
-// renders, but the authoritative names at game start are picked
-// fresh server-side by /api/games/start.
+// 100-name pool via lobbyPreviewName(seatIndex). They are now fully
+// deterministic per seat index so the host doesn't see name churn
+// between renders, while the authoritative names at game start are
+// still picked server-side by /api/games/start.
 
 // Compact doctrine cards for the multiplayer lobby — same metadata as
 // the solo onboarding flow (icons, taglines, effect bubbles), but
@@ -417,7 +417,7 @@ export default function GameLobbyPage({
   const game = data.game;
   const isHost = sessionId === game.created_by_session_id;
   // sessionId is always user.id (real or anonymous Supabase auth) —
-  // no localStorage fallback needed because signInAnonymously() runs
+  // no browser-storage fallback needed because auth/session identity runs
   // before the join call, so the member row is always keyed to user.id.
   const myMember = data.members.find((m) => m.session_id === sessionId);
   const isFacilitator =
@@ -469,7 +469,7 @@ export default function GameLobbyPage({
         </h1>
         <p className="text-sm text-slate-500 mb-8 max-w-xl">
           Players claim seats below. {game.mode === "facilitated"
-            ? "The Game Master starts when everyone is in."
+            ? "The Game Master starts when everyone is in. The Game Master is not one of the player seats."
             : "The host starts when everyone is in."}
         </p>
 

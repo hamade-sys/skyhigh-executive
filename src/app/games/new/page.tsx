@@ -318,7 +318,10 @@ function CreateGameForm() {
           {/* 6. Number of seats */}
           <Field
             label="Number of seats"
-            hint={`${seatCount} seat${seatCount === 1 ? "" : "s"}`}
+            hint={
+              `${seatCount} competing airline seat${seatCount === 1 ? "" : "s"}`
+              + (beGameMaster ? " · Game Master not counted" : "")
+            }
           >
             <div className="flex items-center gap-4">
               <button
@@ -343,8 +346,9 @@ function CreateGameForm() {
                 <Plus className="w-4 h-4" />
               </button>
               <p className="text-xs text-slate-400">
-                1–8 seats. In the lobby you&rsquo;ll assign each seat to a
-                human player or an AI bot and pick the difficulty.
+                1–8 competing airlines. In the lobby you&rsquo;ll assign each
+                seat to a human player or an AI bot and pick the difficulty.
+                {beGameMaster ? " Your Game Master role is separate and does not use one of these seats." : ""}
               </p>
             </div>
           </Field>

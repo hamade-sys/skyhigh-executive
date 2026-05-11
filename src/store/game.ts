@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { SCENARIOS, SCENARIOS_BY_QUARTER, scenariosForQuarter } from "@/data/scenarios";
@@ -457,9 +456,9 @@ export interface GameStore extends GameState {
    *  new round; the facilitator can also trigger saves manually. Each
    *  snapshot carries the entire persisted game state so a restore
    *  fully resyncs the cohort to that moment. See lib/snapshots.ts. */
-  saveQuarterSnapshot(): void;
-  restoreQuarterSnapshot(snapshotId: string): { ok: boolean; error?: string };
-  deleteQuarterSnapshot(snapshotId: string): void;
+  saveQuarterSnapshot(): Promise<void>;
+  restoreQuarterSnapshot(snapshotId: string): Promise<{ ok: boolean; error?: string }>;
+  deleteQuarterSnapshot(snapshotId: string): Promise<void>;
 
   /** Multiplayer hydrate path. Replaces the local store with the
    *  server-authoritative game state for this gameId, then binds
@@ -904,8 +903,7 @@ function isReadyForQuarter(
 }
 
 export const useGame = create<GameStore>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       phase: "idle",
       currentQuarter: 1,
       fuelIndex: 100,
@@ -5259,15 +5257,13 @@ export const useGame = create<GameStore>()(
         });
 
         // Auto-snapshot at the start of every new round. Stored in a
-        // separate localStorage namespace so the facilitator can roll
+        // separate database-backed snapshot stream so the facilitator can roll
         // back, re-sync disconnected players, or export an archive
         // copy of any past round. Saving AFTER the set() above means
         // the snapshot represents the freshly-advanced state — i.e.
         // "the game at the start of round nextQ". One snapshot per
         // round (re-saving same round overwrites).
-        try {
-          get().saveQuarterSnapshot();
-        } catch (err) {
+        void get().saveQuarterSnapshot().catch((err) => {
           // Auto-save must never break the game flow. Surface a
           // soft warning if it failed but keep the round advancing.
           console.error("[snapshots] auto-save failed", err);
@@ -5275,7 +5271,7 @@ export const useGame = create<GameStore>()(
             "Save failed",
             "Could not write a snapshot for this round. Game continues.",
           );
-        }
+        });
 
         // ── Multiplayer state write-back ─────────────────────
         // When the game is bound to a server-side gameId, push the
@@ -5337,15 +5333,18 @@ export const useGame = create<GameStore>()(
         // The banner will remount for the new quarter once state settles.
         if (_gmAdvanceInFlight) return;
 
-        // We need at least one bot team to simulate. If all teams are
-        // human (none joined a bot-only slot) there's nothing to run.
-        const botTeam =
+        // In facilitated games the GM owns quarter progression even when
+        // all seats are human. Prefer a human focus team so any unresolved
+        // board decisions resolve against a real player; fall back to a
+        // bot-only team when the room has no humans.
+        const focusTeam =
+          s.teams.find((t) => t.controlledBy === "human") ??
           s.teams.find((t) => t.botDifficulty != null) ??
           s.teams.find((t) => t.controlledBy === "bot");
-        if (!botTeam) {
+        if (!focusTeam) {
           toast.warning(
-            "No bot teams",
-            "All seats are human-controlled — players must advance this round.",
+            "No teams seeded",
+            "This game has no airline teams yet. Start after at least one player or bot seat is configured.",
           );
           return;
         }
@@ -5360,7 +5359,7 @@ export const useGame = create<GameStore>()(
         // Solution: _suppressGmPush blocks ALL pushStateToServer calls until
         // we clear it and fire the single authoritative write ourselves.
         _suppressGmPush = true;
-        set({ isObserver: false, playerTeamId: botTeam.id });
+        set({ isObserver: false, playerTeamId: focusTeam.id, activeTeamId: focusTeam.id });
 
         // closeQuarter runs all bot AI decisions (routes, aircraft, slots),
         // processes every team through runQuarterClose, resolves slot
@@ -5639,25 +5638,7 @@ export const useGame = create<GameStore>()(
       },
 
       resetGame: () => {
-        // Clear every skyforce:* sessionStorage key so a fresh game
-        // doesn't carry stale snapshots, milestone dedup ledgers, or
-        // notification preferences from the previous run.
-        if (typeof window !== "undefined") {
-          try {
-            const keys: string[] = [];
-            for (let i = 0; i < window.sessionStorage.length; i += 1) {
-              const k = window.sessionStorage.key(i);
-              if (k && k.startsWith("skyforce")) keys.push(k);
-            }
-            for (const k of keys) {
-              try { window.sessionStorage.removeItem(k); } catch { /* ignore */ }
-            }
-          } catch { /* sessionStorage disabled */ }
-        }
-        // Active-game redirect is now handled via Supabase (game_members
-        // table) — no localStorage key to clear there.
-        // Active-game redirect is now handled via Supabase (game_members
-        // table) — no localStorage key to clear.
+        // Reset the in-memory store so a fresh game starts cleanly.
         set({
           phase: "idle",
           currentQuarter: 1,
@@ -5909,21 +5890,15 @@ export const useGame = create<GameStore>()(
       },
 
       // ── Quarter snapshots (V1.5: rollback + reconnect resync) ──
-      saveQuarterSnapshot: () => {
+      saveQuarterSnapshot: async () => {
         const s = get();
-        // Snapshots are solo-play only (rewind/reconnect). In a
-        // multiplayer session the server state is the source of truth;
-        // writing 40 × ~200 KB blobs would exhaust localStorage quota.
-        if (s.isMultiplayerSession) return;
+        const gameId = s.session?.gameId;
+        if (!gameId) return;
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         const ctx = player
           ? `${s.teams.length} team${s.teams.length === 1 ? "" : "s"} · ${player.code} ${fmtMoneyPlain(player.cashUsd)}`
           : `${s.teams.length} team${s.teams.length === 1 ? "" : "s"}`;
-        // Build the same payload shape that the persist's `partialize`
-        // returns so a restore is byte-compatible with the rehydration
-        // pipeline. flags get serialized as arrays (Sets don't survive
-        // JSON), matching the partialize convention.
-        const persistPayload = {
+        const statePayload = {
           phase: s.phase,
           currentQuarter: s.currentQuarter,
           fuelIndex: s.fuelIndex,
@@ -5946,18 +5921,27 @@ export const useGame = create<GameStore>()(
           sessionSlots: s.sessionSlots,
           preOrders: s.preOrders,
           productionCapOverrides: s.productionCapOverrides,
+          marketHistory: s.marketHistory,
+          quarterCloseRequest: s.quarterCloseRequest,
+          session: s.session,
         };
-        snapSave({
+        await snapSave({
+          gameId,
           quarter: s.currentQuarter,
-          state: persistPayload,
+          state: statePayload,
           contextLabel: ctx,
           quarterLabel: fmtQuarter(s.currentQuarter),
           teamCount: s.teams.length,
         });
       },
 
-      restoreQuarterSnapshot: (snapshotId) => {
-        const payload = snapLoad(snapshotId);
+      restoreQuarterSnapshot: async (snapshotId) => {
+        const current = get();
+        const gameId = current.session?.gameId;
+        if (!gameId) {
+          return { ok: false, error: "No game is attached to this session." };
+        }
+        const payload = await snapLoad(gameId, snapshotId);
         if (!payload) {
           return { ok: false, error: "Snapshot not found or unreadable." };
         }
@@ -5969,6 +5953,25 @@ export const useGame = create<GameStore>()(
         type Persisted = ReturnType<typeof get>;
         const restored = payload.state as Partial<Persisted>;
         try {
+          const restoreRes = await fetch("/api/games/state-update", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              gameId,
+              expectedVersion: current.serverStateVersion,
+              newState: restored,
+              eventType: "game.snapshotRestored",
+              eventPayload: { snapshotId },
+            }),
+          });
+          const restoreJson = await restoreRes.json().catch(() => ({}));
+          if (!restoreRes.ok) {
+            return {
+              ok: false,
+              error: restoreJson.error ?? "Snapshot restore failed.",
+            };
+          }
+
           // Convert flags arrays → Sets on each team (mirror of the
           // onRehydrateStorage hook, since we're skipping Zustand's
           // built-in rehydrate for this in-place restore).
@@ -5999,6 +6002,10 @@ export const useGame = create<GameStore>()(
             // the campaign, not a continuation.
             lastCloseResult: null,
             phase: restored.phase === "endgame" ? "endgame" : "playing",
+            serverStateVersion:
+              typeof restoreJson.state?.version === "number"
+                ? restoreJson.state.version
+                : current.serverStateVersion + 1,
           } as Partial<Persisted>);
           toast.accent(
             "Snapshot restored",
@@ -6013,16 +6020,18 @@ export const useGame = create<GameStore>()(
         }
       },
 
-      deleteQuarterSnapshot: (id) => {
-        snapDelete(id);
+      deleteQuarterSnapshot: async (id) => {
+        const gameId = get().session?.gameId;
+        if (!gameId) return;
+        await snapDelete(gameId, id);
       },
 
       // ── Multiplayer hydrate ──────────────────────────────────
       // Server-authoritative state lands here when /games/[gameId]/play
       // hydrates on initial paint or after a remote mutation. The
-      // shape mirrors the persist `partialize` payload so we can reuse
-      // the rehydrate fixups (flag Set conversion, slot pool backfill)
-      // that already exist for localStorage rehydration. ActiveTeamId
+      // shape mirrors the server snapshot payload so we can reuse the
+      // hydrate fixups (flag Set conversion, slot pool backfill).
+      // ActiveTeamId
       // is set from whichever team has `claimedBySessionId === my
       // sessionId`; if no claim is found we leave activeTeamId null
       // and the player lands in spectator-y view-only mode (still
@@ -6127,15 +6136,12 @@ export const useGame = create<GameStore>()(
               : boundTeamId;
 
           const activeTeamId = preservedViewTarget;
-          // Mirror activeTeamId into playerTeamId so the 75+ panel
-          // surfaces that still read selectPlayer (legacy) resolve
-          // to the same team. This is safe in multiplayer because
-          // playerTeamId only drives "you" highlighting from THIS
-          // browser's perspective; other browsers hydrate with their
-          // own claim. Step 7 sweep migrated the critical surfaces
-          // (TopBar, leaderboard, admin) but the panels still rely
-          // on the legacy field.
-          const playerTeamId = activeTeamId;
+          // Keep ownership and viewing separate:
+          //   - players own `boundTeamId`
+          //   - observers/GM own no team (`null`) but can still view one
+          // Mirroring the observer's viewed team into playerTeamId made
+          // several legacy surfaces treat the GM as "you".
+          const playerTeamId = boundTeamId;
 
           // Detect quarter advance so we can clear the pending close
           // request banner. If the incoming state has a higher quarter
@@ -6156,7 +6162,7 @@ export const useGame = create<GameStore>()(
             activeTeamId,
             playerTeamId,
             // Store the authenticated session ID so pushStateToServer
-            // can use it as actorSessionId without touching localStorage.
+            // can use it as actorSessionId without any browser-storage fallback.
             localSessionId: mySessionId,
             memberTeamId: boundTeamId,
             // Use the actual DB game_state.version as the source of truth
@@ -6213,7 +6219,7 @@ export const useGame = create<GameStore>()(
         // here is a no-op — the local engine has already advanced.
         if (!session?.gameId) return Promise.resolve({ ok: true as const });
         // Use the authenticated Supabase user.id stored during hydration.
-        // This is always server-side identity — never a localStorage UUID.
+        // This is always server-side identity — never a browser-only UUID.
         const sessionId = s.localSessionId;
         if (!sessionId) return Promise.resolve({ ok: true as const });
         const actorTeamId = s.activeTeamId ?? s.playerTeamId ?? undefined;
@@ -7194,18 +7200,36 @@ export const useGame = create<GameStore>()(
       // last-mile change to make timer state cohort-coherent.
       // Solo runs (no session.gameId) skip the push silently.
       startQuarterTimer: (seconds = 1800) => {
+        const s = get();
+        const isFacilitatedPlayer =
+          s.session?.mode === "facilitated" &&
+          Boolean(s.session?.gameId) &&
+          !s.isObserver;
+        if (isFacilitatedPlayer) return;
         set({ quarterTimerSecondsRemaining: seconds, quarterTimerPaused: false });
         if (get().session?.gameId) {
           void get().pushStateToServer("game.timerStarted", { seconds });
         }
       },
       pauseQuarterTimer: () => {
+        const s = get();
+        const isFacilitatedPlayer =
+          s.session?.mode === "facilitated" &&
+          Boolean(s.session?.gameId) &&
+          !s.isObserver;
+        if (isFacilitatedPlayer) return;
         set({ quarterTimerPaused: true });
         if (get().session?.gameId) {
           void get().pushStateToServer("game.timerPaused");
         }
       },
       resumeQuarterTimer: () => {
+        const s = get();
+        const isFacilitatedPlayer =
+          s.session?.mode === "facilitated" &&
+          Boolean(s.session?.gameId) &&
+          !s.isObserver;
+        if (isFacilitatedPlayer) return;
         set({ quarterTimerPaused: false });
         if (get().session?.gameId) {
           void get().pushStateToServer("game.timerResumed");
@@ -7213,6 +7237,11 @@ export const useGame = create<GameStore>()(
       },
       extendQuarterTimer: (seconds) => {
         const s = get();
+        const isFacilitatedPlayer =
+          s.session?.mode === "facilitated" &&
+          Boolean(s.session?.gameId) &&
+          !s.isObserver;
+        if (isFacilitatedPlayer) return;
         if (s.quarterTimerSecondsRemaining === null) return;
         set({ quarterTimerSecondsRemaining: s.quarterTimerSecondsRemaining + seconds });
         if (s.session?.gameId) {
@@ -7228,6 +7257,14 @@ export const useGame = create<GameStore>()(
 
         // Auto-submit + auto-close when timer transitions to 0 (PRD A5)
         if (wasRunning && next === 0) {
+          const isFacilitatedMultiplayer =
+            s.session?.mode === "facilitated" &&
+            Boolean(s.session?.gameId);
+          if (isFacilitatedMultiplayer && s.isObserver) {
+            toast.warning("Quarter timer expired", "Advancing to the next round.");
+            setTimeout(() => get().gmAdvanceQuarter(), 400);
+            return;
+          }
           const player = s.teams.find((t) => t.id === s.playerTeamId);
           if (!player) return;
           const scenariosThisQuarter = scenariosForQuarter(s.currentQuarter, getTotalRounds(s));
@@ -7248,13 +7285,18 @@ export const useGame = create<GameStore>()(
               `Defaulted to option ${fallback} (worst outcome per PRD §A5)`,
             );
           }
+          const expiryActionDetail = isFacilitatedMultiplayer
+            ? (s.isObserver
+                ? "Game Master advancing the round automatically."
+                : "Waiting for the Game Master to advance the round.")
+            : "Closing quarter automatically.";
           if (unsubmitted.length > 0) {
             toast.warning(
               `${unsubmitted.length} decision${unsubmitted.length > 1 ? "s" : ""} auto-submitted`,
-              "Timer expired. Closing quarter automatically.",
+              `Timer expired. ${expiryActionDetail}`,
             );
           } else {
-            toast.warning("Quarter timer expired", "Closing quarter automatically.");
+            toast.warning("Quarter timer expired", expiryActionDetail);
           }
           const isSelfGuidedMultiplayer =
             s.session?.mode === "self_guided" &&
@@ -7272,289 +7314,17 @@ export const useGame = create<GameStore>()(
             }, 400);
             return;
           }
+          if (isFacilitatedMultiplayer) {
+            if (s.isObserver) {
+              setTimeout(() => get().gmAdvanceQuarter(), 400);
+            }
+            return;
+          }
           // Auto-close quarter
           setTimeout(() => get().closeQuarter(), 400);
         }
       },
     }),
-    {
-      name: "skyforce-game-v1",
-      // Phase 6 P0 — save schema version. Bump this when a non-
-      // backwards-compatible field is added/renamed/removed in
-      // partialize. The `migrate` hook below converts older versions
-      // forward, falling through to a hard reset when the schema
-      // is too old to map cleanly. The version is independent of
-      // the localStorage key (`skyforce-game-v1` stays stable);
-      // this counter only governs in-key migrations.
-      //
-      // Migration history:
-      //   0 → 1: initial release shape (handled by no migration)
-      //   1 → 2: added airlineColorId on Team (Phase 9). Older
-      //          saves get null and the deterministic-hash fallback
-      //          renders them until the next save round.
-      //   2 → 3: bankrupt flag is now sticky on Team.flags. Older
-      //          saves don't carry the flag yet — that's fine,
-      //          re-detection on the next quarter-close re-stamps.
-      version: 3,
-      migrate: (persisted, fromVersion) => {
-        // Defensive: if the persisted shape is corrupt or pre-versioning,
-        // pass through and let onRehydrateStorage's per-field defaults
-        // pick up the slack. We never throw — a workshop in progress
-        // shouldn't lose state because we shipped a new field.
-        if (!persisted || typeof persisted !== "object") return persisted;
-        const s = persisted as Record<string, unknown>;
-        if (fromVersion < 2) {
-          // No-op for airlineColorId — the field is optional and the
-          // render fallback (airlineColorFor) covers null teams.
-        }
-        if (fromVersion < 3) {
-          // No-op for bankrupt — re-evaluated each quarter-close.
-        }
-        return s;
-      },
-      // Custom storage that protects the solo save from being overwritten
-      // while a multiplayer session is active. Multiplayer state is always
-      // re-hydrated from the server on play-page load, so there is nothing
-      // useful to persist locally for multiplayer. The solo save is never
-      // touched by a multiplayer game, and multiple multiplayer games
-      // never interfere with each other.
-      storage: createJSONStorage(() => ({
-        getItem: (name: string) => {
-          try { return sessionStorage.getItem(name); } catch { return null; }
-        },
-        setItem: (name: string, value: string) => {
-          try {
-            // Multiplayer state is always authoritative from the server.
-            // Never persist to browser storage — prevents stale data from
-            // old games appearing in new sessions. The endgame page now
-            // loads directly from the DB, so no exception is needed.
-            const parsed = JSON.parse(value) as {
-              state?: { isMultiplayerSession?: boolean };
-            };
-            if (parsed?.state?.isMultiplayerSession === true) return;
-            sessionStorage.setItem(name, value);
-          } catch (err) {
-            if (typeof window !== "undefined") {
-              try {
-                window.dispatchEvent(new CustomEvent("skyforce:storage-failed", {
-                  detail: { error: err instanceof Error ? err.message : "unknown" },
-                }));
-              } catch { /* ignore */ }
-            }
-          }
-        },
-        removeItem: (name: string) => {
-          try { sessionStorage.removeItem(name); } catch { /* ignore */ }
-        },
-      })),
-      partialize: (s) => ({
-        phase: s.phase,
-        currentQuarter: s.currentQuarter,
-        fuelIndex: s.fuelIndex,
-        baseInterestRatePct: s.baseInterestRatePct,
-        teams: s.teams.map((t) => ({
-          ...t,
-          flags: Array.from(t.flags) as unknown as Set<string>,
-        })),
-        playerTeamId: s.playerTeamId,
-        quarterTimerSecondsRemaining: s.quarterTimerSecondsRemaining,
-        quarterTimerPaused: s.quarterTimerPaused,
-        secondHandListings: s.secondHandListings,
-        cargoContracts: s.cargoContracts,
-        airportSlots: s.airportSlots,
-        airportBids: s.airportBids,
-        worldCupHostCode: s.worldCupHostCode,
-        olympicHostCode: s.olympicHostCode,
-        sessionCode: s.sessionCode,
-        sessionLocked: s.sessionLocked,
-        sessionSlots: s.sessionSlots,
-        preOrders: s.preOrders,
-        productionCapOverrides: s.productionCapOverrides,
-        marketHistory: s.marketHistory,
-        // Included so the custom storage setItem can read it and decide
-        // whether to skip the write. Not used by onRehydrateStorage.
-        isMultiplayerSession: s.isMultiplayerSession,
-        isObserver: s.isObserver,
-      }),
-      onRehydrateStorage: () => (state) => {
-        if (!state) return;
-        // If we crashed mid-close last session, the phase will be "quarter-closing"
-        // but lastCloseResult isn't persisted — surface no-op modal won't open and
-        // the user thinks the UI is frozen. Force back to "playing" so buttons work.
-        if (state.phase === "quarter-closing") {
-          state.phase = "playing";
-          state.lastCloseResult = null;
-        }
-        if (!state.cargoContracts) state.cargoContracts = [];
-        // Backfill tournament hosts on older saves so the new event logic
-        // has somewhere to fire. Picks neutral tier 1-2 cities not used
-        // as a hub by any team.
-        if (state.worldCupHostCode === undefined) state.worldCupHostCode = null;
-        if (state.olympicHostCode === undefined) state.olympicHostCode = null;
-        // Older saves predate the session-lock toggle. Default to false
-        // so existing facilitated cohorts can keep accepting new joiners.
-        if (state.sessionLocked === undefined) state.sessionLocked = false;
-        // Pre-order queue + production cap overrides are new in
-        // SkyForce post-master-ref. Older saves get empty arrays so
-        // delivery batches and cancel-penalty paths run safely.
-        if (!state.preOrders) state.preOrders = [];
-        if (!state.productionCapOverrides) state.productionCapOverrides = {};
-        // Airport bids (regulator approval flow) are post-Sprint-12.
-        // Older saves get an empty array so the bid inbox doesn't
-        // crash on `airportBids?.filter(...)` paths.
-        if (!state.airportBids) state.airportBids = [];
-        if (!state.worldCupHostCode || !state.olympicHostCode) {
-          const allTeamHubs = new Set<string>();
-          for (const t of state.teams ?? []) {
-            allTeamHubs.add(t.hubCode);
-            for (const sh of t.secondaryHubCodes ?? []) allTeamHubs.add(sh);
-          }
-          const candidates = CITIES
-            .filter((c) => (c.tier === 1 || c.tier === 2) && !allTeamHubs.has(c.code))
-            .map((c) => c.code);
-          const pickRandom = (excl?: string | null) => {
-            const pool = candidates.filter((c) => c !== excl);
-            return pool.length === 0 ? null : pool[Math.floor(Math.random() * pool.length)];
-          };
-          if (!state.worldCupHostCode) state.worldCupHostCode = pickRandom();
-          if (!state.olympicHostCode) state.olympicHostCode = pickRandom(state.worldCupHostCode);
-        }
-        // Migration: older saves don't have airportSlots — initialize fresh
-        // so existing routes continue to work (slots = unconstrained from
-        // their existing in-game allocation in slotsByAirport).
-        if (!state.airportSlots || Object.keys(state.airportSlots).length === 0) {
-          state.airportSlots = makeInitialAirportSlots();
-        } else {
-          // CRITICAL: ensure every CITY has an airportSlots entry. Older
-          // saves had a partial map (only the cities that existed in the
-          // first city list). When we expanded to ~380 cities, bids at
-          // newly-added airports silently failed because the auction
-          // resolver skips airports with no `state` entry. Backfill any
-          // missing cities with fresh tier-default pools.
-          const fresh = makeInitialAirportSlots();
-          for (const code of Object.keys(fresh)) {
-            if (!state.airportSlots[code]) {
-              state.airportSlots[code] = fresh[code];
-            }
-          }
-        }
-        state.teams = state.teams.map((t) => {
-          const flags = new Set(Array.isArray(t.flags) ? t.flags : Array.from(t.flags ?? []));
-          // (Removed: the debug "+$900M Meridian Air cash grant" used during
-          // initial purchase-flow validation. It would otherwise fire on
-          // every fresh rehydrate of a save without that flag set.)
-          return ({
-          ...t,
-          cashUsd: t.cashUsd,
-          flags,
-          deferredEvents: t.deferredEvents ?? [],
-          rcfBalanceUsd: t.rcfBalanceUsd ?? 0,
-          taxLossCarryForward: t.taxLossCarryForward ?? [],
-          secondaryHubCodes: t.secondaryHubCodes ?? [],
-          sliders: {
-            ...t.sliders,
-            customerService: t.sliders?.customerService ?? 2,
-          },
-          members: t.members && t.members.length > 0 ? t.members : [
-            { role: "CEO",  name: "Your CEO",  mvpPts: 0, cards: [] },
-            { role: "CFO",  name: "Your CFO",  mvpPts: 0, cards: [] },
-            { role: "CMO",  name: "Your CMO",  mvpPts: 0, cards: [] },
-            { role: "CHRO", name: "Your CHRO", mvpPts: 0, cards: [] },
-          ],
-          fleet: t.fleet.map((f) => {
-            // Sweep stale routeIds — if the aircraft is pointed at a route
-            // that no longer exists (or is closed), treat it as idle so it
-            // shows up in the route-setup picker again.
-            const stale = f.routeId
-              ? !((t.routes ?? []).some((r) => r.id === f.routeId && r.status !== "closed"))
-              : false;
-            // Aircraft lifespan migration: legacy 20Q saves get an
-            // 8-quarter extension on rehydrate so the 7-year lifespan
-            // applies retroactively. Heuristic: if retirement is
-            // exactly purchase+20, this is a legacy plane → bump it.
-            // Newer purchases (28Q) and any custom values are left alone.
-            const legacy20Q = f.retirementQuarter !== undefined
-              && f.retirementQuarter === f.purchaseQuarter + 20;
-            const fixedRetirement =
-              f.retirementQuarter === undefined
-                ? f.purchaseQuarter + 28
-                : legacy20Q
-                  ? f.retirementQuarter + 8
-                  : f.retirementQuarter;
-            return {
-              ...f,
-              retirementQuarter: fixedRetirement,
-              maintenanceDeficit: f.maintenanceDeficit ?? 0,
-              satisfactionPct: f.satisfactionPct ?? 75,
-              ecoUpgrade: f.ecoUpgrade ?? false,
-              ecoUpgradeQuarter: f.ecoUpgradeQuarter ?? null,
-              ecoUpgradeCost: f.ecoUpgradeCost ?? 0,
-              routeId: stale ? null : f.routeId,
-            };
-          }),
-          insurancePolicy: t.insurancePolicy ?? "none",
-          tagline: t.tagline ?? "",
-          marketFocus: t.marketFocus ?? "balanced",
-          geographicPriority: t.geographicPriority ?? "global",
-          pricingPhilosophy: t.pricingPhilosophy ?? "standard",
-          salaryPhilosophy: t.salaryPhilosophy ?? "at",
-          marketingLevel: t.marketingLevel ?? "medium",
-          csrTheme: t.csrTheme ?? "none",
-          fuelTanks: t.fuelTanks ?? { small: 0, medium: 0, large: 0 },
-          fuelStorageLevelL: t.fuelStorageLevelL ?? 0,
-          fuelStorageAvgCostPerL: t.fuelStorageAvgCostPerL ?? 0,
-          slotsByAirport: t.slotsByAirport ?? { [t.hubCode]: 30 },
-          // Migration: backfill airportLeases from any existing routes so
-          // pre-Model-B saves can still operate. Each airport that the team
-          // is flying to/from receives slots equal to its existing weekly
-          // schedule load (so capacity check doesn't immediately break).
-          // No fee charged on backfilled slots — pretend they're grandfathered.
-          airportLeases: t.airportLeases ?? (() => {
-            const leases: Record<string, AirportLease> = {};
-            const usage: Record<string, number> = {};
-            for (const r of (t.routes ?? [])) {
-              if (r.status === "closed") continue;
-              const wf = r.dailyFrequency * 7;
-              usage[r.originCode] = (usage[r.originCode] ?? 0) + wf;
-              usage[r.destCode] = (usage[r.destCode] ?? 0) + wf;
-            }
-            // Plus the legacy slotsByAirport hub seed so the team has hub capacity
-            for (const code of Object.keys(t.slotsByAirport ?? {})) {
-              const seed = t.slotsByAirport[code] ?? 0;
-              usage[code] = Math.max(usage[code] ?? 0, seed);
-            }
-            for (const code of Object.keys(usage)) {
-              leases[code] = { slots: usage[code], totalWeeklyCost: 0 };
-            }
-            return leases;
-          })(),
-          pendingSlotBids: t.pendingSlotBids ?? [],
-          timedModifiers: t.timedModifiers ?? [],
-          cargoStorageActivations: t.cargoStorageActivations ?? [t.hubCode],
-          hubInvestments: t.hubInvestments ?? {
-            fuelReserveTankHubs: [],
-            maintenanceDepotHubs: [],
-            premiumLoungeHubs: [],
-            opsExpansionSlots: 0,
-          },
-          labourRelationsScore: t.labourRelationsScore ?? 50,
-          milestones: t.milestones ?? [],
-          consecutiveProfitableQuarters: t.consecutiveProfitableQuarters ?? 0,
-          routes: (t.routes ?? []).map((r) => ({
-            ...r,
-            econFare: r.econFare ?? null,
-            busFare: r.busFare ?? null,
-            firstFare: r.firstFare ?? null,
-            cargoRatePerTonne: r.cargoRatePerTonne ?? null,
-            isCargo: r.isCargo ?? false,
-            consecutiveQuartersActive: r.consecutiveQuartersActive ?? 0,
-            consecutiveLosingQuarters: r.consecutiveLosingQuarters ?? 0,
-          })),
-        });
-        });
-      },
-    },
-  ),
 );
 
 // ─── Selectors ──────────────────────────────────────────────
@@ -7567,7 +7337,9 @@ export const useGame = create<GameStore>()(
  *  Kept until Step 7 of the multiplayer rollout migrates the 30+
  *  callsites that still read it. */
 export function selectPlayer(s: GameStore): Team | null {
-  return s.teams.find((t) => t.id === s.playerTeamId) ?? null;
+  const id = s.isObserver ? (s.activeTeamId ?? null) : s.playerTeamId;
+  if (!id) return null;
+  return s.teams.find((t) => t.id === id) ?? null;
 }
 
 /** "You" — the team the local browser controls. In solo runs this

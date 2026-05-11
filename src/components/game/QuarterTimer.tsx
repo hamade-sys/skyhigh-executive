@@ -48,6 +48,14 @@ export function QuarterTimerChip() {
   const pause = useGame((s) => s.pauseQuarterTimer);
   const resume = useGame((s) => s.resumeQuarterTimer);
   const extend = useGame((s) => s.extendQuarterTimer);
+  const isObserver = useGame((s) => s.isObserver);
+  const sessionMode = useGame((s) => s.session?.mode ?? null);
+  const gameId = useGame((s) => s.session?.gameId ?? null);
+  const canControlTimer = !(
+    sessionMode === "facilitated" &&
+    gameId &&
+    !isObserver
+  );
   // Default the manual "Start timer" button to whatever the host
   // configured at game creation (if anything); otherwise fall back
   // to the legacy 30 minutes.
@@ -60,6 +68,16 @@ export function QuarterTimerChip() {
       : 1800;
 
   if (seconds === null) {
+    if (!canControlTimer) {
+      return (
+        <span
+          className="text-[0.6875rem] font-medium px-2 py-1 rounded-md border border-line bg-surface-2 text-ink-muted"
+          title="Game Master controls the quarter timer"
+        >
+          Timer idle
+        </span>
+      );
+    }
     return (
       <button
         onClick={() => start(fallbackStart)}
@@ -93,20 +111,24 @@ export function QuarterTimerChip() {
       >
         {mm}:{ss}
       </span>
-      <button
-        onClick={paused ? resume : pause}
-        className="w-6 h-6 rounded-md text-ink-2 hover:bg-surface-hover hover:text-ink text-[0.6875rem]"
-        title={paused ? "Resume" : "Pause"}
-      >
-        {paused ? "▶" : "❚❚"}
-      </button>
-      <button
-        onClick={() => extend(300)}
-        className="w-6 h-6 rounded-md text-ink-2 hover:bg-surface-hover hover:text-ink text-[0.625rem] tabular"
-        title="Extend 5 minutes"
-      >
-        +5
-      </button>
+      {canControlTimer && (
+        <>
+          <button
+            onClick={paused ? resume : pause}
+            className="w-6 h-6 rounded-md text-ink-2 hover:bg-surface-hover hover:text-ink text-[0.6875rem]"
+            title={paused ? "Resume" : "Pause"}
+          >
+            {paused ? "▶" : "❚❚"}
+          </button>
+          <button
+            onClick={() => extend(300)}
+            className="w-6 h-6 rounded-md text-ink-2 hover:bg-surface-hover hover:text-ink text-[0.625rem] tabular"
+            title="Extend 5 minutes"
+          >
+            +5
+          </button>
+        </>
+      )}
     </div>
   );
 }

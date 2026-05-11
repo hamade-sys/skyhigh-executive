@@ -294,6 +294,7 @@ function LeaderboardButton() {
 
 function CloseQuarterButton() {
   const closeQuarter = useGame((s) => s.closeQuarter);
+  const gmAdvanceQuarter = useGame((s) => s.gmAdvanceQuarter);
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
   const localSessionId = useGame((s) => s.localSessionId);
   const currentQuarter = useGame((s) => s.currentQuarter);
@@ -309,6 +310,7 @@ function CloseQuarterButton() {
   const sessionMode = useGame((s) => s.session?.mode ?? null);
   const gameId = useGame((s) => s.session?.gameId ?? null);
   const phase = useGame((s) => s.phase);
+  const isObserver = useGame((s) => s.isObserver);
   const memberTeamId = useGame((s) => s.memberTeamId);
   const allReady = useGame((s) => s.allActiveTeamsReady());
   const designatedCloserId = useGame((s) => {
@@ -330,6 +332,7 @@ function CloseQuarterButton() {
   );
   const activeTeamId = useGame((s) => s.activeTeamId ?? s.playerTeamId);
   const isMultiplayerSelfGuided = sessionMode === "self_guided" && humanCount >= 2;
+  const isMultiplayerFacilitated = sessionMode === "facilitated" && Boolean(gameId);
 
   // Quarter-close request from a peer (set by onQuarterCloseRequested in
   // play/page.tsx). Null in solo runs or when we initiated the close
@@ -502,6 +505,7 @@ function CloseQuarterButton() {
     syncAndClose,
   ]);
 
+  if (isMultiplayerFacilitated && !isObserver) return null;
   if (!player) return null;
 
   const pending = scenariosForQuarter(currentQuarter, totalRounds).filter(
@@ -735,11 +739,15 @@ function CloseQuarterButton() {
         title={
           isMultiplayerSelfGuided
             ? "Review your decisions and end this quarter. Other players get 30s to close."
+            : isMultiplayerFacilitated
+              ? "Game Master control: close this quarter and advance the room."
             : "Lock decisions + run quarter close."
         }
       >
         {isMultiplayerSelfGuided && iRequested && !pendingClose
           ? "Waiting for cohort…"
+          : isMultiplayerFacilitated
+            ? "Advance Quarter →"
           : isMultiplayerSelfGuided
             ? "End Quarter →"
             : "Next Quarter →"}
@@ -756,6 +764,10 @@ function CloseQuarterButton() {
               ? issueCount === 0
                 ? "Pre-flight checks all green. Ending the quarter will give cohort members 30s to close."
                 : `${issueCount} item${issueCount === 1 ? "" : "s"} flagged. Review or close anyway.`
+              : isMultiplayerFacilitated
+                ? issueCount === 0
+                  ? "Pre-flight checks all green. The Game Master will close this quarter and advance the room."
+                  : `${issueCount} item${issueCount === 1 ? "" : "s"} flagged. Review or advance anyway.`
               : issueCount === 0
                 ? "Pre-flight checks all green. Locking decisions and running quarter close."
                 : `${issueCount} item${issueCount === 1 ? "" : "s"} flagged. Review or close anyway — auto-resolutions kick in for unfinished items.`}
@@ -817,6 +829,14 @@ function CloseQuarterButton() {
               if (isMultiplayerSelfGuided) {
                 // Request close via server — broadcasts countdown to peers.
                 void handleRequestClose();
+              } else if (isMultiplayerFacilitated) {
+                setPendingClose(true);
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    gmAdvanceQuarter();
+                    setPendingClose(false);
+                  });
+                });
               } else {
                 // Solo / facilitated: close immediately with loading overlay.
                 setPendingClose(true);
@@ -831,6 +851,8 @@ function CloseQuarterButton() {
           >
             {isMultiplayerSelfGuided
               ? (issueCount === 0 ? "End quarter →" : "End quarter anyway →")
+              : isMultiplayerFacilitated
+                ? (issueCount === 0 ? "Advance quarter →" : "Advance anyway →")
               : (issueCount === 0 ? "Close quarter →" : "Close anyway →")}
           </Button>
         </ModalFooter>
@@ -1009,7 +1031,7 @@ function AirlineSwitcher({
  * over", which calls the store's resetGame() and routes back to the
  * onboarding flow. Lives in TopBar so the player always has a visible
  * exit, no matter which panel they're in. Without this the only path
- * out of a saved game was clearing localStorage manually — players
+ * out of a saved game was clearing browser storage manually — players
  * who wanted to start fresh got stuck mid-quarter on next visit.
  */
 function GameMenu() {

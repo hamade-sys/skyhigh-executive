@@ -172,7 +172,7 @@ function CanvasInner() {
   const playerTeamId = useGame((state) => state.playerTeamId);
   const currentQuarter = useGame((state) => state.currentQuarter);
   // Detect multiplayer context — session.gameId is set in-memory after
-  // hydrateFromServerState. Not persisted to localStorage, so this is
+  // hydrateFromServerState. Not persisted in browser storage, so this is
   // null on solo runs and on home-page canvas mounts.
   const multiplayerGameId = useGame(
     (s) => ((s.session as Record<string, unknown> | null)?.gameId as string) ?? null,
@@ -186,6 +186,9 @@ function CanvasInner() {
   // the GM's playerTeamId null (so setActiveTeam only sets activeTeamId)
   // and to hide interactive canvas elements (map click, launch bar, HUD).
   const isObserver = useGame((s) => s.isObserver);
+  const isFacilitatedMultiplayer = useGame((s) =>
+    s.session?.mode === "facilitated" && Boolean(s.session?.gameId),
+  );
   // GM can advance if there is at least one bot team — the button is
   // hidden when all seats are filled by human players (they control their
   // own advance via the Close Quarter button).
@@ -464,7 +467,7 @@ function CanvasInner() {
           {/* Manual Advance button: visible in mixed games (human + bots)
               so the GM can trigger bot rounds if no human is online, and
               in bot-only games where they want to skip without waiting. */}
-          {hasBotTeams && !allBotsGame && phase === "playing" && (
+          {hasBotTeams && !allBotsGame && phase === "playing" && !isFacilitatedMultiplayer && (
             <button
               onClick={gmAdvanceQuarter}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-xs font-semibold shadow-lg transition-colors cursor-pointer select-none"
