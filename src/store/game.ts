@@ -5652,59 +5652,129 @@ export const useGame = create<GameStore>()(
             t.id === meId ? { ...t, readyForNextQuarter: ready } : t,
           ),
         });
-        // Sync the ready flag to the server via the dedicated mark-ready
-        // endpoint. We do NOT use pushStateToServer here because that sends
-        // the full local state — which only has OUR flag set to true. If
-        // two players click Ready simultaneously, each browser's full-state
-        // push would overwrite the other's flag, leaving the server with
-        // only one flag true and the other false (deadlock at 1/2).
-        //
-        // /api/games/mark-ready does a server-side read-modify-write with
-        // CAS retry: it reads the DB state (including other players' flags),
-        // flips ONLY our flag, and writes back. Race-safe by design.
-        if (s.isMultiplayerSession) {
-          const gId = s.session?.gameId;
-          if (gId) {
-            fetch("/api/games/mark-ready", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ gameId: gId }),
-            }).catch(() => {
-              // Non-fatal — the postgres_changes Realtime listener on the
-              // other browser will eventually catch us up if the endpoint
-              // fails. A failed mark-ready is surfaced in the console but
-              // does not block the local engine.
-              console.warn("[SkyForce] mark-ready fetch failed");
-            });
-          }
-        }
-        // Re-evaluate after the set so allActiveTeamsReady reads the
-        // fresh team list. Only fire auto-advance when:
-        //   - the flip was a "true" (player marked ready, not unmarked)
-        //   - the game is multiplayer self-guided (session.mode)
-        //   - more than one human team exists (solo doesn't auto-advance)
-        //   - all ACTIVE human teams are now ready (Phase 6 P1: long-
-        //     away humans count as ready so they don't stall the
-        //     cohort indefinitely — see below)
         if (!ready) return;
         const after = get();
         const session = after.session;
         if (!session || session.mode !== "self_guided") return;
         const humans = after.teams.filter((t) => t.controlledBy === "human");
         if (humans.length < 2) return;
-
-        // Phase 6 P1 — fetch members + treat long-away humans as
-        // ready so the cohort can advance even when one player has
-        // closed their tab. Threshold: 5 minutes since heartbeat.
-        // We do this asynchronously so the user-facing setReady
-        // call returns immediately; auto-close fires once the
-        // member fetch resolves.
         const gameId = session.gameId;
         if (!gameId) return;
+
+        // ── Multiplayer self-guided path ────────────────────────────────
+        // DESIGN: exactly ONE browser must call closeQuarter(). Using the
+        // full pushStateToServer or checking local state both cause races:
+        //
+        //   • pushStateToServer sends the whole store — Player A's push
+        //     writes {A:ready,B:not} and Player B's overwrites it with
+        //     {A:not,B:ready}. Server always ends at 1/2. (original bug)
+        //
+        //   • Checking local store after mark-ready: both browsers see
+        //     all-ready (via Realtime), both call closeQuarter(), both do
+        //     multiple pushes, each gets 409s, each 409 re-hydrates Q1
+        //     state (all-ready again), infinite loop → stuck on
+        //     "Loading game canvas…". (regression from prior fix attempt)
+        //
+        // FIX: await the mark-ready endpoint, then fetch the server state.
+        // Only the LAST browser to mark ready will see all-ready in the
+        // server response (since mark-ready is atomic with CAS retry).
+        // That browser closes the quarter; all others just hydrate the
+        // result when the Realtime broadcast from closeQuarter arrives.
+        if (s.isMultiplayerSession) {
+          (async () => {
+            // Step 1: atomically set our flag on the server.
+            try {
+              const mrRes = await fetch("/api/games/mark-ready", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ gameId }),
+              });
+              if (!mrRes.ok) {
+                console.warn("[SkyForce] mark-ready failed", mrRes.status);
+              }
+            } catch {
+              console.warn("[SkyForce] mark-ready network error");
+            }
+
+            // Step 2: fetch the fresh server state + member heartbeats.
+            // We MUST check server state here (not local store) — this is
+            // what ensures only the last-to-mark-ready browser closes.
+            let staleHumans = new Set<string>();
+            type ServerTeam = {
+              id: string;
+              controlledBy?: string;
+              claimedBySessionId?: string | null;
+              readyForNextQuarter?: boolean;
+            };
+            let serverHumans: ServerTeam[] = [];
+            try {
+              const loadRes = await fetch(
+                `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
+                { cache: "no-store" },
+              );
+              if (loadRes.ok) {
+                const json = await loadRes.json();
+                // Heartbeat stale check (Phase 6 P1 — long-away players
+                // don't permanently block the cohort).
+                const now = Date.now();
+                const LONG_AWAY_MS = 5 * 60 * 1000;
+                for (const m of (json.members ?? []) as Array<{
+                  session_id: string;
+                  last_seen_at?: string | null;
+                }>) {
+                  const ts = m.last_seen_at ? Date.parse(m.last_seen_at) : NaN;
+                  if (Number.isFinite(ts) && now - ts > LONG_AWAY_MS) {
+                    staleHumans.add(m.session_id);
+                  }
+                }
+                serverHumans = (
+                  (json.state?.state_json?.teams ?? []) as ServerTeam[]
+                ).filter((t) => t.controlledBy === "human");
+              }
+            } catch {
+              // Network error — fall back to local store so a blip
+              // doesn't permanently block the cohort.
+              staleHumans = new Set();
+              serverHumans = get()
+                .teams.filter((t) => t.controlledBy === "human")
+                .map((t) => ({
+                  id: t.id,
+                  controlledBy: t.controlledBy,
+                  claimedBySessionId: t.claimedBySessionId,
+                  readyForNextQuarter: t.readyForNextQuarter,
+                }));
+            }
+
+            // Step 3: check if every human is ready (or long-away).
+            const blockingHumans = serverHumans.filter((t) => {
+              if (t.readyForNextQuarter === true) return false;
+              if (
+                t.claimedBySessionId &&
+                staleHumans.has(t.claimedBySessionId)
+              ) {
+                return false;
+              }
+              return true;
+            });
+            // Still someone blocking — we were NOT the last to mark ready.
+            // The last browser will handle the close when they check.
+            if (blockingHumans.length > 0) return;
+
+            // Step 4: all humans ready — THIS browser closes the quarter.
+            if (staleHumans.size > 0) {
+              toast.warning(
+                "Auto-advancing past stalled players",
+                `${staleHumans.size} player${staleHumans.size === 1 ? " was" : "s were"} away for 5+ min.`,
+              );
+            }
+            get().closeQuarter();
+          })();
+          return; // multiplayer handled above; skip solo path below
+        }
+
+        // ── Solo / facilitated path (no mark-ready endpoint needed) ────
+        // Local state is authoritative; check it directly.
         (async () => {
-          // Try to fetch the latest members (with last_seen_at).
-          // On failure, fall back to the strict "every human ready"
-          // gate — better to wait than to advance prematurely.
           let staleHumans = new Set<string>();
           try {
             const res = await fetch(
@@ -5726,36 +5796,27 @@ export const useGame = create<GameStore>()(
               }
             }
           } catch {
-            // Network blip — fall back to strict gate by leaving
-            // staleHumans empty.
             staleHumans = new Set();
           }
-
-          // Re-pull state in case anything moved while we awaited.
           const fresh = get();
           const freshHumans = fresh.teams.filter(
             (t) => t.controlledBy === "human",
           );
           const blockingHumans = freshHumans.filter((t) => {
-            // A human blocks auto-close only if they're (a) not
-            // marked ready AND (b) not long-away. Long-away humans
-            // are skipped — they get a forfeit/replacement decision
-            // from the facilitator UI later.
             if (t.readyForNextQuarter === true) return false;
-            if (t.claimedBySessionId && staleHumans.has(t.claimedBySessionId)) {
+            if (
+              t.claimedBySessionId &&
+              staleHumans.has(t.claimedBySessionId)
+            ) {
               return false;
             }
             return true;
           });
           if (blockingHumans.length > 0) return;
-
-          // All ACTIVE humans ready — auto-close. The engine handles
-          // the rest of the round close (procedural rivals, slot
-          // auctions, etc).
           if (staleHumans.size > 0) {
             toast.warning(
               "Auto-advancing past stalled players",
-              `${staleHumans.size} player${staleHumans.size === 1 ? " was" : "s were"} away for 5+ min — facilitator can mark them forfeit later.`,
+              `${staleHumans.size} player${staleHumans.size === 1 ? " was" : "s were"} away for 5+ min.`,
             );
           }
           get().closeQuarter();
@@ -6016,30 +6077,6 @@ export const useGame = create<GameStore>()(
             // them automatically without needing a page reload.
             isClosing: false,
           } as Partial<GameStore>);
-
-          // ── Multiplayer self-guided all-ready re-check ──
-          // A Realtime push from another player may carry their
-          // readyForNextQuarter: true. After we hydrate that into local
-          // state, check if every human is now ready and fire closeQuarter()
-          // if so. setTimeout(0) lets the set() commit flush before
-          // closeQuarter() reads fresh state. The isClosing guard inside
-          // closeQuarter() prevents double-firing if two browsers race.
-          const afterHydrate = get();
-          if (
-            !afterHydrate.isObserver &&
-            !afterHydrate.isClosing &&
-            afterHydrate.session?.mode === "self_guided"
-          ) {
-            const hydHumans = afterHydrate.teams.filter(
-              (t) => t.controlledBy === "human",
-            );
-            if (
-              hydHumans.length >= 2 &&
-              hydHumans.every((t) => t.readyForNextQuarter === true)
-            ) {
-              setTimeout(() => get().closeQuarter(), 0);
-            }
-          }
 
           return { ok: true };
         } catch (err) {
