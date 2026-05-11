@@ -162,32 +162,38 @@ export function pickAirlineNames(
   return out;
 }
 
-/** Deterministic seat-index → airline name mapping for the lobby
+/** Deterministic seat-index → airline entry (name + code) for the lobby
  *  preview before bots are seeded server-side. Stable across reloads
  *  in the same browser via a localStorage cache, so a host glancing
  *  at the lobby doesn't see name churn between renders.
  *
- *  This is a per-browser preview only — the authoritative names are
- *  generated server-side by `/api/games/start` using
- *  `pickAirlineNames`. */
-const LOBBY_PREVIEW_KEY = "skyforce:lobbyBotNames:v1";
+ *  The host's browser is the source of truth for preview names: the
+ *  names are saved into `plannedSeats` via `/api/games/seat-config`
+ *  so the start route uses the exact same names instead of re-rolling. */
+const LOBBY_PREVIEW_KEY = "skyforce:lobbyBotNames:v2";
 
-export function lobbyPreviewName(seatIndex: number): string {
-  if (typeof window === "undefined") {
-    return AIRLINE_NAME_POOL[seatIndex % AIRLINE_NAME_POOL.length].name;
-  }
+export function lobbyPreviewEntry(seatIndex: number): AirlineNameEntry {
+  const fallback = AIRLINE_NAME_POOL[seatIndex % AIRLINE_NAME_POOL.length];
+  if (typeof window === "undefined") return fallback;
   try {
     const raw = window.localStorage.getItem(LOBBY_PREVIEW_KEY);
-    const cached: string[] = raw ? JSON.parse(raw) : [];
-    if (cached[seatIndex]) return cached[seatIndex];
-    // Backfill — pick a random name not already in cache and persist.
-    const taken = new Set(cached.filter(Boolean));
-    const next = pickAirlineNames(1, taken);
-    const picked = next[0]?.name ?? AIRLINE_NAME_POOL[seatIndex % AIRLINE_NAME_POOL.length].name;
-    cached[seatIndex] = picked;
+    const cached: Array<{ name: string; code: string } | null> = raw ? JSON.parse(raw) : [];
+    if (cached[seatIndex]?.name && cached[seatIndex]?.code) {
+      return cached[seatIndex] as AirlineNameEntry;
+    }
+    // Backfill — pick a random entry not already in cache.
+    const takenNames = new Set(cached.filter(Boolean).map((e) => (e as AirlineNameEntry).name));
+    const next = pickAirlineNames(1, takenNames);
+    const picked = next[0] ?? fallback;
+    cached[seatIndex] = { name: picked.name, code: picked.code };
     window.localStorage.setItem(LOBBY_PREVIEW_KEY, JSON.stringify(cached));
     return picked;
   } catch {
-    return AIRLINE_NAME_POOL[seatIndex % AIRLINE_NAME_POOL.length].name;
+    return fallback;
   }
+}
+
+/** Convenience wrapper — returns only the name string (backwards compat). */
+export function lobbyPreviewName(seatIndex: number): string {
+  return lobbyPreviewEntry(seatIndex).name;
 }

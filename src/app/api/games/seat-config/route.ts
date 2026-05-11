@@ -34,6 +34,10 @@ interface SeatConfigEntry {
    *  raw string here so seat-config doesn't need a runtime dep on the
    *  airline-colors module. */
   botColorOverride?: string | null;
+  /** Airline name + IATA code shown in the lobby preview. Persisted so
+   *  /api/games/start uses the exact same names rather than re-rolling. */
+  botName?: string;
+  botCode?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -97,8 +101,8 @@ export async function POST(req: NextRequest) {
     const session = (stateJson.session as Record<string, unknown> | undefined) ?? {};
 
     // Build updated plannedSeats from the incoming configs.
-    // Color override is stored only for bot seats; human seats clear it
-    // so a seat-type flip from bot→human doesn't leave stale color hints.
+    // Color override + bot name/code are stored only for bot seats;
+    // human seats clear them so a bot→human flip leaves no stale hints.
     const plannedSeats = (seatConfigs as SeatConfigEntry[]).map((s, i) => ({
       id: `seat-${s.index ?? i}`,
       type: s.type === "bot" ? "bot" : "human",
@@ -107,6 +111,12 @@ export async function POST(req: NextRequest) {
         s.type === "bot" && typeof s.botColorOverride === "string"
           ? s.botColorOverride
           : undefined,
+      botName: s.type === "bot" && typeof s.botName === "string" && s.botName.length > 0
+        ? s.botName
+        : undefined,
+      botCode: s.type === "bot" && typeof s.botCode === "string" && s.botCode.length > 0
+        ? s.botCode
+        : undefined,
     }));
 
     const updatedState = {

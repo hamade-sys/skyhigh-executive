@@ -31,7 +31,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { DOCTRINES as DOCTRINE_META, DOCTRINE_ICON_TINT } from "@/data/doctrines";
-import { lobbyPreviewName } from "@/data/airline-names";
+import { lobbyPreviewEntry } from "@/data/airline-names";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
@@ -59,6 +59,10 @@ interface SeatConfig {
   // deterministic fallback. Refresh button on the bot SeatCard
   // re-rolls this to a random unclaimed palette id.
   botColorOverride?: AirlineColorId | null;
+  // Airline name + IATA code assigned at lobby init time so the same
+  // names shown in the lobby are used when the game starts server-side.
+  botName?: string;
+  botCode?: string;
 }
 
 // Names for the lobby seat-preview cards come from the shared
@@ -182,7 +186,7 @@ export default function GameLobbyPage({
       (data.state?.state_json as Record<string, unknown> | undefined)
         ?.session as Record<string, unknown> | undefined
     )?.plannedSeats as
-      | Array<{ type?: string; botDifficulty?: string; botColorOverride?: string | null }>
+      | Array<{ type?: string; botDifficulty?: string; botColorOverride?: string | null; botName?: string; botCode?: string }>
       | undefined;
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -190,11 +194,16 @@ export default function GameLobbyPage({
       Array.from({ length: maxTeams }, (_, i) => {
         const p = planned?.[i];
         const override = p?.botColorOverride;
+        // Use server-saved name/code when present; otherwise generate a stable
+        // preview from the local pool and it will be persisted on first save.
+        const preview = lobbyPreviewEntry(i);
         return {
           index: i,
           type: (p?.type === "bot" ? "bot" : "human") as SeatType,
           difficulty: ((p?.botDifficulty ?? "medium") as Difficulty),
           botColorOverride: isAirlineColorId(override) ? override : null,
+          botName: p?.botName ?? preview.name,
+          botCode: p?.botCode ?? preview.code,
         };
       }),
     );
@@ -215,7 +224,14 @@ export default function GameLobbyPage({
       await fetch("/api/games/seat-config", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ gameId, seatConfigs: updated }),
+        body: JSON.stringify({
+          gameId,
+          seatConfigs: updated.map((s) => ({
+            ...s,
+            botName: s.type === "bot" ? (s.botName ?? lobbyPreviewEntry(s.index).name) : undefined,
+            botCode: s.type === "bot" ? (s.botCode ?? lobbyPreviewEntry(s.index).code) : undefined,
+          })),
+        }),
       });
     } catch { /* non-critical — local state already updated */ }
     finally { setSeatConfigSaving(false); }
@@ -958,11 +974,9 @@ function SeatCard({
 }) {
   const claimed = !!member;
   const isBot = !claimed && seatConfig.type === "bot";
-  // Stable per-seat random pick from the 100-name pool — see
-  // src/data/airline-names.ts. Cached per browser via localStorage
-  // so re-renders don't churn the displayed name; the authoritative
-  // bot name is picked again server-side at /api/games/start.
-  const botName = lobbyPreviewName(index - 1);
+  // Name comes from seatConfig.botName which is persisted server-side
+  // so it matches exactly what /api/games/start will use.
+  const botName = seatConfig.botName ?? `Bot ${index}`;
   // Phase 9 — once a claimant has chosen a color, tint their seat
   // tile + avatar square with that hex. Bot seats also get a tint
   // from the parent's color allocator (preview of what /api/games/start

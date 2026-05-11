@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
       }> | undefined) ?? {};
 
       const plannedSeats = (
-        ((stateJson.session as Record<string, unknown> | undefined)?.plannedSeats as Array<{ type: string; botDifficulty?: string }>) ?? []
+        ((stateJson.session as Record<string, unknown> | undefined)?.plannedSeats as Array<{ type: string; botDifficulty?: string; botName?: string; botCode?: string }>) ?? []
       );
 
       // Only actual players get teams. The facilitator/game master manages the
@@ -241,10 +241,14 @@ export async function POST(req: NextRequest) {
       // skipping anything humans already claimed.
       const botPlannedSeats = plannedSeats.filter((s) => s.type === "bot");
       for (let i = 0; i < botsToSeed; i++) {
-        // Random distinct name from the 100-name pool (already pre-
-        // picked above to avoid colliding with human-supplied names
-        // and other bots in the same game).
-        const namePick = pickedNamePool[nameCursor++];
+        // Use the lobby-preview name that the host saw (persisted via
+        // seat-config) so the name shown in the lobby matches the game.
+        // Fall back to the randomly-picked pool entry for legacy saves.
+        const savedName = botPlannedSeats[i]?.botName;
+        const savedCode = botPlannedSeats[i]?.botCode;
+        const namePick = savedName && savedCode
+          ? { name: savedName, code: savedCode }
+          : pickedNamePool[nameCursor++];
         const fallbackHub = BOT_HUBS[i % BOT_HUBS.length];
         const fallbackHex = BOT_BRAND_HEXES[i % BOT_BRAND_HEXES.length];
         const botDoctrines: DoctrineId[] = [
