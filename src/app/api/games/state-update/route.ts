@@ -195,6 +195,13 @@ export async function POST(req: NextRequest) {
     // with 403 because simulation necessarily changes the other player's team
     // state (cash, routes, fleet status) which they don't "own".
     const isQuarterClose = eventType === "game.quarterClosed";
+    const TEAM_NEUTRAL_EVENTS = new Set([
+      "game.timerStarted",
+      "game.timerPaused",
+      "game.timerResumed",
+      "game.timerExtended",
+    ]);
+    const isTeamNeutralEvent = TEAM_NEUTRAL_EVENTS.has(eventType);
 
     // Load the canonical stored teams once so we can both authorise writes
     // and preserve multiplayer identity fields (`claimedBySessionId`,
@@ -223,7 +230,7 @@ export async function POST(req: NextRequest) {
       if (t && typeof t.id === "string") storedById.set(t.id, t);
     }
 
-    if (!isFacilitator && !isQuarterClose) {
+    if (!isFacilitator && !isQuarterClose && !isTeamNeutralEvent) {
       const submittedTeams = (newState as NewStateShape).teams ?? [];
       for (const t of submittedTeams) {
         if (!t || typeof t !== "object") continue;
@@ -281,23 +288,25 @@ export async function POST(req: NextRequest) {
     const sanitizedState = Array.isArray(submittedTeams)
       ? {
           ...(newState as Record<string, unknown>),
-          teams: submittedTeams.map((t) => {
-            if (!t || typeof t !== "object" || typeof t.id !== "string") return t;
-            const stored = storedById.get(t.id);
-            if (!stored) return t;
-            return {
-              ...t,
-              claimedBySessionId: stored.claimedBySessionId ?? null,
-              controlledBy:
-                stored.controlledBy === "human" || stored.controlledBy === "bot"
-                  ? stored.controlledBy
-                  : t.controlledBy,
-              isPlayer: typeof stored.isPlayer === "boolean"
-                ? stored.isPlayer
-                : t.isPlayer,
-              playerDisplayName: stored.playerDisplayName ?? null,
-            };
-          }),
+          teams: isTeamNeutralEvent
+            ? (storedTeamsRaw as unknown as NewStateTeamShape[])
+            : submittedTeams.map((t) => {
+                if (!t || typeof t !== "object" || typeof t.id !== "string") return t;
+                const stored = storedById.get(t.id);
+                if (!stored) return t;
+                return {
+                  ...t,
+                  claimedBySessionId: stored.claimedBySessionId ?? null,
+                  controlledBy:
+                    stored.controlledBy === "human" || stored.controlledBy === "bot"
+                      ? stored.controlledBy
+                      : t.controlledBy,
+                  isPlayer: typeof stored.isPlayer === "boolean"
+                    ? stored.isPlayer
+                    : t.isPlayer,
+                  playerDisplayName: stored.playerDisplayName ?? null,
+                };
+              }),
         }
       : newState;
 

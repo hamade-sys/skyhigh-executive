@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useGame, selectPlayer, selectRivals, selectActiveTeam, selectOtherTeams } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { fmtMoney, fmtQuarter, fmtQuarterShort } from "@/lib/format";
@@ -308,6 +308,16 @@ function CloseQuarterButton() {
   const openPanel = useUi((u) => u.openPanel);
   const sessionMode = useGame((s) => s.session?.mode ?? null);
   const gameId = useGame((s) => s.session?.gameId ?? null);
+  const phase = useGame((s) => s.phase);
+  const memberTeamId = useGame((s) => s.memberTeamId);
+  const allReady = useGame((s) => s.allActiveTeamsReady());
+  const designatedCloserId = useGame((s) => {
+    const humanIds = s.teams
+      .filter((t) => t.controlledBy === "human")
+      .map((t) => t.id)
+      .sort((a, b) => a.localeCompare(b));
+    return humanIds[0] ?? null;
+  });
   // When the session has board decisions disabled (self-guided cohorts
   // that opt out of scenarios), the close-quarter pre-flight should
   // not include the decisions row. Defaults to true for legacy saves
@@ -336,6 +346,7 @@ function CloseQuarterButton() {
   const [countdownSec, setCountdownSec] = useState<number | null>(null);
   // Whether we sent the close request (suppresses showing our own banner)
   const [iRequested, setIRequested] = useState(false);
+  const autoCloseAttemptedQuarterRef = useRef<number | null>(null);
 
   // activeTeamId fallback already handled above; just satisfy TS
   void activeTeamId;
@@ -418,15 +429,15 @@ function CloseQuarterButton() {
   const triggerClose = useCallback(() => {
     setQuarterCloseRequest(null);
     setCountdownSec(null);
-    // Mark ourselves ready first, then sync & close.
+    // Peer accepted the close request. Only mark this seat ready; a
+    // single deterministic browser will perform the actual close once
+    // every human seat is ready for this quarter.
     if (isMultiplayerSelfGuided && gameId) {
       fetch("/api/games/mark-ready", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ gameId }),
-      }).catch(() => {/* non-fatal */}).finally(() => {
-        void syncAndClose();
-      });
+      }).catch(() => {/* non-fatal */});
     } else {
       void syncAndClose();
     }
@@ -456,7 +467,36 @@ function CloseQuarterButton() {
   // clears quarterCloseRequest and hydrateFromServerState fires).
   // We detect this by watching currentQuarter.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setIRequested(false); }, [currentQuarter]);
+  useEffect(() => {
+    setIRequested(false);
+    autoCloseAttemptedQuarterRef.current = null;
+  }, [currentQuarter]);
+
+  // Self-guided multiplayer needs exactly one browser to perform the
+  // actual close once every human has marked ready. Use the stable
+  // smallest human team id as the designated closer so the quarter
+  // doesn't depend on who happened to click last.
+  useEffect(() => {
+    if (!isMultiplayerSelfGuided) return;
+    if (phase !== "playing") return;
+    if (!allReady) return;
+    if (pendingClose) return;
+    if (!memberTeamId || memberTeamId !== designatedCloserId) return;
+    if (autoCloseAttemptedQuarterRef.current === currentQuarter) return;
+
+    autoCloseAttemptedQuarterRef.current = currentQuarter;
+    setIRequested(false);
+    void syncAndClose();
+  }, [
+    allReady,
+    currentQuarter,
+    designatedCloserId,
+    isMultiplayerSelfGuided,
+    memberTeamId,
+    pendingClose,
+    phase,
+    syncAndClose,
+  ]);
 
   if (!player) return null;
 
@@ -586,17 +626,10 @@ function CloseQuarterButton() {
         return;
       }
       const { allReady } = await res.json() as { allReady: boolean; deadlineAt: string };
-      if (allReady) {
-        // Every human is ready — sync version from server then close
-        // immediately. syncAndClose re-fetches the authoritative state
-        // (which now includes our own ready-flag write that bumped the
-        // DB version) so closeQuarter's CAS push uses the correct version.
-        void syncAndClose();
-      }
+      void allReady;
       // If not allReady: the 30s countdown broadcast has been sent to peers.
-      // We stay in "Waiting for cohort…" until the peer closes or the timer
-      // expires on their end and they auto-close (which broadcasts the new
-      // quarter back to us via game.stateChanged).
+      // When everyone is ready, the designated closer effect above performs
+      // the actual quarter close on exactly one browser.
     } catch {
       console.warn("[SkyForce] request-quarter-close network error");
       void syncAndClose();
