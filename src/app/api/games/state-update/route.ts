@@ -64,6 +64,47 @@ interface StoredTeam {
   controlledBy?: string | null;
 }
 
+/**
+ * Returns true if any field in `submitted` differs from `stored`.
+ *
+ * WHY: pushStateToServer always sends the full engine state including ALL
+ * teams. A player legitimately pushes other players' teams verbatim (they
+ * haven't touched them) on every timer tick, quarter close, slider change,
+ * etc. Without this check we would block those writes with a 403 even though
+ * no cross-team mutation is happening.
+ *
+ * We use canonical JSON (sorted object keys + sorted primitive arrays) so
+ * field-ordering differences in the JSON round-trip don't produce false
+ * positives. Sets are serialised as arrays by pushStateToServer; the stored
+ * data has the same shape, so the comparison is apples-to-apples.
+ */
+function teamDataChanged(
+  stored: Record<string, unknown>,
+  submitted: Record<string, unknown>,
+): boolean {
+  function norm(v: unknown): unknown {
+    if (v === null || v === undefined) return v;
+    if (Array.isArray(v)) {
+      const mapped = v.map(norm);
+      // Primitive arrays (e.g. flags: string[]) are order-independent sets —
+      // sort them so ["b","a"] and ["a","b"] compare equal.
+      if (mapped.every((x) => typeof x === "string" || typeof x === "number")) {
+        return (mapped as (string | number)[]).slice().sort();
+      }
+      return mapped;
+    }
+    if (typeof v === "object") {
+      return Object.fromEntries(
+        Object.keys(v as Record<string, unknown>)
+          .sort()
+          .map((k) => [k, norm((v as Record<string, unknown>)[k])]),
+      );
+    }
+    return v;
+  }
+  return JSON.stringify(norm(stored)) !== JSON.stringify(norm(submitted));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const userId = await getAuthenticatedUserId();
@@ -187,16 +228,29 @@ export async function POST(req: NextRequest) {
         // Bot teams (per STORED state) — allowed for everyone, since
         // the local engine runs bot turns and pushes their results.
         if (stored.controlledBy === "bot") continue;
-        // Human team — must be claimed by THIS user (per stored data).
+
+        // Human team — check ownership only if the team data actually changed.
+        // Full-state pushes (timer ticks, quarter close, slider changes, etc.)
+        // include every team verbatim. Rejecting those with a 403 just because
+        // another player's team appears in the payload would block virtually
+        // every multiplayer state write. We only block cross-team mutations —
+        // i.e. when a player's submitted payload meaningfully differs from the
+        // stored state for a team they don't own.
         const ownerInStore = stored.claimedBySessionId ?? null;
         if (ownerInStore && ownerInStore !== userId) {
-          return NextResponse.json(
-            {
-              error:
-                "Cannot mutate a team you do not own. Facilitator role required for cross-team writes.",
-            },
-            { status: 403 },
-          );
+          const storedFull = stored as unknown as Record<string, unknown>;
+          const submittedFull = t as unknown as Record<string, unknown>;
+          if (teamDataChanged(storedFull, submittedFull)) {
+            return NextResponse.json(
+              {
+                error:
+                  "Cannot mutate a team you do not own. Facilitator role required for cross-team writes.",
+              },
+              { status: 403 },
+            );
+          }
+          // Data unchanged — player is carrying this team through a global
+          // state push. Allow it.
         }
       }
     }
