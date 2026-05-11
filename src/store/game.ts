@@ -5652,12 +5652,31 @@ export const useGame = create<GameStore>()(
             t.id === meId ? { ...t, readyForNextQuarter: ready } : t,
           ),
         });
-        // Sync the ready flag to the server immediately so every other
-        // browser in the cohort sees it via the Realtime channel. Without
-        // this push each browser only sees its own player as ready and the
-        // all-ready gate never fires — the multiplayer ready deadlock.
+        // Sync the ready flag to the server via the dedicated mark-ready
+        // endpoint. We do NOT use pushStateToServer here because that sends
+        // the full local state — which only has OUR flag set to true. If
+        // two players click Ready simultaneously, each browser's full-state
+        // push would overwrite the other's flag, leaving the server with
+        // only one flag true and the other false (deadlock at 1/2).
+        //
+        // /api/games/mark-ready does a server-side read-modify-write with
+        // CAS retry: it reads the DB state (including other players' flags),
+        // flips ONLY our flag, and writes back. Race-safe by design.
         if (s.isMultiplayerSession) {
-          get().pushStateToServer("player.markedReady", { teamId: meId });
+          const gId = s.session?.gameId;
+          if (gId) {
+            fetch("/api/games/mark-ready", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ gameId: gId }),
+            }).catch(() => {
+              // Non-fatal — the postgres_changes Realtime listener on the
+              // other browser will eventually catch us up if the endpoint
+              // fails. A failed mark-ready is surfaced in the console but
+              // does not block the local engine.
+              console.warn("[SkyForce] mark-ready fetch failed");
+            });
+          }
         }
         // Re-evaluate after the set so allActiveTeamsReady reads the
         // fresh team list. Only fire auto-advance when:
@@ -5886,25 +5905,55 @@ export const useGame = create<GameStore>()(
           return { ok: false, error: "State has no currentQuarter — game not yet started." };
         }
         try {
-          // Mirror the onRehydrateStorage hook: flags arrays → Sets.
-          const teams = restored.teams.map((t) => ({
-            ...t,
-            flags: new Set<string>(
-              Array.isArray(t.flags)
-                ? t.flags
-                : t.flags
-                  ? Array.from(t.flags)
-                  : [],
-            ),
-          })) as Team[];
+          const currentState = get();
 
           // Bind activeTeamId to whichever team this session has claimed.
           // sessionId is always user.id (Supabase auth — real or anonymous),
           // so a single equality check is sufficient.
-          const claimed = teams.find(
-            (t) => t.claimedBySessionId === mySessionId,
-          );
-          const claimedTeamId = claimed?.id ?? null;
+          // We need claimedTeamId before building the teams array so we can
+          // preserve the ready-flag on our own team (see comment below).
+          const claimedTeamId =
+            restored.teams.find((t) => t.claimedBySessionId === mySessionId)
+              ?.id ?? null;
+
+          // Mirror the onRehydrateStorage hook: flags arrays → Sets.
+          const teams = restored.teams.map((t) => {
+            const base = {
+              ...t,
+              flags: new Set<string>(
+                Array.isArray(t.flags)
+                  ? t.flags
+                  : t.flags
+                    ? Array.from(t.flags)
+                    : [],
+              ),
+            } as Team;
+
+            // Preserve our own team's readyForNextQuarter=true when:
+            //   • the incoming server state has it false (the mark-ready
+            //     endpoint hasn't persisted our flag yet — another player's
+            //     action raced us and its broadcast arrived first), AND
+            //   • the quarter hasn't advanced (if it has, the ready flags
+            //     are legitimately reset for the new round and we keep them).
+            // Without this guard the TopBar briefly flips from "1/2" back
+            // to "0/2" while the mark-ready write is in-flight.
+            if (
+              t.id === claimedTeamId &&
+              base.readyForNextQuarter !== true
+            ) {
+              const localTeam = currentState.teams.find((lt) => lt.id === t.id);
+              if (
+                localTeam?.readyForNextQuarter === true &&
+                (restored.currentQuarter ?? 0) === (currentState.currentQuarter ?? 0)
+              ) {
+                base.readyForNextQuarter = true;
+              }
+            }
+
+            return base;
+          }) as Team[];
+
+          const claimed = teams.find((t) => t.id === claimedTeamId);
 
           // For observers (GM/facilitator), preserve the team they are
           // currently watching across live Realtime re-hydrations. Without
@@ -5914,7 +5963,7 @@ export const useGame = create<GameStore>()(
           // stale/empty state instead of the live update that just arrived.
           // We only preserve the target if the team still exists in the
           // fresh state (teams can be dropped on forfeit, etc.).
-          const currentState = get();
+          // currentState is declared above (before the teams map).
           const preservedViewTarget =
             !claimed && currentState.isObserver && currentState.activeTeamId
               ? (teams.some((t) => t.id === currentState.activeTeamId)
