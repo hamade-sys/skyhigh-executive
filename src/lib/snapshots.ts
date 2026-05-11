@@ -52,13 +52,13 @@ export interface SnapshotPayload {
 const SCHEMA_VERSION = 1;
 
 function isBrowser(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
 }
 
 function readIndex(): SnapshotMeta[] {
   if (!isBrowser()) return [];
   try {
-    const raw = window.localStorage.getItem(INDEX_KEY);
+    const raw = window.sessionStorage.getItem(INDEX_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as SnapshotMeta[];
     if (!Array.isArray(parsed)) return [];
@@ -71,7 +71,7 @@ function readIndex(): SnapshotMeta[] {
 function writeIndex(index: SnapshotMeta[]): void {
   if (!isBrowser()) return;
   try {
-    window.localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+    window.sessionStorage.setItem(INDEX_KEY, JSON.stringify(index));
   } catch (err) {
     console.error("[snapshots] failed to write index", err);
   }
@@ -92,7 +92,7 @@ export function listSnapshots(): SnapshotMeta[] {
 export function loadSnapshot(id: string): SnapshotPayload | null {
   if (!isBrowser()) return null;
   try {
-    const raw = window.localStorage.getItem(PAYLOAD_PREFIX + id);
+    const raw = window.sessionStorage.getItem(PAYLOAD_PREFIX + id);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SnapshotPayload;
     if (!parsed || typeof parsed !== "object") return null;
@@ -138,7 +138,7 @@ export function saveSnapshot(opts: SaveOpts): SnapshotMeta {
 
   if (isBrowser()) {
     try {
-      window.localStorage.setItem(
+      window.sessionStorage.setItem(
         PAYLOAD_PREFIX + id,
         JSON.stringify(payload),
       );
@@ -153,7 +153,7 @@ export function saveSnapshot(opts: SaveOpts): SnapshotMeta {
       if (oldest && oldest.id !== id) {
         deleteSnapshot(oldest.id);
         try {
-          window.localStorage.setItem(
+          window.sessionStorage.setItem(
             PAYLOAD_PREFIX + id,
             JSON.stringify(payload),
           );
@@ -175,7 +175,7 @@ export function saveSnapshot(opts: SaveOpts): SnapshotMeta {
 export function deleteSnapshot(id: string): void {
   if (!isBrowser()) return;
   try {
-    window.localStorage.removeItem(PAYLOAD_PREFIX + id);
+    window.sessionStorage.removeItem(PAYLOAD_PREFIX + id);
   } catch (err) {
     console.error("[snapshots] delete payload failed", id, err);
   }
@@ -187,7 +187,7 @@ export function deleteSnapshot(id: string): void {
 export function clearAllSnapshots(): void {
   if (!isBrowser()) return;
   for (const m of readIndex()) {
-    try { window.localStorage.removeItem(PAYLOAD_PREFIX + m.id); } catch {}
+    try { window.sessionStorage.removeItem(PAYLOAD_PREFIX + m.id); } catch {}
   }
   writeIndex([]);
 }
@@ -232,7 +232,7 @@ export function importSnapshotJson(
   const meta = p.meta as SnapshotMeta;
   if (isBrowser()) {
     try {
-      window.localStorage.setItem(PAYLOAD_PREFIX + meta.id, json);
+      window.sessionStorage.setItem(PAYLOAD_PREFIX + meta.id, json);
     } catch (err) {
       return {
         ok: false,

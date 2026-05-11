@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 
 export type ToastKind = "info" | "success" | "warning" | "negative" | "accent";
 
@@ -43,51 +42,38 @@ interface ToastStore {
 const HISTORY_CAP = 600;
 
 export const useToasts = create<ToastStore>()(
-  persist(
-    (set, get) => ({
-      toasts: [],
-      history: [],
-      lastReadAt: 0,
-      // Default duration bumped 4.2s → 6.5s so quarter-close bursts (5+
-      // toasts in quick succession) stay readable. Anything the user
-      // misses still lives in the persistent Notification Center.
-      push: ({ kind, title, detail, duration = 6500 }) => {
-        const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        const toast: Toast = {
-          id,
-          kind,
-          title,
-          detail,
-          duration,
-          createdAt: Date.now(),
-        };
-        set((s) => ({
-          toasts: [...s.toasts, toast],
-          // Append to history; cap to last HISTORY_CAP entries.
-          history: [...s.history, toast].slice(-HISTORY_CAP),
-        }));
-        if (duration > 0) {
-          setTimeout(() => {
-            // Only dismiss if it hasn't already been dismissed
-            if (get().toasts.some((t) => t.id === id)) {
-              get().dismiss(id);
-            }
-          }, duration);
-        }
-        return id;
-      },
-      dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
-      clearAll: () => set({ toasts: [] }),
-      clearHistory: () => set({ history: [], lastReadAt: Date.now() }),
-      markAllRead: () => set({ lastReadAt: Date.now() }),
-    }),
-    {
-      name: "skyforce-toast-history-v1",
-      storage: createJSONStorage(() => localStorage),
-      // Only persist history + lastReadAt — active toasts shouldn't survive a reload.
-      partialize: (s) => ({ history: s.history, lastReadAt: s.lastReadAt }),
+  (set, get) => ({
+    toasts: [],
+    history: [],
+    lastReadAt: 0,
+    push: ({ kind, title, detail, duration = 6500 }) => {
+      const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const toast: Toast = {
+        id,
+        kind,
+        title,
+        detail,
+        duration,
+        createdAt: Date.now(),
+      };
+      set((s) => ({
+        toasts: [...s.toasts, toast],
+        history: [...s.history, toast].slice(-HISTORY_CAP),
+      }));
+      if (duration > 0) {
+        setTimeout(() => {
+          if (get().toasts.some((t) => t.id === id)) {
+            get().dismiss(id);
+          }
+        }, duration);
+      }
+      return id;
     },
-  ),
+    dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+    clearAll: () => set({ toasts: [] }),
+    clearHistory: () => set({ history: [], lastReadAt: Date.now() }),
+    markAllRead: () => set({ lastReadAt: Date.now() }),
+  }),
 );
 
 // Convenience helpers

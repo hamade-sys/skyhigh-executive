@@ -5583,23 +5583,20 @@ export const useGame = create<GameStore>()(
       },
 
       resetGame: () => {
-        // Clear every skyforce:* localStorage key so a fresh game
-        // doesn't carry stale toast history, snapshots, milestone
-        // dedup ledgers, or notification preferences from the
-        // previous run. The persisted Zustand store is one of those
-        // keys and gets cleared here too — the `set({ phase: 'idle',
-        // ... })` below then primes a clean idle state.
+        // Clear every skyforce:* sessionStorage key so a fresh game
+        // doesn't carry stale snapshots, milestone dedup ledgers, or
+        // notification preferences from the previous run.
         if (typeof window !== "undefined") {
           try {
             const keys: string[] = [];
-            for (let i = 0; i < window.localStorage.length; i += 1) {
-              const k = window.localStorage.key(i);
-              if (k && k.startsWith("skyforce:")) keys.push(k);
+            for (let i = 0; i < window.sessionStorage.length; i += 1) {
+              const k = window.sessionStorage.key(i);
+              if (k && k.startsWith("skyforce")) keys.push(k);
             }
             for (const k of keys) {
-              try { window.localStorage.removeItem(k); } catch { /* ignore */ }
+              try { window.sessionStorage.removeItem(k); } catch { /* ignore */ }
             }
-          } catch { /* localStorage disabled (private mode) */ }
+          } catch { /* sessionStorage disabled */ }
         }
         // Active-game redirect is now handled via Supabase (game_members
         // table) — no localStorage key to clear there.
@@ -7065,42 +7062,31 @@ export const useGame = create<GameStore>()(
       // never interfere with each other.
       storage: createJSONStorage(() => ({
         getItem: (name: string) => {
-          try { return localStorage.getItem(name); } catch { return null; }
+          try { return sessionStorage.getItem(name); } catch { return null; }
         },
         setItem: (name: string, value: string) => {
           try {
-            // Check the isMultiplayerSession flag embedded in the
-            // partialize payload. If true, silently skip the write so the
-            // solo save is left untouched — EXCEPT when the game has just
-            // ended (phase:"endgame"). Allowing the write on game-end
-            // means a refresh of /endgame shows the correct final teams
-            // instead of stale localStorage data from a previous game.
+            // Multiplayer state is always authoritative from the server.
+            // Never persist to browser storage — prevents stale data from
+            // old games appearing in new sessions. The endgame page now
+            // loads directly from the DB, so no exception is needed.
             const parsed = JSON.parse(value) as {
-              state?: { isMultiplayerSession?: boolean; phase?: string };
+              state?: { isMultiplayerSession?: boolean };
             };
-            if (
-              parsed?.state?.isMultiplayerSession === true &&
-              parsed?.state?.phase !== "endgame"
-            ) return;
-            localStorage.setItem(name, value);
+            if (parsed?.state?.isMultiplayerSession === true) return;
+            sessionStorage.setItem(name, value);
           } catch (err) {
-            // Phase 7 P2 — surface a one-time failure event so the
-            // <StorageFailureBanner /> component can warn the user
-            // their progress isn't being saved (private mode, quota
-            // exceeded, browser cache cleared mid-session, etc.).
-            // Used to be silently dropped; live workshops then lost
-            // entire runs on a tab reload.
             if (typeof window !== "undefined") {
               try {
                 window.dispatchEvent(new CustomEvent("skyforce:storage-failed", {
                   detail: { error: err instanceof Error ? err.message : "unknown" },
                 }));
-              } catch { /* ignore — event-dispatch failure is bizarre but non-fatal */ }
+              } catch { /* ignore */ }
             }
           }
         },
         removeItem: (name: string) => {
-          try { localStorage.removeItem(name); } catch { /* ignore */ }
+          try { sessionStorage.removeItem(name); } catch { /* ignore */ }
         },
       })),
       partialize: (s) => ({

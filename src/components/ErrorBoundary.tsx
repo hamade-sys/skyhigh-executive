@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
   handleReset = () => {
     if (typeof window !== "undefined") {
       try {
-        localStorage.removeItem("skyforce-game-v1");
+        sessionStorage.removeItem("skyforce-game-v1");
       } catch {
         /* noop */
       }

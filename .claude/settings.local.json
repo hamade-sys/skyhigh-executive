@@ -4,7 +4,22 @@
       "mcp__Claude_Preview__preview_start",
       "Bash(gh auth *)",
       "Bash(gh repo *)",
-      "Bash(gh api *)"
+      "Bash(gh api *)",
+      "Bash(kill 85220)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__computer",
+      "mcp__Claude_in_Chrome__get_page_text",
+      "Bash(cp '/Users/mohammadbalkis/Desktop/missing images/A300-600F_side Background Removed.png' '/Users/mohammadbalkis/Desktop/game airport claude/public/plane-images/A300-600F/A300-600F_side.png')",
+      "Bash(cp '/Users/mohammadbalkis/Desktop/missing images/A330-900neo_side Background Removed.png' '/Users/mohammadbalkis/Desktop/game airport claude/public/plane-images/A330-900neo/A330-900neo_side.png')",
+      "Bash(cp '/Users/mohammadbalkis/Desktop/missing images/A340-500_side Background Removed.png' '/Users/mohammadbalkis/Desktop/game airport claude/public/plane-images/A340-500/A340-500_side.png')",
+      "Bash(cp '/Users/mohammadbalkis/Desktop/missing images/A380-800_side Background Removed.png' '/Users/mohammadbalkis/Desktop/game airport claude/public/plane-images/A380-800/A380-800_side.png')",
+      "Bash(cp '/Users/mohammadbalkis/Desktop/missing images/ATR 42-500_side Background Removed.png' '/Users/mohammadbalkis/Desktop/game airport claude/public/plane-images/ATR 42-500/ATR 42-500_side.png')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)"
     ]
   }
 }

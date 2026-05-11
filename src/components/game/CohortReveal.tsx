@@ -36,7 +36,10 @@ interface Props {
   onContinue: () => void;
 }
 
-const SEEN_KEY_PREFIX = "skyforce:cohortRevealSeen:v1:";
+// In-memory set of gameIds whose reveal has been dismissed this
+// session. No storage — the reveal shows once per page load, which
+// is fine: multiplayer state comes from the server on every load.
+const _seenThisSession = new Set<string>();
 
 export function CohortReveal({ gameId, teams, onContinue }: Props) {
   // Stagger the entrance — cards fade-in 50ms apart so the player
@@ -64,14 +67,7 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
   });
 
   function continueAndRemember() {
-    if (typeof window !== "undefined") {
-      try {
-        // Use localStorage (not sessionStorage) so the reveal is
-        // permanently suppressed for this game even after the tab is
-        // closed and the player re-enters mid-game.
-        window.localStorage.setItem(SEEN_KEY_PREFIX + gameId, "1");
-      } catch { /* private mode / quota — fine, fall back to in-memory */ }
-    }
+    _seenThisSession.add(gameId);
     onContinue();
   }
 
@@ -221,16 +217,10 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
   );
 }
 
-/** Has the user already seen the cohort reveal for this gameId?
- *  Checked against localStorage so the reveal stays dismissed even
- *  when the player closes the tab and re-enters the game mid-run. */
+/** Has the user already seen the cohort reveal for this gameId
+ *  during the current page session? */
 export function hasSeenCohortReveal(gameId: string): boolean {
-  if (typeof window === "undefined") return true; // SSR: don't block
-  try {
-    return window.localStorage.getItem(SEEN_KEY_PREFIX + gameId) === "1";
-  } catch {
-    return false;
-  }
+  return _seenThisSession.has(gameId);
 }
 
 // Eliminate unused import warning in production builds where the

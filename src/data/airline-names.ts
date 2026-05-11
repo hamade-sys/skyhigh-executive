@@ -176,7 +176,7 @@ export function lobbyPreviewEntry(seatIndex: number): AirlineNameEntry {
   const fallback = AIRLINE_NAME_POOL[seatIndex % AIRLINE_NAME_POOL.length];
   if (typeof window === "undefined") return fallback;
   try {
-    const raw = window.localStorage.getItem(LOBBY_PREVIEW_KEY);
+    const raw = window.sessionStorage.getItem(LOBBY_PREVIEW_KEY);
     const cached: Array<{ name: string; code: string } | null> = raw ? JSON.parse(raw) : [];
     if (cached[seatIndex]?.name && cached[seatIndex]?.code) {
       return cached[seatIndex] as AirlineNameEntry;
@@ -186,7 +186,7 @@ export function lobbyPreviewEntry(seatIndex: number): AirlineNameEntry {
     const next = pickAirlineNames(1, takenNames);
     const picked = next[0] ?? fallback;
     cached[seatIndex] = { name: picked.name, code: picked.code };
-    window.localStorage.setItem(LOBBY_PREVIEW_KEY, JSON.stringify(cached));
+    window.sessionStorage.setItem(LOBBY_PREVIEW_KEY, JSON.stringify(cached));
     return picked;
   } catch {
     return fallback;

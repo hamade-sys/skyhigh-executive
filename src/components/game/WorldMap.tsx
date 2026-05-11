@@ -487,7 +487,7 @@ export function WorldMap({
   const [legendOpen, setLegendOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     if (currentQuarter <= 1) return true;
-    return window.localStorage.getItem(LEGEND_DISMISSED_KEY) !== "1";
+    return window.sessionStorage.getItem(LEGEND_DISMISSED_KEY) !== "1";
   });
 
   // When the quarter advances past Q1, auto-collapse the legend ONCE
@@ -504,9 +504,9 @@ export function WorldMap({
         // sync setState in effects, but here it's bounded by the
         // ref-guarded one-shot above — we won't loop. Suppress for
         // this single intended path.
-        const dismissed = window.localStorage.getItem(LEGEND_DISMISSED_KEY) === "1";
+        const dismissed = window.sessionStorage.getItem(LEGEND_DISMISSED_KEY) === "1";
         if (!dismissed) {
-          window.localStorage.setItem(LEGEND_DISMISSED_KEY, "1");
+          window.sessionStorage.setItem(LEGEND_DISMISSED_KEY, "1");
         }
       }
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -517,7 +517,7 @@ export function WorldMap({
   function dismissLegend() {
     setLegendOpen(false);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(LEGEND_DISMISSED_KEY, "1");
+      window.sessionStorage.setItem(LEGEND_DISMISSED_KEY, "1");
     }
   }
   function openLegend() {

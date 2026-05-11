@@ -42,7 +42,7 @@ export function QuarterCloseModal() {
   const milestonesShown = useMemo(() => {
     if (typeof window === "undefined") return new Set<string>();
     try {
-      const raw = window.localStorage.getItem(SHOWN_KEY);
+      const raw = window.sessionStorage.getItem(SHOWN_KEY);
       if (!raw) return new Set<string>();
       const arr = JSON.parse(raw);
       return new Set<string>(Array.isArray(arr) ? arr : []);
@@ -65,7 +65,7 @@ export function QuarterCloseModal() {
     if (milestonesActuallyNew.length === 0) return;
     try {
       const merged = Array.from(new Set([...milestonesShown, ...milestonesActuallyNew]));
-      window.localStorage.setItem(SHOWN_KEY, JSON.stringify(merged));
+      window.sessionStorage.setItem(SHOWN_KEY, JSON.stringify(merged));
     } catch {
       // Quota errors etc. — non-fatal, just lose dedupe for this turn.
     }

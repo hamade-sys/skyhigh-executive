@@ -4,7 +4,7 @@
  * Per-browser session id — the lobby system's primary identity key
  * for anonymous play.
  *
- * Persisted in localStorage so a page refresh reconnects to the
+ * Persisted in sessionStorage so a page refresh reconnects to the
  * same team, the same lobby seat, and the same audit-log actor
  * across the run. Null on first ever paint (SSR + first client
  * hydration) — components must tolerate that case.
@@ -24,7 +24,7 @@ export function getOrCreateSessionId(): string {
     return "ssr-placeholder";
   }
   try {
-    const existing = window.localStorage.getItem(STORAGE_KEY);
+    const existing = window.sessionStorage.getItem(STORAGE_KEY);
     if (existing && existing.length > 0) return existing;
     // crypto.randomUUID is on every modern browser; use it directly
     // rather than a polyfill to keep the bundle small. The fallback
@@ -33,7 +33,7 @@ export function getOrCreateSessionId(): string {
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
         : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-    window.localStorage.setItem(STORAGE_KEY, fresh);
+    window.sessionStorage.setItem(STORAGE_KEY, fresh);
     return fresh;
   } catch {
     // Storage blocked (incognito + strict mode etc) — return a

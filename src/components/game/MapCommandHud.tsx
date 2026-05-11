@@ -37,13 +37,13 @@ export function MapCommandHud({ origin, dest, hubCode, activeRouteCount, compact
     if (typeof window === "undefined") return;
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setManuallyDismissed(window.localStorage.getItem(DISMISSED_KEY) === "1");
+      setManuallyDismissed(window.sessionStorage.getItem(DISMISSED_KEY) === "1");
     } catch {}
   }, []);
   function dismiss() {
     setManuallyDismissed(true);
     if (typeof window !== "undefined") {
-      try { window.localStorage.setItem(DISMISSED_KEY, "1"); } catch {}
+      try { window.sessionStorage.setItem(DISMISSED_KEY, "1"); } catch {}
     }
   }
 
