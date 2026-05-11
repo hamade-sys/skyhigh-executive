@@ -112,6 +112,8 @@ export async function POST(req: NextRequest) {
       ? ((stateJson as Record<string, unknown>).teams as unknown[])
       : [];
 
+    let memberTeamAssignments: Array<{ sessionId: string; teamId: string }> = [];
+
     if (existingTeams.length === 0 && stateJson) {
       // Player setups saved from the lobby form. airlineColorId is
       // optional (Phase 9) — preserved through start so the team's
@@ -174,7 +176,6 @@ export async function POST(req: NextRequest) {
         humanMembers.length === 0 && botsToSeed === 0 ? Math.max(1, game.max_teams) : 0;
 
       const seededTeams: unknown[] = [];
-      const seededHumanAssignments: Array<{ sessionId: string; teamId: string }> = [];
       const claimedColorIds: Array<AirlineColorId | null | undefined> = [];
 
       // Pre-pick distinct airline names from the 100-name pool for
@@ -234,7 +235,7 @@ export async function POST(req: NextRequest) {
           ...team,
           flags: Array.from(team.flags ?? []),
         });
-        seededHumanAssignments.push({
+        memberTeamAssignments.push({
           sessionId: member.session_id,
           teamId: team.id,
         });
@@ -361,18 +362,36 @@ export async function POST(req: NextRequest) {
       // Persist each player's seeded team id onto their membership row so
       // later play-page hydrations can recover the correct seat even if a
       // transient state snapshot ever arrives without claimedBySessionId.
-      for (const assignment of seededHumanAssignments) {
-        const { error: memberTeamErr } = await supa
-          .from("game_members")
-          .update({ team_id: assignment.teamId })
-          .eq("game_id", gameId)
-          .eq("session_id", assignment.sessionId);
-        if (memberTeamErr) {
-          return NextResponse.json(
-            { error: `Failed to bind player seat: ${memberTeamErr.message}` },
-            { status: 500 },
-          );
+    } else {
+      memberTeamAssignments = existingTeams.flatMap((team) => {
+        if (!team || typeof team !== "object") return [];
+        const maybe = team as {
+          id?: unknown;
+          claimedBySessionId?: unknown;
+          controlledBy?: unknown;
+        };
+        if (
+          typeof maybe.id !== "string" ||
+          typeof maybe.claimedBySessionId !== "string" ||
+          maybe.controlledBy !== "human"
+        ) {
+          return [];
         }
+        return [{ sessionId: maybe.claimedBySessionId, teamId: maybe.id }];
+      });
+    }
+
+    for (const assignment of memberTeamAssignments) {
+      const { error: memberTeamErr } = await supa
+        .from("game_members")
+        .update({ team_id: assignment.teamId })
+        .eq("game_id", gameId)
+        .eq("session_id", assignment.sessionId);
+      if (memberTeamErr) {
+        return NextResponse.json(
+          { error: `Failed to bind player seat: ${memberTeamErr.message}` },
+          { status: 500 },
+        );
       }
     }
 

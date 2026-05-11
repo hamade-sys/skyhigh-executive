@@ -85,8 +85,14 @@ export async function POST(req: NextRequest) {
       let myTeamName = "A player";
       let myTeamId = "";
       let found = false;
+      const myTeamIdFromMembership = membership.data.team_id ?? null;
       const updatedTeams = teams.map((t) => {
-        if (t.claimedBySessionId === userId) {
+        const matchesCaller =
+          t.claimedBySessionId === userId ||
+          (typeof t.id === "string" &&
+            myTeamIdFromMembership !== null &&
+            t.id === myTeamIdFromMembership);
+        if (matchesCaller) {
           found = true;
           myTeamId = String(t.id ?? "");
           myTeamName = String(t.airlineName ?? t.name ?? "A player");

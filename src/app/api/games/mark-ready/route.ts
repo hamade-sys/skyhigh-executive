@@ -84,8 +84,12 @@ export async function POST(req: NextRequest) {
       // Only flip the flag for the team claimed by this user.
       // Every other team's flag is preserved exactly as it is in the DB.
       let found = false;
+      const myTeamId = membership.data.team_id ?? null;
       const updatedTeams = teams.map((t) => {
-        if (t.claimedBySessionId === userId) {
+        const matchesCaller =
+          t.claimedBySessionId === userId ||
+          (typeof t.id === "string" && myTeamId !== null && t.id === myTeamId);
+        if (matchesCaller) {
           found = true;
           return {
             ...t,
