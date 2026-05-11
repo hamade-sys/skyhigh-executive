@@ -49,6 +49,8 @@ interface NewStateTeamShape {
   id?: unknown;
   claimedBySessionId?: unknown;
   controlledBy?: unknown;
+  isPlayer?: unknown;
+  playerDisplayName?: unknown;
 }
 
 interface NewStateShape {
@@ -62,6 +64,8 @@ interface StoredTeam {
   id?: string;
   claimedBySessionId?: string | null;
   controlledBy?: string | null;
+  isPlayer?: boolean | null;
+  playerDisplayName?: string | null;
 }
 
 /**
@@ -192,30 +196,34 @@ export async function POST(req: NextRequest) {
     // state (cash, routes, fleet status) which they don't "own".
     const isQuarterClose = eventType === "game.quarterClosed";
 
-    if (!isFacilitator && !isQuarterClose) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supa = getServerClient() as any;
-      const { data: storedRow, error: storedErr } = await supa
-        .from("game_state")
-        .select("state_json")
-        .eq("game_id", gameId)
-        .single();
-      if (storedErr || !storedRow) {
-        return NextResponse.json(
-          { error: "Game state not found." },
-          { status: 404 },
-        );
-      }
-      const storedTeamsRaw = (
-        (storedRow.state_json as Record<string, unknown> | undefined)?.teams as
-          | StoredTeam[]
-          | undefined
-      ) ?? [];
-      const storedById = new Map<string, StoredTeam>();
-      for (const t of storedTeamsRaw) {
-        if (t && typeof t.id === "string") storedById.set(t.id, t);
-      }
+    // Load the canonical stored teams once so we can both authorise writes
+    // and preserve multiplayer identity fields (`claimedBySessionId`,
+    // `controlledBy`, `isPlayer`, `playerDisplayName`) even if a client-side
+    // quarter-close transform accidentally drops them.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supa = getServerClient() as any;
+    const { data: storedRow, error: storedErr } = await supa
+      .from("game_state")
+      .select("state_json")
+      .eq("game_id", gameId)
+      .single();
+    if (storedErr || !storedRow) {
+      return NextResponse.json(
+        { error: "Game state not found." },
+        { status: 404 },
+      );
+    }
+    const storedTeamsRaw = (
+      (storedRow.state_json as Record<string, unknown> | undefined)?.teams as
+        | StoredTeam[]
+        | undefined
+    ) ?? [];
+    const storedById = new Map<string, StoredTeam>();
+    for (const t of storedTeamsRaw) {
+      if (t && typeof t.id === "string") storedById.set(t.id, t);
+    }
 
+    if (!isFacilitator && !isQuarterClose) {
       const submittedTeams = (newState as NewStateShape).teams ?? [];
       for (const t of submittedTeams) {
         if (!t || typeof t !== "object") continue;
@@ -269,10 +277,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const submittedTeams = (newState as NewStateShape).teams;
+    const sanitizedState = Array.isArray(submittedTeams)
+      ? {
+          ...(newState as Record<string, unknown>),
+          teams: submittedTeams.map((t) => {
+            if (!t || typeof t !== "object" || typeof t.id !== "string") return t;
+            const stored = storedById.get(t.id);
+            if (!stored) return t;
+            return {
+              ...t,
+              claimedBySessionId: stored.claimedBySessionId ?? null,
+              controlledBy:
+                stored.controlledBy === "human" || stored.controlledBy === "bot"
+                  ? stored.controlledBy
+                  : t.controlledBy,
+              isPlayer: typeof stored.isPlayer === "boolean"
+                ? stored.isPlayer
+                : t.isPlayer,
+              playerDisplayName: stored.playerDisplayName ?? null,
+            };
+          }),
+        }
+      : newState;
+
     const result = await submitStateMutation({
       gameId,
       expectedVersion,
-      newState,
+      newState: sanitizedState,
       // Identity is server-derived — pass the authenticated userId
       // so the audit log records the real actor, not a body param.
       actorSessionId: userId,

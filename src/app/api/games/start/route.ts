@@ -79,6 +79,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: auth.error }, { status });
     }
     const actorSessionId = userId;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supa = getServerClient() as any;
 
     // ── Belt-and-suspenders: ensure the actor has a game_members row ──────
     // createGame inserts the host into game_members, but that insert is
@@ -87,8 +89,6 @@ export async function POST(req: NextRequest) {
     // call would return 403 "Not a member". Upserting here is idempotent
     // and guarantees membership is established before the game begins.
     {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supa = getServerClient() as any;
       await supa.from("game_members").upsert(
         {
           game_id: gameId,
@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
         humanMembers.length === 0 && botsToSeed === 0 ? Math.max(1, game.max_teams) : 0;
 
       const seededTeams: unknown[] = [];
+      const seededHumanAssignments: Array<{ sessionId: string; teamId: string }> = [];
       const claimedColorIds: Array<AirlineColorId | null | undefined> = [];
 
       // Pre-pick distinct airline names from the 100-name pool for
@@ -232,6 +233,10 @@ export async function POST(req: NextRequest) {
         seededTeams.push({
           ...team,
           flags: Array.from(team.flags ?? []),
+        });
+        seededHumanAssignments.push({
+          sessionId: member.session_id,
+          teamId: team.id,
         });
       }
 
@@ -351,6 +356,23 @@ export async function POST(req: NextRequest) {
           { error: `Failed to seed teams: ${seedResult.error}. Please try starting again.` },
           { status: 409 },
         );
+      }
+
+      // Persist each player's seeded team id onto their membership row so
+      // later play-page hydrations can recover the correct seat even if a
+      // transient state snapshot ever arrives without claimedBySessionId.
+      for (const assignment of seededHumanAssignments) {
+        const { error: memberTeamErr } = await supa
+          .from("game_members")
+          .update({ team_id: assignment.teamId })
+          .eq("game_id", gameId)
+          .eq("session_id", assignment.sessionId);
+        if (memberTeamErr) {
+          return NextResponse.json(
+            { error: `Failed to bind player seat: ${memberTeamErr.message}` },
+            { status: 500 },
+          );
+        }
       }
     }
 

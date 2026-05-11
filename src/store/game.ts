@@ -4400,7 +4400,7 @@ export const useGame = create<GameStore>()(
         // brand-new route if no head-on overlap. Limited to one toast
         // per quarter to avoid noise. Skipped in pure-solo runs (no
         // bot rivals).
-        const playerForToast = s.teams.find((t) => t.isPlayer);
+        const playerForToast = closed;
         if (playerForToast) {
           const playerHubs = new Set([
             playerForToast.hubCode,
@@ -4462,7 +4462,7 @@ export const useGame = create<GameStore>()(
         //   (b) Hub-slot dominance        — the more slots the player
         //       holds at the rival's primary hub, the more the rival
         //       gets squeezed at home base.
-        const playerTeamForRivals = s.teams.find((t) => t.isPlayer);
+        const playerTeamForRivals = closed;
         const playerActiveRoutes = playerTeamForRivals?.routes.filter(
           (rt) => rt.status === "active",
         ) ?? [];
@@ -4474,7 +4474,9 @@ export const useGame = create<GameStore>()(
           playerEndpointSet.add(rt.destCode);
         }
 
-        const rivals = s.teams.filter((t) => !t.isPlayer).map((r) => {
+        const rivals = teamsAfterBotScenarios
+          .filter((t) => t.id !== closed.id)
+          .map((r) => {
           // Stable per-team noise so the rival has a "personality" curve
           const seed = (r.id.charCodeAt(0) * 31 + s.currentQuarter * 7) % 100;
           const personalityNoise = (seed / 100 - 0.5) * 0.18;  // ±9%
@@ -4684,7 +4686,7 @@ export const useGame = create<GameStore>()(
             brandValue: updated.brandValue,
           };
           return updated;
-        });
+          });
 
         // Resolve slot auctions across all airports (PRD slot bidding).
         // Group every team's pendingSlotBids by airport, sort by price desc,
@@ -6203,8 +6205,6 @@ export const useGame = create<GameStore>()(
             ...t,
             flags: Array.from(t.flags) as unknown as Set<string>,
           })),
-          playerTeamId: s.playerTeamId,
-          activeTeamId: s.activeTeamId,
           quarterTimerSecondsRemaining: s.quarterTimerSecondsRemaining,
           quarterTimerPaused: s.quarterTimerPaused,
           secondHandListings: s.secondHandListings,
