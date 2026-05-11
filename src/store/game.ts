@@ -155,6 +155,14 @@ export interface GameStore extends GameState {
    *  immediately until the first finishes. */
   isClosing: boolean;
 
+  /** True while the GM bot-advance push is in-flight (between
+   *  gmAdvanceQuarter being called and the server write settling).
+   *  Exposed as reactive Zustand state so the BotAutoAdvanceBanner
+   *  can disable the Skip button and auto-retry when the push settles,
+   *  preventing the "stuck at 0s" freeze when the user clicks Skip
+   *  faster than the server round-trip. */
+  gmAdvanceInFlight: boolean;
+
   // ── Actions ───────────────────────────────────────────────
   startNewGame(args: {
     airlineName: string;
@@ -908,6 +916,7 @@ export const useGame = create<GameStore>()(
       isMultiplayerSession: false,
       isObserver: false,
       isClosing: false,
+      gmAdvanceInFlight: false,
 
       startNewGame: (args) => {
         const {
@@ -5324,16 +5333,19 @@ export const useGame = create<GameStore>()(
         // invisible to the UI. _suppressGmPush=false allows the push through.
         _suppressGmPush = false;
         _gmAdvanceInFlight = true;
-        set({ isObserver: false });
+        // Sync to Zustand so BotAutoAdvanceBanner can disable the Skip
+        // button and auto-retry, preventing the "stuck at 0s" freeze
+        // when the user clicks faster than the server round-trip.
+        set({ isObserver: false, gmAdvanceInFlight: true });
         const pushPromise = get().pushStateToServer("game.botRoundAdvanced", {
           quarter: get().currentQuarter,
         });
         set({ isObserver: true });
-        // Clear the in-flight guard once the push settles (success or 409).
-        // Using void + .finally so this is truly fire-and-forget from the
-        // caller's perspective but the guard is always released.
+        // Clear both the fast module-level guard AND the reactive Zustand
+        // flag once the push settles (success or 409).
         void (pushPromise as Promise<unknown>).finally(() => {
           _gmAdvanceInFlight = false;
+          set({ gmAdvanceInFlight: false });
         });
       },
 

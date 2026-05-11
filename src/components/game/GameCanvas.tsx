@@ -46,13 +46,23 @@ const BOT_AUTO_ADVANCE_SECONDS = 20;
 /** Countdown + auto-advance component rendered inside the GM observer banner
  *  when ALL teams are bots (no human players in the game). Counts down from
  *  BOT_AUTO_ADVANCE_SECONDS, then fires gmAdvanceQuarter automatically.
- *  The GM can click "▶ Skip" to advance immediately. */
+ *  The GM can click "▶ Skip" to advance immediately.
+ *
+ *  Rapid-click resilience: gmAdvanceQuarter sets gmAdvanceInFlight in the
+ *  Zustand store while the server push is in-flight. The Skip button is
+ *  disabled during that window and shows a spinner. When the push settles
+ *  (gmAdvanceInFlight → false) and seconds is already 0, the component
+ *  automatically retries the advance so a rapid second click that was
+ *  blocked doesn't leave the banner frozen at "0s". */
 function BotAutoAdvanceBanner({
   gmAdvanceQuarter,
 }: {
   gmAdvanceQuarter: () => void;
 }) {
   const [seconds, setSeconds] = useState(BOT_AUTO_ADVANCE_SECONDS);
+  // Subscribe to the reactive push-in-flight flag so we can disable the
+  // button and auto-retry without polling a module-level variable.
+  const inFlight = useGame((s) => s.gmAdvanceInFlight);
 
   // Always-current ref so the countdown effect never needs gmAdvanceQuarter
   // in its dependency array. Without this, a reference change (e.g. after a
@@ -68,16 +78,28 @@ function BotAutoAdvanceBanner({
     setSeconds(BOT_AUTO_ADVANCE_SECONDS);
   }, []);
 
-  // Count down 1 s at a time; fire advance when we reach 0.
-  // gmAdvanceQuarter accessed via ref — excluded from deps intentionally.
+  // Count down 1 s at a time; fire advance when we reach 0 AND the previous
+  // push has settled. If seconds hits 0 while inFlight is true (rapid clicks
+  // or very fast auto-countdown), the advance is deferred until inFlight
+  // clears — the effect below handles that auto-retry.
   useEffect(() => {
     if (seconds <= 0) {
-      advanceRef.current();
+      if (!inFlight) advanceRef.current();
       return;
     }
     const id = window.setTimeout(() => setSeconds((s) => s - 1), 1000);
     return () => window.clearTimeout(id);
-  }, [seconds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [seconds, inFlight]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-retry: when the push settles (inFlight flips false) and seconds is
+  // already 0, trigger the advance. This is the key fix for the "stuck at 0s"
+  // bug: a rapid second Skip click was blocked by the guard and left the
+  // banner frozen because currentQuarter never changed (no remount).
+  useEffect(() => {
+    if (!inFlight && seconds <= 0) {
+      advanceRef.current();
+    }
+  }, [inFlight]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Arc progress — full circle = BOT_AUTO_ADVANCE_SECONDS, shrinks to 0.
   const pct = seconds / BOT_AUTO_ADVANCE_SECONDS;
@@ -87,26 +109,34 @@ function BotAutoAdvanceBanner({
 
   return (
     <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/80 backdrop-blur-sm text-white text-xs font-semibold shadow-lg">
-      {/* Circular countdown arc */}
-      <svg width="22" height="22" className="-rotate-90">
-        <circle cx="11" cy="11" r={r} fill="none" stroke="#475569" strokeWidth="2" />
-        <circle
-          cx="11" cy="11" r={r}
-          fill="none"
-          stroke="#a78bfa"
-          strokeWidth="2"
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="text-violet-300 tabular-nums">{seconds}s</span>
+      {/* Circular countdown arc — replaces with a spinner while in-flight */}
+      {inFlight ? (
+        <svg width="22" height="22" className="animate-spin">
+          <circle cx="11" cy="11" r={r} fill="none" stroke="#475569" strokeWidth="2" />
+          <path d={`M 11 1 A ${r} ${r} 0 0 1 ${11 + r} 11`} fill="none" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg width="22" height="22" className="-rotate-90">
+          <circle cx="11" cy="11" r={r} fill="none" stroke="#475569" strokeWidth="2" />
+          <circle
+            cx="11" cy="11" r={r}
+            fill="none"
+            stroke="#a78bfa"
+            strokeWidth="2"
+            strokeDasharray={`${dash} ${circ}`}
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
+      <span className="text-violet-300 tabular-nums">{inFlight ? "…" : `${seconds}s`}</span>
       <span className="text-slate-300">· next round in</span>
       <button
         onClick={() => { setSeconds(0); }}
-        className="ml-1 px-2 py-0.5 rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white text-xs font-semibold transition-colors cursor-pointer"
-        title="Advance to next round immediately"
+        disabled={inFlight}
+        className="ml-1 px-2 py-0.5 rounded-full text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-violet-600 hover:bg-violet-500 active:bg-violet-700 disabled:hover:bg-violet-600"
+        title={inFlight ? "Advancing round…" : "Advance to next round immediately"}
       >
-        ▶ Skip
+        {inFlight ? "Advancing…" : "▶ Skip"}
       </button>
     </div>
   );
