@@ -401,7 +401,7 @@ function CanvasInner() {
         // `isolate` creates a stacking context so Leaflet's pane z-indices
         // (which go up to 1000) stay inside this map container instead of
         // competing in the document root with our fixed-position chrome.
-        className="absolute inset-0 top-14 isolate transition-[left] duration-[var(--dur-fast)]"
+        className="absolute inset-0 isolate transition-[left] duration-[var(--dur-fast)]"
         style={{ left: railExpanded ? "14rem" : "3.5rem" }}
       >
         <WorldMap
