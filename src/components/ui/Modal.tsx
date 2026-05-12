@@ -186,7 +186,7 @@ export function Modal({
       className={cn(
         "m-auto p-0 rounded-xl bg-surface text-ink shadow-[var(--shadow-4)]",
         "backdrop:bg-[rgba(16,37,63,0.32)] backdrop:backdrop-blur-sm",
-        "max-w-[calc(100vw-2rem)] w-[32rem]",
+        "max-w-[calc(100vw-2rem)] w-fit",
       )}
       onClick={(e) => {
         // Click on backdrop (dialog element itself, not children) closes
@@ -199,7 +199,7 @@ export function Modal({
       <div
         className={cn(
           "flex flex-col overflow-hidden",
-          "max-h-[calc(100dvh-2rem)]",
+          "w-[32rem] max-h-[calc(100dvh-2rem)]",
           className,
         )}
         style={{ maxHeight: "calc(100dvh - 2rem)" }}
