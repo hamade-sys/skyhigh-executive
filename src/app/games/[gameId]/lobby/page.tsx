@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { DOCTRINES as DOCTRINE_META, DOCTRINE_ICON_TINT } from "@/data/doctrines";
 import { lobbyPreviewEntry } from "@/data/airline-names";
+import { GuestAccessPrompt } from "@/components/auth/GuestAccessPrompt";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
@@ -102,7 +103,13 @@ export default function GameLobbyPage({
   const router = useRouter();
   // Stable server-side identity — Supabase user.id only.
   // authReady flips true once the auth session check completes.
-  const { sessionId, authReady } = useMultiplayerSession();
+  const {
+    sessionId,
+    authReady,
+    guestPending,
+    guestError,
+    continueAsGuest,
+  } = useMultiplayerSession({ autoGuest: true });
   const [data, setData] = useState<LobbyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -379,21 +386,15 @@ export default function GameLobbyPage({
   }
 
   // ── Auth gate — player must be signed in ─────────────────
-  if (authReady && !sessionId) {
+  if (!authReady || (authReady && !sessionId)) {
     return (
       <CenteredMessage>
-        <div className="max-w-md w-full rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-          <p className="text-base font-semibold text-amber-900 mb-2">Sign in required</p>
-          <p className="text-sm text-amber-800 mb-4">
-            You need to be signed in to join or view a game lobby.
-          </p>
-          <Link
-            href={`/login?next=/games/${gameId}/lobby`}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors"
-          >
-            Sign in →
-          </Link>
-        </div>
+        <GuestAccessPrompt
+          nextPath={`/games/${gameId}/lobby`}
+          guestError={guestError}
+          guestPending={guestPending || !authReady}
+          onContinueAsGuest={() => { void continueAsGuest(); }}
+        />
       </CenteredMessage>
     );
   }

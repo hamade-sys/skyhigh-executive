@@ -19,7 +19,16 @@ import { useAuth } from "@/lib/auth-context";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 
 function LoginInner() {
-  const { signInWithGoogle, signInWithMicrosoft, signInWithPassword, user, loading: authLoading, authConfigured } = useAuth();
+  const {
+    signInWithGoogle,
+    signInWithMicrosoft,
+    signInWithPassword,
+    signInAsGuest,
+    user,
+    loading: authLoading,
+    authConfigured,
+    guestPending,
+  } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +69,16 @@ function LoginInner() {
       setLoading(null);
     }
     // OAuth redirects away; password sign-in flips user via onAuthStateChange → effect above handles redirect.
+  }
+
+  async function playAsGuest() {
+    setError(null);
+    const r = await signInAsGuest();
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    router.replace(nextPath);
   }
 
   async function handleEmail(e: React.FormEvent) {
@@ -176,13 +195,18 @@ function LoginInner() {
               Create an account
             </Link>
           </div>
-          <div className="text-xs">
-            Or just{" "}
-            <Link href="/lobby" className="text-slate-600 hover:text-slate-900 underline underline-offset-2">
-              play anonymously
-            </Link>
-            {" "}— your saves stay in this browser.
-          </div>
+          <p className="text-xs">
+            Or{" "}
+            <button
+              type="button"
+              onClick={() => void playAsGuest()}
+              disabled={!authConfigured || guestPending}
+              className="text-slate-600 hover:text-slate-900 underline underline-offset-2 disabled:opacity-50"
+            >
+              {guestPending ? "Starting guest session…" : "continue as guest"}
+            </button>
+            {" "}— no account needed for solo and lobby play.
+          </p>
         </div>
       </main>
     </div>

@@ -19,7 +19,7 @@
  * behavior rather than browser storage.
  */
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { getAppOrigin } from "@/lib/config/site";
 import { getBrowserClient } from "@/lib/supabase/browser";
@@ -38,6 +38,10 @@ interface AuthState {
   signInWithMicrosoft: (next?: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signInWithPassword: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signUpWithPassword: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Anonymous Supabase session for guest lobby/join/play (no email). */
+  signInAsGuest: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  guestPending: boolean;
+  guestError: string | null;
   signOut: () => Promise<void>;
 }
 
@@ -54,6 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // an effect to flip it false) avoids the React 19
   // set-state-in-effect cascading-render warning.
   const [loading, setLoading] = useState(supa !== null);
+  const [guestPending, setGuestPending] = useState(false);
+  const [guestError, setGuestError] = useState<string | null>(null);
+  const guestInFlight = useRef<Promise<{ ok: true } | { ok: false; error: string }> | null>(null);
   const router = useRouter();
   const authConfigured = supa !== null;
 
@@ -126,9 +133,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true as const };
   }
 
+  const signInAsGuest = useCallback(async (): Promise<{ ok: true } | { ok: false; error: string }> => {
+    if (!supa) {
+      return { ok: false as const, error: "Auth not configured" };
+    }
+    if (user) return { ok: true as const };
+    if (guestInFlight.current) return guestInFlight.current;
+
+    const run = (async () => {
+      setGuestError(null);
+      setGuestPending(true);
+      const { data, error } = await supa.auth.signInAnonymously();
+      setGuestPending(false);
+      if (error) {
+        const msg =
+          error.message.includes("anonymous") || error.message.includes("disabled")
+            ? "Guest sign-in is disabled in Supabase. Enable Anonymous sign-ins under Authentication → Providers."
+            : error.message;
+        setGuestError(msg);
+        return { ok: false as const, error: msg };
+      }
+      setSession(data.session);
+      setUser(data.session?.user ?? null);
+      return { ok: true as const };
+    })();
+
+    guestInFlight.current = run;
+    try {
+      return await run;
+    } finally {
+      guestInFlight.current = null;
+    }
+  }, [supa, user]);
+
   async function signOut() {
     if (!supa) return;
     await supa.auth.signOut();
+    setGuestError(null);
     router.refresh();
   }
 
@@ -137,7 +178,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user, session, loading, authConfigured,
         signInWithGoogle, signInWithMicrosoft,
-        signInWithPassword, signUpWithPassword, signOut,
+        signInWithPassword, signUpWithPassword, signInAsGuest,
+        guestPending, guestError, signOut,
       }}
     >
       {children}
@@ -160,6 +202,9 @@ export function useAuth(): AuthState {
       signInWithMicrosoft: async (_next?: string) => ({ ok: false, error: "Auth provider not mounted" }),
       signInWithPassword: async () => ({ ok: false, error: "Auth provider not mounted" }),
       signUpWithPassword: async () => ({ ok: false, error: "Auth provider not mounted" }),
+      signInAsGuest: async () => ({ ok: false, error: "Auth provider not mounted" }),
+      guestPending: false,
+      guestError: null,
       signOut: async () => {},
     };
   }

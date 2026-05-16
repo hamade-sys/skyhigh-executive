@@ -42,7 +42,9 @@ interface JoinableGame extends GameRow {
 
 export default function LobbyPage() {
   const router = useRouter();
-  const { sessionId } = useMultiplayerSession();
+  const { sessionId, authReady, guestPending, continueAsGuest } = useMultiplayerSession({
+    autoGuest: true,
+  });
   const [games, setGames] = useState<JoinableGame[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,13 +96,19 @@ export default function LobbyPage() {
       setJoinError("Enter the 6-digit code from your host.");
       return;
     }
-    if (!sessionId) return;
+    if (!sessionId) {
+      const r = await continueAsGuest();
+      if (!r.ok) {
+        setJoinError(r.error);
+        return;
+      }
+    }
     setJoining(true);
     try {
       const res = await fetch("/api/games/join", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ joinCode: code, sessionId }),
+        body: JSON.stringify({ joinCode: code }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -169,7 +177,7 @@ export default function LobbyPage() {
           />
           <button
             type="submit"
-            disabled={(code.length !== 4 && code.length !== 6) || joining || !sessionId}
+            disabled={(code.length !== 4 && code.length !== 6) || joining || guestPending}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold disabled:opacity-50 transition-colors shrink-0"
           >
             {joining ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}

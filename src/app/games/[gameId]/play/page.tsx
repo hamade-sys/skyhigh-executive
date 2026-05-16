@@ -27,6 +27,7 @@ import Link from "next/link";
 import { useEffect, useState, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
+import { GuestAccessPrompt } from "@/components/auth/GuestAccessPrompt";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import { useGame } from "@/store/game";
 import { getBrowserClient } from "@/lib/supabase/browser";
@@ -51,7 +52,13 @@ export default function GamePlayPage({
   const { gameId } = use(params);
   const router = useRouter();
   // Stable server-side identity — Supabase user.id only.
-  const { sessionId, authReady } = useMultiplayerSession();
+  const {
+    sessionId,
+    authReady,
+    guestPending,
+    guestError,
+    continueAsGuest,
+  } = useMultiplayerSession({ autoGuest: true });
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
   const setQuarterCloseRequest = useGame((s) => s.setQuarterCloseRequest);
   const phase = useGame((s) => s.phase);
@@ -319,22 +326,16 @@ export default function GamePlayPage({
     },
   });
 
-  // Auth gate — must be signed in to play
-  if (authReady && !sessionId) {
+  // Auth gate — guest (anonymous) or signed-in
+  if (!authReady || (authReady && !sessionId)) {
     return (
       <CenteredMessage>
-        <div className="max-w-md w-full rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-          <p className="text-base font-semibold text-amber-900 mb-2">Sign in required</p>
-          <p className="text-sm text-amber-800 mb-4">
-            You need to be signed in to join a multiplayer game.
-          </p>
-          <Link
-            href={`/login?next=/games/${gameId}/play`}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors"
-          >
-            Sign in →
-          </Link>
-        </div>
+        <GuestAccessPrompt
+          nextPath={`/games/${gameId}/play`}
+          guestError={guestError}
+          guestPending={guestPending || !authReady}
+          onContinueAsGuest={() => { void continueAsGuest(); }}
+        />
       </CenteredMessage>
     );
   }

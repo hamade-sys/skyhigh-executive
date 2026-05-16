@@ -10,8 +10,8 @@
  *
  * IMPORTANT (Phase 1 hardening): identity is server-derived from the
  * cookie-bound auth session — body parameter `sessionId` is no longer
- * accepted. Anonymous join is supported via a guest UUID in cookies
- * (Phase 4c work); for now the route requires sign-in.
+ * accepted. Anonymous (guest) Supabase sessions are supported via
+ * signInAnonymously on the client — same cookie-bound JWT path.
  *
  * Per-IP rate limit: 10 attempts per 5 minutes. With 6-digit codes
  * (1M keyspace), this raises the brute-force floor to ~95 years per

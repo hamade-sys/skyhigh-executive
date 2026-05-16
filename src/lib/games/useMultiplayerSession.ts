@@ -1,32 +1,47 @@
 "use client";
 
 /**
- * useMultiplayerSession — server-side identity for multiplayer pages.
+ * useMultiplayerSession — identity for multiplayer pages.
  *
- * All multiplayer pages (lobby, game lobby, play, facilitator) require
- * the player to be signed in. Identity is always Supabase user.id —
- * never a browser-storage UUID, never an anonymous fallback.
- *
- * Returns:
- *   sessionId  — user.id when signed in, null otherwise
- *   authReady  — true once AuthProvider has finished its getSession()
- *                call; false during the initial loading tick
- *
- * Pages should:
- *   - Show a spinner while !authReady (auth is still initialising)
- *   - Show a "sign in required" prompt when authReady && !sessionId
- *   - Proceed normally when authReady && sessionId is a string
+ * Uses Supabase Auth user.id (signed-in or anonymous guest). When
+ * `autoGuest` is true, creates an anonymous session automatically so
+ * lobby/join/play work without Google or email sign-in.
  */
 
+import { useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 
-export function useMultiplayerSession(): {
+export function useMultiplayerSession(options?: { autoGuest?: boolean }): {
   sessionId: string | null;
   authReady: boolean;
+  isGuest: boolean;
+  guestPending: boolean;
+  guestError: string | null;
+  continueAsGuest: () => Promise<{ ok: true } | { ok: false; error: string }>;
 } {
-  const { user, loading: authLoading } = useAuth();
+  const {
+    user,
+    loading: authLoading,
+    guestPending,
+    guestError,
+    signInAsGuest,
+  } = useAuth();
+
+  const autoGuest = options?.autoGuest ?? false;
+
+  useEffect(() => {
+    if (!autoGuest || authLoading || user) return;
+    void signInAsGuest();
+  }, [autoGuest, authLoading, user, signInAsGuest]);
+
+  const authReady = !authLoading && !guestPending;
+
   return {
     sessionId: user?.id ?? null,
-    authReady: !authLoading,
+    authReady,
+    isGuest: user?.is_anonymous === true,
+    guestPending,
+    guestError,
+    continueAsGuest: signInAsGuest,
   };
 }

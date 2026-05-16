@@ -16,6 +16,9 @@
 # Supabase Dashboard → Authentication → URL Configuration:
 #   Site URL: https://sim.icanmena.com
 #   Redirect URLs: https://sim.icanmena.com/**
+#
+# Supabase Dashboard → Authentication → Providers → Anonymous sign-ins: ON
+#   (required for guest lobby/join without Google or email)
 
 set -euo pipefail
 PROJECT_REF="veokzbeaqenkdtkaltcg"

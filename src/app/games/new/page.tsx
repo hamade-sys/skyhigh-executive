@@ -45,10 +45,14 @@ export default function CreateGamePage() {
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace("/login?next=/games/new");
+      return;
+    }
+    if (!authLoading && user?.is_anonymous) {
+      router.replace("/login?next=/games/new&reason=host");
     }
   }, [authLoading, user, router]);
 
-  if (authLoading || !user) {
+  if (authLoading || !user || user.is_anonymous) {
     return <div className="flex-1 bg-slate-50" aria-hidden />;
   }
   return <CreateGameForm />;
