@@ -11,6 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { getPublicSupabaseUrl } from "@/lib/config/site";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/login?error=missing_code", url.origin));
   }
 
-  const supaUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supaUrl = getPublicSupabaseUrl();
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supaUrl || !anonKey) {
     return NextResponse.redirect(new URL("/login?error=auth_not_configured", url.origin));

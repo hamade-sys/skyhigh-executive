@@ -21,6 +21,7 @@
 
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { getPublicSupabaseUrl } from "@/lib/config/site";
 
 /**
  * Build a Supabase server client bound to the request's cookies. The
@@ -30,7 +31,7 @@ import { cookies } from "next/headers";
  * is proven, use `getServerClient()` from `./server.ts` instead.
  */
 export async function getCookieClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = getPublicSupabaseUrl();
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
     throw new Error(

@@ -21,6 +21,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { getAppOrigin } from "@/lib/config/site";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import type { Session, User } from "@supabase/supabase-js";
 
@@ -78,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signInWithGoogle(next?: string) {
     if (!supa) return { ok: false as const, error: "Auth not configured" };
-    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const base = getAppOrigin(typeof window !== "undefined" ? window.location.origin : undefined);
     const redirectTo = next
       ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
       : `${base}/auth/callback`;
@@ -92,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signInWithMicrosoft(next?: string) {
     if (!supa) return { ok: false as const, error: "Auth not configured" };
-    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const base = getAppOrigin(typeof window !== "undefined" ? window.location.origin : undefined);
     const redirectTo = next
       ? `${base}/auth/callback?next=${encodeURIComponent(next)}`
       : `${base}/auth/callback`;
@@ -113,13 +114,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signUpWithPassword(email: string, password: string) {
     if (!supa) return { ok: false as const, error: "Auth not configured" };
+    const origin = getAppOrigin(typeof window !== "undefined" ? window.location.origin : undefined);
     const { error } = await supa.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback`
-          : undefined,
+        emailRedirectTo: origin ? `${origin}/auth/callback` : undefined,
       },
     });
     if (error) return { ok: false as const, error: error.message };
