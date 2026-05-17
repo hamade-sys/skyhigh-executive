@@ -3737,8 +3737,22 @@ export const useGame = create<GameStore>()(
           const autoRebidsByAirport: Record<string, { slots: number; price: number }> = {};
           for (const r of t.routes) {
             if (r.status !== "pending") continue;
-            if (!r.pendingBidPrices) continue;
-            for (const code of Object.keys(r.pendingBidPrices)) {
+            // Endpoints to rebid: union of (a) airports the player
+            // explicitly committed a price to via pendingBidPrices,
+            // and (b) the route's two endpoints. (b) catches the
+            // stuck-pending bug: when openRoute only stored a bid
+            // for one endpoint but the OTHER also had a shortfall,
+            // that endpoint never rebid and the route sat pending
+            // forever. Now we always try both endpoints, falling back
+            // to BASE_SLOT_PRICE_BY_TIER when the player didn't set
+            // a price. (`pendingBidPrices` is optional on a route, so
+            // the previous `if (!r.pendingBidPrices) continue` skipped
+            // legacy/edge-case routes entirely.)
+            const endpoints = new Set<string>([r.originCode, r.destCode]);
+            for (const code of Object.keys(r.pendingBidPrices ?? {})) {
+              endpoints.add(code);
+            }
+            for (const code of endpoints) {
               const slotsHeld = t.airportLeases?.[code]?.slots ?? 0;
               const usedAtCode = t.routes
                 .filter((rt) =>
@@ -3750,11 +3764,32 @@ export const useGame = create<GameStore>()(
               const intendedWeekly = r.dailyFrequency * 7;
               const stillNeeded = Math.max(0, intendedWeekly + usedAtCode - slotsHeld);
               if (stillNeeded <= 0) continue;
-              const price = r.pendingBidPrices[code];
+              // Base price: player's committed price if any, else
+              // the tier's base slot price.
+              let basePrice = r.pendingBidPrices?.[code];
+              if (basePrice == null || !Number.isFinite(basePrice) || basePrice <= 0) {
+                const tier = (CITIES_BY_CODE[code]?.tier ?? 1) as 1 | 2 | 3 | 4;
+                basePrice = BASE_SLOT_PRICE_BY_TIER[tier] ?? 35_000;
+              }
+              // Price escalation: bump 15% per quarter the route has
+              // waited, capped at 3×. Without this, a route with a
+              // perpetually losing bid price stays stuck forever even
+              // with both endpoints covered. Cap matters: cargo/global
+              // routes can need 7-10 quarters to settle and we don't
+              // want to drain the team's cash on runaway bids.
+              const quartersPending = Math.max(
+                0,
+                s.currentQuarter - r.openQuarter,
+              );
+              const escalationFactor = Math.min(
+                3,
+                1 + 0.15 * quartersPending,
+              );
+              const escalatedPrice = Math.round(basePrice * escalationFactor);
               const cur = autoRebidsByAirport[code];
               autoRebidsByAirport[code] = {
                 slots: (cur?.slots ?? 0) + stillNeeded,
-                price: Math.max(cur?.price ?? 0, price),
+                price: Math.max(cur?.price ?? 0, escalatedPrice),
               };
             }
           }
@@ -4708,8 +4743,22 @@ export const useGame = create<GameStore>()(
           const autoRebidsByAirport: Record<string, { slots: number; price: number }> = {};
           for (const r of t.routes) {
             if (r.status !== "pending") continue;
-            if (!r.pendingBidPrices) continue;
-            for (const code of Object.keys(r.pendingBidPrices)) {
+            // Endpoints to rebid: union of (a) airports the player
+            // explicitly committed a price to via pendingBidPrices,
+            // and (b) the route's two endpoints. (b) catches the
+            // stuck-pending bug: when openRoute only stored a bid
+            // for one endpoint but the OTHER also had a shortfall,
+            // that endpoint never rebid and the route sat pending
+            // forever. Now we always try both endpoints, falling back
+            // to BASE_SLOT_PRICE_BY_TIER when the player didn't set
+            // a price. (`pendingBidPrices` is optional on a route, so
+            // the previous `if (!r.pendingBidPrices) continue` skipped
+            // legacy/edge-case routes entirely.)
+            const endpoints = new Set<string>([r.originCode, r.destCode]);
+            for (const code of Object.keys(r.pendingBidPrices ?? {})) {
+              endpoints.add(code);
+            }
+            for (const code of endpoints) {
               const slotsHeld = t.airportLeases?.[code]?.slots ?? 0;
               const usedAtCode = t.routes
                 .filter((rt) =>
@@ -4721,11 +4770,32 @@ export const useGame = create<GameStore>()(
               const intendedWeekly = r.dailyFrequency * 7;
               const stillNeeded = Math.max(0, intendedWeekly + usedAtCode - slotsHeld);
               if (stillNeeded <= 0) continue;
-              const price = r.pendingBidPrices[code];
+              // Base price: player's committed price if any, else
+              // the tier's base slot price.
+              let basePrice = r.pendingBidPrices?.[code];
+              if (basePrice == null || !Number.isFinite(basePrice) || basePrice <= 0) {
+                const tier = (CITIES_BY_CODE[code]?.tier ?? 1) as 1 | 2 | 3 | 4;
+                basePrice = BASE_SLOT_PRICE_BY_TIER[tier] ?? 35_000;
+              }
+              // Price escalation: bump 15% per quarter the route has
+              // waited, capped at 3×. Without this, a route with a
+              // perpetually losing bid price stays stuck forever even
+              // with both endpoints covered. Cap matters: cargo/global
+              // routes can need 7-10 quarters to settle and we don't
+              // want to drain the team's cash on runaway bids.
+              const quartersPending = Math.max(
+                0,
+                s.currentQuarter - r.openQuarter,
+              );
+              const escalationFactor = Math.min(
+                3,
+                1 + 0.15 * quartersPending,
+              );
+              const escalatedPrice = Math.round(basePrice * escalationFactor);
               const cur = autoRebidsByAirport[code];
               autoRebidsByAirport[code] = {
                 slots: (cur?.slots ?? 0) + stillNeeded,
-                price: Math.max(cur?.price ?? 0, price),
+                price: Math.max(cur?.price ?? 0, escalatedPrice),
               };
             }
           }
