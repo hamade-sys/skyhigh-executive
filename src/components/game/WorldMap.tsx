@@ -643,7 +643,13 @@ export function WorldMap({
           <ActiveRouteArc
             key={r.id}
             route={r}
-            teamColor={team.color}
+            // Pre-Phase-9 this read `team.color` — the legacy
+            // hash-assigned palette which is what produced the
+            // purple/violet "rival" arcs that confused players whose
+            // chosen airline color was something else (e.g. amber).
+            // The hub badge already uses `teamColor` from
+            // airlineColorFor() above; route arcs now match.
+            teamColor={teamColor}
             isNew={r.openQuarter === currentQuarter}
           />
         ))}
@@ -918,7 +924,12 @@ export function WorldMap({
                   <span className="sf-city-name">{c.name}</span>
                   {flights > 0 && (
                     <span className="sf-flights">
-                      {flights * 7}/wk
+                      {/* Round to whole flights — `flights` is a daily
+                          frequency that can carry tiny FP residue
+                          (e.g. 9.99999999) from upstream arithmetic,
+                          which surfaces as a garbage "69.99999999/wk"
+                          label on the hub. */}
+                      {Math.round(flights * 7)}/wk
                     </span>
                   )}
                   {isSelected && <span className="sf-selected-dot" />}

@@ -505,12 +505,24 @@ function FleetStatusRow({
   );
 }
 
+/** Stable empty-array reference so the selector below doesn't return
+ *  a fresh `[]` on every store change. Without this, Zustand sees a
+ *  new snapshot every tick → React error #185 (Maximum update depth
+ *  exceeded) the moment the Mgmt tab mounts on a save that doesn't
+ *  carry `marketHistory` yet. */
+const EMPTY_MARKET_HISTORY: ReadonlyArray<{
+  quarter: number;
+  fuelIndex: number;
+  travelIndex: number;
+  baseRatePct: number;
+}> = [];
+
 /** Three-line trajectory chart of the macro indices. Reads
  *  GameState.marketHistory which the engine appends to at every
  *  quarter close. Hidden until at least 2 closes have happened so
  *  the chart has a meaningful slope. */
 function MarketHistorySection() {
-  const history = useGame((s) => s.marketHistory ?? []);
+  const history = useGame((s) => s.marketHistory ?? EMPTY_MARKET_HISTORY);
   if (history.length < 2) return null;
   const sorted = [...history].sort((a, b) => a.quarter - b.quarter);
   return (

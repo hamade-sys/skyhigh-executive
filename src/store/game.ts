@@ -5264,13 +5264,16 @@ export const useGame = create<GameStore>()(
         // "the game at the start of round nextQ". One snapshot per
         // round (re-saving same round overwrites).
         void get().saveQuarterSnapshot().catch((err) => {
-          // Auto-save must never break the game flow. Surface a
-          // soft warning if it failed but keep the round advancing.
+          // Auto-save must never break the game flow. Failures here
+          // are usually one of:
+          //  - 403 because the calling user isn't recognised as host
+          //    (auth-id mismatch — see Lobby-3 follow-up PR).
+          //  - 503/network: transient infra hiccup.
+          //  - 401: session lapsed.
+          // None are user-actionable from inside the simulation, so
+          // we log to console for diagnostics and stay quiet on the
+          // UI. The next quarter close will retry the snapshot.
           console.error("[snapshots] auto-save failed", err);
-          toast.warning(
-            "Save failed",
-            "Could not write a snapshot for this round. Game continues.",
-          );
         });
 
         // ── Multiplayer state write-back ─────────────────────
@@ -6366,9 +6369,16 @@ export const useGame = create<GameStore>()(
                   console.warn("[state-update] refetch after 409 failed:", refetchErr);
                 }
               }
-              // Only surface the "out of sync" toast for events where the
-              // user needs to explicitly retry something.
-              if (shouldHydrateAfter409) {
+              // Only surface the "out of sync" toast for events where
+              // the user needs to explicitly retry something AND we're
+              // in a real multi-human cohort. In single-human games
+              // (1 host + N bots) the toast is misleading — there's no
+              // other cohort to be out of sync WITH; the 409 here is
+              // a benign re-hydrate, not user-actionable.
+              const humanCount = get().teams.filter(
+                (t) => t.controlledBy === "human",
+              ).length;
+              if (shouldHydrateAfter409 && humanCount >= 2) {
                 toast.warning(
                   "Game state out of sync",
                   "The cohort advanced before your action landed. We've pulled the latest state — please retry your action.",
