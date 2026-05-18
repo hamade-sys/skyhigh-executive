@@ -3,8 +3,10 @@
 import { X, ArrowRight, Plane, Users, MapPin } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { CITIES_BY_CODE } from "@/data/cities";
-import { useGame, selectPlayer } from "@/store/game";
-import { distanceBetween, routeDemandPerDay } from "@/lib/engine";
+import { useGame, selectPlayer, selectRivals } from "@/store/game";
+import { useShallow } from "zustand/react/shallow";
+import { distanceBetween, effectiveRangeKm, routeDemandPerDay } from "@/lib/engine";
+import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { cn } from "@/lib/cn";
 import type { City, Team } from "@/types/game";
 
@@ -41,6 +43,7 @@ export function RouteLaunchBar({
   origin, dest, onCancel, onLaunch,
 }: RouteLaunchBarProps) {
   const player = useGame(selectPlayer);
+  const rivals = useGame(useShallow(selectRivals));
   const currentQuarter = useGame((s) => s.currentQuarter);
   if (!player) return null;
   if (!origin && !dest) return null;
@@ -73,6 +76,35 @@ export function RouteLaunchBar({
     ? distanceBetween(leftCity.code, rightCity.code)
     : 0;
 
+  // Per-route quick-preview stats (only meaningful once both endpoints
+  // are picked). Eligible aircraft: idle planes in this player's fleet
+  // that can physically reach the destination given their effective
+  // range (incl. engine-upgrade +10%). Competing airlines: rival
+  // teams running an ACTIVE same-OD route in either direction.
+  const eligibleAircraftCount = (() => {
+    if (!leftCity || !rightCity || distKm === 0) return 0;
+    return player.fleet.filter((f) => {
+      if (f.status !== "active" && f.status !== "ordered") return false;
+      if (f.status === "active" && f.routeId) {
+        const r = player.routes.find((rt) => rt.id === f.routeId);
+        if (r && r.status !== "closed") return false;
+      }
+      const spec = AIRCRAFT_BY_ID[f.specId];
+      if (!spec) return false;
+      return effectiveRangeKm(spec, f.engineUpgrade ?? null) >= distKm;
+    }).length;
+  })();
+  const competingAirlinesCount = (() => {
+    if (!leftCity || !rightCity) return 0;
+    return rivals.filter((r) =>
+      r.routes.some((rt) =>
+        rt.status === "active" &&
+        ((rt.originCode === leftCity!.code && rt.destCode === rightCity!.code) ||
+         (rt.originCode === rightCity!.code && rt.destCode === leftCity!.code)),
+      ),
+    ).length;
+  })();
+
   return (
     <div className="pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 z-[1080]">
       <div className="pointer-events-auto flex items-end gap-2">
@@ -87,19 +119,47 @@ export function RouteLaunchBar({
           />
         )}
 
-        {/* Connector + open-route button */}
+        {/* Connector + quick-preview stats + open-route button */}
         {leftCity && rightCity && (
-          <div className="flex flex-col items-center gap-2 pb-3">
+          <div className="flex flex-col items-center gap-1.5 pb-3 min-w-[8.5rem]">
             <div className="flex items-center gap-1.5 text-ink-muted">
               <ArrowRight size={14} />
               <span className="text-[0.75rem] tabular font-mono">
                 {Math.round(distKm).toLocaleString()} km
               </span>
             </div>
+            {/* Eligible fleet — at-a-glance signal of whether the
+                player has a plane that can fly this distance before
+                they open the modal. Cuts the "open modal → see
+                nothing fits → close → order plane → retry" loop. */}
+            <div className="flex items-center gap-1 text-[0.6875rem] font-mono tabular">
+              <Plane size={10} className={cn(
+                eligibleAircraftCount > 0 ? "text-positive" : "text-warning",
+              )} />
+              <span className={cn(
+                eligibleAircraftCount > 0 ? "text-ink-2" : "text-warning",
+              )}>
+                {eligibleAircraftCount} eligible
+              </span>
+            </div>
+            {/* Competing airlines on this OD pair. Helps the player
+                understand market saturation before committing. */}
+            <div className="flex items-center gap-1 text-[0.6875rem] font-mono tabular text-ink-muted">
+              <Users size={10} />
+              <span>
+                {competingAirlinesCount === 0
+                  ? "uncontested"
+                  : `${competingAirlinesCount} rival${competingAirlinesCount > 1 ? "s" : ""}`}
+              </span>
+            </div>
             <Button
               size="sm"
               variant="primary"
               onClick={() => onLaunch({ isCargo: false })}
+              disabled={eligibleAircraftCount === 0}
+              title={eligibleAircraftCount === 0
+                ? "No plane in your fleet can reach this destination — order or lease one first."
+                : undefined}
             >
               Open route →
             </Button>
