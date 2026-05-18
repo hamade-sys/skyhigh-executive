@@ -267,15 +267,37 @@ export function FinancialsPanel() {
           the residual that reconciles cash delta against operating +
           financing, so it absorbs CapEx, M&A, and any non-trivial
           one-off cash movements without needing per-line storage. */}
-      {player.financialsByQuarter.length > 0 && (
-        <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
-            Cash flow · last {Math.min(4, player.financialsByQuarter.length)} quarter
-            {Math.min(4, player.financialsByQuarter.length) === 1 ? "" : "s"}
-          </div>
-          <CashflowCard rows={player.financialsByQuarter} />
-        </section>
-      )}
+      {player.financialsByQuarter.length > 0 && (() => {
+        const visible = player.financialsByQuarter.slice(-4);
+        // Detect gaps: legacy saves (and snapshots restored from
+        // earlier rounds) sometimes have non-consecutive quarter
+        // numbers in financialsByQuarter. The cash-flow card is
+        // honest about what it's showing — labels each column with
+        // the actual quarter number and surfaces a hint when the
+        // sequence isn't dense.
+        const hasGaps =
+          visible.length >= 2 &&
+          visible.some((r, i) => i > 0 && r.quarter !== visible[i - 1].quarter + 1);
+        return (
+          <section>
+            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2 flex items-center gap-2">
+              <span>
+                Cash flow · last {visible.length} closed quarter
+                {visible.length === 1 ? "" : "s"} on record
+              </span>
+              {hasGaps && (
+                <span
+                  className="text-[0.625rem] normal-case tracking-normal font-normal text-warning"
+                  title="Some earlier quarters didn't append a financials row (legacy bug, snapshot restore, or close that didn't complete). The columns below are the four most recent on file — they may not be consecutive."
+                >
+                  · gaps detected
+                </span>
+              )}
+            </div>
+            <CashflowCard rows={player.financialsByQuarter} />
+          </section>
+        );
+      })()}
 
       {/* ── 4. P&L history (expandable) ── */}
       {player.financialsByQuarter.length > 0 && (
