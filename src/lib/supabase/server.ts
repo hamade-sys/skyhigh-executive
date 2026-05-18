@@ -10,7 +10,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { getPublicSupabaseUrl } from "@/lib/config/site";
+import { getSupabaseUrl } from "@/lib/supabase/env";
 
 let serviceClient: ReturnType<typeof createClient> | null = null;
 
@@ -24,7 +24,7 @@ let serviceClient: ReturnType<typeof createClient> | null = null;
  *  get full type safety on the data shape. */
 export function getServerClient() {
   if (serviceClient) return serviceClient;
-  const url = getPublicSupabaseUrl();
+  const url = getSupabaseUrl();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     throw new Error(
