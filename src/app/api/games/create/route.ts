@@ -21,19 +21,39 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createGame } from "@/lib/games/api";
+import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    // CRITICAL: prefer the cookie-auth user.id over the body's
+    // hostSessionId. Pre-fix the route trusted the browser-generated
+    // uuid in the body, which created a mismatch with every other
+    // route on the platform (player-setup, state-update, lock, start,
+    // etc. all derive identity from the cookie). The mismatch broke:
+    //   1. Host's playerSetups[] keys didn't match game_members rows
+    //      → host's hub/doctrine/airline silently discarded at start
+    //      and the cohort reveal showed a fallback IST airline
+    //      instead of the host's actual choice.
+    //   2. Snapshot endpoint 403'd for the host because the host's
+    //      session_id didn't match the game's created_by_session_id
+    //      from the host's POV.
+    //   3. Lobby seat card showed "Player" instead of the host's
+    //      saved airline name (same lookup miss).
+    // Only fall back to the body hostSessionId when there's literally
+    // no signed-in user (anonymous guest flow — Supabase anonymous
+    // sign-in runs before this route, but if it failed, accept the
+    // legacy path so creating a game still works).
+    const authedUserId = await getAuthenticatedUserId();
     const body = await req.json();
     const {
       name,
       mode,
       visibility,
       maxTeams,
-      hostSessionId,
+      hostSessionId: bodyHostSessionId,
       gameMasterSessionId,
       beGameMaster,
       totalRounds,
@@ -42,6 +62,7 @@ export async function POST(req: NextRequest) {
       plannedSeats,
       initialState,
     } = body ?? {};
+    const hostSessionId = authedUserId ?? bodyHostSessionId;
 
     if (typeof name !== "string" || name.trim().length === 0) {
       return NextResponse.json({ error: "Game name is required." }, { status: 400 });

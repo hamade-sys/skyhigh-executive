@@ -440,11 +440,19 @@ export async function joinGame(args: {
   }
 
   // Phase 1.8 — capacity gate. Refuse new joins when the game is at
-  // its plannedSeats / max_teams cap. Existing members reconnecting
-  // (their session_id already in game_members) bypass the gate. The
-  // count uses ONLY non-spectator, non-facilitator seats — host /
-  // facilitator role rows occupy a member row but don't consume a
-  // playable seat.
+  // its HUMAN-seat cap. Existing members reconnecting (their
+  // session_id already in game_members) bypass the gate. The count
+  // uses ONLY non-spectator, non-facilitator member rows.
+  //
+  // Previously this gated on `max_teams` (the TOTAL seat count
+  // including bots), which let humans flood past the human-seat
+  // allocation in mixed-bot games. A game configured
+  // [human, human, bot, bot, bot, bot] would silently accept 6
+  // humans — only 2 had a planned seat to render into, the rest
+  // were dropped from the lobby UI without feedback. Now we cap on
+  // the human-typed plannedSeats count; if plannedSeats is missing
+  // (legacy game without that field), fall back to max_teams so
+  // capacity isn't accidentally infinite.
   {
     const { data: existing } = await supa
       .from("game_members")
@@ -461,11 +469,23 @@ export async function joinGame(args: {
         .neq("role", "spectator")
         .neq("role", "facilitator");
       const seatedCount = count ?? 0;
-      const maxTeams = (game.max_teams as number | null) ?? 0;
-      if (maxTeams > 0 && seatedCount >= maxTeams) {
+      // Pull plannedSeats from state_json to count human-typed seats.
+      const { data: stateRow } = await supa
+        .from("game_state")
+        .select("state_json")
+        .eq("game_id", args.gameId)
+        .maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const plannedSeats = (stateRow?.state_json as any)?.session?.plannedSeats as
+        | Array<{ type?: "human" | "bot" }>
+        | undefined;
+      const humanCap = Array.isArray(plannedSeats)
+        ? plannedSeats.filter((s) => s?.type === "human").length
+        : ((game.max_teams as number | null) ?? 0);
+      if (humanCap > 0 && seatedCount >= humanCap) {
         return {
           ok: false,
-          error: "Game is full — capacity reached.",
+          error: "Game is full — all human seats are taken.",
         };
       }
     }
