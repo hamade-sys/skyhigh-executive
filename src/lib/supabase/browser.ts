@@ -12,7 +12,7 @@
  */
 
 import { createBrowserClient } from "@supabase/ssr";
-import { getPublicSupabaseUrl } from "@/lib/config/site";
+import { getSupabaseUrl } from "@/lib/supabase/env";
 
 let client: ReturnType<typeof createBrowserClient> | null = null;
 
@@ -30,7 +30,7 @@ let client: ReturnType<typeof createBrowserClient> | null = null;
  *  cast with the canonical generic. */
 export function getBrowserClient() {
   if (client) return client;
-  const url = getPublicSupabaseUrl();
+  const url = getSupabaseUrl();
   // Support both the legacy anon key and the new publishable key env var names
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
@@ -51,7 +51,7 @@ export function getBrowserClient() {
  *  before navigating to /lobby or /games/new and surface a clear
  *  "multiplayer not configured" empty state when false. */
 export function isMultiplayerAvailable(): boolean {
-  const hasUrl = getPublicSupabaseUrl().length > 0;
+  const hasUrl = Boolean(getSupabaseUrl());
   const hasKey =
     (typeof process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY === "string" &&
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.length > 0) ||
