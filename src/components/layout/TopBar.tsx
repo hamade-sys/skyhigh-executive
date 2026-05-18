@@ -17,6 +17,7 @@ import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash,
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { airlineColorFor, type AirlineColorId } from "@/lib/games/airline-colors";
+import { DOCTRINE_BY_ID } from "@/data/doctrines";
 
 export function TopBar() {
   // Fine-grained subscriptions so unrelated store writes don't re-render this.
@@ -129,6 +130,18 @@ export function TopBar() {
           }}
         />
       </div>
+
+      {/* Doctrine pill — at-a-glance reminder of which strategic
+          archetype this airline picked at onboarding (Premium /
+          Budget / Cargo / Global Network). Click to see the full
+          benefits list. Pre-Phase-9 the doctrine was only visible
+          on the Overview tab (Reports), which is too buried for
+          mid-game reference. Hidden when viewing a rival because
+          rival doctrines are intel that should require an explicit
+          peek (Switch View → rival panel). */}
+      {!viewingRival && (
+        <DoctrinePill doctrineId={displayTeam.doctrine} />
+      )}
 
       {/* KPIs — follow the currently-displayed team. When viewing a
           rival, the strip shows their numbers (read-only). */}
@@ -926,6 +939,122 @@ function Kpi({
 
 function Divider() {
   return <span className="w-px h-6 bg-line shrink-0" aria-hidden />;
+}
+
+/** Compact pill showing the player's strategic doctrine (Premium /
+ *  Budget / Cargo / Global Network) — visible at all times in the
+ *  top-bar so mid-game it's never a question what archetype the
+ *  player is playing. Click/hover opens a popover with the doctrine's
+ *  tagline + full effects list. Tinted to match the doctrine's
+ *  iconAccent so it reads at a glance.
+ *
+ *  Hides the "safety-first" legacy doctrine (no longer player-facing). */
+function DoctrinePill({ doctrineId }: { doctrineId: import("@/types/game").DoctrineId | undefined }) {
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  // Close on outside click / Escape.
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      const t = e.target as Node;
+      if (panelRef.current?.contains(t)) return;
+      if (buttonRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  if (!doctrineId) return null;
+  const doctrine = DOCTRINE_BY_ID[doctrineId];
+  if (!doctrine) return null;
+  const Icon = doctrine.Icon;
+  // Tint mapping matches the doctrine icon-accent palette used in
+  // onboarding + lobby cards (DOCTRINE_ICON_TINT). We can't use the
+  // tailwind class string directly inside the inline style; instead
+  // pick a compatible hex pair per accent.
+  const accentTone: Record<typeof doctrine.iconAccent, { bg: string; text: string; border: string }> = {
+    amber:   { bg: "rgb(254 243 199 / 0.6)", text: "#B45309", border: "rgb(252 211 77 / 0.5)" },
+    violet:  { bg: "rgb(237 233 254 / 0.6)", text: "#6D28D9", border: "rgb(196 181 253 / 0.5)" },
+    emerald: { bg: "rgb(209 250 229 / 0.6)", text: "#047857", border: "rgb(110 231 183 / 0.5)" },
+    cyan:    { bg: "rgb(207 250 254 / 0.6)", text: "#0E7490", border: "rgb(103 232 249 / 0.5)" },
+  };
+  const tone = accentTone[doctrine.iconAccent];
+  return (
+    <div className="relative shrink-0">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`Doctrine: ${doctrine.name}. Click for benefits.`}
+        title={`${doctrine.name} — ${doctrine.tagline}`}
+        className="inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2 rounded-full border text-[0.6875rem] font-semibold hover:brightness-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        style={{ background: tone.bg, color: tone.text, borderColor: tone.border }}
+      >
+        <Icon size={12} aria-hidden />
+        <span className="hidden md:inline">{doctrine.name}</span>
+        <span className="md:hidden">{doctrine.name.split(" ")[0]}</span>
+      </button>
+      {open && (
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-label={`${doctrine.name} doctrine details`}
+          className="absolute top-full left-0 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-surface shadow-[var(--shadow-2)] p-4 z-[70]"
+        >
+          <div className="flex items-start gap-3 mb-3">
+            <span
+              className="inline-flex w-9 h-9 rounded-lg items-center justify-center shrink-0"
+              style={{ background: tone.bg, color: tone.text }}
+            >
+              <Icon size={18} aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="font-display text-[0.9375rem] text-ink leading-tight">
+                {doctrine.name}
+              </div>
+              <div className="text-[0.75rem] text-ink-muted italic mt-0.5">
+                {doctrine.tagline}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="-mr-1 -mt-1 p-1 rounded-md hover:bg-surface-hover text-ink-muted hover:text-ink shrink-0"
+              aria-label="Close"
+            >
+              <X size={14} aria-hidden />
+            </button>
+          </div>
+          <p className="text-[0.8125rem] text-ink-muted leading-relaxed mb-3">
+            {doctrine.description}
+          </p>
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5 font-semibold">
+            What you get
+          </div>
+          <ul className="space-y-1">
+            {doctrine.effects.map((eff, i) => (
+              <li
+                key={i}
+                className="text-[0.8125rem] text-ink leading-snug flex items-start gap-2 before:content-['•'] before:text-ink-muted before:mt-0"
+              >
+                <span>{eff}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Switcher modal opened by clicking the airline brand chip. Lists

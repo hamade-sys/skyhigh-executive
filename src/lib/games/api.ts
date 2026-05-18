@@ -584,7 +584,9 @@ export async function listPublicLobby(args?: {
   const games = (gameRows ?? []) as GameRow[];
   if (games.length === 0) return { ok: true, data: [] };
 
-  // Step 2: per-game seat count + lobby presence + freshness.
+  // Step 2: per-game seat count, lobby presence, and freshness.
+  // Badge = player seats + bots from plannedSeats. Presence includes
+  // host/GM (facilitator) so facilitated lobbies stay visible.
   const gameIds = games.map((g) => g.id);
   const [
     { data: memberRows },
@@ -660,8 +662,8 @@ export async function listPublicLobby(args?: {
   const enriched: JoinableGameRow[] = games
     .map((g) => ({ ...g, member_count: memberCount.get(g.id) ?? 0 }))
     .filter((g) => {
-      // Hide lobbies with nobody present (no host/GM/player). Game
-      // Master-only rows count toward presence but not seat badges.
+      // Hide lobbies with nobody present (no host/GM/player). Bots
+      // alone do not count — only real members in game_members.
       if (g.status === "lobby" && (lobbyPresenceCount.get(g.id) ?? 0) === 0) {
         idleGameIds.push(g.id);
         return false;

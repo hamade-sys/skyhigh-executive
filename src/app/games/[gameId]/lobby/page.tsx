@@ -115,6 +115,7 @@ export default function GameLobbyPage({
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [copyHint, setCopyHint] = useState(false);
+  const [copyLinkHint, setCopyLinkHint] = useState(false);
 
   // ── Seat configuration (host/GM can toggle each unclaimed seat) ────────
   // Phase 6 P1 — heartbeat ping so peers can see who's still in the
@@ -307,6 +308,12 @@ export default function GameLobbyPage({
   // Claim a seat as soon as we have a session id and the game is in lobby.
   // The join API is idempotent — re-joining with the same session id is
   // the reconnect path and only updates last_seen_at.
+  //
+  // This is the path that makes the invite link work end-to-end: a
+  // friend follows the shared URL, lands here signed in, and this
+  // effect auto-claims their seat. We surface errors (game full,
+  // locked) instead of silently swallowing — otherwise a friend who
+  // clicks a link to a full game sees nothing happen.
   useEffect(() => {
     if (!sessionId || !data) return;
     const alreadyJoined = data.members.some((m) => m.session_id === sessionId);
@@ -316,7 +323,24 @@ export default function GameLobbyPage({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ gameId, sessionId }),
-    }).then(load).catch(() => {});
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          await load();
+        } else {
+          // Surface the server's message so an invited friend
+          // understands why they can't join (locked / full / etc).
+          let msg = "Couldn't join this lobby.";
+          try {
+            const j = await res.json();
+            if (j && typeof j.error === "string") msg = j.error;
+          } catch { /* keep generic */ }
+          setError(msg);
+        }
+      })
+      .catch(() => {
+        setError("Network error while joining lobby.");
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, data?.game.id, data?.game.status]);
 
@@ -382,6 +406,22 @@ export default function GameLobbyPage({
     navigator.clipboard.writeText(code).then(() => {
       setCopyHint(true);
       setTimeout(() => setCopyHint(false), 1500);
+    });
+  }
+
+  /**
+   * Copy a shareable invite URL to the clipboard. The URL points at
+   * this lobby page; any signed-in visitor who follows it gets
+   * auto-joined as a member via the effect at top of this component
+   * (line ~268). For private games the gameId in the URL is the
+   * secret — no separate code entry required on the receiving end.
+   */
+  function handleCopyInviteLink() {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return;
+    const url = `${window.location.origin}/games/${gameId}/lobby`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopyLinkHint(true);
+      setTimeout(() => setCopyLinkHint(false), 1500);
     });
   }
 
@@ -474,14 +514,20 @@ export default function GameLobbyPage({
             : "The host starts when everyone is in."}
         </p>
 
-        {/* Prominent share-code banner — shown on private games to
-            ANY visitor (so non-host members can see the code their
-            host shared with them, and the host can copy at a glance). */}
-        {game.join_code && game.status === "lobby" && (
-          <ShareCodeBanner
-            code={game.join_code}
-            onCopy={handleCopyCode}
+        {/* Prominent invite banner — shown on every lobby (public AND
+            private). Always exposes a copy-link button so the host can
+            share a single URL with friends; the recipient lands here
+            and auto-joins via the effect above. For private games the
+            6-digit join code is shown alongside as a fallback for
+            in-room dictation. */}
+        {game.status === "lobby" && (
+          <InviteBanner
+            gameId={gameId}
+            joinCode={game.join_code}
+            onCopyCode={handleCopyCode}
+            onCopyLink={handleCopyInviteLink}
             copyHint={copyHint}
+            copyLinkHint={copyLinkHint}
           />
         )}
 
@@ -845,40 +891,77 @@ export default function GameLobbyPage({
 // Subcomponents
 // ============================================================================
 
-function ShareCodeBanner({
-  code, onCopy, copyHint,
+/**
+ * Lobby invite banner — shown for every game in lobby status (public
+ * and private). The primary action is "Copy invite link" which copies
+ * the absolute URL of this lobby page; recipients open it and are
+ * auto-joined as members (see the effect near line 268). For private
+ * games the 6-digit join code is also surfaced as a fallback for
+ * verbal/in-person sharing.
+ */
+function InviteBanner({
+  gameId, joinCode, onCopyCode, onCopyLink, copyHint, copyLinkHint,
 }: {
-  code: string;
-  onCopy: () => void;
+  gameId: string;
+  joinCode: string | null;
+  onCopyCode: () => void;
+  onCopyLink: () => void;
   copyHint: boolean;
+  copyLinkHint: boolean;
 }) {
+  const inviteUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/games/${gameId}/lobby`
+      : `/games/${gameId}/lobby`;
   return (
     <div className="rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 text-white p-6 mb-8 relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-cyan-500/15 rounded-full blur-3xl -mr-20 -mt-20" />
-      <div className="relative flex flex-wrap items-center justify-between gap-6">
+      <div className="relative flex flex-col gap-5">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-cyan-300 mb-2">
-            Private game · share this code
+            {joinCode ? "Private game · invite friends" : "Public game · invite friends"}
           </p>
-          <p className="text-sm text-slate-300 mb-1 max-w-md leading-relaxed">
-            Players visit <span className="font-mono text-white">/lobby</span> and enter this 4-digit code to join your game.
+          <p className="text-sm text-slate-300 max-w-2xl leading-relaxed">
+            Share the link below. Anyone signed in who opens it lands in this lobby and claims an open seat automatically.
+            {joinCode && (
+              <>
+                {" "}
+                In-person? Read out the {joinCode.length}-digit code instead.
+              </>
+            )}
           </p>
         </div>
-        <button
-          onClick={onCopy}
-          className="group inline-flex items-center gap-4 px-6 py-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-          aria-label={`Copy join code ${code}`}
-        >
-          <span className="font-mono text-5xl font-bold tabular text-white tracking-[0.25em]">
-            {code}
-          </span>
-          <span className="flex flex-col items-start text-xs">
-            <span className="text-slate-300 group-hover:text-white transition-colors">
-              {copyHint ? "Copied!" : "Click to copy"}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Primary action — copy the URL */}
+          <button
+            onClick={onCopyLink}
+            className="group inline-flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-xl bg-white text-slate-900 hover:bg-slate-100 transition-colors max-w-full"
+            aria-label="Copy invite link"
+          >
+            <span className="font-mono text-xs sm:text-sm truncate max-w-[14rem] sm:max-w-[26rem]">
+              {inviteUrl}
             </span>
-            <span className="text-slate-500 mt-0.5">share via chat / email</span>
-          </span>
-        </button>
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 text-white px-2 py-1 text-[11px] font-semibold uppercase tracking-wider">
+              <Copy className="w-3 h-3" />
+              {copyLinkHint ? "Copied" : "Copy"}
+            </span>
+          </button>
+          {/* Fallback action — copy the join code (private games only) */}
+          {joinCode && (
+            <button
+              onClick={onCopyCode}
+              className="group inline-flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+              aria-label={`Copy join code ${joinCode}`}
+            >
+              <span className="font-mono text-2xl font-bold tabular text-white tracking-[0.2em]">
+                {joinCode}
+              </span>
+              <span className="text-[11px] uppercase tracking-wider text-slate-400 group-hover:text-white transition-colors">
+                {copyHint ? "Copied" : "Code"}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
