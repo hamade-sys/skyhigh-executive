@@ -1938,9 +1938,13 @@ function DemandBreakdown({
   const isSecondary =
     player.secondaryHubCodes.includes(route.originCode) ||
     player.secondaryHubCodes.includes(route.destCode);
-  const hubMultiplier = isHub ? 1.18 : isSecondary ? 1.10 : 1.0;
+  // These curves MUST stay in lockstep with the engine equivalents
+  // (`hubAttractivenessBonus`, `customerServiceOccupancyMultiplier`,
+  // `loyaltyRetentionFactor`, and the cabin-penalty block in
+  // `computeRouteEconomics`). When you tune one, tune the other.
+  const hubMultiplier = isHub ? 1.22 : isSecondary ? 1.12 : 1.0;
   const csLevel = player.sliders.customerService ?? 2;
-  const csMultiplier = [0.92, 0.96, 1.0, 1.03, 1.06, 1.10][csLevel] ?? 1.0;
+  const csMultiplier = [0.90, 0.95, 1.0, 1.06, 1.12, 1.18][csLevel] ?? 1.0;
   const hasLounge =
     player.hubInvestments?.premiumLoungeHubs?.includes(route.originCode) ||
     player.hubInvestments?.premiumLoungeHubs?.includes(route.destCode);
@@ -1962,37 +1966,134 @@ function DemandBreakdown({
 
   // Cabin condition penalty — same min-satisfaction lookup as engine.
   // Shows the player WHY a route with a beat-up plane is underperforming
-  // even with the right hub + CS settings.
+  // even with the right hub + CS settings. Curve widened to match
+  // the engine update (−12%..+5%).
   const planes = route.aircraftIds
     .map((id) => player.fleet.find((f) => f.id === id))
     .filter((p): p is NonNullable<typeof p> => !!p && p.status === "active");
   let cabinPenalty = 1.0;
-  let cabinLabel = "Cabin condition (no aircraft)";
+  let cabinLabel = "Cabin condition";
+  let cabinHint = "Assign at least one active aircraft to this route.";
   if (planes.length > 0) {
     const worstSat = Math.min(...planes.map((p) => p.satisfactionPct ?? 75));
-    if (worstSat < 30) { cabinPenalty = 0.92; cabinLabel = `Cabin condition · worst ${Math.round(worstSat)}% (poor)`; }
-    else if (worstSat < 50) { cabinPenalty = 0.96; cabinLabel = `Cabin condition · worst ${Math.round(worstSat)}% (mid)`; }
-    else if (worstSat >= 80) { cabinPenalty = 1.02; cabinLabel = `Cabin condition · worst ${Math.round(worstSat)}% (great)`; }
-    else { cabinLabel = `Cabin condition · worst ${Math.round(worstSat)}% (ok)`; }
+    if (worstSat < 30) {
+      cabinPenalty = 0.88;
+      cabinLabel = `Cabin condition · worst ${Math.round(worstSat)}% (poor)`;
+      cabinHint = "Refurbish or replace the worst plane on this route — refits land in fleet maintenance.";
+    } else if (worstSat < 50) {
+      cabinPenalty = 0.95;
+      cabinLabel = `Cabin condition · worst ${Math.round(worstSat)}% (mid)`;
+      cabinHint = "Cabins are wearing — book a refit before the score drops below 50%.";
+    } else if (worstSat >= 80) {
+      cabinPenalty = 1.05;
+      cabinLabel = `Cabin condition · worst ${Math.round(worstSat)}% (great)`;
+      cabinHint = "Above 80% — keep them clean and you keep the bonus.";
+    } else {
+      cabinLabel = `Cabin condition · worst ${Math.round(worstSat)}% (ok)`;
+      cabinHint = "Hit 80%+ across every plane on the route to unlock +5%.";
+    }
   }
 
   // Loyalty retention — same band lookup as engine's loyaltyRetentionFactor.
+  // Curve widened: 80%+ now +10%, 65%+ +6% (was only +3%).
   const loyalty = player.customerLoyaltyPct ?? 50;
   const loyaltyMult =
-    loyalty >= 80 ? 1.05 :
-    loyalty >= 65 ? 1.03 :
+    loyalty >= 80 ? 1.10 :
+    loyalty >= 65 ? 1.06 :
     loyalty >= 50 ? 1.0 :
-    loyalty >= 35 ? 0.97 : 0.93;
+    loyalty >= 35 ? 0.94 : 0.88;
 
-  const rows: Array<{ label: string; mult: number; tone: "pos" | "neg" | "neutral" }> = [
-    { label: `Hub bonus${isHub ? "" : isSecondary ? " (secondary)" : " (none)"}`, mult: hubMultiplier, tone: hubMultiplier > 1 ? "pos" : "neutral" },
-    { label: `Customer Service · L${csLevel}`, mult: csMultiplier, tone: csMultiplier > 1 ? "pos" : csMultiplier < 1 ? "neg" : "neutral" },
-    { label: hasLounge ? "Premium lounge at hub" : "No lounge at endpoints", mult: loungeBonus, tone: loungeBonus > 1 ? "pos" : "neutral" },
-    { label: "Doctrine + geography fit", mult: onboardingBonus, tone: onboardingBonus > 1 ? "pos" : "neutral" },
-    { label: cabinLabel, mult: cabinPenalty, tone: cabinPenalty > 1 ? "pos" : cabinPenalty < 1 ? "neg" : "neutral" },
-    { label: `Customer loyalty · ${Math.round(loyalty)}%`, mult: loyaltyMult, tone: loyaltyMult > 1 ? "pos" : loyaltyMult < 1 ? "neg" : "neutral" },
+  // Each row carries a `hint` — short, plain-English copy describing
+  // either how the bonus was earned (×>1) or how to improve (×<=1).
+  // Resolves the "all multipliers say ×1.00 and I have no idea why"
+  // complaint from workshop testing.
+  type MultRow = {
+    label: string;
+    mult: number;
+    tone: "pos" | "neg" | "neutral";
+    hint: string;
+  };
+  const hubHint = isHub
+    ? `Primary hub at ${player.hubCode} — every route touching it earns the highest hub bonus.`
+    : isSecondary
+      ? `Secondary hub at ${route.originCode === player.hubCode ? route.originCode : route.destCode}. Upgrade to primary in Hubs for +10%.`
+      : `Route doesn't touch ${player.hubCode}. Add a secondary hub at either endpoint to earn +12%.`;
+  const csHint =
+    csLevel >= 4
+      ? `Customer Service L${csLevel} is at the top of the scale — passengers stay.`
+      : csLevel === 3
+        ? `L3 gives +6%. Push to L4 for +12% (costs more per quarter).`
+        : csLevel === 2
+          ? "L2 is the baseline. L3+ delivers a real boost; L1/L0 cause leakage."
+          : `Below baseline — leakage on every route. Raise to L2 in Operations sliders to neutralise.`;
+  const loungeHint = hasLounge
+    ? "Premium lounge fitted at an endpoint — keeps premium-cabin passengers loyal."
+    : "Build a Premium Lounge at your hub (Hubs panel) for +4% on every route touching it.";
+  const geoLabel = (() => {
+    const bits: string[] = [];
+    if (player.marketFocus === "passenger" && !route.isCargo) bits.push("passenger focus");
+    if (player.marketFocus === "cargo" && route.isCargo) bits.push("cargo focus");
+    if (geoMatch && player.geographicPriority !== "global") bits.push("geo match");
+    if (player.geographicPriority === "global") bits.push("global");
+    if (player.csrTheme === "community" && origin.tier >= 2 && dest.tier >= 2) bits.push("community CSR");
+    return bits.length > 0 ? `Doctrine fit · ${bits.join(" + ")}` : "Doctrine + geography fit";
+  })();
+  const geoHint = onboardingBonus > 1
+    ? "Your onboarding choices align with this route — bonus applied."
+    : "Pick a geographic priority that includes this region (Overview → Strategy) to unlock +8%.";
+  const loyaltyHint =
+    loyalty >= 80
+      ? "Top-tier loyalty (80%+) — passengers actively prefer you."
+      : loyalty >= 65
+        ? "Strong loyalty band. 80%+ unlocks +10% across the network."
+        : loyalty >= 50
+          ? "Loyalty is at the baseline. 65%+ unlocks a real boost — invest in Customer Service + Cabin condition."
+          : "Loyalty is below 50% — every route loses passengers to rivals. Raise CS sliders and refurbish cabins.";
+
+  const rows: MultRow[] = [
+    {
+      label: `Hub bonus${isHub ? "" : isSecondary ? " (secondary)" : " (none)"}`,
+      mult: hubMultiplier,
+      tone: hubMultiplier > 1 ? "pos" : "neutral",
+      hint: hubHint,
+    },
+    {
+      label: `Customer Service · L${csLevel}`,
+      mult: csMultiplier,
+      tone: csMultiplier > 1 ? "pos" : csMultiplier < 1 ? "neg" : "neutral",
+      hint: csHint,
+    },
+    {
+      label: hasLounge ? "Premium lounge at hub" : "No lounge at endpoints",
+      mult: loungeBonus,
+      tone: loungeBonus > 1 ? "pos" : "neutral",
+      hint: loungeHint,
+    },
+    {
+      label: geoLabel,
+      mult: onboardingBonus,
+      tone: onboardingBonus > 1 ? "pos" : "neutral",
+      hint: geoHint,
+    },
+    {
+      label: cabinLabel,
+      mult: cabinPenalty,
+      tone: cabinPenalty > 1 ? "pos" : cabinPenalty < 1 ? "neg" : "neutral",
+      hint: cabinHint,
+    },
+    {
+      label: `Customer loyalty · ${Math.round(loyalty)}%`,
+      mult: loyaltyMult,
+      tone: loyaltyMult > 1 ? "pos" : loyaltyMult < 1 ? "neg" : "neutral",
+      hint: loyaltyHint,
+    },
   ];
   const compound = rows.reduce((m, r) => m * r.mult, 1);
+  // Only the non-neutral factors actually change the compound.
+  // Surfacing them explicitly resolves the "math doesn't add up"
+  // complaint — players were squinting at six rows of ×1.00 trying
+  // to understand where the ×1.22 came from.
+  const activeFactors = rows.filter((r) => Math.abs(r.mult - 1.0) > 0.005);
 
   return (
     <details className="rounded-md border border-line">
@@ -2002,18 +2103,44 @@ function DemandBreakdown({
           ×{compound.toFixed(2)}
         </span>
       </summary>
-      <div className="p-3 space-y-1.5 border-t border-line">
+      <div className="p-3 space-y-2.5 border-t border-line">
         {rows.map((r) => (
-          <div key={r.label} className="flex items-baseline justify-between text-[0.75rem]">
-            <span className="text-ink-2">{r.label}</span>
-            <span className={`tabular font-mono ${
-              r.tone === "pos" ? "text-positive" :
-              r.tone === "neg" ? "text-negative" : "text-ink-muted"
-            }`}>
-              ×{r.mult.toFixed(2)}
-            </span>
+          <div key={r.label} className="space-y-0.5">
+            <div className="flex items-baseline justify-between text-[0.75rem]">
+              <span className={`${r.tone === "neutral" ? "text-ink-muted" : "text-ink-2"}`}>
+                {r.label}
+              </span>
+              <span className={`tabular font-mono ${
+                r.tone === "pos" ? "text-positive" :
+                r.tone === "neg" ? "text-negative" : "text-ink-muted"
+              }`}>
+                ×{r.mult.toFixed(2)}
+              </span>
+            </div>
+            <div className="text-[0.6875rem] text-ink-muted leading-snug pl-0">
+              {r.hint}
+            </div>
           </div>
         ))}
+        {/* Explicit math so players can audit the compound figure
+            instead of squinting at six rows of ×1.00 wondering where
+            the headline number came from. */}
+        <div className="pt-2 mt-2 border-t border-line text-[0.6875rem] text-ink-muted leading-snug">
+          {activeFactors.length === 0
+            ? "All factors at baseline — compound is ×1.00. Improve any factor above to lift this route's demand."
+            : (
+              <>
+                <span className="font-mono">
+                  {activeFactors.map((r) => `×${r.mult.toFixed(2)}`).join(" ")}
+                </span>
+                {" = "}
+                <span className={`font-mono font-semibold ${compound > 1 ? "text-positive" : compound < 1 ? "text-negative" : "text-ink"}`}>
+                  ×{compound.toFixed(2)}
+                </span>
+                {" applied to base demand."}
+              </>
+            )}
+        </div>
         {hasFuelTank && (
           <div className="flex items-baseline justify-between text-[0.75rem] pt-1.5 border-t border-line">
             <span className="text-ink-2">Fuel reserve tank discount</span>
