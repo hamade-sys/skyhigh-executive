@@ -75,6 +75,12 @@ async function runMigrations(): Promise<MigrationStatus> {
   try {
     dbUrl = await resolveDatabaseUrl();
   } catch (err) {
+    // Vercel often has no direct Postgres URL — lobby/core APIs use the
+    // Supabase REST client. Skip runtime DDL instead of failing every
+    // preferences/snapshots request with 503.
+    if (isMissingEnvError(err)) {
+      return { ok: true, applied: [], skipped: true };
+    }
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Could not resolve database connection.",

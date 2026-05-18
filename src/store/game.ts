@@ -6402,13 +6402,15 @@ export const useGame = create<GameStore>()(
                 "game.colorClaimed",
               ]);
               const shouldHydrateAfter409 = !SILENT_409_EVENTS.has(eventType);
+              const humanCount = get().teams.filter(
+                (t) => t.controlledBy === "human",
+              ).length;
 
-              console.warn(
-                `[state-update] stale write — server rejected event ${eventType}. ` +
-                  (shouldHydrateAfter409
-                    ? "Auto-refetching authoritative state."
-                    : "Waiting for authoritative state via the winning write / Realtime."),
-              );
+              if (shouldHydrateAfter409) {
+                console.warn(
+                  `[state-update] stale write — server rejected event ${eventType}. Auto-refetching authoritative state.`,
+                );
+              }
 
               if (shouldHydrateAfter409) {
                 // Refetch + hydrate so this browser snaps to the cohort's
@@ -6442,7 +6444,7 @@ export const useGame = create<GameStore>()(
               // (1 host + N bots) the toast is misleading — there's no
               // other cohort to be out of sync WITH; the 409 here is
               // a benign re-hydrate, not user-actionable.
-              if (shouldHydrateAfter409) {
+              if (shouldHydrateAfter409 && humanCount >= 2) {
                 toast.warning(
                   "Game state out of sync",
                   "The cohort advanced before your action landed. We've pulled the latest state — please retry your action.",

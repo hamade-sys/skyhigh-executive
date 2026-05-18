@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
 import { getServerClient } from "@/lib/supabase/server";
 import { assertHostOrFacilitator, assertMembership } from "@/lib/games/api";
-import { ensureSupabaseRuntimeMigrations } from "@/lib/supabase/runtime-migrations";
+import { isMissingRelationError } from "@/lib/supabase/db-errors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +16,6 @@ async function canAccessGame(gameId: string, userId: string): Promise<boolean> {
 
 export async function GET(req: NextRequest) {
   try {
-    const migration = await ensureSupabaseRuntimeMigrations();
-    if (!migration.ok) {
-      return NextResponse.json({ error: migration.error }, { status: 503 });
-    }
     const userId = await getAuthenticatedUserId();
     if (!userId) {
       return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
@@ -50,7 +46,10 @@ export async function GET(req: NextRequest) {
         .eq("user_id", userId)
         .eq("pref_key", key)
         .maybeSingle();
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) {
+        if (isMissingRelationError(error)) return NextResponse.json({ value: null });
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
       return NextResponse.json({ value: data?.value_json ?? null });
     }
 
@@ -61,7 +60,10 @@ export async function GET(req: NextRequest) {
       .eq("user_id", userId)
       .eq("pref_key", key)
       .maybeSingle();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      if (isMissingRelationError(error)) return NextResponse.json({ value: null });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ value: data?.value_json ?? null });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";
@@ -71,10 +73,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const migration = await ensureSupabaseRuntimeMigrations();
-    if (!migration.ok) {
-      return NextResponse.json({ error: migration.error }, { status: 503 });
-    }
     const userId = await getAuthenticatedUserId();
     if (!userId) {
       return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
@@ -101,7 +99,10 @@ export async function POST(req: NextRequest) {
         { user_id: userId, pref_key: key, value_json: value ?? null },
         { onConflict: "user_id,pref_key" },
       );
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) {
+        if (isMissingRelationError(error)) return NextResponse.json({ ok: true, skipped: true });
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -109,7 +110,10 @@ export async function POST(req: NextRequest) {
       { game_id: gameId, user_id: userId, pref_key: key, value_json: value ?? null },
       { onConflict: "game_id,user_id,pref_key" },
     );
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      if (isMissingRelationError(error)) return NextResponse.json({ ok: true, skipped: true });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unknown error";

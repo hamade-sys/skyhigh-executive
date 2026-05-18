@@ -584,26 +584,57 @@ export async function listPublicLobby(args?: {
   const games = (gameRows ?? []) as GameRow[];
   if (games.length === 0) return { ok: true, data: [] };
 
-  // Step 2: per-game member count + freshness. We need both:
-  //   (a) playable-seat count (excludes spectator/facilitator) — for
-  //       the "3/6 joined" badge + the empty-lobby filter.
-  //   (b) the most-recent last_seen_at across non-spectator/non-
-  //       facilitator members — drives the 2-hour idle cleanup.
+  // Step 2: per-game seat count + lobby presence + freshness.
   const gameIds = games.map((g) => g.id);
-  const { data: memberRows } = await supa
-    .from("game_members")
-    .select("game_id, role, last_seen_at")
-    .in("game_id", gameIds);
+  const [
+    { data: memberRows },
+    { data: stateRows },
+  ] = await Promise.all([
+    supa
+      .from("game_members")
+      .select("game_id, role, last_seen_at")
+      .in("game_id", gameIds),
+    supa
+      .from("game_state")
+      .select("game_id, state_json")
+      .in("game_id", gameIds),
+  ]);
 
-  const memberCount = new Map<string, number>();
+  const botSeatCount = new Map<string, number>();
+  for (const row of (stateRows ?? []) as {
+    game_id: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    state_json: any;
+  }[]) {
+    const planned = row.state_json?.session?.plannedSeats;
+    if (Array.isArray(planned)) {
+      let bots = 0;
+      for (const s of planned) {
+        if (s && s.type === "bot") bots += 1;
+      }
+      botSeatCount.set(row.game_id, bots);
+    }
+  }
+
+  const playerSeatCount = new Map<string, number>();
+  const lobbyPresenceCount = new Map<string, number>();
   const newestSeenAt = new Map<string, number>();
   for (const row of (memberRows ?? []) as {
     game_id: string;
     role: string;
     last_seen_at: string | null;
   }[]) {
-    if (row.role === "spectator" || row.role === "facilitator") continue;
-    memberCount.set(row.game_id, (memberCount.get(row.game_id) ?? 0) + 1);
+    if (row.role === "spectator") continue;
+    lobbyPresenceCount.set(
+      row.game_id,
+      (lobbyPresenceCount.get(row.game_id) ?? 0) + 1,
+    );
+    if (row.role !== "facilitator") {
+      playerSeatCount.set(
+        row.game_id,
+        (playerSeatCount.get(row.game_id) ?? 0) + 1,
+      );
+    }
     if (row.last_seen_at) {
       const ts = Date.parse(row.last_seen_at);
       if (Number.isFinite(ts)) {
@@ -611,6 +642,14 @@ export async function listPublicLobby(args?: {
         if (ts > prev) newestSeenAt.set(row.game_id, ts);
       }
     }
+  }
+
+  const memberCount = new Map<string, number>();
+  for (const id of gameIds) {
+    memberCount.set(
+      id,
+      (playerSeatCount.get(id) ?? 0) + (botSeatCount.get(id) ?? 0),
+    );
   }
 
   const now = Date.now();
@@ -621,10 +660,9 @@ export async function listPublicLobby(args?: {
   const enriched: JoinableGameRow[] = games
     .map((g) => ({ ...g, member_count: memberCount.get(g.id) ?? 0 }))
     .filter((g) => {
-      // Rule from user task #1 — lobbies with zero active humans
-      // shouldn't be advertised. Either the host abandoned, or
-      // everyone forfeited; in both cases there's nothing to join.
-      if (g.status === "lobby" && g.member_count === 0) {
+      // Hide lobbies with nobody present (no host/GM/player). Game
+      // Master-only rows count toward presence but not seat badges.
+      if (g.status === "lobby" && (lobbyPresenceCount.get(g.id) ?? 0) === 0) {
         idleGameIds.push(g.id);
         return false;
       }
