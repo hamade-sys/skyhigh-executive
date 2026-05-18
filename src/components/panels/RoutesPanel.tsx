@@ -430,15 +430,40 @@ export function RoutesPanel() {
                       {fmtMoney(profit)}
                     </td>
                     <td className="py-2.5 px-3 text-right">
-                      {pending ? (
-                        <Badge tone="warning" title="Bid pending — auction at quarter close">
-                          Pending
-                        </Badge>
-                      ) : suspended ? (
-                        <Badge tone="warning">Suspended</Badge>
-                      ) : (
-                        <Badge tone="positive">Active</Badge>
-                      )}
+                      {(() => {
+                        if (pending) {
+                          return (
+                            <Badge tone="warning" title="Bid pending — auction at quarter close">
+                              Pending
+                            </Badge>
+                          );
+                        }
+                        if (suspended) {
+                          return <Badge tone="warning">Suspended</Badge>;
+                        }
+                        // Per user feedback — when an active route has
+                        // no operating aircraft assigned, the status
+                        // chip itself should call that out rather than
+                        // showing a green "Active" tag alongside a
+                        // separate "No aircraft" warning. The full row
+                        // also keeps the inline "No aircraft" chip near
+                        // the route name so the player sees it at a
+                        // glance whichever column they're scanning.
+                        const hasOperatingAircraft = r.aircraftIds.some((id) =>
+                          player.fleet.find((f) => f.id === id && f.status === "active"),
+                        );
+                        if (!hasOperatingAircraft) {
+                          return (
+                            <Badge
+                              tone="warning"
+                              title="Active route with no operating aircraft assigned. Slots are leased but no flights are scheduled — assign aircraft or close the route."
+                            >
+                              No aircraft
+                            </Badge>
+                          );
+                        }
+                        return <Badge tone="positive">Active</Badge>;
+                      })()}
                     </td>
                   </tr>
                 );
