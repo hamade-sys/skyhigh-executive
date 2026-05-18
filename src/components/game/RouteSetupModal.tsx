@@ -687,7 +687,16 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                         )}
                       </div>
                       <div className="text-[0.6875rem] text-ink-muted font-mono">
-                        Range {spec.rangeKm.toLocaleString()} km · {(() => {
+                        {/* Effective range — includes engine-upgrade
+                            range extension (+10% for fuel/super
+                            engine). The spec's base range is what
+                            the plane was when it left the factory;
+                            once upgraded, that number is misleading
+                            (route validation uses effective range,
+                            so a plane with 6,950 km base + +10%
+                            upgrade legitimately flies 7,645 km).
+                            Show the actual reachable range here. */}
+                        Range {effectiveRangeKm(spec, p.engineUpgrade ?? null).toLocaleString()} km · {(() => {
                           // Cargo aircraft don't have passenger seats —
                           // show tonnage capacity instead.
                           if (spec.family === "cargo") {
