@@ -173,7 +173,23 @@ export interface Route {
    *  Mirrors how passenger routes use econFare/busFare/firstFare. */
   cargoRatePerTonne: number | null;
 
-  status: "active" | "pending" | "closed" | "suspended";
+  /**
+   * Route lifecycle:
+   *  - `active`    — flying this quarter, earning revenue.
+   *  - `pending`   — auction-blocked. Waiting for slot allocation.
+   *                  Auto-rebids at every quarter close.
+   *  - `scheduled` — at least one assigned aircraft is still "ordered"
+   *                  (not yet delivered). The route auto-promotes to
+   *                  `active` or `pending` once every assigned plane
+   *                  has been delivered. Lets the player set up
+   *                  routes for future fleet that will hit the map
+   *                  the instant the delivery lands.
+   *  - `closed`    — terminated. Aircraft are freed. Kept on the
+   *                  route list for historical reporting.
+   *  - `suspended` — manually paused by the player. No revenue, no
+   *                  slot fees. Resumable.
+   */
+  status: "active" | "pending" | "scheduled" | "closed" | "suspended";
   openQuarter: number;
   avgOccupancy: number;          // 0..1
   quarterlyRevenue: number;

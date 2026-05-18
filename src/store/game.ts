@@ -2702,6 +2702,24 @@ export const useGame = create<GameStore>()(
             pendingBidSlots[bid.airportCode] = Math.max(need, bid.slots ?? need);
           }
         }
+        // Feature I — pre-route an on-order aircraft. If any of the
+        // selected planes is still in "ordered" status (delivery
+        // pending), the route opens as SCHEDULED. The closeQuarter
+        // engine promotes scheduled→active/pending the quarter ALL
+        // of its aircraft become active. Slot bids submitted now
+        // sit in the team's bid queue and resolve at every quarter
+        // close just like a pending route's bids — so the airport
+        // capacity is already secured when the plane lands. If the
+        // user later cancels the order via the fleet panel, the
+        // route is auto-closed there (closeRoute call from cancel
+        // handler — keeps aircraft → route binding clean).
+        const anyOrdered = planes.some((p) => p.status === "ordered");
+        const routeStatus: "scheduled" | "pending" | "active" =
+          anyOrdered
+            ? ("scheduled" as const)
+            : willBePending
+              ? ("pending" as const)
+              : ("active" as const);
         const route = {
           id: mkId("route"),
           originCode,
@@ -2714,10 +2732,7 @@ export const useGame = create<GameStore>()(
           busFare: busFare ?? null,
           firstFare: firstFare ?? null,
           cargoRatePerTonne: null,
-          // Pending if we're awaiting auction resolution for slot shortfall;
-          // active otherwise. Pending routes don't earn revenue this quarter
-          // — they activate at next quarter-close once slots resolve.
-          status: willBePending ? ("pending" as const) : ("active" as const),
+          status: routeStatus,
           openQuarter: s.currentQuarter,
           avgOccupancy: 0,
           quarterlyRevenue: 0,
@@ -2750,9 +2765,19 @@ export const useGame = create<GameStore>()(
               ...t,
               cashUsd: t.cashUsd - setupCost,
               routes: [...t.routes, route],
+              // Bind the aircraft to the route but PRESERVE their
+              // status. An ordered plane stays ordered (delivery
+              // arrives at quarter close); an active plane flips
+              // to active-on-route. closeQuarter handles the
+              // ordered→active transition for delivery, at which
+              // point it also promotes the scheduled route.
               fleet: t.fleet.map((f) =>
                 aircraftIds.includes(f.id)
-                  ? { ...f, status: "active", routeId: route.id }
+                  ? {
+                      ...f,
+                      status: f.status === "ordered" ? "ordered" : "active",
+                      routeId: route.id,
+                    }
                   : f),
               cargoStorageActivations: [...t.cargoStorageActivations, ...newActivations],
             },
@@ -2762,7 +2787,17 @@ export const useGame = create<GameStore>()(
           toast.info("Cargo storage activated",
             `${newActivations.join(" + ")} · $${(setupCost / 1_000_000).toFixed(1)}M one-time`);
         }
-        if (willBePending) {
+        if (routeStatus === "scheduled") {
+          const deliveryQuarter = Math.min(
+            ...planes
+              .filter((p) => p.status === "ordered")
+              .map((p) => p.purchaseQuarter + 1),
+          );
+          toast.info(
+            `Route scheduled: ${originCode} → ${destCode}`,
+            `Reserved for delivery in Q${deliveryQuarter}. First revenue lands once the aircraft is delivered and the route activates.`,
+          );
+        } else if (willBePending) {
           toast.warning(
             `Route pending: ${originCode} → ${destCode}`,
             `Bid submitted — auction resolves at end of quarter. Route activates ` +
@@ -3616,6 +3651,59 @@ export const useGame = create<GameStore>()(
           if (f.status === "grounded") return { ...f, status: "active" as const };
           return f;
         }).filter((f): f is NonNullable<typeof f> => f !== null);
+
+        // Feature I — promote scheduled routes whose aircraft just
+        // delivered. A scheduled route requires ALL its aircraft to
+        // be active before it can fly; an "ordered" plane joining a
+        // scheduled route still leaves the route scheduled. Once the
+        // last delivery lands, the route flips to pending (so the
+        // existing auto-rebid path resolves any slot shortfall in
+        // the next auction) or active (no shortfall — fly this
+        // quarter).
+        //
+        // We build a new routes array here and inject it into the
+        // teamReadyPre snapshot below (via the `routesPostScheduledPromotion`
+        // local) — mutating `player.routes` directly would write into
+        // shared Zustand state mid-close.
+        const planeIsActiveById = new Map(
+          updatedFleet.map((f) => [f.id, f.status === "active"]),
+        );
+        const newlyPromotedRoutes: string[] = [];
+        const routesPostScheduledPromotion = player.routes.map((r) => {
+          if (r.status !== "scheduled") return r;
+          const allActive = r.aircraftIds.every((id) => planeIsActiveById.get(id) === true);
+          if (!allActive) return r;
+          const weeklyNeed = r.dailyFrequency * 7;
+          const slotsAtOrigin = player.airportLeases?.[r.originCode]?.slots ?? 0;
+          const slotsAtDest = player.airportLeases?.[r.destCode]?.slots ?? 0;
+          const usedAtOrigin = player.routes
+            .filter((rt) =>
+              rt.id !== r.id && rt.status === "active" &&
+              (rt.originCode === r.originCode || rt.destCode === r.originCode),
+            )
+            .reduce((sum, rt) => sum + rt.dailyFrequency * 7, 0);
+          const usedAtDest = player.routes
+            .filter((rt) =>
+              rt.id !== r.id && rt.status === "active" &&
+              (rt.originCode === r.destCode || rt.destCode === r.destCode),
+            )
+            .reduce((sum, rt) => sum + rt.dailyFrequency * 7, 0);
+          const shortAtOrigin = Math.max(0, usedAtOrigin + weeklyNeed - slotsAtOrigin);
+          const shortAtDest = Math.max(0, usedAtDest + weeklyNeed - slotsAtDest);
+          const hasShortfall = shortAtOrigin > 0 || shortAtDest > 0;
+          newlyPromotedRoutes.push(`${r.originCode} → ${r.destCode}`);
+          return {
+            ...r,
+            status: hasShortfall ? ("pending" as const) : ("active" as const),
+          };
+        });
+        if (newlyPromotedRoutes.length > 0) {
+          toast.success(
+            `${newlyPromotedRoutes.length} scheduled route${newlyPromotedRoutes.length > 1 ? "s" : ""} now flying`,
+            newlyPromotedRoutes.join(" · ") +
+              ". Pre-routed aircraft delivered and the route is live.",
+          );
+        }
         // Surface scrap proceeds to the player and merge history.
         if (scrapProceedsUsd > 0 || retiredHistory.length > 0) {
           insuranceProceeds += scrapProceedsUsd;
@@ -3712,7 +3800,10 @@ export const useGame = create<GameStore>()(
         const teamReadyPre: Team = {
           ...ensureStreaks(player),
           fleet: finalFleet,
-          routes: player.routes.map((r) => {
+          // routesPostScheduledPromotion (built above, after the
+          // ordered→active delivery transitions) includes any
+          // scheduled routes that just promoted to active/pending.
+          routes: routesPostScheduledPromotion.map((r) => {
             const stillFlying = r.aircraftIds.filter((id) => {
               const f = player.fleet.find((x) => x.id === id);
               return f && (f.retirementQuarter === undefined || s.currentQuarter < f.retirementQuarter);

@@ -80,22 +80,34 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     if (!isOpen || !player || !origin || !dest) return;
     const dist = distanceBetween(origin, dest);
     const cargo = forceCargo ?? false;
-    const idle = player.fleet.find((f) => {
-      if (f.status !== "active") return false;
-      // Stale routeId tolerance — same logic as idlePlanes filter
-      if (f.routeId) {
-        const r = player.routes.find((rt) => rt.id === f.routeId);
-        if (r && r.status !== "closed") return false;
-      }
+    // Auto-pick prefers an ACTIVE idle plane (immediate fly). Falls
+    // back to an ordered plane (pre-route) only if no active candidate
+    // exists. This way the default UX still opens a flying route;
+    // pre-routing is opt-in by clicking an ordered plane explicitly.
+    const isReachable = (f: typeof player.fleet[number]) => {
       const spec = AIRCRAFT_BY_ID[f.specId];
       if (!spec) return false;
-      // Honour fuel/super engine retrofit +10% range bonus when
-      // checking reach. Earlier the auto-pick used base spec range
-      // and skipped over upgraded planes that could actually fly
-      // the route.
       if (effectiveRangeKm(spec, f.engineUpgrade ?? null) < dist) return false;
       return cargo ? spec.family === "cargo" : spec.family === "passenger";
-    });
+    };
+    const idle =
+      player.fleet.find((f) => {
+        if (f.status !== "active") return false;
+        if (f.routeId) {
+          const r = player.routes.find((rt) => rt.id === f.routeId);
+          if (r && r.status !== "closed") return false;
+        }
+        return isReachable(f);
+      }) ??
+      player.fleet.find((f) => {
+        // Fallback to ordered (pre-route) candidates.
+        if (f.status !== "ordered") return false;
+        if (f.routeId) {
+          const r = player.routes.find((rt) => rt.id === f.routeId);
+          if (r && r.status === "scheduled") return false;
+        }
+        return isReachable(f);
+      });
     const defaultWeeklyFreq = idle
       ? maxWeeklyRotations(
           idle.specId,
@@ -290,12 +302,28 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   // Idle = active AND not currently flying a non-closed route. Defensively
   // treat aircraft whose routeId points to a missing/closed route as idle —
   // older saves can have stale routeIds after route closures.
+  // Now also includes `ordered` aircraft so the player can pre-route a
+  // plane that's still in delivery. Pre-routed aircraft create a
+  // `scheduled` route that auto-activates the moment delivery flips
+  // the plane to `active` (handled in closeQuarter). An ordered plane
+  // already attached to a scheduled route appears reserved (not idle).
   const idlePlanes = player.fleet.filter((f) => {
-    if (f.status !== "active") return false;
-    if (!f.routeId) return true;
-    const r = player.routes.find((rt) => rt.id === f.routeId);
-    if (!r) return true;            // route deleted
-    if (r.status === "closed") return true;
+    if (f.status === "active") {
+      if (!f.routeId) return true;
+      const r = player.routes.find((rt) => rt.id === f.routeId);
+      if (!r) return true;            // route deleted
+      if (r.status === "closed") return true;
+      return false;
+    }
+    if (f.status === "ordered") {
+      // Ordered planes already reserved on a scheduled route are NOT
+      // idle (user can't double-assign them).
+      if (f.routeId) {
+        const r = player.routes.find((rt) => rt.id === f.routeId);
+        if (r && r.status === "scheduled") return false;
+      }
+      return true;
+    }
     return false;
   });
   const originCity = origin ? CITIES_BY_CODE[origin] : null;
@@ -684,6 +712,19 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
                         {spec.name}
                         {p.customSeats && (
                           <span className="ml-1.5 text-[0.6875rem] text-accent">· custom cabin</span>
+                        )}
+                        {p.status === "ordered" && (
+                          /* On-order plane — surfaces in the picker
+                             so players can pre-route. Selecting one
+                             creates a SCHEDULED route that auto-
+                             promotes at the delivery quarter. The
+                             purchaseQuarter on the fleet row is the
+                             ORDER quarter; delivery is the quarter
+                             after (engine flips ordered→active when
+                             `purchaseQuarter < currentQuarter`). */
+                          <span className="ml-1.5 text-[0.6875rem] font-medium text-accent">
+                            · delivers Q{p.purchaseQuarter + 1}
+                          </span>
                         )}
                       </div>
                       <div className="text-[0.6875rem] text-ink-muted font-mono">
