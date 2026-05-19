@@ -846,6 +846,107 @@ export const SCENARIOS: Scenario[] = [
     ],
     autoSubmitOptionId: "D",
   },
+  // ═══════════════════════════════════════════════════════════════════
+  // Half-campaign extension (R41–R60) · Campaign Expansion brief
+  // Section 8. Four new boardroom decisions covering the 2025–2029
+  // strategic environment. Mechanics scaled to existing S1–S18
+  // shape; numbers are first-pass estimates and may need balancing
+  // once 60r games hit live playtest.
+  // ═══════════════════════════════════════════════════════════════════
+  {
+    id: "S19", title: "The AI Pivot", quarter: 55, severity: "HIGH", timeLimitMinutes: 30,
+    teaser: "Generative AI has reshaped operations. Lean fully into automation, hybrid the workforce, or double down on human craft?",
+    context:
+      "By 2028 every rival is running AI revenue management, AI crew scheduling, and AI ground-ops orchestration. Your CTO has a 36-month transformation plan. The strategic question is not whether to invest — it's what shape the airline takes when the dust settles.",
+    options: [
+      { id: "A", label: "Full automation",
+        description: "All-in on AI ops + revenue mgmt. Headcount −22%. Brand softens; ops sharpen.",
+        effect: { cash: -120 * M, opsPts: 25, brandPts: -10, loyaltyDelta: -5, setFlags: ["ai_full_automation"] },
+        effectTags: ["−$120M · ops +25 · brand −10"] },
+      { id: "B", label: "Hybrid model",
+        description: "AI behind the scenes, humans front-of-house. Balanced cost reduction, neutral brand impact.",
+        effect: { cash: -80 * M, opsPts: 15, brandPts: 5, loyaltyDelta: 2, setFlags: ["ai_hybrid"] },
+        effectTags: ["−$80M · ops +15"] },
+      { id: "C", label: "Human-first reskill",
+        description: "Reskill the workforce; AI only for back-office. Brand surge, ops gains modest, talent retained.",
+        effect: { cash: -100 * M, opsPts: 8, brandPts: 18, loyaltyDelta: 8, setFlags: ["ai_human_first"] },
+        effectTags: ["−$100M · brand +18 · loyalty +8"] },
+      { id: "D", label: "Stay course",
+        description: "Watch and wait. Rivals open a 22% ops-cost advantage. Brand neutral, but ops drift down.",
+        effect: { opsPts: -10, setFlags: ["ai_laggard"] },
+        effectTags: ["ops −10"] },
+    ],
+    autoSubmitOptionId: "B",
+  },
+  {
+    id: "S20", title: "The Green Bond", quarter: 57, severity: "MEDIUM", timeLimitMinutes: 30,
+    teaser: "Sustainability-linked bonds price ~150 bps under conventional debt — but the covenants come with teeth.",
+    context:
+      "ICAN Aviation Fund offers a $250M sustainability-linked bond at a 150 basis-point discount conditional on hitting fleet-emission targets by Q4 2029. Miss the targets and the rate steps up to a 200 bps premium. Alternative: conventional debt at standard market rate.",
+    options: [
+      { id: "A", label: "Take the green bond",
+        description: "150 bps below market. Locked-in emission targets. Brand boost on issuance.",
+        effect: { cash: 250 * M, brandPts: 15, setFlags: ["green_bond_active", "sustainability_signal"] },
+        effectTags: ["+$250M @ −150 bps · covenant risk"] },
+      { id: "B", label: "Conventional debt",
+        description: "Standard market rate. No emission covenant. Brand neutral.",
+        effect: { cash: 250 * M },
+        effectTags: ["+$250M @ market rate"] },
+      { id: "C", label: "Pass on financing",
+        description: "Stay debt-light. Preserve balance sheet flexibility. No cash, no covenant.",
+        effect: { brandPts: 3 },
+        effectTags: ["No financing"] },
+    ],
+    autoSubmitOptionId: "B",
+  },
+  {
+    id: "S21", title: "The Alliance Offer", quarter: 58, severity: "MEDIUM", timeLimitMinutes: 30,
+    teaser: "A rival proposes a code-share alliance with frequent-flyer reciprocity. Accept, negotiate, or compete?",
+    context:
+      "A peer airline proposes a code-share + loyalty alliance covering 14 of your routes and 11 of theirs. Estimated +18% load factor on overlap routes from the larger network. Estimated −5% on yields where you compete head-to-head with another alliance partner.",
+    options: [
+      { id: "A", label: "Accept the alliance",
+        description: "Sign at proposed terms. Network reach jumps; pricing power softens on overlap routes.",
+        effect: { brandPts: 8, loyaltyDelta: 5, setFlags: ["alliance_member"] },
+        effectTags: ["network reach +18% · yields −5%"] },
+      { id: "B", label: "Negotiate yield protection",
+        description: "Accept network but insist on yield-protection clauses. Slower agreement but better economics.",
+        effect: { cash: -10 * M, brandPts: 5, setFlags: ["alliance_member", "alliance_yield_protected"] },
+        effectTags: ["−$10M legal/structuring · yields preserved"] },
+      { id: "C", label: "Counter with full merger talks",
+        description: "Reframe the offer as M&A discussions. High-risk: rival may walk; if they bite, transformative.",
+        effect: { brandPts: -5,
+          deferred: { quarter: 60, probability: 0.35,
+            effect: { cash: 200 * M, brandPts: 25, setFlags: ["merger_completed"] } } },
+        effectTags: ["35% merger · 65% walk-away"] },
+      { id: "D", label: "Compete head-to-head",
+        description: "Reject the offer. Stay independent. Compete on every contested route.",
+        effect: { brandPts: -3, setFlags: ["independent"] },
+        effectTags: ["No partnership"] },
+    ],
+    autoSubmitOptionId: "D",
+  },
+  {
+    id: "S22", title: "The Exit", quarter: 60, severity: "HIGH", timeLimitMinutes: 30,
+    teaser: "Final round. A sovereign wealth fund tables an acquisition offer at 1.15× airline value. Sell, IPO, or stay private?",
+    context:
+      "The simulation closes this quarter. ICAN Sovereign Fund has approached the board with a take-private offer at 1.15× current airline value. Alternatively, your CFO has fully-priced IPO documents ready for next week. Or you hold and finish the campaign on your own terms.",
+    options: [
+      { id: "A", label: "Sell to the sovereign fund",
+        description: "Accept the 1.15× offer. Clean exit. Board legacy: realised value.",
+        effect: { brandPts: 0, setFlags: ["exited_to_sovereign"] },
+        effectTags: ["clean exit at 1.15×"] },
+      { id: "B", label: "Float on the exchange",
+        description: "IPO at next-week strike. Public-market valuation could come in 0.9–1.30× depending on conditions.",
+        effect: { brandPts: 10, setFlags: ["ipo_filed"] },
+        effectTags: ["IPO · valuation variable"] },
+      { id: "C", label: "Stay private",
+        description: "Hold and finish on your terms. No realised exit; full strategic control.",
+        effect: { brandPts: 5, setFlags: ["stayed_private"] },
+        effectTags: ["independent finish"] },
+    ],
+    autoSubmitOptionId: "C",
+  },
   {
     id: "S18", title: "The Cocoa Crisis", quarter: 17, severity: "LOW", timeLimitMinutes: 30,
     teaser: "West African cocoa supply has collapsed and prices have tripled.",
