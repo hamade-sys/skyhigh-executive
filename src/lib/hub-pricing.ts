@@ -32,7 +32,7 @@
  *   T4:           $330M starting cash · cheapest, smallest market
  */
 
-import type { City, CityTier } from "@/types/game";
+import type { City, CityTier, CampaignMode } from "@/types/game";
 
 /** Hardcoded premium-hub list. These five sit a tier above the
  *  general tier-1 pool because of their global gateway role
@@ -47,14 +47,74 @@ export const ONBOARDING_HUB_BUDGET_USD = 200_000_000;
 export const ONBOARDING_TOTAL_BUDGET_USD =
   ONBOARDING_BASE_CASH_USD + ONBOARDING_HUB_BUDGET_USD;
 
-export function hubPriceUsd(city: City): number {
-  if (PREMIUM_HUB_CODES.has(city.code)) return 100_000_000;
+/** Hub price for the legacy 40r compressed campaign. Kept identical
+ *  to the May-2026 workshop-feedback rebalance so live 40r games
+ *  experience zero economic shift. */
+const HUB_PRICE_LEGACY_40R: Record<"premium" | 1 | 2 | 3 | 4, number> = {
+  premium: 100_000_000,
+  1: 80_000_000,
+  2: 60_000_000,
+  3: 40_000_000,
+  4: 20_000_000,
+};
+
+/** Hub price for the 60r / 120r campaigns (Campaign Expansion brief
+ *  Section 2). Substantially lower — Premium $50M down from $100M.
+ *  The L0 cash bonus (see l0CashBonusUsd) partially backfills for
+ *  top-ranked players; the broader rationale is that 60-quarter
+ *  campaigns generate enough operating profit downstream that the
+ *  upfront cost no longer needs to throttle differentiation.
+ *
+ *  Tier 4 not in the brief — defaults to Tier 3's $5M so the
+ *  picker still has every city available without a $0 freebie. */
+const HUB_PRICE_CAMPAIGN: Record<"premium" | 1 | 2 | 3 | 4, number> = {
+  premium: 50_000_000,
+  1: 30_000_000,
+  2: 15_000_000,
+  3: 5_000_000,
+  4: 5_000_000,
+};
+
+/** Hub purchase price for the selected city. Pricing varies by
+ *  campaign mode: legacy 40r retains the existing ladder; 60r/120r
+ *  use the brief's substantially-lower ladder paired with the L0
+ *  cash bonus. Callers that don't yet thread `campaignMode` resolve
+ *  to "40r" (default) and keep the existing prices. */
+export function hubPriceUsd(city: City, campaignMode: CampaignMode = "40r"): number {
+  const table =
+    campaignMode === "60r" || campaignMode === "120r"
+      ? HUB_PRICE_CAMPAIGN
+      : HUB_PRICE_LEGACY_40R;
+  if (PREMIUM_HUB_CODES.has(city.code)) return table.premium;
   switch (city.tier as CityTier) {
-    case 1: return 80_000_000;
-    case 2: return 60_000_000;
-    case 3: return 40_000_000;
-    case 4: return 20_000_000;
-    default: return 20_000_000;
+    case 1: return table[1];
+    case 2: return table[2];
+    case 3: return table[3];
+    case 4: return table[4];
+    default: return table[4];
+  }
+}
+
+/** L0 cash bonus by rank. The Campaign Expansion brief grants the
+ *  top-ranked player +$50M of operating cash at game start, with a
+ *  $15M step down per rank to +$0M at 5th. Applied ONLY for 60r and
+ *  120r campaigns (legacy 40r unchanged).
+ *
+ *  Rank is 1-indexed. Out-of-range ranks (0, 6+) return 0.
+ *
+ *  L0 itself (the assessment that produces the rank) is not yet
+ *  implemented — the lobby currently assigns ranks by join order as
+ *  a placeholder. A future PR will wire up a real pre-game
+ *  ranking flow. */
+export function l0CashBonusUsd(rank: number, campaignMode: CampaignMode): number {
+  if (campaignMode === "40r") return 0;
+  switch (rank) {
+    case 1: return 50_000_000;
+    case 2: return 35_000_000;
+    case 3: return 20_000_000;
+    case 4: return 10_000_000;
+    case 5: return 0;
+    default: return 0;
   }
 }
 
