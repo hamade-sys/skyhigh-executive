@@ -58,24 +58,88 @@ export function fmtDelta(n: number, decimals = 1): string {
 export const TOTAL_GAME_ROUNDS = 40;
 const GAME_START_YEAR = 2015;
 
+/** Campaign-mode profile — round count, calendar start year, and the
+ *  maintenance-bracket size used when an aircraft type passes its
+ *  cutoff round. The brief's bracket rule is
+ *  `bracket_size = campaign_rounds / 10` (6 for 60r, 12 for 120r);
+ *  the 40r legacy mode keeps its 6-round bracket to match historical
+ *  saves. */
+type CampaignModeKey = "40r" | "60r" | "120r";
+const CAMPAIGN_PROFILES: Record<
+  CampaignModeKey,
+  { totalRounds: number; startYear: number; maintenanceBracketSize: number }
+> = {
+  "40r":  { totalRounds: 40,  startYear: 2015, maintenanceBracketSize: 6 },
+  "60r":  { totalRounds: 60,  startYear: 2015, maintenanceBracketSize: 6 },
+  "120r": { totalRounds: 120, startYear: 2000, maintenanceBracketSize: 12 },
+};
+
+type CampaignModeState = {
+  session?: { totalRounds?: number; campaignMode?: CampaignModeKey } | null;
+};
+
+/** Resolve the campaign mode from session state.
+ *  Falls back to "40r" when the session field is missing (legacy
+ *  saves) OR present but unrecognised. The fallback keeps the legacy
+ *  2:1-compressed 40-round behavior intact for any save that pre-dates
+ *  the campaign-mode rollout. */
+export function getCampaignMode(state: CampaignModeState): CampaignModeKey {
+  const m = state?.session?.campaignMode;
+  if (m === "40r" || m === "60r" || m === "120r") return m;
+  return "40r";
+}
+
+/** Calendar start year for the campaign. Half campaign (60r) starts
+ *  Q1 2015 to match the legacy 40r product line; Full campaign (120r)
+ *  starts Q1 2000 so the player lives through the 2000–2014 backstory
+ *  (dot-com bust, 9/11, SARS, Beijing Olympics, GFC, …) before reaching
+ *  the present day. */
+export function getCampaignStartYear(state: CampaignModeState): number {
+  return CAMPAIGN_PROFILES[getCampaignMode(state)].startYear;
+}
+
+/** Maintenance bracket width used by the cutoff-escalation curve.
+ *  Engine: rounds-since-cutoff ≤ 1× bracket → +5%, ≤ 2× → +7.5%,
+ *  ≤ 3× → +10%, beyond → +15% permanent flatline (eco upgrade halves
+ *  every rate). The product spec scales the bracket so escalation
+ *  feels equivalent regardless of campaign length. */
+export function getMaintenanceBracketSize(state: CampaignModeState): number {
+  return CAMPAIGN_PROFILES[getCampaignMode(state)].maintenanceBracketSize;
+}
+
 /**
  * Read the configured total round count from the game's session.
- * Falls back to the hardcoded 40 default for legacy single-player
- * saves that pre-date the configurable session field.
+ *
+ * Resolution order:
+ *   1. Explicit `session.totalRounds` value (legacy presets 8/16/24/40
+ *      still honoured for old saves).
+ *   2. Campaign-mode default (60r → 60, 120r → 120, 40r → 40).
+ *   3. The legacy 40 constant.
  *
  * Phase 3 of the enterprise-readiness plan: every UI surface that
  * displays "Round X of Y" or gates on "have we reached the last
  * round?" must use this helper rather than the constant. Otherwise
  * 8/16/24-round games never end and show wrong progress copy.
  */
-export function getTotalRounds(state: { session?: { totalRounds?: number } | null }): number {
+export function getTotalRounds(state: CampaignModeState): number {
   const t = state?.session?.totalRounds;
-  return typeof t === "number" && t > 0 ? t : TOTAL_GAME_ROUNDS;
+  if (typeof t === "number" && t > 0) return t;
+  return CAMPAIGN_PROFILES[getCampaignMode(state)].totalRounds;
 }
 
-export function fmtQuarter(q: number): string {
+/** Format a game round number as a calendar quarter.
+ *
+ *  Pass `state` (the whole game store, or any object with
+ *  `session.campaignMode`) to honour the campaign's start year.
+ *  Without state, defaults to the legacy 2015 anchor — matches
+ *  every legacy callsite that didn't know about start-year shift.
+ *  Once the 120r full-campaign UI lands, panels rendering historical
+ *  quarters should pass state so 2000-era dates render correctly.
+ */
+export function fmtQuarter(q: number, state?: CampaignModeState): string {
   const idx = Math.max(0, q - 1);
-  const year = GAME_START_YEAR + Math.floor(idx / 4);
+  const startYear = state ? getCampaignStartYear(state) : GAME_START_YEAR;
+  const year = startYear + Math.floor(idx / 4);
   const quarterOfYear = (idx % 4) + 1;
   return `Q${quarterOfYear} ${year}`;
 }

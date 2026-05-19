@@ -1793,6 +1793,221 @@ export const WORLD_NEWS: NewsItem[] = [
     headline: "Airbus to end original A320 family production — A319, A320, A321 exit after 35 years",
     detail: "Airbus has announced the end of production for the original A320 family, the backbone of short and medium-haul aviation for 35 years and over 8,000 deliveries. The A319neo, A320neo and A321neo become the sole Airbus narrowbody options from next quarter. Last quarter to place new orders: A319, A320, A321.",
   }),
+
+  // ═══════════════════════════════════════════════════════════════════
+  // R41 – R60 · Q1 2025 → Q4 2029 · Half-campaign extension
+  // ═══════════════════════════════════════════════════════════════════
+  // Campaign Expansion brief Section 9. One anchor entry per round
+  // carrying the round's Travel Index — content for the remaining 2
+  // headlines per round will land in a follow-up content PR. The
+  // anchor here is enough for the engine to drive demand correctly
+  // when a 60r game crosses R41.
+
+  n({
+    quarter: 41, id: "EXPO-OSAKA", icon: "🏛", impact: "tourism",
+    headline: "Expo 2025 Osaka opens — 161 nations, 28M visitors expected across 184 days",
+    detail: "Japan tourism at all-time peak. KIX and NRT at absolute simulation high. All Japan routes at 98%+ occupancy.",
+    modifiers: [
+      { city: "KIX", category: "tourism", pct: 80, rounds: 3 },
+      { city: "NRT", category: "tourism", pct: 50, rounds: 3 },
+      { city: "NGO", category: "tourism", pct: 40, rounds: 3 },
+    ],
+    travelIndex: 128,
+  }),
+  n({
+    quarter: 42, id: "DXB-MOST-VISITED", icon: "🌆", impact: "tourism",
+    headline: "Dubai named world's most visited city for third consecutive year — 24M visitors in 2025",
+    detail: "DXB demand permanently elevated again. Tourism infrastructure maxed.",
+    modifiers: [
+      { city: "DXB", category: "tourism", pct: 15, rounds: 99 },
+    ],
+    travelIndex: 125,
+  }),
+  n({
+    quarter: 43, id: "PEAK-2025", icon: "✈", impact: "tourism",
+    headline: "Peak summer 2025 breaks all records — global aviation at 5.5B annual passenger pace",
+    detail: "All Tier 1-2 hub tourism at simulation peak. Premium cabin yields at 5-year high.",
+    travelIndex: 130,
+  }),
+  n({
+    quarter: 44, id: "CARBON-ETS", icon: "🌱", impact: "fuel",
+    headline: "Carbon pricing escalates — EU ETS aviation full rate now $65/tonne CO2",
+    detail: "Non-SAF effective fuel cost rising. Carbon levy increases to $65/tonne CO2 from this round; non-SAF index effectively +8% additional.",
+    travelIndex: 122,
+  }),
+  n({
+    quarter: 45, id: "UAE-ASIA", icon: "💼", impact: "business",
+    headline: "New UAE–Asia bilateral agreements open 14 new city-pair routes",
+    detail: "First-mover teams claim permanent slot advantage. Boeing 797 NMA and Airbus A220-500 enter the commercial market this quarter.",
+    travelIndex: 120,
+  }),
+  n({
+    quarter: 46, id: "FIFA-WC-2026", icon: "⚽", impact: "tourism",
+    headline: "FIFA World Cup 2026 opens — USA, Canada, Mexico host the largest World Cup ever",
+    detail: "48 teams, 104 matches, 16 host cities. North American routes at absolute peak.",
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 120, rounds: 2 },
+      { city: "JFK", category: "tourism", pct: 100, rounds: 2 },
+      { city: "MIA", category: "tourism", pct: 110, rounds: 2 },
+      { city: "ORD", category: "tourism", pct: 90, rounds: 2 },
+      { city: "DFW", category: "tourism", pct: 85, rounds: 2 },
+      { city: "YYZ", category: "tourism", pct: 80, rounds: 2 },
+    ],
+    travelIndex: 135,
+  }),
+  n({
+    quarter: 47, id: "WC-FINAL-LA", icon: "🏆", impact: "tourism",
+    headline: "World Cup Final in Los Angeles — USA wins in extra time",
+    detail: "4.8M total attendance. Record TV audience 2.1B. Highest Travel Index in the entire simulation.",
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 140, rounds: 1 },
+      { city: "JFK", category: "tourism", pct: 80, rounds: 1 },
+    ],
+    travelIndex: 140,
+  }),
+  n({
+    quarter: 48, id: "POST-WC", icon: "✈", impact: "tourism",
+    headline: "Post-World Cup North America tourism surge — record visitor retention",
+    detail: "'We had no idea how big this country was.' Permanent uplift for major US gateways.",
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 30, rounds: 99 },
+      { city: "JFK", category: "tourism", pct: 20, rounds: 99 },
+    ],
+    travelIndex: 125,
+  }),
+  n({
+    quarter: 49, id: "GLOBAL-SLOWDOWN", icon: "📉", impact: "business",
+    headline: "Global economic slowdown signals — IMF warns of rate-cycle hangover",
+    detail: "Corporate travel caution spreading. Business travel softening across major financial hubs.",
+    modifiers: [
+      { city: "JFK", category: "business", pct: -12, rounds: 2 },
+      { city: "LHR", category: "business", pct: -10, rounds: 2 },
+      { city: "HKG", category: "business", pct: -10, rounds: 2 },
+    ],
+    travelIndex: 115,
+  }),
+  n({
+    quarter: 50, id: "RUGBY-WC-AUS", icon: "🏉", impact: "tourism",
+    headline: "Rugby World Cup 2027 Australia — 20 nations, largest sporting event in Southern Hemisphere",
+    detail: "Australian cities at record demand. Pre-event surge building.",
+    modifiers: [
+      { city: "SYD", category: "tourism", pct: 60, rounds: 2 },
+      { city: "MEL", category: "tourism", pct: 55, rounds: 2 },
+      { city: "BNE", category: "tourism", pct: 65, rounds: 2 },
+    ],
+    travelIndex: 118,
+  }),
+  n({
+    quarter: 51, id: "RUGBY-WC-FINAL", icon: "🏆", impact: "tourism",
+    headline: "Rugby World Cup 2027 Australia peak — South Africa wins fourth title",
+    detail: "2.1M attendance across 8 cities. Australian cities at absolute demand peak. Boeing 797F cargo variant available for order.",
+    modifiers: [
+      { city: "SYD", category: "tourism", pct: 90, rounds: 2 },
+      { city: "MEL", category: "tourism", pct: 85, rounds: 2 },
+      { city: "BNE", category: "tourism", pct: 95, rounds: 2 },
+    ],
+    travelIndex: 122,
+  }),
+  n({
+    quarter: 52, id: "AFL-RUH", icon: "🏟", impact: "business",
+    headline: "Middle East Vision programmes delivering — RUH surpasses CDG in annual passenger volume",
+    detail: "AFL Grand Final + Rugby WC tail combine — Melbourne at all-time demand high. Permanent business uplift at Riyadh.",
+    modifiers: [
+      { city: "MEL", category: "tourism", pct: 40, rounds: 1 },
+      { city: "RUH", category: "business", pct: 30, rounds: 99 },
+    ],
+    travelIndex: 120,
+  }),
+  n({
+    quarter: 53, id: "LA-2028-BUILD", icon: "🏛", impact: "tourism",
+    headline: "Los Angeles 2028 Olympics — 2.5 years out, advance bookings breaking all Olympic records",
+    detail: "Trans-Pacific routes filling. Global aviation at 6B annual passengers — industry has grown 30% since 2020 COVID trough.",
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 35, rounds: 6 },
+      { city: "SFO", category: "tourism", pct: 20, rounds: 4 },
+      { city: "SAN", category: "tourism", pct: 25, rounds: 4 },
+    ],
+    travelIndex: 118,
+  }),
+  n({
+    quarter: 54, id: "EURO-2028-BUILD", icon: "⚽", impact: "tourism",
+    headline: "UEFA Euro 2028 UK & Ireland — 6 months out, hotels sold through August 2028",
+    detail: "England, Wales, Scotland, Republic of Ireland co-host. Biggest event in UK/Ireland history.",
+    modifiers: [
+      { city: "LHR", category: "tourism", pct: 50, rounds: 2 },
+      { city: "MAN", category: "tourism", pct: 45, rounds: 2 },
+      { city: "DUB", category: "tourism", pct: 55, rounds: 2 },
+      { city: "EDI", category: "tourism", pct: 40, rounds: 2 },
+    ],
+    travelIndex: 125,
+  }),
+  n({
+    quarter: 55, id: "EURO-2028", icon: "🏆", impact: "tourism",
+    headline: "UEFA Euro 2028 opens — England wins first ever Euros, highest-scoring tournament in history",
+    detail: "2.8M attendance. LA 2028 Olympics 18 months out — trans-Pacific routes at 97%+ occupancy.",
+    modifiers: [
+      { city: "LHR", category: "tourism", pct: 100, rounds: 2 },
+      { city: "MAN", category: "tourism", pct: 95, rounds: 2 },
+      { city: "DUB", category: "tourism", pct: 90, rounds: 2 },
+      { city: "GLA", category: "tourism", pct: 85, rounds: 2 },
+      { city: "LAX", category: "tourism", pct: 60, rounds: 2 },
+    ],
+    travelIndex: 135,
+  }),
+  n({
+    quarter: 56, id: "LA-2028-12MO", icon: "🌴", impact: "tourism",
+    headline: "LA 2028 Olympics — 12 months out, emergency slot releases at LAX",
+    detail: "US West Coast infrastructure at limit. Boom Overture supersonic jet enters commercial availability — Tier 1 hubs only, routes >5,000km only.",
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 50, rounds: 2 },
+      { city: "LAS", category: "tourism", pct: 30, rounds: 2 },
+    ],
+    travelIndex: 128,
+  }),
+  n({
+    quarter: 57, id: "LA-2028-6MO", icon: "🌴", impact: "tourism",
+    headline: "LA 2028 Olympics — 6 months out, all LAX-adjacent routes booked",
+    detail: "Trans-Pacific at simulation peak. Global aviation at 6.5B annual passengers — all markets above 2019 pre-COVID peak by 35%.",
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 70, rounds: 2 },
+      { city: "SFO", category: "tourism", pct: 50, rounds: 2 },
+      { city: "SAN", category: "tourism", pct: 60, rounds: 2 },
+      { city: "NRT", category: "tourism", pct: 30, rounds: 2 },
+      { city: "ICN", category: "tourism", pct: 25, rounds: 2 },
+    ],
+    travelIndex: 120,
+  }),
+  n({
+    quarter: 58, id: "LA-2028-OPEN", icon: "🏆", impact: "tourism",
+    headline: "Los Angeles 2028 Olympics opens — 10,800 athletes, 209 nations",
+    detail: "Opening ceremony on Pacific coast breaks streaming records. LAX at absolute simulation peak.",
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 150, rounds: 2 },
+      { city: "SFO", category: "tourism", pct: 80, rounds: 2 },
+      { city: "SAN", category: "tourism", pct: 90, rounds: 2 },
+      { city: "LAS", category: "tourism", pct: 60, rounds: 2 },
+      { city: "SEA", category: "tourism", pct: 40, rounds: 2 },
+      { city: "LAX", category: "business", pct: 60, rounds: 2 },
+    ],
+    travelIndex: 138,
+  }),
+  n({
+    quarter: 59, id: "FIFA-CWC-2029", icon: "⚽", impact: "tourism",
+    headline: "FIFA Club World Cup 2029 — 32 clubs, multi-continent host cities",
+    detail: "Additional demand layer on top of post-Olympics surge. Post-Olympics US investment cycle at decade high.",
+    modifiers: [
+      { city: "JFK", category: "business", pct: 20, rounds: 2 },
+      { city: "LAX", category: "business", pct: 18, rounds: 2 },
+      { city: "SFO", category: "business", pct: 15, rounds: 2 },
+    ],
+    travelIndex: 132,
+  }),
+  n({
+    quarter: 60, id: "FINAL-2029", icon: "✓", impact: "none",
+    headline: "2029 closes — aviation sector unrecognisable from 2015",
+    detail: "Final round of the half-campaign. All decisions permanent. Investor pitch begins.",
+    travelIndex: 128,
+  }),
 ];
 
 export const NEWS_BY_QUARTER: Record<number, NewsItem[]> = WORLD_NEWS.reduce(

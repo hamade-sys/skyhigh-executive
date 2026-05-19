@@ -737,6 +737,12 @@ export type GameStatus = "lobby" | "playing" | "ended";
  *      "stale state" error so simultaneous teams can't clobber each
  *      other.
  */
+/** Campaign mode — see GameSession.campaignMode for the full doc.
+ *  Kept as a tagged union of three string literals so a future
+ *  "240r" or other variant can land additively without changing
+ *  callers that exhaustively check (TS narrows the switch). */
+export type CampaignMode = "40r" | "60r" | "120r";
+
 export interface GameSession {
   gameId: string;
   name: string;
@@ -766,6 +772,23 @@ export interface GameSession {
    *  Engine reads this in place of the legacy TOTAL_GAME_ROUNDS
    *  constant once the create-game form lands. */
   totalRounds: number;
+  /** Campaign mode — controls round count, calendar start year, and
+   *  the maintenance-bracket scale. Three modes today:
+   *    - "40r"  : legacy compressed campaign (Q1 2015 + 2:1 real-world
+   *               compression so the 2000–2026 EIS catalogue fits in 40
+   *               rounds). Default for new games until the 60r/120r
+   *               content waves land.
+   *    - "60r"  : Half campaign — 60 rounds, Q1 2015 → Q4 2029. 1:1
+   *               mapping (each round = 1 calendar quarter, no
+   *               compression). New content for R41–R60 ships in a
+   *               follow-up PR.
+   *    - "120r" : Full campaign — 120 rounds, Q1 2000 → Q4 2029. 1:1
+   *               mapping. R1–R60 covers 2000–2014 with new content;
+   *               R61–R120 reuses the half-campaign content unchanged.
+   *
+   *  Optional so legacy saves that don't carry the field continue to
+   *  resolve as "40r" via getCampaignMode(). */
+  campaignMode?: CampaignMode;
   /** Per-quarter timer in seconds. Drives auto-advance in self-
    *  guided games — when the local tick reaches 0, the engine
    *  auto-closes the quarter. Set to 0 (or undefined for legacy

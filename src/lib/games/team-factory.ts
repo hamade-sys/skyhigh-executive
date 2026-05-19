@@ -28,6 +28,7 @@ import { mkId } from "@/lib/id";
 import { CITIES_BY_CODE } from "@/data/cities";
 import {
   hubPriceUsd,
+  l0CashBonusUsd,
   ONBOARDING_TOTAL_BUDGET_USD,
 } from "@/lib/hub-pricing";
 import type {
@@ -85,6 +86,17 @@ export interface CreateInitializedTeamArgs {
    *  When null, the team renders with `airlineColorFor({ fallbackKey })`
    *  derived from the team id — kept for legacy saves. */
   airlineColorId?: AirlineColorId | null;
+
+  /** Campaign mode this game is running. Drives hub pricing (legacy
+   *  vs new ladder) and the L0 cash bonus. Defaults to "40r" so
+   *  every caller that doesn't yet thread the value resolves to the
+   *  legacy economic profile (zero behavior change for in-flight
+   *  workshops). */
+  campaignMode?: import("@/types/game").CampaignMode;
+  /** L0 ranking 1-5 (1 = highest, picks hub first + biggest cash
+   *  bonus). Optional; ignored in 40r legacy mode. Bots default to
+   *  rank 5 (no bonus) so the L0 perk stays on the human side. */
+  l0Rank?: number;
 }
 
 /**
@@ -117,9 +129,23 @@ export function createInitializedTeamFromOnboarding(
   // Hub-cost deduction. The same $350M onboarding budget the solo
   // flow uses; multiplayer claimers get the same starting position
   // so the leaderboard is fair.
+  //
+  // Campaign-mode awareness (Campaign Expansion brief):
+  //   - 40r legacy uses the existing $100/$80/$60/$40/$20M ladder.
+  //   - 60r/120r use the lower $50/$30/$15/$5M ladder + an L0 cash
+  //     bonus for the top-ranked players (+$50/$35/$20/$10/$0M).
+  //   - Both modes keep the same $350M base budget pool, so the
+  //     effective starting cash shifts upward for new campaigns.
+  const campaignMode = args.campaignMode ?? "40r";
   const hubCity = CITIES_BY_CODE[args.hubCode];
-  const hubCost = hubCity ? hubPriceUsd(hubCity) : 0;
-  const startingCash = ONBOARDING_TOTAL_BUDGET_USD - hubCost;
+  const hubCost = hubCity ? hubPriceUsd(hubCity, campaignMode) : 0;
+  // L0 cash bonus only applies when a rank was assigned AND the
+  // game is on a long campaign. Bots default to no bonus (rank 5
+  // returns 0 anyway). See l0CashBonusUsd in hub-pricing.ts.
+  const l0Bonus = isPlayer && typeof args.l0Rank === "number"
+    ? l0CashBonusUsd(args.l0Rank, campaignMode)
+    : 0;
+  const startingCash = ONBOARDING_TOTAL_BUDGET_USD - hubCost + l0Bonus;
 
   // Slider nudges from the brand profile. These match what
   // startNewGame did inline before the extraction.

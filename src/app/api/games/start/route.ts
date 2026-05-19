@@ -123,6 +123,14 @@ export async function POST(req: NextRequest) {
         airlineColorId?: string | null;
       }> | undefined) ?? {};
 
+      // Campaign mode resolved from the session block — drives hub
+      // pricing + L0 cash bonus at team seed. Defaults to "40r" for
+      // legacy games whose session predates the campaignMode field.
+      const sessionBlock = stateJson.session as
+        | { campaignMode?: "40r" | "60r" | "120r" }
+        | undefined;
+      const campaignMode = sessionBlock?.campaignMode ?? "40r";
+
       const plannedSeats = (
         ((stateJson.session as Record<string, unknown> | undefined)?.plannedSeats as Array<{ type: string; botDifficulty?: string; botName?: string; botCode?: string }>) ?? []
       );
@@ -230,6 +238,11 @@ export async function POST(req: NextRequest) {
           claimedBySessionId: member.session_id,
           playerDisplayName: member.display_name ?? null,
           airlineColorId: memberColorId,
+          campaignMode,
+          // L0 placeholder: rank by humanMembers index (1-based).
+          // First-to-claim = rank 1 = biggest cash bonus. Real L0
+          // assessment will replace this in a follow-up PR.
+          l0Rank: i + 1,
         });
         seededTeams.push({
           ...team,
@@ -287,6 +300,9 @@ export async function POST(req: NextRequest) {
           claimedBySessionId: null,
           playerDisplayName: null,
           airlineColorId: botColorId,
+          campaignMode,
+          // Bots don't claim L0 perks — leave rank undefined so
+          // l0CashBonusUsd returns 0 even if mode is 60r/120r.
         });
         const botTeam = {
           ...team,
@@ -321,6 +337,7 @@ export async function POST(req: NextRequest) {
             claimedBySessionId: null,
             playerDisplayName: null,
             airlineColorId: fallbackBotColorId,
+            campaignMode,
           });
           seededTeams.push({
             ...team,
