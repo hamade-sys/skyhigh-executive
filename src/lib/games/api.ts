@@ -157,8 +157,14 @@ export interface CreateGameArgs {
    *  hand-off scenarios where the creator preassigns the role. */
   gameMasterSessionId?: string;
   /** Total rounds the game runs for. Default 40. The create-game
-   *  form offers 8/16/24/40 presets. */
+   *  form offers 8/16/24/40 presets (legacy), and 60/120 once the
+   *  campaign-mode UI lands. */
   totalRounds?: number;
+  /** Campaign mode — selects the round count, calendar start year,
+   *  and maintenance-bracket scale. Optional; falls back to "40r"
+   *  for legacy callers that pre-date the campaign-mode rollout.
+   *  See GameSession.campaignMode for the full reference. */
+  campaignMode?: "40r" | "60r" | "120r";
   /** Per-quarter timer in seconds. 0 = no timer (Game Master closes
    *  manually). Self-guided games auto-advance when this hits 0;
    *  the timer's max product (timerSec * totalRounds) bounds the
@@ -265,7 +271,17 @@ export async function createGame(args: CreateGameArgs): Promise<
   const boardDecisions =
     args.boardDecisionsEnabled ?? (gmSessionId !== null);
 
-  const totalRounds = args.totalRounds ?? 40;
+  // Default to the legacy "40r" mode when the caller doesn't pass a
+  // campaign mode. The create-game UI will start exposing 60r/120r in
+  // a follow-up PR; until then existing flows continue to produce
+  // 40-round games and the persisted session carries an explicit
+  // `campaignMode: "40r"` for forward compatibility.
+  const campaignMode = args.campaignMode ?? "40r";
+  // totalRounds priority: explicit arg > campaign-mode default > 40.
+  // Keeps the 8/16/24-round preset path working until the UI swap.
+  const campaignDefaultRounds =
+    campaignMode === "60r" ? 60 : campaignMode === "120r" ? 120 : 40;
+  const totalRounds = args.totalRounds ?? campaignDefaultRounds;
 
   const { data: game, error: gameErr } = await supa
     .from("games")
@@ -313,6 +329,12 @@ export async function createGame(args: CreateGameArgs): Promise<
       gameMasterSessionId: gmSessionId,
       facilitatorSessionId: gmSessionId,  // legacy alias
       totalRounds,
+      // Campaign mode tags the game with its round-count + start-year
+      // profile. Persisted on the session block so the engine can
+      // resolve start year, bracket size, etc. from one place. See
+      // getCampaignMode / getCampaignStartYear / getMaintenanceBracketSize
+      // in src/lib/format.ts.
+      campaignMode,
       // Per-quarter timer chosen at create time. 0 = no timer (Game
       // Master closes manually). When set, self-guided games auto-
       // advance when the local tick reaches 0 — that's how a non-
@@ -369,6 +391,7 @@ export async function createGame(args: CreateGameArgs): Promise<
       visibility: args.visibility,
       maxTeams: args.maxTeams,
       totalRounds,
+      campaignMode,
       boardDecisionsEnabled: boardDecisions,
       gameMasterSessionId: gmSessionId,
     },
