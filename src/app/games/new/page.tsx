@@ -21,11 +21,36 @@ import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 
 type Visibility = "public" | "private";
 
-const ROUND_PRESETS = [
-  { value: 8,  label: "8 rounds",  sub: "2 years · quick session" },
-  { value: 16, label: "16 rounds", sub: "4 years · half campaign" },
-  { value: 24, label: "24 rounds", sub: "6 years · medium" },
-  { value: 40, label: "40 rounds", sub: "10 years · full decade" },
+/**
+ * Round-count presets shown in the new-game form.
+ *
+ * Each preset maps to a campaign mode:
+ *   - 8/16/24/40 rounds → "40r" legacy compressed campaign (Q1 2015
+ *     + 2:1 real-world EIS compression). Use for quick sessions.
+ *   - 60 rounds → "60r" Half Campaign (Q1 2015 → Q4 2029, 1:1 mapping).
+ *     This is the brief's default once R41–R60 content lands.
+ *   - 120 rounds → "120r" Full Campaign (Q1 2000 → Q4 2029, 1:1
+ *     mapping). 30-year storyline through dot-com, 9/11, SARS, GFC.
+ *
+ * Until 60r/120r content ships in follow-up PRs, the longer modes
+ * run on the same content the 40r mode uses today; selecting them
+ * simply extends the round count. We surface them anyway so the
+ * campaign-mode plumbing gets used in real games before the content
+ * waves land.
+ */
+type CampaignMode = "40r" | "60r" | "120r";
+const ROUND_PRESETS: ReadonlyArray<{
+  value: number;
+  campaignMode: CampaignMode;
+  label: string;
+  sub: string;
+}> = [
+  { value: 8,   campaignMode: "40r",  label: "8 rounds",   sub: "2 years · quick session" },
+  { value: 16,  campaignMode: "40r",  label: "16 rounds",  sub: "4 years · half session" },
+  { value: 24,  campaignMode: "40r",  label: "24 rounds",  sub: "6 years · medium" },
+  { value: 40,  campaignMode: "40r",  label: "40 rounds",  sub: "10 years · legacy decade" },
+  { value: 60,  campaignMode: "60r",  label: "60 rounds",  sub: "15 years · Half campaign" },
+  { value: 120, campaignMode: "120r", label: "120 rounds", sub: "30 years · Full campaign" },
 ] as const;
 
 /** Per-quarter timer presets (seconds). 0 = no timer. */
@@ -68,6 +93,10 @@ function CreateGameForm() {
   const [beGameMaster, setBeGameMaster] = useState(false);
   const [boardDecisionsEnabled, setBoardDecisionsEnabled] = useState(false);
   const [totalRounds, setTotalRounds] = useState(40);
+  // Campaign mode follows the picked preset — 8/16/24/40 → "40r" legacy
+  // (compressed timeline), 60 → "60r" Half, 120 → "120r" Full. Derived
+  // when the user clicks a preset; defaults match the initial 40r pick.
+  const [campaignMode, setCampaignMode] = useState<CampaignMode>("40r");
   // Just a seat count — human/bot config is done in the pre-game lobby
   const [seatCount, setSeatCount] = useState(2);
   // Per-quarter timer in SECONDS. 0 = no timer (game master closes
@@ -111,6 +140,7 @@ function CreateGameForm() {
           visibility,
           maxTeams: seatCount,
           totalRounds,
+          campaignMode,
           quarterTimerSeconds,
           boardDecisionsEnabled,
           beGameMaster,
@@ -250,14 +280,26 @@ function CreateGameForm() {
           {/* 5. Number of rounds */}
           <Field
             label="Number of rounds"
-            hint={`${totalRounds} rounds · ${(totalRounds / 4).toFixed(0)} years`}
+            hint={(() => {
+              const years = (totalRounds / 4).toFixed(0);
+              const modeLabel =
+                campaignMode === "120r"
+                  ? "Full campaign (Q1 2000 → Q4 2029)"
+                  : campaignMode === "60r"
+                    ? "Half campaign (Q1 2015 → Q4 2029)"
+                    : "Legacy compressed timeline";
+              return `${totalRounds} rounds · ${years} years · ${modeLabel}`;
+            })()}
           >
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
               {ROUND_PRESETS.map((p) => (
                 <button
                   key={p.value}
                   type="button"
-                  onClick={() => setTotalRounds(p.value)}
+                  onClick={() => {
+                    setTotalRounds(p.value);
+                    setCampaignMode(p.campaignMode);
+                  }}
                   className={
                     "rounded-xl border p-3 text-left transition-all " +
                     (totalRounds === p.value
