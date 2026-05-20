@@ -241,6 +241,61 @@ export function QuarterCloseModal() {
               />
             </div>
 
+            {/* Reconciliation line — shows the non-operating cash
+                flows that sit BETWEEN net profit and the headline
+                Cash-position delta. Without this, players see
+                "Net profit +$2.5M" but the cash bar jumped +$20M
+                and the variance is unexplained. Now the math tallies
+                visibly: net profit + scrap/insurance + RCF auto-draw
+                = cash delta. */}
+            {(() => {
+              const insurance = result.insuranceProceeds ?? 0;
+              // Cash delta that isn't accounted for by net profit
+              // and the surfaced non-operating items. Anything left
+              // over is shown as a "Financing / other" catch-all so
+              // the tally still adds up. Will be 0 in steady-state;
+              // non-zero indicates an RCF draw or a future post-
+              // engine cash flow that hasn't been broken out yet.
+              const explainedDelta = result.netProfit + insurance;
+              const residual = cashDelta - explainedDelta;
+              const hasResidual = Math.abs(residual) > 0.5;
+              if (insurance === 0 && !hasResidual) return null;
+              return (
+                <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-1.5 text-[0.75rem]">
+                  <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                    How cash changed
+                  </div>
+                  <ReconRow
+                    label="Net profit"
+                    amount={result.netProfit}
+                    fmt={fmtMoney}
+                  />
+                  {insurance !== 0 && (
+                    <ReconRow
+                      label="Scrap &amp; hull-insurance payouts"
+                      amount={insurance}
+                      fmt={fmtMoney}
+                      hint="One-time inflow from retired airframes or insured losses."
+                    />
+                  )}
+                  {hasResidual && (
+                    <ReconRow
+                      label="Financing / other"
+                      amount={residual}
+                      fmt={fmtMoney}
+                      hint="RCF auto-draw, refunds, or other non-operating cash flows."
+                    />
+                  )}
+                  <div className="flex items-baseline justify-between border-t border-line pt-1.5 mt-1.5 font-semibold">
+                    <span className="text-ink-2">Total cash change</span>
+                    <span className={`tabular font-mono ${cashDelta >= 0 ? "text-positive" : "text-negative"}`}>
+                      {cashDelta >= 0 ? "+" : ""}{fmtMoney(cashDelta)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-2 gap-3">
               <Mini
                 label="Brand pts"
@@ -752,6 +807,38 @@ function DeltaRow({
       <div className="text-[0.625rem] tabular text-ink-muted mt-1">
         from {fmt(from)}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Single line in the "How cash changed" reconciliation block. Used
+ * to surface non-operating cash flows (scrap proceeds, RCF
+ * residuals, etc.) so the player can see exactly which line items
+ * add up to the headline cash delta.
+ */
+function ReconRow({
+  label, amount, fmt, hint,
+}: {
+  label: string;
+  amount: number;
+  fmt: (n: number) => string;
+  hint?: string;
+}) {
+  const positive = amount >= 0;
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-ink-2">{label}</span>
+        <span className={cn("tabular font-mono", positive ? "text-positive" : "text-negative")}>
+          {positive ? "+" : ""}{fmt(amount)}
+        </span>
+      </div>
+      {hint && (
+        <div className="text-[0.6875rem] text-ink-muted leading-snug">
+          {hint}
+        </div>
+      )}
     </div>
   );
 }
