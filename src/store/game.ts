@@ -3967,15 +3967,42 @@ export const useGame = create<GameStore>()(
             : cc)
           .filter((cc) => cc.quartersRemaining > 0);
 
-        // Commit result back to team + add any insurance proceeds on top.
-        // CRITICAL: persist the post-close fleet + routes so future quarter
-        // closes see depreciated bookValues, accumulated maintenance deficit,
-        // and the newly-realised revenue/cost/occupancy numbers per route.
+        // ── Cash invariant — single source of truth ─────────────────
+        //
+        // Rule (per workshop feedback May 2026):
+        //   Cash beginning + every reported line item = Cash ending.
+        //   There MUST NOT be a variance between what the Quarter
+        //   Close modal displays and what the player's TopBar shows
+        //   one click later.
+        //
+        // Mechanism:
+        //   1. Engine returns `result.newCashUsd` based on operating
+        //      P&L + deferred events + tax + financing.
+        //   2. We then layer non-operating cash effects that flow
+        //      AROUND the netProfit line — currently just scrap +
+        //      hull-insurance payouts in `insuranceProceeds`.
+        //   3. We OVERWRITE `result.newCashUsd` to equal the team's
+        //      final cash position AND publish the layered amount
+        //      via `result.insuranceProceeds` so the modal can show
+        //      it as its own row. The modal's headline cash number
+        //      and the live TopBar cash now reconcile by construction.
+        //
+        // If future PRs add another post-engine cash flow, route it
+        // through this block (or fold it into the engine itself)
+        // rather than bypassing — the dev-only assertion below will
+        // shout if the invariant gets broken.
+        const finalCashUsd = result.newCashUsd + insuranceProceeds;
+        result.newCashUsd = finalCashUsd;
+        result.insuranceProceeds = insuranceProceeds;
+        // Commit result back to team. Persist the post-close fleet +
+        // routes so future quarter closes see depreciated bookValues,
+        // accumulated maintenance deficit, and the newly-realised
+        // revenue/cost/occupancy numbers per route.
         const closed: Team = {
           ...teamReady,
           fleet: result.newFleet,
           routes: result.newRoutes,
-          cashUsd: result.newCashUsd + insuranceProceeds,
+          cashUsd: finalCashUsd,
           rcfBalanceUsd: result.newRcfBalance,
           brandPts: result.newBrandPts,
           opsPts: result.newOpsPts,
@@ -5003,6 +5030,28 @@ export const useGame = create<GameStore>()(
             ],
           };
         });
+
+        // Cash invariant guard — fires (in dev/console only) if
+        // anything between the engine output and the team store
+        // managed to drift `team.cashUsd` away from
+        // `result.newCashUsd`. The two MUST match so the Quarter
+        // Close modal's headline cash and the TopBar cash one click
+        // later are the same number. If this fires in production
+        // logs, a new post-engine cash flow has been introduced
+        // without being folded into `result.newCashUsd` — fix it at
+        // the source (around the `finalCashUsd` block above)
+        // rather than papering over here.
+        if (process.env.NODE_ENV !== "production") {
+          const playerInRank = teamsWithRank.find((t) => t.id === player.id);
+          if (playerInRank && Math.abs(playerInRank.cashUsd - result.newCashUsd) > 0.5) {
+            console.error(
+              `[closeQuarter] CASH INVARIANT BROKEN: team.cashUsd=${playerInRank.cashUsd} ≠ result.newCashUsd=${result.newCashUsd}. ` +
+                `Modal will mismatch the TopBar. ` +
+                `Likely cause: a post-engine cash effect was added without folding into result.newCashUsd. ` +
+                `See the cash-invariant block in closeQuarter.`,
+            );
+          }
+        }
 
         _closeCompleted = true; // mark before the set so finally sees it
         set({

@@ -2312,6 +2312,17 @@ export interface QuarterCloseResult {
   rcfInterest: number;
   netProfit: number;
   newCashUsd: number;
+  /** Non-operating cash inflow that lands during the quarter close
+   *  but flows around the netProfit accounting line — scrap value
+   *  from retired airframes, hull-insurance payouts on losses, etc.
+   *
+   *  Surfaced as its own field so the Quarter Close modal can show
+   *  it transparently ("Scrap & insurance: +$17.5M") and so the
+   *  invariant `prevCashUsd + netProfit + insuranceProceeds ===
+   *  newCashUsd` holds visibly. The store sets this from its own
+   *  insurance accumulator (engine doesn't compute it — it lives
+   *  in closeQuarter's fleet-retirement / loss-event paths). */
+  insuranceProceeds: number;
   newRcfBalance: number;
   /** Updated fleet (depreciated bookValues, accumulated maintenanceDeficit)
    *  the close ran against. Must be persisted back to the team so future
@@ -3520,6 +3531,12 @@ export function runQuarterClose(
     rcfInterest,
     netProfit,
     newCashUsd,
+    // Engine doesn't know about scrap / hull-insurance payouts —
+    // those land in closeQuarter (see store/game.ts insuranceProceeds
+    // accumulator). The store overwrites this with its own number
+    // right after the engine returns. Default 0 keeps the type
+    // honest for any caller that doesn't pass through the store.
+    insuranceProceeds: 0,
     newRcfBalance,
     newFleet: next.fleet,
     newRoutes: next.routes,
