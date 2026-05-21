@@ -9,10 +9,11 @@ import {
   computeAirlineValue,
   effectiveTravelIndex,
   fleetCount,
+  FUEL_BASELINE_USD_PER_L,
 } from "@/lib/engine";
 import { cityEventImpact, activeNewsAtQuarter } from "@/lib/city-events";
 import { cn } from "@/lib/cn";
-import { TrendingUp, TrendingDown, Plane, Users, BarChart3, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, Plane, Users, BarChart3, Wallet, Fuel } from "lucide-react";
 
 /**
  * Management Report dashboard (PRD update — full overview with QTR/YTD/all-time
@@ -253,6 +254,83 @@ export function DashboardPanel() {
           <SnapCard label="Base rate" value={`${baseInterestRatePct.toFixed(1)}%`} sub="commercial debt" />
           <SnapCard label="Brand grade" value={grade.grade} sub={`Brand ${player.brandPts.toFixed(0)}/100 · Ops ${player.opsPts.toFixed(0)}/100`} color={grade.color} />
         </div>
+
+        {/* ── Fuel hedging card (Phase 1B) ──────────────────────
+            Shows ONLY when the player has installed at least one
+            fuel tank — otherwise it would read as dead UI. Surfaces
+            litres held / avg cost / unrealised P&L vs spot so the
+            player can see at a glance whether their hedge is in the
+            money. Catalogue copy promised this feature; the engine
+            consumes from storage at quarter close. */}
+        {(() => {
+          const tanks = player.fuelTanks ?? { small: 0, medium: 0, large: 0 };
+          const totalTanks = (tanks.small ?? 0) + (tanks.medium ?? 0) + (tanks.large ?? 0);
+          if (totalTanks === 0) return null;
+          const capacityL =
+            (tanks.small ?? 0) * 25_000_000 +
+            (tanks.medium ?? 0) * 75_000_000 +
+            (tanks.large ?? 0) * 150_000_000;
+          const storedL = player.fuelStorageLevelL ?? 0;
+          const avgCost = player.fuelStorageAvgCostPerL ?? 0;
+          const fillPct = capacityL > 0 ? (storedL / capacityL) * 100 : 0;
+          const marketPricePerL = (fuelIndex / 100) * FUEL_BASELINE_USD_PER_L;
+          const unrealizedPnL = (marketPricePerL - avgCost) * storedL;
+          return (
+            <div className="mt-3 rounded-md border border-line bg-surface p-3">
+              <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2">
+                <Fuel size={12} />
+                Fuel hedging
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[0.75rem]">
+                <div>
+                  <div className="text-[0.625rem] text-ink-muted">Capacity</div>
+                  <div className="tabular font-mono text-ink font-medium">
+                    {(capacityL / 1_000_000).toFixed(0)}M L
+                  </div>
+                  <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                    {totalTanks} tank{totalTanks === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[0.625rem] text-ink-muted">Stored</div>
+                  <div className="tabular font-mono text-ink font-medium">
+                    {(storedL / 1_000_000).toFixed(1)}M L
+                  </div>
+                  <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                    {fillPct.toFixed(0)}% full
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[0.625rem] text-ink-muted">Avg cost</div>
+                  <div className="tabular font-mono text-ink font-medium">
+                    {avgCost > 0 ? `$${avgCost.toFixed(3)}/L` : "—"}
+                  </div>
+                  <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                    Spot ${marketPricePerL.toFixed(3)}/L
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[0.625rem] text-ink-muted">Unrealised P&amp;L</div>
+                  <div className={cn(
+                    "tabular font-mono font-medium",
+                    storedL === 0
+                      ? "text-ink"
+                      : unrealizedPnL > 0
+                        ? "text-positive"
+                        : unrealizedPnL < 0
+                          ? "text-negative"
+                          : "text-ink",
+                  )}>
+                    {storedL === 0 ? "—" : `${unrealizedPnL >= 0 ? "+" : ""}${fmtMoney(unrealizedPnL)}`}
+                  </div>
+                  <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                    vs current spot
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       {/* ── 6b. Market vitals trajectory ── */}

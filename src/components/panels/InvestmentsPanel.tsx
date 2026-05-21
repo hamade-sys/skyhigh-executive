@@ -25,6 +25,8 @@ import {
 } from "@/data/subsidiaries";
 import type { SubsidiaryType, Subsidiary } from "@/types/game";
 import { cn } from "@/lib/cn";
+import { FUEL_BASELINE_USD_PER_L } from "@/lib/engine";
+import { toast } from "@/store/toasts";
 
 /**
  * Investments — non-aviation subsidiaries the airline can build at any
@@ -145,6 +147,17 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
           />
         </div>
       </section>
+
+      {/* ── Fuel hedging (Phase 1B) ─────────────────────────────────
+          Surfaces team.fuelStorageLevelL + team.fuelTanks so the
+          player can: buy tank capacity, bulk-buy fuel at 25% off
+          spot, sell stored fuel back if needed, and see how much was
+          drawn last quarter at the avg cost basis. Before this, the
+          buyFuelTank / buyBulkFuel / sellStoredFuel store actions
+          existed but had no UI entry-point — the catalogue promised
+          the feature, the engine consumed from storage, but the
+          player had no way to put fuel in. */}
+      <FuelHedgingSection />
 
       {/* Owned subsidiaries — grouped by type */}
       {owned.length > 0 && (
@@ -945,5 +958,419 @@ function PortfolioCount({
         </button>
       )}
     </div>
+  );
+}
+
+// ─── Fuel hedging section (Phase 1B) ──────────────────────────────────
+//
+// The team's fuel-storage state lives at the team level (not per-hub):
+// `fuelStorageLevelL` (litres held) + `fuelStorageAvgCostPerL` (weighted
+// avg cost basis). Capacity is gated by installed tanks
+// (`fuelTanks.small/medium/large` × 25M/75M/150M L). Each tank costs
+// $3M/$8M/$15M up-front and adds maintenance to the next quarter close.
+//
+// Routes from a hub that has a `fuelReserveTank` subsidiary built get a
+// 15% routing discount (engine: src/lib/engine.ts:1838). Bulk-buys at
+// 25% off market into the global pool stack on top: at quarter close
+// the engine swaps in stored fuel at avg cost across all routes (engine:
+// src/lib/engine.ts:2932). The catalogue promise of "25% off bulk +
+// 15% routing" is delivered by the combination of these mechanisms.
+
+const TANK_SPECS = {
+  small:  { cost: 3_000_000,  capacityL: 25_000_000,  label: "Small" },
+  medium: { cost: 8_000_000,  capacityL: 75_000_000,  label: "Medium" },
+  large:  { cost: 15_000_000, capacityL: 150_000_000, label: "Large" },
+} as const;
+const MAX_STORAGE_L = 300_000_000;
+
+function FuelHedgingSection() {
+  const player = useGame(selectPlayer);
+  const fuelIndex = useGame((s) => s.fuelIndex);
+  const buyFuelTank = useGame((s) => s.buyFuelTank);
+  const buyBulkFuel = useGame((s) => s.buyBulkFuel);
+  const sellStoredFuel = useGame((s) => s.sellStoredFuel);
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [sellOpen, setSellOpen] = useState(false);
+  if (!player) return null;
+
+  const tanks = player.fuelTanks ?? { small: 0, medium: 0, large: 0 };
+  const totalTanks = (tanks.small ?? 0) + (tanks.medium ?? 0) + (tanks.large ?? 0);
+  const capacityL =
+    (tanks.small ?? 0) * TANK_SPECS.small.capacityL +
+    (tanks.medium ?? 0) * TANK_SPECS.medium.capacityL +
+    (tanks.large ?? 0) * TANK_SPECS.large.capacityL;
+  const storedL = player.fuelStorageLevelL ?? 0;
+  const avgCost = player.fuelStorageAvgCostPerL ?? 0;
+  const roomL = Math.max(0, capacityL - storedL);
+  const fillPct = capacityL > 0 ? (storedL / capacityL) * 100 : 0;
+  const depotHubs = player.hubInvestments?.fuelReserveTankHubs ?? [];
+  const marketPricePerL = (fuelIndex / 100) * FUEL_BASELINE_USD_PER_L;
+  const bulkPricePerL = marketPricePerL * 0.75; // 25% off market
+  const valueAtCost = storedL * avgCost;
+  const valueAtMarket = storedL * marketPricePerL;
+  const unrealizedPnL = valueAtMarket - valueAtCost;
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+            Fuel hedging · storage + bulk-buy
+          </div>
+          <div className="text-[0.625rem] text-ink-muted leading-snug max-w-md">
+            Bulk-buy at 25% off market to pre-stock fuel at a low index quarter,
+            then consume at quarter close when prices spike.
+          </div>
+        </div>
+      </div>
+
+      {/* Top-line cards. Show ALWAYS — even with zero tanks — so the player
+          knows where the upgrade lives. The "Buy tanks" CTA in the row
+          below covers the empty state. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <FuelKpi
+          label="Capacity"
+          value={`${(capacityL / 1_000_000).toFixed(0)}M L`}
+          sub={totalTanks === 0 ? "No tanks installed" : `${totalTanks} tank${totalTanks === 1 ? "" : "s"}`}
+        />
+        <FuelKpi
+          label="Stored"
+          value={`${(storedL / 1_000_000).toFixed(1)}M L`}
+          sub={capacityL > 0 ? `${fillPct.toFixed(0)}% full` : "—"}
+          tone={fillPct > 50 ? "pos" : undefined}
+        />
+        <FuelKpi
+          label="Avg cost"
+          value={avgCost > 0 ? `$${avgCost.toFixed(3)}/L` : "—"}
+          sub={
+            unrealizedPnL > 0 && storedL > 0
+              ? `Up ${fmtMoney(unrealizedPnL)} on hand`
+              : unrealizedPnL < 0 && storedL > 0
+                ? `Down ${fmtMoney(-unrealizedPnL)} on hand`
+                : "no fuel held"
+          }
+          tone={unrealizedPnL > 0 && storedL > 0 ? "pos" : unrealizedPnL < 0 && storedL > 0 ? "neg" : undefined}
+        />
+        <FuelKpi
+          label="Spot today"
+          value={`$${marketPricePerL.toFixed(3)}/L`}
+          sub={`Index ${Math.round(fuelIndex)} · bulk $${bulkPricePerL.toFixed(3)}/L`}
+        />
+      </div>
+
+      {/* Action row + depot list */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div className="rounded-md border border-line bg-surface p-3">
+          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2 font-semibold">
+            Tank capacity
+          </div>
+          <div className="space-y-1.5">
+            {(["small", "medium", "large"] as const).map((size) => {
+              const spec = TANK_SPECS[size];
+              const owned = tanks[size] ?? 0;
+              const atMax = capacityL + spec.capacityL > MAX_STORAGE_L;
+              const canAfford = player.cashUsd >= spec.cost;
+              return (
+                <div key={size} className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[0.8125rem] text-ink-2">
+                      {spec.label} tank
+                      <span className="text-ink-muted ml-1">
+                        · {(spec.capacityL / 1_000_000).toFixed(0)}M L · {fmtMoney(spec.cost)}
+                      </span>
+                    </div>
+                    <div className="text-[0.6875rem] text-ink-muted tabular">
+                      Owned: {owned}
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={atMax || !canAfford}
+                    title={atMax ? "300M L maximum storage reached" : !canAfford ? `Need ${fmtMoney(spec.cost)}` : undefined}
+                    onClick={() => {
+                      const r = buyFuelTank(size);
+                      if (!r.ok && r.error) toast.warning("Cannot install tank", r.error);
+                    }}
+                  >
+                    + Install
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-md border border-line bg-surface p-3">
+          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2 font-semibold">
+            Bulk fuel
+          </div>
+          <div className="space-y-2">
+            <p className="text-[0.75rem] text-ink-muted leading-relaxed">
+              Buy at <strong className="text-ink-2">${bulkPricePerL.toFixed(3)}/L</strong>{" "}
+              (25% off the current market). Engine draws from storage first
+              at quarter close — so you save when spot prices spike.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={capacityL === 0}
+                title={capacityL === 0 ? "Install at least one tank first" : undefined}
+                onClick={() => setBuyOpen(true)}
+              >
+                Buy fuel →
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={storedL === 0}
+                title={storedL === 0 ? "No stored fuel to sell" : undefined}
+                onClick={() => setSellOpen(true)}
+              >
+                Sell stored →
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Depot hubs (where the 15% routing discount applies) */}
+      {depotHubs.length > 0 && (
+        <div className="mt-3 rounded-md border border-line bg-surface-2/30 p-3">
+          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5 font-semibold">
+            Depot hubs — 15% routing discount applies on outbound routes
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {depotHubs.map((code) => {
+              const city = CITIES_BY_CODE[code];
+              return (
+                <span
+                  key={code}
+                  className="inline-flex items-baseline gap-1 rounded-full border border-line bg-surface px-2 py-0.5 text-[0.75rem]"
+                  title={city?.name ?? code}
+                >
+                  <span className="font-mono text-ink-2 font-semibold">{code}</span>
+                  {city && <span className="text-ink-muted">· {city.name}</span>}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Buy modal */}
+      {buyOpen && (
+        <BuyFuelModal
+          onClose={() => setBuyOpen(false)}
+          roomL={roomL}
+          bulkPricePerL={bulkPricePerL}
+          marketPricePerL={marketPricePerL}
+          cashUsd={player.cashUsd}
+          onBuy={(litres) => {
+            const r = buyBulkFuel(litres);
+            if (!r.ok && r.error) toast.warning("Cannot buy fuel", r.error);
+            else setBuyOpen(false);
+          }}
+        />
+      )}
+
+      {/* Sell modal */}
+      {sellOpen && (
+        <SellFuelModal
+          onClose={() => setSellOpen(false)}
+          storedL={storedL}
+          sellPricePerL={bulkPricePerL}
+          avgCost={avgCost}
+          onSell={(litres) => {
+            const r = sellStoredFuel(litres);
+            if (!r.ok && r.error) toast.warning("Cannot sell fuel", r.error);
+            else setSellOpen(false);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function FuelKpi({
+  label, value, sub, tone,
+}: { label: string; value: string; sub?: string; tone?: "pos" | "neg" }) {
+  return (
+    <div className="rounded-md border border-line bg-surface p-2.5">
+      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">{label}</div>
+      <div className={cn(
+        "font-display text-[1.25rem] tabular leading-none mt-0.5",
+        tone === "pos" ? "text-positive" : tone === "neg" ? "text-negative" : "text-ink",
+      )}>{value}</div>
+      {sub && <div className="text-[0.625rem] text-ink-muted mt-1 leading-snug">{sub}</div>}
+    </div>
+  );
+}
+
+function BuyFuelModal({
+  onClose, roomL, bulkPricePerL, marketPricePerL, cashUsd, onBuy,
+}: {
+  onClose: () => void;
+  roomL: number;
+  bulkPricePerL: number;
+  marketPricePerL: number;
+  cashUsd: number;
+  onBuy: (litres: number) => void;
+}) {
+  // Default to the smaller of (room available, $50M worth at bulk price)
+  // — a sensible mid-sized buy that's affordable mid-game without
+  // exhausting cash.
+  const defaultLitresFromBudget = bulkPricePerL > 0 ? Math.floor(50_000_000 / bulkPricePerL) : 0;
+  const defaultLitres = Math.max(0, Math.min(roomL, defaultLitresFromBudget));
+  const [litres, setLitres] = useState<number>(defaultLitres);
+  const cost = litres * bulkPricePerL;
+  const marketCost = litres * marketPricePerL;
+  const savings = marketCost - cost;
+  const canBuy = litres > 0 && litres <= roomL && cost <= cashUsd;
+  return (
+    <Modal open onClose={onClose}>
+      <ModalHeader>
+        <h2 className="font-display text-[1.125rem] text-ink leading-tight">Buy bulk fuel</h2>
+        <p className="text-[0.8125rem] text-ink-muted mt-1 leading-snug">
+          25% off the current market index. Stored fuel is drawn at quarter close
+          to save vs the spot price.
+        </p>
+      </ModalHeader>
+      <ModalBody className="space-y-4">
+        <div className="grid grid-cols-3 gap-2 text-[0.75rem]">
+          <FuelKpi label="Room available" value={`${(roomL / 1_000_000).toFixed(1)}M L`} />
+          <FuelKpi label="Bulk price" value={`$${bulkPricePerL.toFixed(3)}/L`} sub={`Market $${marketPricePerL.toFixed(3)}/L`} />
+          <FuelKpi
+            label="Saving vs spot"
+            value={fmtMoney(savings)}
+            tone="pos"
+          />
+        </div>
+        <div className="space-y-2">
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+            Litres to buy
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={0}
+              max={roomL}
+              step={Math.max(1, Math.floor(roomL / 100))}
+              value={litres}
+              onChange={(e) => setLitres(parseInt(e.target.value, 10))}
+              className="flex-1 accent-primary"
+              aria-label="Litres to buy"
+            />
+            <span className="tabular font-mono text-ink font-semibold w-28 text-right">
+              {(litres / 1_000_000).toFixed(2)}M L
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between text-[0.6875rem] text-ink-muted">
+            <span>0</span>
+            <span>{(roomL / 1_000_000).toFixed(0)}M L (room)</span>
+          </div>
+        </div>
+        <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-1 text-[0.8125rem]">
+          <div className="flex items-baseline justify-between">
+            <span className="text-ink-2">Cost at bulk rate</span>
+            <span className="tabular font-mono text-ink font-semibold">{fmtMoney(cost)}</span>
+          </div>
+          <div className="flex items-baseline justify-between text-[0.75rem] text-ink-muted">
+            <span>If bought at spot</span>
+            <span className="tabular font-mono">{fmtMoney(marketCost)}</span>
+          </div>
+          <div className="flex items-baseline justify-between pt-1 mt-1 border-t border-line text-positive">
+            <span>Saved vs spot</span>
+            <span className="tabular font-mono">+{fmtMoney(savings)}</span>
+          </div>
+          <div className="text-[0.6875rem] text-ink-muted leading-snug pt-1">
+            Cash on hand: <span className="text-ink-2 tabular font-mono">{fmtMoney(cashUsd)}</span>
+            {cost > cashUsd && <span className="text-negative ml-2">— not enough cash</span>}
+          </div>
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={!canBuy} onClick={() => onBuy(litres)}>
+          Buy {(litres / 1_000_000).toFixed(2)}M L →
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
+
+function SellFuelModal({
+  onClose, storedL, sellPricePerL, avgCost, onSell,
+}: {
+  onClose: () => void;
+  storedL: number;
+  sellPricePerL: number;
+  avgCost: number;
+  onSell: (litres: number) => void;
+}) {
+  const [litres, setLitres] = useState<number>(Math.floor(storedL / 2));
+  const proceeds = litres * sellPricePerL;
+  const costBasis = litres * avgCost;
+  const pnl = proceeds - costBasis;
+  return (
+    <Modal open onClose={onClose}>
+      <ModalHeader>
+        <h2 className="font-display text-[1.125rem] text-ink leading-tight">Sell stored fuel</h2>
+        <p className="text-[0.8125rem] text-ink-muted mt-1 leading-snug">
+          Liquidate stored fuel back to the market at the bulk price.
+        </p>
+      </ModalHeader>
+      <ModalBody className="space-y-4">
+        <div className="grid grid-cols-3 gap-2">
+          <FuelKpi label="Held" value={`${(storedL / 1_000_000).toFixed(2)}M L`} />
+          <FuelKpi label="Avg cost" value={avgCost > 0 ? `$${avgCost.toFixed(3)}/L` : "—"} />
+          <FuelKpi label="Sell price" value={`$${sellPricePerL.toFixed(3)}/L`} />
+        </div>
+        <div className="space-y-2">
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+            Litres to sell
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={0}
+              max={storedL}
+              step={Math.max(1, Math.floor(storedL / 100))}
+              value={litres}
+              onChange={(e) => setLitres(parseInt(e.target.value, 10))}
+              className="flex-1 accent-primary"
+              aria-label="Litres to sell"
+            />
+            <span className="tabular font-mono text-ink font-semibold w-28 text-right">
+              {(litres / 1_000_000).toFixed(2)}M L
+            </span>
+          </div>
+        </div>
+        <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-1 text-[0.8125rem]">
+          <div className="flex items-baseline justify-between">
+            <span className="text-ink-2">Cash proceeds</span>
+            <span className="tabular font-mono text-ink font-semibold">{fmtMoney(proceeds)}</span>
+          </div>
+          <div className="flex items-baseline justify-between text-[0.75rem] text-ink-muted">
+            <span>Cost basis released</span>
+            <span className="tabular font-mono">{fmtMoney(costBasis)}</span>
+          </div>
+          <div className={cn(
+            "flex items-baseline justify-between pt-1 mt-1 border-t border-line",
+            pnl >= 0 ? "text-positive" : "text-negative",
+          )}>
+            <span>P&amp;L on sale</span>
+            <span className="tabular font-mono">{pnl >= 0 ? "+" : ""}{fmtMoney(pnl)}</span>
+          </div>
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={litres <= 0} onClick={() => onSell(litres)}>
+          Sell {(litres / 1_000_000).toFixed(2)}M L →
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }
