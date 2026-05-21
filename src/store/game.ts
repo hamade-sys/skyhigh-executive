@@ -2817,6 +2817,7 @@ export const useGame = create<GameStore>()(
 
       cancelPendingRoute: (routeId) => {
         const s = get();
+        if (s.isObserver) return { ok: false, error: "Observer mode — no edits allowed" };
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player team" };
         const route = player.routes.find((r) => r.id === routeId);
@@ -2842,11 +2843,15 @@ export const useGame = create<GameStore>()(
           `${route.originCode} → ${route.destCode} · aircraft returned to idle. ` +
             `Slot bids stay queued — release in Slot Market if you don't want them.`,
         );
+        // Persist to server in multiplayer — same data-loss vector as
+        // updateRoute (see comment there).
+        get().pushStateToServer("player.cancelledPendingRoute", { routeId });
         return { ok: true };
       },
 
       updateRoute: (routeId, patch) => {
         const s = get();
+        if (s.isObserver) return { ok: false, error: "Observer mode — no edits allowed" };
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player" };
         const route = player.routes.find((r) => r.id === routeId);
@@ -2971,6 +2976,16 @@ export const useGame = create<GameStore>()(
             }),
           }),
         });
+        // Persist to server in multiplayer. Without this, the local
+        // mutation (aircraft assignment, frequency change, fare edit)
+        // is wiped the next time anything triggers a re-hydrate from
+        // the server — Realtime broadcast, CAS conflict on a sibling
+        // push, or a quarter close. Reported by the user as "I added
+        // aircraft to my routes then clicked Switch View and they
+        // were gone." Switch View is read-only locally but any other
+        // player action in the same cohort would also have lost the
+        // local change.
+        get().pushStateToServer("player.updatedRoute", { routeId });
         return { ok: true };
       },
 
@@ -6628,6 +6643,7 @@ export const useGame = create<GameStore>()(
 
       suspendRoute: (routeId) => {
         const s = get();
+        if (s.isObserver) return { ok: false, error: "Observer mode — no edits allowed" };
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player" };
         set({
@@ -6642,11 +6658,15 @@ export const useGame = create<GameStore>()(
           }),
         });
         toast.info("Route suspended", "Slots retained, 20% holding fee applies.");
+        // Persist to server in multiplayer — same data-loss vector as
+        // updateRoute (see comment there).
+        get().pushStateToServer("player.suspendedRoute", { routeId });
         return { ok: true };
       },
 
       resumeRoute: (routeId) => {
         const s = get();
+        if (s.isObserver) return { ok: false, error: "Observer mode — no edits allowed" };
         set({
           teams: s.teams.map((t) => t.id !== s.playerTeamId ? t : {
             ...t,
@@ -6656,6 +6676,9 @@ export const useGame = create<GameStore>()(
           }),
         });
         toast.success("Route resumed");
+        // Persist to server in multiplayer — same data-loss vector as
+        // updateRoute (see comment there).
+        get().pushStateToServer("player.resumedRoute", { routeId });
         return { ok: true };
       },
 
