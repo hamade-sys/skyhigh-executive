@@ -281,6 +281,44 @@ function ScenarioCard({
                     {blocker && (
                       <Badge tone="negative">Blocked · {blocker.replace(/_/g, " ")}</Badge>
                     )}
+                    {/* Deferred-risk chip (Phase 2 — P1-5). Promoted
+                        from buried text below the option label.
+                        Workshop executives missed it at decision time.
+                        Renders inline so the player sees the trade
+                        BEFORE submitting. */}
+                    {opt.effect.deferred && (() => {
+                      const def = opt.effect.deferred;
+                      const probPct = def.probability !== undefined
+                        ? `${Math.round(def.probability * 100)}%`
+                        : "Will";
+                      const when = typeof def.quarter === "number"
+                        ? fmtQuarter(def.quarter)
+                        : typeof def.lagQuarters === "number"
+                          ? `+${def.lagQuarters}Q`
+                          : "later";
+                      const cashImpact = def.effect.cash
+                        ?? (def.effect.scaledCash ? scaledCashAmount(player, def.effect.scaledCash) : null);
+                      const brand = def.effect.brandPts;
+                      const ops = def.effect.opsPts;
+                      // Build a short summary string covering the
+                      // most actionable consequence (cash > brand > ops).
+                      const summary = cashImpact !== null && cashImpact !== 0
+                        ? signedMoney(cashImpact)
+                        : brand !== undefined
+                          ? `Brand ${brand >= 0 ? "+" : ""}${brand}`
+                          : ops !== undefined
+                            ? `Ops ${ops >= 0 ? "+" : ""}${ops}`
+                            : "effect";
+                      return (
+                        <Badge
+                          tone="warning"
+                          title={`Deferred consequence — ${probPct} chance to fire in ${when} with ${summary}.`}
+                        >
+                          <AlertTriangle size={9} className="inline -mt-0.5 mr-0.5" />
+                          {probPct} risk · {when} · {summary}
+                        </Badge>
+                      );
+                    })()}
                   </div>
                   <div className="text-[0.8125rem] text-ink-2 mt-1 leading-relaxed">
                     {opt.description}

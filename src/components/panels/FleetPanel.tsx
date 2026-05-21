@@ -566,6 +566,23 @@ export function FleetPanel() {
                       >
                         {f.status}
                       </Badge>
+                      {/* Pre-order ETA (Phase 2 — P1-13e). For ordered
+                          aircraft, f.purchaseQuarter holds the projected
+                          delivery round. Pre-fix the badge just said
+                          "ordered" with no signal about WHEN it arrived
+                          — players had to open the pre-order queue
+                          modal to see the ETA. Surface it inline. */}
+                      {f.status === "ordered" && f.purchaseQuarter > s.currentQuarter && (() => {
+                        const qOut = f.purchaseQuarter - s.currentQuarter;
+                        return (
+                          <Badge
+                            tone="info"
+                            title={`Projected delivery: Q${f.purchaseQuarter}. ${qOut} quarter${qOut === 1 ? "" : "s"} until the airframe enters service.`}
+                          >
+                            ETA Q{f.purchaseQuarter} · {qOut}Q out
+                          </Badge>
+                        );
+                      })()}
                       {f.ecoUpgrade && <Badge tone="positive">Eco</Badge>}
                       {f.engineUpgrade && (
                         <Badge tone="info" title={`Engine retrofit: ${f.engineUpgrade}`}>

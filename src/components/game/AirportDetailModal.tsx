@@ -11,6 +11,7 @@ import { Crown, MapPin, Building, ShieldAlert, ArrowUp, ArrowDown, Trophy, Newsp
 import {
   airportAskingPriceUsd,
   airportQuarterlySlotRevenueUsd,
+  AIRPORT_BASE_PRICE_BY_TIER,
   AIRPORT_DEFAULT_CAPACITY_BY_TIER,
   AIRPORT_EXPANSION_COST_PER_LEVEL,
   AIRPORT_EXPANSION_SLOTS,
@@ -723,6 +724,35 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           <Stat label="Q slot revenue" value={fmtMoney(qRevenue)} hint="What it earns now" />
           <Stat label="Capacity" value={`${capacity} / ${maxCap}`} hint="+200 per expansion" />
         </div>
+
+        {/* ── Asking-price breakdown (Phase 2 — P1-9). The pre-fix
+            modal showed just "Tier base + 4× Q rev" as a 3-word hint
+            — players had to do the math themselves on a Tier-1
+            airport whose asking price lands near $1B. Now the
+            breakdown is spelled out explicitly. */}
+        {(() => {
+          const baseUsd = AIRPORT_BASE_PRICE_BY_TIER[tier];
+          const capitalisedUsd = askingPrice - baseUsd;
+          return (
+            <div className="rounded-md border border-line/60 bg-surface-2/30 p-2.5 text-[0.75rem] space-y-1">
+              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                How the asking price is calculated
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-ink-2">Tier {tier} base price</span>
+                <span className="tabular font-mono text-ink-2">{fmtMoney(baseUsd)}</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-ink-2">Capitalised slot revenue (4× current Q)</span>
+                <span className="tabular font-mono text-ink-2">+{fmtMoney(capitalisedUsd)}</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-3 pt-1 mt-0.5 border-t border-line/60 font-semibold">
+                <span className="text-ink">Total asking price</span>
+                <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Pending-bid surfaces — explain to the player why they
             can't bid again while their previous bid is held. */}

@@ -35,6 +35,7 @@ export function TopBar() {
   const legacyRivals = useGame(useShallow(selectRivals));
   const rivals = activeTeam ? otherTeams : legacyRivals;
   const currentQuarter = useGame((state) => state.currentQuarter);
+  const baseInterestRatePct = useGame((s) => s.baseInterestRatePct);
   const joinCode = useGame((s) => s.session?.joinCode ?? null);
   const viewingTeamId = useUi((u) => u.viewingTeamId);
   const setViewingTeamId = useUi((u) => u.setViewingTeamId);
@@ -173,10 +174,20 @@ export function TopBar() {
         {!viewingRival && displayTeam.rcfBalanceUsd > 0 && (
           <>
             <Divider />
-            <Kpi
-              label="RCF drawn"
-              value={fmtMoney(displayTeam.rcfBalanceUsd)}
-              tone="warn"
+            {/* RCF Risk — surfaces the most expensive debt the player
+                can hold (auto-draw runs at 2× base rate). Pre-Phase-2
+                this was a passive "RCF drawn $X" chip with no signal
+                about the interest cost; players didn't realise
+                they'd be paying ~12-18% APR until they saw it on
+                next quarter's P&L. Phase 2 adds:
+                  • the projected next-Q interest in the chip subtext
+                  • a tooltip that names the trap explicitly
+                  • a clickable target that navigates to Financials so
+                    the player can see the full debt picture and decide
+                    whether to take a regular loan to clear the RCF. */}
+            <RcfRiskPill
+              rcfBalanceUsd={displayTeam.rcfBalanceUsd}
+              baseRatePct={baseInterestRatePct}
             />
           </>
         )}
@@ -941,6 +952,49 @@ function Divider() {
   return <span className="w-px h-6 bg-line shrink-0" aria-hidden />;
 }
 
+/**
+ * RCF Risk pill (Phase 2 — P1-6). Replaces the passive "RCF drawn $X"
+ * KPI when the player has auto-drawn against their revolving credit
+ * facility. The standard KPI didn't show the trap explicitly: RCF
+ * auto-draws at **2× base rate**, the most expensive debt in the
+ * game. Players routinely didn't realise they were paying ~12-18% APR
+ * until the next quarter's P&L surfaced the interest line.
+ *
+ * The pill now shows the projected next-Q interest cost inline as the
+ * sub-label so the player can't miss it. Hover/tooltip names the rate
+ * explicitly. Clicking navigates to the Financials panel where the
+ * full debt + loan composition is visible — that's where the player
+ * decides whether to take a regular loan to clear the RCF.
+ */
+function RcfRiskPill({
+  rcfBalanceUsd, baseRatePct,
+}: {
+  rcfBalanceUsd: number;
+  baseRatePct: number;
+}) {
+  const openPanel = useUi((u) => u.openPanel);
+  const rcfRatePct = baseRatePct * 2;
+  const nextQInterest = rcfBalanceUsd * (rcfRatePct / 100) / 4;
+  return (
+    <button
+      type="button"
+      onClick={() => openPanel("financials")}
+      title={`RCF balance ${fmtMoney(rcfBalanceUsd)} · auto-drawn at ${rcfRatePct.toFixed(1)}% APR (2× base). Next-quarter interest will be ${fmtMoney(nextQInterest)}. Click to open Financials and consider a cheaper loan.`}
+      className="flex flex-col items-start px-4 py-1 min-w-[7.5rem] shrink-0 text-left rounded-md hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2 focus-visible:ring-offset-surface transition-colors cursor-pointer"
+    >
+      <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-warning">
+        RCF risk
+      </span>
+      <span className="tabular font-display text-[1rem] leading-none mt-1 text-warning">
+        {fmtMoney(rcfBalanceUsd)}
+      </span>
+      <span className="text-[0.6875rem] text-warning/80 leading-snug mt-0.5 tabular">
+        +{fmtMoney(nextQInterest)}/Q at 2× base
+      </span>
+    </button>
+  );
+}
+
 /** Compact pill showing the player's strategic doctrine (Premium /
  *  Budget / Cargo / Global Network) — visible at all times in the
  *  top-bar so mid-game it's never a question what archetype the
@@ -972,7 +1026,23 @@ function DoctrinePill({ doctrineId }: { doctrineId: import("@/types/game").Doctr
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-  if (!doctrineId) return null;
+  // Phase 2 (P1-3): when doctrineId is missing (multiplayer pre-setup
+  // before host locks doctrines, or legacy saves from before the
+  // doctrine system shipped), the pill used to disappear entirely —
+  // leaving the player wondering whether their strategy was ever
+  // registered. Show a muted "Doctrine pending" chip instead so the
+  // TopBar layout doesn't reflow and the player gets a clear signal.
+  if (!doctrineId) {
+    return (
+      <div
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-line bg-surface-2/40 text-ink-muted text-[0.75rem] font-medium shrink-0"
+        title="Doctrine not yet set. Pick one during onboarding or wait for the facilitator to seed your strategy."
+      >
+        <span className="inline-block w-2 h-2 rounded-full bg-ink-muted/40 animate-pulse" aria-hidden />
+        Doctrine pending
+      </div>
+    );
+  }
   const doctrine = DOCTRINE_BY_ID[doctrineId];
   if (!doctrine) return null;
   const Icon = doctrine.Icon;

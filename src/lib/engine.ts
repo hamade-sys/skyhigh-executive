@@ -95,10 +95,15 @@ export function discontinuedMaintenanceBracket(
   if (!spec || typeof spec.cutoffRound !== "number") return null;
   const roundsSince = currentQuarter - spec.cutoffRound;
   if (roundsSince <= 0) return null;
-  if (roundsSince <= 4) return { roundsSince, bracketLabel: "1 of 3", pct: 5, isMax: false };
-  if (roundsSince <= 8) return { roundsSince, bracketLabel: "2 of 3", pct: 7.5, isMax: false };
-  if (roundsSince <= 12) return { roundsSince, bracketLabel: "3 of 3", pct: 10, isMax: false };
-  return { roundsSince, bracketLabel: "max", pct: 15, isMax: true };
+  // Phase 2 (P1-8) — labels used to say "1 of 3", "2 of 3", "3 of 3"
+  // and then mysteriously jumped to a +15% flatline with no label.
+  // There are actually 4 brackets (+5% → +7.5% → +10% → max +15%).
+  // Relabelled "Bracket 1/2/3 · Max +15%" so the player sees the
+  // escalation ladder honestly.
+  if (roundsSince <= 4) return { roundsSince, bracketLabel: "Bracket 1 · +5%", pct: 5, isMax: false };
+  if (roundsSince <= 8) return { roundsSince, bracketLabel: "Bracket 2 · +7.5%", pct: 7.5, isMax: false };
+  if (roundsSince <= 12) return { roundsSince, bracketLabel: "Bracket 3 · +10%", pct: 10, isMax: false };
+  return { roundsSince, bracketLabel: "Max · +15%", pct: 15, isMax: true };
 }
 
 // ─── Global Travel Index (PRD E6) — master demand multiplier ──

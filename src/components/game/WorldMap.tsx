@@ -312,12 +312,27 @@ function FlyingPlane({
  *  so the plane glides at a believable speed on screen. We don't want
  *  the animation to feel realistic-slow (10h flight = 10 minutes on
  *  screen), but the relative speeds of short vs long routes should
- *  read naturally. */
+ *  read naturally.
+ *
+ *  Phase 2 — Hamade flagged that "longer-distance planes are flying
+ *  faster than smaller-distance, which does not make sense sometimes."
+ *  The base formula already makes long-haul slower (sqrt(distance) ×
+ *  80ms). The bug was the frequency-dampening multiplier:
+ *  `1 / log10(1 + freq)` produced ~1.05× at 8/day and ~3.32× at 1/day,
+ *  so a low-frequency long-haul route animated ~5× slower than a
+ *  high-frequency short-hop — visibly jarring on the map. Capping the
+ *  ratio to ~1.5× preserves "busy routes feel busier" without making
+ *  thin long-haul look like it's crawling.
+ */
 function flightDurationMs(distanceKm: number, dailyFreq: number): number {
   // Faster on shorter routes, slower on long-haul. Scale by frequency
-  // so a busy route's plane circles back faster than a thin one.
+  // so a busy route's plane circles back faster than a thin one — but
+  // cap the dampening so a daily-1 long-haul doesn't crawl 5× slower
+  // than an 8/day CRJ short-hop. Range: [0.85, 1.4] → at most 1.65×
+  // slowdown ratio across the freq spectrum.
   const baseMs = 6_000 + Math.sqrt(distanceKm) * 80; // 6-15s typical
-  const freqScale = Math.max(0.6, 1 / Math.max(0.5, Math.log10(1 + dailyFreq)));
+  const rawScale = 1 / Math.max(0.5, Math.log10(1 + dailyFreq));
+  const freqScale = Math.max(0.85, Math.min(1.4, rawScale));
   return Math.round(baseMs * freqScale);
 }
 
