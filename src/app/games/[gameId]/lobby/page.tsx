@@ -789,34 +789,50 @@ export default function GameLobbyPage({
               // side at start, but rendering the same algorithm here means
               // the lobby preview matches the played game (assuming no
               // human flips their pick between now and start).
+              // Map members to seats by plannedSeat TYPE, not arrival
+              // order. Pre-fix, the k-th joiner went to seat k — so a
+              // host on a [bot, human, bot, human, bot, bot] config
+              // visibly displaced the seat-0 bot, and a friend joining
+              // landed in seat 1 only because the lobby happened to
+              // alphabetise that way. Now humans fill human-type seats
+              // in order; bots stay in their planned indices.
+              const humanSeatIndices: number[] = [];
+              const botSeatIndices: number[] = [];
+              for (let i = 0; i < game.max_teams; i++) {
+                const t = (seatConfigs[i]?.type ?? "human") as SeatType;
+                if (t === "human") humanSeatIndices.push(i);
+                else botSeatIndices.push(i);
+              }
+              const memberBySeatIndex = new Map<number, typeof playerMembers[number]>();
+              playerMembers.forEach((m, idx) => {
+                const seatIdx = humanSeatIndices[idx];
+                if (seatIdx !== undefined) memberBySeatIndex.set(seatIdx, m);
+              });
               const claimedSoFar: AirlineColorId[] = playerMembers
                 .map((m) => m.airline_color_id)
                 .filter((c): c is AirlineColorId => isAirlineColorId(c));
               const botColorByIndex = new Map<number, AirlineColorId>();
-              for (let i = 0; i < game.max_teams; i++) {
-                const memberAtSeat = playerMembers[i];
+              for (const i of botSeatIndices) {
                 const cfgI = seatConfigs[i];
-                const seatType = cfgI?.type ?? ("human" as SeatType);
-                if (!memberAtSeat && seatType === "bot") {
-                  // If host explicitly chose a color via the refresh
-                  // button (botColorOverride), honor it as long as no
-                  // human has claimed the same hue. Otherwise fall
-                  // back to the deterministic next-available rule
-                  // that mirrors /api/games/start at game-start.
-                  const override = cfgI?.botColorOverride ?? null;
-                  const overrideUsable =
-                    override != null &&
-                    isAirlineColorId(override) &&
-                    !claimedSoFar.includes(override);
-                  const c = overrideUsable
-                    ? override
-                    : pickNextAvailableColor(claimedSoFar);
-                  botColorByIndex.set(i, c);
-                  claimedSoFar.push(c);
-                }
+                if (memberBySeatIndex.get(i)) continue; // host took this bot slot? shouldn't happen post-fix
+                // If host explicitly chose a color via the refresh
+                // button (botColorOverride), honor it as long as no
+                // human has claimed the same hue. Otherwise fall
+                // back to the deterministic next-available rule
+                // that mirrors /api/games/start at game-start.
+                const override = cfgI?.botColorOverride ?? null;
+                const overrideUsable =
+                  override != null &&
+                  isAirlineColorId(override) &&
+                  !claimedSoFar.includes(override);
+                const c = overrideUsable
+                  ? override
+                  : pickNextAvailableColor(claimedSoFar);
+                botColorByIndex.set(i, c);
+                claimedSoFar.push(c);
               }
               return Array.from({ length: game.max_teams }).map((_, i) => {
-                const member = playerMembers[i];
+                const member = memberBySeatIndex.get(i) ?? null;
                 const isMe = member ? member.session_id === sessionId : false;
                 const hasSetup = member ? member.session_id in playerSetups : false;
                 const cfg = seatConfigs[i] ?? { index: i, type: "human" as SeatType, difficulty: "medium" as Difficulty };
