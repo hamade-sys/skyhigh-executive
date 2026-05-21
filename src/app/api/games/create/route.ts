@@ -1,39 +1,30 @@
 /**
  * POST /api/games/create — host creates a new game.
  *
- * Body shape (validated below):
- *   {
- *     name:         string         // 1-80 chars
- *     mode:         'facilitated' | 'self_guided'
- *     visibility:   'public' | 'private'
- *     maxTeams:     number          // 1-12
- *     hostSessionId: string         // browser-generated uuid
- *     initialState: GameState       // post-onboarding seeded state
- *   }
- *
- * Returns: { game: GameRow, state: GameStateRow, joinCode?: string }
- *
- * The host's browser session id is taken from the body (not a
- * cookie) because the lobby is anonymous-friendly. The route
- * trusts the id but relies on RLS + service-role boundaries to
- * keep mutations safe.
+ * Host session id is derived from the authenticated user — never from
+ * the request body — so snapshot/admin checks align with game_members.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createGame } from "@/lib/games/api";
+import { getAuthenticatedUserId } from "@/lib/supabase/server-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId();
+    if (!userId) {
+      return NextResponse.json({ error: "Sign-in required." }, { status: 401 });
+    }
+
     const body = await req.json();
     const {
       name,
       mode,
       visibility,
       maxTeams,
-      hostSessionId,
       gameMasterSessionId,
       beGameMaster,
       totalRounds,
@@ -55,15 +46,9 @@ export async function POST(req: NextRequest) {
     if (typeof maxTeams !== "number" || maxTeams < 1 || maxTeams > 12) {
       return NextResponse.json({ error: "Max teams must be 1-12." }, { status: 400 });
     }
-    if (typeof hostSessionId !== "string" || hostSessionId.length < 8) {
-      return NextResponse.json({ error: "Missing host session id." }, { status: 400 });
-    }
     if (totalRounds !== undefined && (typeof totalRounds !== "number" || totalRounds < 4 || totalRounds > 80)) {
       return NextResponse.json({ error: "Total rounds must be 4-80." }, { status: 400 });
     }
-    // Quarter timer: 0 means "no timer" (Game Master closes manually).
-    // Range cap at 4 hours per quarter to prevent typos that would
-    // otherwise create games that never end.
     if (
       quarterTimerSeconds !== undefined &&
       (typeof quarterTimerSeconds !== "number" ||
@@ -87,8 +72,9 @@ export async function POST(req: NextRequest) {
       mode,
       visibility,
       maxTeams,
-      hostSessionId,
-      gameMasterSessionId,
+      hostSessionId: userId,
+      gameMasterSessionId:
+        typeof gameMasterSessionId === "string" ? gameMasterSessionId : undefined,
       beGameMaster: typeof beGameMaster === "boolean" ? beGameMaster : undefined,
       totalRounds,
       quarterTimerSeconds:

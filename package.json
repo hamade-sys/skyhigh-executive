@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test src/lib/game-engine/__tests__/pending-routes.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

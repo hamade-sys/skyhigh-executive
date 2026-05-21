@@ -925,6 +925,8 @@ function RouteDetailModal({
   const player = selectPlayer(s);
   const updateRoute = useGame((g) => g.updateRoute);
   const submitSlotBid = useGame((g) => g.submitSlotBid);
+  const submitSlotBidAsync = useGame((g) => g.submitSlotBidAsync);
+  const gameId = useGame((g) => g.session?.gameId ?? null);
 
   // UI works in WEEKLY frequency (engine still stores dailyFrequency).
   const [weeklyFreq, setWeeklyFreq] = useState<number>(Math.round(route.dailyFrequency * 7));
@@ -1099,7 +1101,7 @@ function RouteDetailModal({
     ((shortfallOrigin === 0 || bidPrices[route.originCode] !== undefined) &&
       (shortfallDest === 0 || bidPrices[route.destCode] !== undefined));
 
-  function save() {
+  async function save() {
     // Reject empty aircraft assignment — earlier the modal happily
     // saved aircraftIds=[] with a positive frequency, so the route
     // would stay "active" earning no revenue while still consuming
@@ -1121,12 +1123,16 @@ function RouteDetailModal({
       const bidErrs: string[] = [];
       if (shortfallOrigin > 0 && bidPrices[route.originCode] !== undefined) {
         const slots = bidSlots[route.originCode] ?? shortfallOrigin;
-        const r = submitSlotBid(route.originCode, slots, bidPrices[route.originCode]!);
+        const r = gameId
+          ? await submitSlotBidAsync(route.originCode, slots, bidPrices[route.originCode]!)
+          : submitSlotBid(route.originCode, slots, bidPrices[route.originCode]!);
         if (!r.ok) bidErrs.push(`${route.originCode}: ${r.error}`);
       }
       if (shortfallDest > 0 && bidPrices[route.destCode] !== undefined) {
         const slots = bidSlots[route.destCode] ?? shortfallDest;
-        const r = submitSlotBid(route.destCode, slots, bidPrices[route.destCode]!);
+        const r = gameId
+          ? await submitSlotBidAsync(route.destCode, slots, bidPrices[route.destCode]!)
+          : submitSlotBid(route.destCode, slots, bidPrices[route.destCode]!);
         if (!r.ok) bidErrs.push(`${route.destCode}: ${r.error}`);
       }
       if (bidErrs.length > 0) {

@@ -51,6 +51,8 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   const s = useGame();
   const player = selectPlayer(s);
   const openRoute = useGame((g) => g.openRoute);
+  const openRouteAsync = useGame((g) => g.openRouteAsync);
+  const gameId = useGame((g) => g.session?.gameId ?? null);
 
   const [selectedPlaneIds, setSelectedPlaneIds] = useState<string[]>([]);
   // UI is weekly throughout; engine still stores daily.
@@ -445,7 +447,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
   // hook ordering note further up. We can't safely keep it here because
   // it would render conditionally on `if (!player) return null;`.)
 
-  function confirmRoute() {
+  async function confirmRoute() {
     if (!origin || !dest) return;
     if (selectedPlaneIds.length === 0) {
       setError("Pick at least one aircraft before opening the route.");
@@ -481,11 +483,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
         });
       }
     }
-    const r = openRoute({
+    const routeArgs = {
       originCode: origin,
       destCode: dest,
       aircraftIds: selectedPlaneIds,
-      // Engine still tracks daily; convert. Min 1 so route is always operating.
       dailyFrequency: Math.max(1 / 7, weeklyFreq / 7),
       pricingTier: tier,
       econFare,
@@ -493,7 +494,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
       firstFare,
       isCargo,
       slotBids: slotBids.length > 0 ? slotBids : undefined,
-    });
+    };
+    const r = gameId
+      ? await openRouteAsync(routeArgs)
+      : openRoute(routeArgs);
     if (!r.ok) {
       setError(r.error ?? "Unknown error");
       return;

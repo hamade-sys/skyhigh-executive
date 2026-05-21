@@ -31,6 +31,8 @@ export function SlotMarketPanel() {
   const player = useGame(selectPlayer);
   const airportSlots = useGame((s) => s.airportSlots);
   const submitSlotBid = useGame((s) => s.submitSlotBid);
+  const submitSlotBidAsync = useGame((s) => s.submitSlotBidAsync);
+  const gameId = useGame((s) => s.session?.gameId ?? null);
   const cancelSlotBid = useGame((s) => s.cancelSlotBid);
   const releaseSlots = useGame((s) => s.releaseSlots);
 
@@ -295,8 +297,10 @@ export function SlotMarketPanel() {
                   owned={owned}
                   available={state?.available ?? 0}
                   myBid={myBid}
-                  onPlaceBid={(slots, price) => {
-                    const r = submitSlotBid(c.code, slots, price);
+                  onPlaceBid={async (slots, price) => {
+                    const r = gameId
+                      ? await submitSlotBidAsync(c.code, slots, price)
+                      : submitSlotBid(c.code, slots, price);
                     if (!r.ok) toast.negative(r.error ?? "Bid failed");
                     else setExpandedCode(null);
                   }}

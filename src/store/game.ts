@@ -93,6 +93,11 @@ import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
 import { pickNextAvailableColor, type AirlineColorId } from "@/lib/games/airline-colors";
 import { pickAirlineNames } from "@/data/airline-names";
 import { fetchWithRetry } from "@/lib/games/fetch-with-retry";
+import {
+  activatePendingRoutes,
+  buildAutoRebidsForTeam,
+  mergeAutoRebidsIntoTeam,
+} from "@/lib/game-engine/pending-routes";
 import { captureEvent } from "@/lib/telemetry";
 import type {
   AirportBid,
@@ -376,6 +381,22 @@ export interface GameStore extends GameState {
    *  restored to 80% of new-aircraft rating. Owned aircraft only. */
   quickServiceAircraft(aircraftId: string): { ok: boolean; error?: string };
 
+  openRouteAsync(args: {
+    originCode: string;
+    destCode: string;
+    aircraftIds: string[];
+    dailyFrequency: number;
+    pricingTier: PricingTier;
+    econFare?: number | null;
+    busFare?: number | null;
+    firstFare?: number | null;
+    isCargo?: boolean;
+    slotBids?: Array<{
+      airportCode: string;
+      pricePerSlot: number;
+      slots?: number;
+    }>;
+  }): Promise<{ ok: true } | { ok: false; error?: string }>;
   openRoute(args: {
     originCode: string;
     destCode: string;
@@ -568,6 +589,11 @@ export interface GameStore extends GameState {
   sellStoredFuel(litres: number): { ok: boolean; error?: string };
 
   /** Slot auction (PRD G10) */
+  submitSlotBidAsync(
+    airportCode: string,
+    slots: number,
+    pricePerSlot: number,
+  ): Promise<{ ok: true } | { ok: false; error?: string }>;
   submitSlotBid(airportCode: string, slots: number, pricePerSlot: number):
     { ok: boolean; error?: string };
   cancelSlotBid(airportCode: string): void;
@@ -659,6 +685,14 @@ const mkId = mkIdShared;
 // isObserver:false (so closeQuarter's guard passes and bots actually run)
 // while still doing exactly one atomic write at the end.
 let _suppressGmPush = false;
+/** Server API routes set this while running closeQuarter/advanceToNext locally. */
+let _serverAuthoritativeWrite = false;
+export function setServerAuthoritativeWrite(on: boolean): void {
+  _serverAuthoritativeWrite = on;
+}
+export function isServerAuthoritativeWrite(): boolean {
+  return _serverAuthoritativeWrite;
+}
 // Guard against re-entry: set true just before the single atomic push
 // inside gmAdvanceQuarter, cleared once the promise settles (success or
 // failure). Prevents the BotAutoAdvanceBanner from firing a second advance
@@ -2776,10 +2810,33 @@ export const useGame = create<GameStore>()(
             `Flights start running this quarter; first revenue shows at quarter close.`,
           );
         }
-        get().pushStateToServer("player.openedRoute", {
-          origin: originCode, dest: destCode,
-        });
+        if (!isServerAuthoritativeWrite()) {
+          get().pushStateToServer("player.openedRoute", {
+            origin: originCode,
+            dest: destCode,
+          });
+        }
         return { ok: true };
+      },
+
+      openRouteAsync: async (args) => {
+        const s = get();
+        const gameId = s.session?.gameId;
+        const sessionId = s.localSessionId;
+        if (!gameId || !sessionId) {
+          return get().openRoute(args);
+        }
+        const { postOpenRoute } = await import("@/lib/games/route-mutations");
+        const result = await postOpenRoute({
+          gameId,
+          expectedVersion: s.serverStateVersion,
+          route: args,
+          mySessionId: sessionId,
+          memberTeamId: s.memberTeamId,
+          hydrate: get().hydrateFromServerState,
+        });
+        if (!result.ok) return { ok: false as const, error: result.error };
+        return { ok: true as const };
       },
 
       closeRoute: (routeId) => {
@@ -3332,7 +3389,76 @@ export const useGame = create<GameStore>()(
 
       closeQuarter: () => {
         const s = get();
-        if (s.isObserver) return;
+        if (s.isObserver && !isServerAuthoritativeWrite()) return;
+
+        const boundGameId = s.session?.gameId;
+        const sessionId = s.localSessionId;
+        if (
+          boundGameId &&
+          sessionId &&
+          !isServerAuthoritativeWrite()
+        ) {
+          if (s.isClosing) return;
+          set({ isClosing: true });
+          void (async () => {
+            try {
+              const { postCloseQuarter, applyServerStateHydrate } = await import(
+                "@/lib/games/quarter-mutations"
+              );
+              const result = await postCloseQuarter({
+                gameId: boundGameId,
+                expectedVersion: s.serverStateVersion,
+                fromQuarter: s.currentQuarter,
+              });
+              if (!result.ok) {
+                if (result.status === 409) {
+                  try {
+                    const loadRes = await fetch(
+                      `/api/games/load?gameId=${encodeURIComponent(boundGameId)}&includeState=1`,
+                      { cache: "no-store" },
+                    );
+                    if (loadRes.ok) {
+                      const json = await loadRes.json();
+                      if (json?.state?.state_json) {
+                        get().hydrateFromServerState({
+                          stateJson: json.state.state_json,
+                          mySessionId: sessionId,
+                          fallbackTeamId: s.memberTeamId,
+                          dbVersion: json.state.version,
+                        });
+                      }
+                    }
+                  } catch {
+                    /* refetch best-effort */
+                  }
+                }
+                toast.warning(
+                  "Quarter close failed",
+                  result.error,
+                );
+                return;
+              }
+              applyServerStateHydrate(get().hydrateFromServerState, {
+                stateJson: result.stateJson,
+                mySessionId: sessionId,
+                fallbackTeamId: s.memberTeamId,
+                version: result.version,
+              });
+              if (result.snapshot && !result.snapshot.ok && result.snapshot.error) {
+                console.warn("[snapshots] server auto-save failed", result.snapshot.error);
+              }
+            } catch (err) {
+              console.error("[closeQuarter] server close failed", err);
+              toast.warning(
+                "Quarter close error",
+                "Could not reach the server. Please try again.",
+              );
+            } finally {
+              set({ isClosing: false });
+            }
+          })();
+          return;
+        }
 
         // Phase 6 P0 — re-entrancy guard. Two human players in a
         // self-guided cohort both mark ready within ~50ms; both
@@ -3731,83 +3857,14 @@ export const useGame = create<GameStore>()(
         // sees the routes as flying and books their revenue.
         const earlyRivals = s.teams.filter((t) => t.id !== player.id);
         const earlyBidsByAirport: Record<string, BidEntry[]> = {};
-        for (const t of [teamReadyPre, ...earlyRivals]) {
-          // Auto re-bid for pending routes whose stored pendingBidPrices
-          // indicate the player committed to a price.
-          const autoRebidsByAirport: Record<string, { slots: number; price: number }> = {};
-          for (const r of t.routes) {
-            if (r.status !== "pending") continue;
-            // Endpoints to rebid: union of (a) airports the player
-            // explicitly committed a price to via pendingBidPrices,
-            // and (b) the route's two endpoints. (b) catches the
-            // stuck-pending bug: when openRoute only stored a bid
-            // for one endpoint but the OTHER also had a shortfall,
-            // that endpoint never rebid and the route sat pending
-            // forever. Now we always try both endpoints, falling back
-            // to BASE_SLOT_PRICE_BY_TIER when the player didn't set
-            // a price. (`pendingBidPrices` is optional on a route, so
-            // the previous `if (!r.pendingBidPrices) continue` skipped
-            // legacy/edge-case routes entirely.)
-            const endpoints = new Set<string>([r.originCode, r.destCode]);
-            for (const code of Object.keys(r.pendingBidPrices ?? {})) {
-              endpoints.add(code);
-            }
-            for (const code of endpoints) {
-              const slotsHeld = t.airportLeases?.[code]?.slots ?? 0;
-              const usedAtCode = t.routes
-                .filter((rt) =>
-                  rt.id !== r.id &&
-                  (rt.status === "active" || rt.status === "suspended") &&
-                  (rt.originCode === code || rt.destCode === code),
-                )
-                .reduce((sum, rt) => sum + rt.dailyFrequency * 7, 0);
-              const intendedWeekly = r.dailyFrequency * 7;
-              const stillNeeded = Math.max(0, intendedWeekly + usedAtCode - slotsHeld);
-              if (stillNeeded <= 0) continue;
-              // Base price: player's committed price if any, else
-              // the tier's base slot price.
-              let basePrice = r.pendingBidPrices?.[code];
-              if (basePrice == null || !Number.isFinite(basePrice) || basePrice <= 0) {
-                const tier = (CITIES_BY_CODE[code]?.tier ?? 1) as 1 | 2 | 3 | 4;
-                basePrice = BASE_SLOT_PRICE_BY_TIER[tier] ?? 35_000;
-              }
-              // Price escalation: bump 15% per quarter the route has
-              // waited, capped at 3×. Without this, a route with a
-              // perpetually losing bid price stays stuck forever even
-              // with both endpoints covered. Cap matters: cargo/global
-              // routes can need 7-10 quarters to settle and we don't
-              // want to drain the team's cash on runaway bids.
-              const quartersPending = Math.max(
-                0,
-                s.currentQuarter - r.openQuarter,
-              );
-              const escalationFactor = Math.min(
-                3,
-                1 + 0.15 * quartersPending,
-              );
-              const escalatedPrice = Math.round(basePrice * escalationFactor);
-              const cur = autoRebidsByAirport[code];
-              autoRebidsByAirport[code] = {
-                slots: (cur?.slots ?? 0) + stillNeeded,
-                price: Math.max(cur?.price ?? 0, escalatedPrice),
-              };
-            }
-          }
-          for (const code of Object.keys(autoRebidsByAirport)) {
-            const existing = (t.pendingSlotBids ?? []).find((b) => b.airportCode === code);
-            if (existing) {
-              existing.slots = Math.max(existing.slots, autoRebidsByAirport[code].slots);
-              existing.pricePerSlot = Math.max(existing.pricePerSlot, autoRebidsByAirport[code].price);
-            } else {
-              (t.pendingSlotBids ??= []).push({
-                airportCode: code,
-                slots: autoRebidsByAirport[code].slots,
-                pricePerSlot: autoRebidsByAirport[code].price,
-                quarterSubmitted: s.currentQuarter,
-              });
-            }
-          }
-          for (const b of (t.pendingSlotBids ?? [])) {
+        const mergePendingBids = (t: Team): Team => {
+          const autoRebids = buildAutoRebidsForTeam(t, s.currentQuarter);
+          return mergeAutoRebidsIntoTeam(t, autoRebids, s.currentQuarter);
+        };
+        const playerMergedEarly = mergePendingBids(teamReadyPre);
+        const rivalsMergedEarly = earlyRivals.map(mergePendingBids);
+        for (const t of [playerMergedEarly, ...rivalsMergedEarly]) {
+          for (const b of t.pendingSlotBids ?? []) {
             (earlyBidsByAirport[b.airportCode] ??= []).push({
               teamId: t.id,
               airportCode: b.airportCode,
@@ -3846,71 +3903,16 @@ export const useGame = create<GameStore>()(
           return { ...t, airportLeases: newLeases, slotsByAirport: newSlots, pendingSlotBids: [] };
         };
 
-        const playerWithAwards = applyAwards(teamReadyPre);
-        const rivalsWithAwards = earlyRivals.map(applyAwards);
+        const playerWithAwards = applyAwards(playerMergedEarly);
+        const rivalsWithAwards = rivalsMergedEarly.map(applyAwards);
 
-        // Activate pending routes that now have enough slots at both endpoints.
-        let earlyActivations = 0;
-        const earlyStillPending: string[] = [];
-        const activatePending = (t: Team, surfaceDiagnostics: boolean): Team => {
-          if (!t.routes.some((r) => r.status === "pending")) return t;
-          const newRoutes: typeof t.routes = [];
-          for (const r of t.routes) {
-            if (r.status !== "pending") {
-              newRoutes.push(r);
-              continue;
-            }
-            const slotsO = t.airportLeases?.[r.originCode]?.slots ?? 0;
-            const slotsD = t.airportLeases?.[r.destCode]?.slots ?? 0;
-            const usedO = t.routes
-              .filter((rt) =>
-                rt.id !== r.id &&
-                (rt.status === "active" || rt.status === "suspended") &&
-                (rt.originCode === r.originCode || rt.destCode === r.originCode),
-              )
-              .reduce((sum, rt) => sum + rt.dailyFrequency * 7, 0);
-            const usedD = t.routes
-              .filter((rt) =>
-                rt.id !== r.id &&
-                (rt.status === "active" || rt.status === "suspended") &&
-                (rt.originCode === r.destCode || rt.destCode === r.destCode),
-              )
-              .reduce((sum, rt) => sum + rt.dailyFrequency * 7, 0);
-            const availO = Math.max(0, slotsO - usedO);
-            const availD = Math.max(0, slotsD - usedD);
-            const intendedWeekly = r.dailyFrequency * 7;
-            const effectiveWeekly = Math.min(intendedWeekly, availO, availD);
-            if (effectiveWeekly < 1) {
-              const reason =
-                `held ${slotsO}@${r.originCode} / ${slotsD}@${r.destCode}, ` +
-                `${usedO}/${usedD} used, ${availO}/${availD} free, ` +
-                `need ${intendedWeekly}/wk`;
-              if (surfaceDiagnostics) {
-                earlyStillPending.push(`${r.originCode}→${r.destCode}: ${reason}`);
-              }
-              // Persist the reason on the Route so the Routes panel can
-              // show it any time (not just the one-shot toast at close).
-              newRoutes.push({ ...r, pendingReason: reason });
-              continue;
-            }
-            if (surfaceDiagnostics) earlyActivations += 1;
-            newRoutes.push({
-              ...r,
-              status: "active" as const,
-              // Preserve fractional daily so 1–6 won weekly slots
-              // become 0.14–0.86 daily, not snapped up to 1 daily
-              // (= 7 weekly) which would silently over-consume slots.
-              dailyFrequency: Math.max(1 / 7, effectiveWeekly / 7),
-              pendingReason: undefined,
-              pendingBidPrices: undefined,
-              pendingBidSlots: undefined,
-            });
-          }
-          return { ...t, routes: newRoutes };
-        };
-
-        const teamReady = activatePending(playerWithAwards, true);
-        const rivalsAfterActivation = rivalsWithAwards.map((t) => activatePending(t, false));
+        const earlyPlayerActivation = activatePendingRoutes(playerWithAwards, true);
+        const teamReady = earlyPlayerActivation.team;
+        const earlyActivations = earlyPlayerActivation.activatedCount;
+        const earlyStillPending = earlyPlayerActivation.stillPendingDiagnostics;
+        const rivalsAfterActivation = rivalsWithAwards.map(
+          (t) => activatePendingRoutes(t, false).team,
+        );
 
         if (earlyActivations > 0) {
           toast.success(
@@ -4733,89 +4735,12 @@ export const useGame = create<GameStore>()(
         // Group every team's pendingSlotBids by airport, sort by price desc,
         // award winners, charge cash, add to slotsByAirport.
         const bidsByAirport: Record<string, BidEntry[]> = {};
-        for (const t of [closed, ...rivals]) {
-          // CRITICAL: auto re-bid for pending routes whose stored
-          // pendingBidPrices indicate the player committed to a price.
-          // Without this, a pending route gets ONE auction attempt and
-          // then the bid is gone — the route sits forever pending. Now
-          // every quarter close re-issues those bids until the route
-          // either activates OR the player cancels manually.
-          const autoRebidsByAirport: Record<string, { slots: number; price: number }> = {};
-          for (const r of t.routes) {
-            if (r.status !== "pending") continue;
-            // Endpoints to rebid: union of (a) airports the player
-            // explicitly committed a price to via pendingBidPrices,
-            // and (b) the route's two endpoints. (b) catches the
-            // stuck-pending bug: when openRoute only stored a bid
-            // for one endpoint but the OTHER also had a shortfall,
-            // that endpoint never rebid and the route sat pending
-            // forever. Now we always try both endpoints, falling back
-            // to BASE_SLOT_PRICE_BY_TIER when the player didn't set
-            // a price. (`pendingBidPrices` is optional on a route, so
-            // the previous `if (!r.pendingBidPrices) continue` skipped
-            // legacy/edge-case routes entirely.)
-            const endpoints = new Set<string>([r.originCode, r.destCode]);
-            for (const code of Object.keys(r.pendingBidPrices ?? {})) {
-              endpoints.add(code);
-            }
-            for (const code of endpoints) {
-              const slotsHeld = t.airportLeases?.[code]?.slots ?? 0;
-              const usedAtCode = t.routes
-                .filter((rt) =>
-                  rt.id !== r.id &&
-                  (rt.status === "active" || rt.status === "suspended") &&
-                  (rt.originCode === code || rt.destCode === code),
-                )
-                .reduce((sum, rt) => sum + rt.dailyFrequency * 7, 0);
-              const intendedWeekly = r.dailyFrequency * 7;
-              const stillNeeded = Math.max(0, intendedWeekly + usedAtCode - slotsHeld);
-              if (stillNeeded <= 0) continue;
-              // Base price: player's committed price if any, else
-              // the tier's base slot price.
-              let basePrice = r.pendingBidPrices?.[code];
-              if (basePrice == null || !Number.isFinite(basePrice) || basePrice <= 0) {
-                const tier = (CITIES_BY_CODE[code]?.tier ?? 1) as 1 | 2 | 3 | 4;
-                basePrice = BASE_SLOT_PRICE_BY_TIER[tier] ?? 35_000;
-              }
-              // Price escalation: bump 15% per quarter the route has
-              // waited, capped at 3×. Without this, a route with a
-              // perpetually losing bid price stays stuck forever even
-              // with both endpoints covered. Cap matters: cargo/global
-              // routes can need 7-10 quarters to settle and we don't
-              // want to drain the team's cash on runaway bids.
-              const quartersPending = Math.max(
-                0,
-                s.currentQuarter - r.openQuarter,
-              );
-              const escalationFactor = Math.min(
-                3,
-                1 + 0.15 * quartersPending,
-              );
-              const escalatedPrice = Math.round(basePrice * escalationFactor);
-              const cur = autoRebidsByAirport[code];
-              autoRebidsByAirport[code] = {
-                slots: (cur?.slots ?? 0) + stillNeeded,
-                price: Math.max(cur?.price ?? 0, escalatedPrice),
-              };
-            }
-          }
-          // Merge auto-rebids into the team's pendingSlotBids before
-          // the auction so they participate.
-          for (const code of Object.keys(autoRebidsByAirport)) {
-            const existing = (t.pendingSlotBids ?? []).find((b) => b.airportCode === code);
-            if (existing) {
-              existing.slots = Math.max(existing.slots, autoRebidsByAirport[code].slots);
-              existing.pricePerSlot = Math.max(existing.pricePerSlot, autoRebidsByAirport[code].price);
-            } else {
-              (t.pendingSlotBids ??= []).push({
-                airportCode: code,
-                slots: autoRebidsByAirport[code].slots,
-                pricePerSlot: autoRebidsByAirport[code].price,
-                quarterSubmitted: s.currentQuarter,
-              });
-            }
-          }
-          for (const b of (t.pendingSlotBids ?? [])) {
+        const lateTeamsMerged = [closed, ...rivals].map((t) => {
+          const autoRebids = buildAutoRebidsForTeam(t, s.currentQuarter);
+          return mergeAutoRebidsIntoTeam(t, autoRebids, s.currentQuarter);
+        });
+        for (const t of lateTeamsMerged) {
+          for (const b of t.pendingSlotBids ?? []) {
             (bidsByAirport[b.airportCode] ??= []).push({
               teamId: t.id,
               airportCode: b.airportCode,
@@ -4848,7 +4773,7 @@ export const useGame = create<GameStore>()(
         // Each won slot adds `weeklyPricePerSlot` to the team's airport lease
         // total weekly cost; the slots count rises by slotsWon. Quarterly
         // expense accrues based on this lease state at the next close.
-        const teamsWithAwards = [closed, ...rivals].map((t) => {
+        const teamsWithAwards = lateTeamsMerged.map((t) => {
           const won = awards.filter((a) => a.teamId === t.id && a.slotsWon > 0);
           if (won.length === 0) {
             return { ...t, pendingSlotBids: [] };
@@ -5058,6 +4983,68 @@ export const useGame = create<GameStore>()(
 
       advanceToNext: () => {
         const s = get();
+        const boundGameId = s.session?.gameId;
+        const sessionId = s.localSessionId;
+        if (
+          boundGameId &&
+          sessionId &&
+          !isServerAuthoritativeWrite()
+        ) {
+          void (async () => {
+            try {
+              const { postAdvanceQuarter, applyServerStateHydrate } = await import(
+                "@/lib/games/quarter-mutations"
+              );
+              const result = await postAdvanceQuarter({
+                gameId: boundGameId,
+                expectedVersion: s.serverStateVersion,
+                fromQuarter: s.currentQuarter,
+              });
+              if (!result.ok) {
+                if (result.status === 409) {
+                  try {
+                    const loadRes = await fetch(
+                      `/api/games/load?gameId=${encodeURIComponent(boundGameId)}&includeState=1`,
+                      { cache: "no-store" },
+                    );
+                    if (loadRes.ok) {
+                      const json = await loadRes.json();
+                      if (json?.state?.state_json) {
+                        get().hydrateFromServerState({
+                          stateJson: json.state.state_json,
+                          mySessionId: sessionId,
+                          fallbackTeamId: s.memberTeamId,
+                          dbVersion: json.state.version,
+                        });
+                      }
+                    }
+                  } catch {
+                    /* refetch best-effort */
+                  }
+                } else {
+                  toast.warning("Advance failed", result.error);
+                }
+                return;
+              }
+              applyServerStateHydrate(get().hydrateFromServerState, {
+                stateJson: result.stateJson,
+                mySessionId: sessionId,
+                fallbackTeamId: s.memberTeamId,
+                version: result.version,
+              });
+              if (result.snapshot && !result.snapshot.ok && result.snapshot.error) {
+                console.warn("[snapshots] server auto-save failed", result.snapshot.error);
+              }
+            } catch (err) {
+              console.error("[advanceToNext] server advance failed", err);
+              toast.warning(
+                "Advance error",
+                "Could not reach the server. Please try again.",
+              );
+            }
+          })();
+          return;
+        }
         // Phase 3: respect the configured totalRounds so 8 / 16 / 24
         // round games end at their configured stop, not always at 40.
         const totalRounds = getTotalRounds(s);
@@ -5333,18 +5320,11 @@ export const useGame = create<GameStore>()(
         // the snapshot represents the freshly-advanced state — i.e.
         // "the game at the start of round nextQ". One snapshot per
         // round (re-saving same round overwrites).
-        void get().saveQuarterSnapshot().catch((err) => {
-          // Auto-save must never break the game flow. Failures here
-          // are usually one of:
-          //  - 403 because the calling user isn't recognised as host
-          //    (auth-id mismatch — see Lobby-3 follow-up PR).
-          //  - 503/network: transient infra hiccup.
-          //  - 401: session lapsed.
-          // None are user-actionable from inside the simulation, so
-          // we log to console for diagnostics and stay quiet on the
-          // UI. The next quarter close will retry the snapshot.
-          console.error("[snapshots] auto-save failed", err);
-        });
+        if (!isServerAuthoritativeWrite()) {
+          void get().saveQuarterSnapshot().catch((err) => {
+            console.error("[snapshots] auto-save failed", err);
+          });
+        }
 
         // ── Multiplayer state write-back ─────────────────────
         // When the game is bound to a server-side gameId, push the
@@ -5356,10 +5336,12 @@ export const useGame = create<GameStore>()(
         // browser back in sync — the engine doesn't unwind the
         // local close. Solo runs and runs without session.gameId
         // skip this entirely.
-        get().pushStateToServer("game.quarterClosed", {
-          fromQuarter: s.currentQuarter,
-          toQuarter: nextQ,
-        });
+        if (!isServerAuthoritativeWrite()) {
+          get().pushStateToServer("game.quarterClosed", {
+            fromQuarter: s.currentQuarter,
+            toQuarter: nextQ,
+          });
+        }
 
         // Player-facing label: "Round 13/N" headline with the calendar
         // quarter as the detail line. N comes from the game's session
@@ -5422,59 +5404,64 @@ export const useGame = create<GameStore>()(
           return;
         }
 
-        const savedActiveTeamId = s.activeTeamId;
+        const gameId = s.session?.gameId;
+        const sessionId = s.localSessionId;
+        if (gameId && sessionId) {
+          _gmAdvanceInFlight = true;
+          set({ gmAdvanceInFlight: true });
+          void (async () => {
+            try {
+              const { postCloseQuarter, applyServerStateHydrate } = await import(
+                "@/lib/games/quarter-mutations"
+              );
+              const result = await postCloseQuarter({
+                gameId,
+                expectedVersion: s.serverStateVersion,
+                fromQuarter: s.currentQuarter,
+                facilitatorAdvance: true,
+              });
+              if (!result.ok) {
+                toast.warning("GM advance failed", result.error);
+                return;
+              }
+              applyServerStateHydrate(get().hydrateFromServerState, {
+                stateJson: result.stateJson,
+                mySessionId: sessionId,
+                fallbackTeamId: null,
+                version: result.version,
+              });
+              if (result.snapshot && !result.snapshot.ok && result.snapshot.error) {
+                toast.warning(
+                  "Quarter snapshot not saved",
+                  result.snapshot.error,
+                );
+              }
+            } catch (err) {
+              console.error("[gmAdvanceQuarter] server advance failed", err);
+              toast.warning(
+                "GM advance error",
+                "Could not reach the server. Please try again.",
+              );
+            } finally {
+              _gmAdvanceInFlight = false;
+              set({ gmAdvanceInFlight: false, lastCloseResult: null });
+            }
+          })();
+          return;
+        }
 
-        // ── Suppress internal pushes, then run bot turns ────────────────
-        // closeQuarter has `if (s.isObserver) return;` at its top, so we
-        // must set isObserver:false for it to actually process bot turns.
-        // But that causes closeQuarter to fire pushStateToServer internally
-        // at version N, and our final push also at version N → 409 race.
-        // Solution: _suppressGmPush blocks ALL pushStateToServer calls until
-        // we clear it and fire the single authoritative write ourselves.
+        // Offline / unbound session fallback — local simulation only.
         _suppressGmPush = true;
         set({ isObserver: false, playerTeamId: focusTeam.id, activeTeamId: focusTeam.id });
-
-        // closeQuarter runs all bot AI decisions (routes, aircraft, slots),
-        // processes every team through runQuarterClose, resolves slot
-        // auctions, and updates fuel / interest rate. Fully synchronous.
-        // Internal push is suppressed by _suppressGmPush.
         get().closeQuarter();
-
-        // advanceToNext bumps currentQuarter and transitions phase → "playing".
-        // Internal push also suppressed.
         get().advanceToNext();
-
-        // ── Single atomic write ─────────────────────────────────────────
-        // Restore clean observer state FIRST so the stateJson captured by
-        // pushStateToServer has playerTeamId:null (not the synthetic bot id).
-        // Without this, every re-hydration from Realtime restores the bot as
-        // the player, causing subtle state pollution across rounds.
         set({
           isObserver: true,
           playerTeamId: null,
-          activeTeamId: savedActiveTeamId,
+          activeTeamId: s.activeTeamId,
           lastCloseResult: null,
         });
-
-        // Brief flip to non-observer just for the push call — React effects
-        // are async (fire after paint), so this synchronous window is
-        // invisible to the UI. _suppressGmPush=false allows the push through.
         _suppressGmPush = false;
-        _gmAdvanceInFlight = true;
-        // Sync to Zustand so BotAutoAdvanceBanner can disable the Skip
-        // button and auto-retry, preventing the "stuck at 0s" freeze
-        // when the user clicks faster than the server round-trip.
-        set({ isObserver: false, gmAdvanceInFlight: true });
-        const pushPromise = get().pushStateToServer("game.botRoundAdvanced", {
-          quarter: get().currentQuarter,
-        });
-        set({ isObserver: true });
-        // Clear both the fast module-level guard AND the reactive Zustand
-        // flag once the push settles (success or 409).
-        void (pushPromise as Promise<unknown>).finally(() => {
-          _gmAdvanceInFlight = false;
-          set({ gmAdvanceInFlight: false });
-        });
       },
 
       // setAirlineColor is defined earlier in this file (line ~5147 in
@@ -6246,8 +6233,16 @@ export const useGame = create<GameStore>()(
             ...(dbVersion !== undefined ? { serverStateVersion: dbVersion } : {}),
             // Reset transient UI — a fresh hydrate is a hard reload
             // of the campaign, not a continuation of a paused close.
-            lastCloseResult: null,
-            phase: restored.phase === "endgame" ? "endgame" : "playing",
+            lastCloseResult:
+              restored.phase === "quarter-closing"
+                ? restored.lastCloseResult ?? null
+                : null,
+            phase:
+              restored.phase === "endgame"
+                ? "endgame"
+                : restored.phase === "quarter-closing"
+                  ? "quarter-closing"
+                  : "playing",
             // Flag this browser as being in a multiplayer session.
             // The custom persist storage checks this flag and refuses to
             // write to the solo save slot, so solo saves are never
@@ -6285,7 +6280,9 @@ export const useGame = create<GameStore>()(
         // Suppress internal pushes during gmAdvanceQuarter so only one
         // atomic write goes out after both closeQuarter + advanceToNext
         // have fully computed the new state.
-        if (_suppressGmPush) return Promise.resolve({ ok: true as const });
+        if (_suppressGmPush || isServerAuthoritativeWrite()) {
+          return Promise.resolve({ ok: true as const });
+        }
         const session = s.session;
         // Solo runs (no session) and runs that haven't been bound to a
         // server-side gameId skip the write-back entirely. Returning
@@ -6710,6 +6707,26 @@ export const useGame = create<GameStore>()(
         toast.info(`Slot bid queued at ${airportCode}`,
           `${slots} slots × $${(pricePerSlot / 1000).toFixed(0)}K = $${(maxCost / 1_000_000).toFixed(1)}M max`);
         return { ok: true };
+      },
+
+      submitSlotBidAsync: async (airportCode, slots, pricePerSlot) => {
+        const s = get();
+        const gameId = s.session?.gameId;
+        const sessionId = s.localSessionId;
+        if (!gameId || !sessionId) {
+          return get().submitSlotBid(airportCode, slots, pricePerSlot);
+        }
+        const { postSlotBid } = await import("@/lib/games/route-mutations");
+        return postSlotBid({
+          gameId,
+          expectedVersion: s.serverStateVersion,
+          airportCode,
+          slots,
+          pricePerSlot,
+          mySessionId: sessionId,
+          memberTeamId: s.memberTeamId,
+          hydrate: get().hydrateFromServerState,
+        });
       },
 
       releaseSlots: (airportCode, slotsToRelease) => {
