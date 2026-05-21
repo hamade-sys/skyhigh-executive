@@ -366,15 +366,19 @@ export function maxRouteDailyFrequency(
 }
 
 // ─── Hub attractiveness bonus (PRD E7) ─────────────────────
-/** Returns multiplier (e.g. 1.18 for primary hub) for a route touching a team's hub. */
+/** Returns multiplier (e.g. 1.22 for primary hub) for a route touching a team's hub.
+ *  Bumped from 1.18 → 1.22 (primary) / 1.10 → 1.12 (secondary) so the
+ *  hub feels like the dominant factor it's meant to be in the player's
+ *  network choice (workshop feedback: hub bonus felt too modest vs the
+ *  hub investment cost — primary hub fees can be $200-300M). */
 export function hubAttractivenessBonus(
   team: { hubCode: string; secondaryHubCodes: string[] },
   origin: string,
   dest: string,
 ): number {
-  if (team.hubCode === origin || team.hubCode === dest) return 1.18;
+  if (team.hubCode === origin || team.hubCode === dest) return 1.22;
   if (team.secondaryHubCodes?.includes(origin) || team.secondaryHubCodes?.includes(dest))
-    return 1.10;
+    return 1.12;
   return 1.0;
 }
 
@@ -1147,10 +1151,15 @@ export function serviceScoreFromSliders(s: Sliders): number {
 }
 
 /** Customer Service slider → occupancy multiplier (PRD E1).
- *  Higher CS retains more passengers, lower causes leakage even at low fares. */
+ *  Higher CS retains more passengers, lower causes leakage even at low fares.
+ *
+ *  Curve widened post-workshop feedback (user: "the multipliers don't
+ *  make sense"). Previous spread [0.92-1.10] meant L3/L4/L5 looked
+ *  ~indistinguishable on the route detail panel. New spread [0.90-1.18]
+ *  separates the tiers clearly — every level up gives roughly +6%. */
 export function customerServiceOccupancyMultiplier(s: Sliders): number {
   const cs = s.customerService ?? 2;
-  return [0.92, 0.96, 1.0, 1.03, 1.06, 1.10][cs] ?? 1.0;
+  return [0.90, 0.95, 1.0, 1.06, 1.12, 1.18][cs] ?? 1.0;
 }
 
 // ─── Route quarterly economics ─────────────────────────────
@@ -1489,9 +1498,13 @@ export function computeRouteEconomics(
   let cabinPenalty = 1.0;
   if (planes.length > 0) {
     const worstSat = Math.min(...planes.map(effectiveSat));
-    if (worstSat < 30) cabinPenalty = 0.92;
-    else if (worstSat < 50) cabinPenalty = 0.96;
-    else if (worstSat >= 80) cabinPenalty = 1.02;
+    // Curve widened post-workshop feedback so cabin condition
+    // is more than a token signal.  Old [<30=0.92, <50=0.96,
+    // ≥80=1.02] now [<30=0.88, <50=0.95, ≥80=1.05]. The middle
+    // band 50-79% stays at 1.0 baseline.
+    if (worstSat < 30) cabinPenalty = 0.88;
+    else if (worstSat < 50) cabinPenalty = 0.95;
+    else if (worstSat >= 80) cabinPenalty = 1.05;
     // Premium-tier amenity stacking: when ALL planes on the route
     // have at least Premium Seating + Entertainment fitted, the
     // route earns a small additional uplift. Models the brand effect
@@ -2065,14 +2078,17 @@ export function loyaltyDemandMultiplier(
   return positive ? 0.7 : 1.4;
 }
 
-/** Pass-through loyalty scale for baseline demand (−5%..+5%). */
+/** Pass-through loyalty scale for baseline demand.
+ *  Curve widened post-workshop feedback — user complained that 67%
+ *  loyalty only earned ×1.03, which felt too small for the effort
+ *  required to build it. New spread roughly doubles the range
+ *  (−12%..+10%) so loyalty becomes a real strategic lever. */
 export function loyaltyRetentionFactor(loyaltyPct: number): number {
-  // 0.95 at 30, 1.00 at 50, 1.05 at 80+
-  if (loyaltyPct >= 80) return 1.05;
-  if (loyaltyPct >= 65) return 1.03;
+  if (loyaltyPct >= 80) return 1.10;
+  if (loyaltyPct >= 65) return 1.06;
   if (loyaltyPct >= 50) return 1.0;
-  if (loyaltyPct >= 35) return 0.97;
-  return 0.93;
+  if (loyaltyPct >= 35) return 0.94;
+  return 0.88;
 }
 
 export function scaledCashBasisUsd(team: Team, basis: ScaledCashEffect["basis"]): number {
