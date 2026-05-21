@@ -7,8 +7,9 @@ import { useUi } from "@/store/ui";
 import { fmtMoney, fmtPct } from "@/lib/format";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { AIRCRAFT_BY_ID } from "@/data/aircraft";
-import { classFareRangeForDoctrine, distanceBetween, effectiveRangeKm, maxRouteDailyFrequency, routeDemandPerDay } from "@/lib/engine";
-import type { CityTier, PricingTier } from "@/types/game";
+import { classDemandShares, classFareRangeForDoctrine, distanceBetween, effectiveRangeKm, maxRouteDailyFrequency, routeDemandPerDay } from "@/lib/engine";
+import type { CityTier, PricingTier, Route } from "@/types/game";
+import { QUARTER_DAYS } from "@/lib/engine";
 import { cn } from "@/lib/cn";
 import {
   airlineColorFor,
@@ -1074,7 +1075,7 @@ function RouteDetailModal({
     // plane's seats, not the sum across planes. dailyFreq is already
     // the total daily flights across the fleet, so capacity is
     // (avg seats per flight) × dailyFreq.
-    let seatsSum = 0;
+    const seatsByClassSum = { first: 0, bus: 0, econ: 0 };
     let seatedPlaneCount = 0;
     for (const id of selectedPlaneIds) {
       const p = player.fleet.find((f) => f.id === id);
@@ -1082,14 +1083,49 @@ function RouteDetailModal({
       const spec = AIRCRAFT_BY_ID[p.specId];
       const seats = p.customSeats ?? spec?.seats;
       if (!seats) continue;
-      seatsSum += seats.first + seats.business + seats.economy;
+      seatsByClassSum.first += seats.first;
+      seatsByClassSum.bus += seats.business;
+      seatsByClassSum.econ += seats.economy;
       seatedPlaneCount += 1;
     }
-    const avgSeatsPerFlight = seatedPlaneCount > 0 ? seatsSum / seatedPlaneCount : 0;
+    const avgSeatsPerFlight = seatedPlaneCount > 0
+      ? (seatsByClassSum.first + seatsByClassSum.bus + seatsByClassSum.econ) / seatedPlaneCount
+      : 0;
+    const avgSeatsByClass = seatedPlaneCount > 0
+      ? {
+          first: seatsByClassSum.first / seatedPlaneCount,
+          bus: seatsByClassSum.bus / seatedPlaneCount,
+          econ: seatsByClassSum.econ / seatedPlaneCount,
+        }
+      : { first: 0, bus: 0, econ: 0 };
     const dailyCapacity = avgSeatsPerFlight * dailyFreq;
     if (dailyCapacity === 0) return null;
     const occ = Math.min(1, demand / dailyCapacity);
-    return { kind: "passenger" as const, demand, capacity: dailyCapacity, occupancy: occ };
+    // ── Per-class decomposition (Phase 1A) ──────────────────────
+    // Mirrors the engine's class share logic. Lets the player see
+    // "First 4 demand/day, only 12 seats configured" and right-size
+    // the cabin mix without flipping back and forth between modal
+    // and fleet panel.
+    const o = CITIES_BY_CODE[route.originCode];
+    const d = CITIES_BY_CODE[route.destCode];
+    const shares = (o && d)
+      ? classDemandShares(route.distanceKm, o.tier, d.tier)
+      : { first: 0, bus: 0, econ: 1 };
+    const byClass = {
+      demandFirst: demand * shares.first,
+      demandBus: demand * shares.bus,
+      demandEcon: demand * shares.econ,
+      capacityFirst: avgSeatsByClass.first * dailyFreq,
+      capacityBus: avgSeatsByClass.bus * dailyFreq,
+      capacityEcon: avgSeatsByClass.econ * dailyFreq,
+    };
+    return {
+      kind: "passenger" as const,
+      demand,
+      capacity: dailyCapacity,
+      occupancy: occ,
+      byClass,
+    };
   })();
 
   // Are all required bids set when there's a shortfall? Save's split
@@ -1245,12 +1281,24 @@ function RouteDetailModal({
             label={route.isCargo ? "Cargo occupancy" : "Occupancy"}
             value={fmtPct(route.avgOccupancy * 100, 0)}
             tone={route.avgOccupancy > 0.7 ? "pos" : route.avgOccupancy > 0 && route.avgOccupancy < 0.5 ? "neg" : undefined}
-            sub={route.isCargo ? "tonnes shipped / capacity" : "pax / seats"}
+            sub={
+              route.isCargo
+                ? "tonnes shipped / capacity"
+                : (route.occupancyFirst !== undefined ||
+                    route.occupancyBus !== undefined ||
+                    route.occupancyEcon !== undefined)
+                  ? `F ${fmtPct((route.occupancyFirst ?? 0) * 100, 0)} · C ${fmtPct((route.occupancyBus ?? 0) * 100, 0)} · Y ${fmtPct((route.occupancyEcon ?? 0) * 100, 0)}`
+                  : "pax / seats"
+            }
           />
           <MiniStat
             label="Q revenue"
             value={fmtMoney(route.quarterlyRevenue)}
-            sub={`fuel ${fmtMoney(route.quarterlyFuelCost)} · slot ${fmtMoney(route.quarterlySlotCost)}`}
+            sub={`fuel ${fmtMoney(route.quarterlyFuelCost)}${
+              route.quarterlySlotCostAllocation !== undefined
+                ? ` · slot ${fmtMoney(route.quarterlySlotCostAllocation)}`
+                : ""
+            }`}
           />
           <MiniStat
             label="Direct contribution"
@@ -1265,6 +1313,32 @@ function RouteDetailModal({
             sub="after share of company costs"
           />
         </div>
+
+        {/* ── Revenue + Cost breakdown (Phase 1A — addresses Hamade's
+            workshop feedback: "no per-class revenue breakdown" + the
+            misleading $0 slot cost on every route). Renders only when
+            the engine has populated the new per-class fields (post-PR
+            saves; legacy saves fall back to the aggregate MiniStat
+            above). Every line reconciles to the headline `quarterlyRevenue`
+            / `quarterlyAllocatedCost`. */}
+        <RouteBreakdown route={route} />
+
+        {/* ── Demand-shock hint (Phase 1A) — explains a sudden swing
+            in revenue ("Q5 demand was 0.92× normal due to news events").
+            Only shows when the engine recorded a meaningful shock at
+            close. */}
+        {route.lastQuarterDemandShockMult !== undefined && (
+          <div className="rounded-md border border-line bg-surface-2/30 px-3 py-2 text-[0.75rem] text-ink-2">
+            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted mr-2">
+              News impact
+            </span>
+            Last quarter&apos;s demand on this route was{" "}
+            <strong className="text-ink tabular font-mono">
+              {route.lastQuarterDemandShockMult.toFixed(2)}×
+            </strong>{" "}
+            normal due to active news events at one or both endpoints.
+          </div>
+        )}
 
         {/* ── Demand vs capacity projection — restored. Tells the player
             the OD pair's daily demand AND how much of it the currently
@@ -1328,6 +1402,31 @@ function RouteDetailModal({
                 </div>
               </div>
             </div>
+            {/* ── Per-class decomposition (Phase 1A) ──────────────
+                Show First / Business / Economy demand vs capacity so
+                the player can right-size the cabin mix. A premium-heavy
+                aircraft on a leisure route shows F demand far below
+                capacity; a single-cabin on a Tier-1 trunk shows
+                business demand spilling out. */}
+            {projection.kind === "passenger" && projection.byClass && (
+              <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-line/40 text-[0.6875rem]">
+                <ClassDemandCell
+                  label="First"
+                  demand={projection.byClass.demandFirst}
+                  capacity={projection.byClass.capacityFirst}
+                />
+                <ClassDemandCell
+                  label="Business"
+                  demand={projection.byClass.demandBus}
+                  capacity={projection.byClass.capacityBus}
+                />
+                <ClassDemandCell
+                  label="Economy"
+                  demand={projection.byClass.demandEcon}
+                  capacity={projection.byClass.capacityEcon}
+                />
+              </div>
+            )}
             <div className="text-[0.625rem] text-ink-muted leading-snug mt-1.5">
               {projection.kind === "cargo"
                 ? "Demand = min(origin, dest) business demand in tonnes (before market-focus + news modifiers)."
@@ -1648,6 +1747,86 @@ function RouteDetailModal({
                 <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
                   Higher rates extract more revenue per tonne but suppress demand against competitors;
                   lower rates fill capacity at thinner margins.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── 4b. Belly cargo rate (passenger routes with belly-equipped
+            aircraft) — Phase 1A. The player previously had no way to
+            price belly cargo on a passenger route; the engine just
+            applied a fixed 80% × tier-based rate. Now the same
+            cargoRatePerTonne field carries the belly rate, gated by
+            "does at least one assigned aircraft actually have a belly
+            upgrade." Hidden entirely on routes whose aircraft are not
+            belly-equipped so the UI doesn't surface a control with
+            no effect. */}
+        {!route.isCargo && (() => {
+          // Check the LIVE-edited aircraft selection (selectedPlaneIds)
+          // so the slider appears/disappears as the player toggles
+          // belly-equipped vs not-belly-equipped aircraft into the
+          // route.
+          const hasBelly = selectedPlaneIds.some((id) => {
+            const f = player.fleet.find((p) => p.id === id);
+            return f && (f.cargoBelly ?? "none") !== "none";
+          });
+          if (!hasBelly) return null;
+          const baseRate = route.distanceKm < 3000 ? 3.5 : 5.5;
+          const tierMult =
+            tier === "budget" ? 0.5 :
+            tier === "premium" ? 1.5 :
+            tier === "ultra" ? 2.0 : 1.0;
+          const tierBaseRate = baseRate * tierMult * 0.80;  // belly = 80% of full cargo rate
+          const minRate = tierBaseRate * 0.5;
+          const maxRate = tierBaseRate * 3.0;
+          const effective = cargoRate ?? tierBaseRate;
+          return (
+            <div className="space-y-3">
+              <Label>4b · Belly cargo rate per tonne (optional override)</Label>
+              <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-3">
+                <div className="flex items-baseline justify-between text-[0.8125rem]">
+                  <span className="text-ink-2">
+                    Default ${tierBaseRate.toFixed(2)}/T
+                    <span className="text-ink-muted"> · belly (parcels/mail)</span>
+                  </span>
+                  <span className="text-ink-muted">
+                    80% of full cargo rate
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={minRate}
+                    max={maxRate}
+                    step={0.1}
+                    value={effective}
+                    onChange={(e) => setCargoRate(parseFloat(e.target.value))}
+                    className="flex-1 accent-primary"
+                    aria-label="Belly cargo rate per tonne"
+                  />
+                  <span className="tabular font-mono text-ink font-semibold w-20 text-right">
+                    ${effective.toFixed(2)}/T
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between text-[0.6875rem] text-ink-muted">
+                  <span>Min ${minRate.toFixed(2)}</span>
+                  {cargoRate !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setCargoRate(null)}
+                      className="text-accent hover:underline"
+                    >
+                      Reset to default
+                    </button>
+                  )}
+                  <span>Max ${maxRate.toFixed(2)}</span>
+                </div>
+                <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
+                  Belly cargo on this passenger route carries parcels and mail
+                  alongside passengers (no extra fuel burn). Higher rates extract
+                  more revenue per tonne; lower rates compete harder for the
+                  parcels pool.
                 </p>
               </div>
             </div>
@@ -2254,6 +2433,257 @@ function RegionSection({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Per-route Revenue / Cost breakdown surfaced inside RouteDetailModal.
+ * Plumbs the per-class + per-category fields that runQuarterClose now
+ * writes onto each Route record, so the player can audit exactly where
+ * the route's $X.XM revenue and $Y.YM cost came from.
+ *
+ * Legacy save guard: every field is optional on the Route type; if
+ * none have populated yet (pre-PR save, or a route that hasn't been
+ * through a quarter close), the component renders nothing.
+ */
+function RouteBreakdown({ route }: { route: Route }) {
+  // Has at least one per-class field landed? If no, this route hasn't
+  // been through a close yet OR the save predates Phase 1A — show
+  // nothing rather than a confusing all-zeros block.
+  const hasPerClass =
+    route.quarterlyFirstRevenue !== undefined ||
+    route.quarterlyBusRevenue !== undefined ||
+    route.quarterlyEconRevenue !== undefined ||
+    route.bellyCargoRevenue !== undefined ||
+    route.cargoRevenue !== undefined;
+  const hasCategoryAlloc =
+    route.allocatedStaff !== undefined ||
+    route.allocatedMarketing !== undefined ||
+    route.allocatedMaintenance !== undefined ||
+    route.allocatedDepreciation !== undefined ||
+    route.allocatedInterest !== undefined ||
+    route.allocatedTaxes !== undefined;
+  if (!hasPerClass && !hasCategoryAlloc) return null;
+
+  // Per-class revenue table. Cargo routes show one cargo row +
+  // belly row (if applicable, which they don't carry); passenger
+  // routes show First / Business / Economy with optional Belly cargo
+  // beneath when a belly-equipped aircraft is on the route.
+  const QD = QUARTER_DAYS;
+  const revRows: Array<{
+    label: string;
+    paxPerDay?: number;
+    fare?: number;
+    dailyTonnes?: number;
+    ratePerTonne?: number;
+    revenue: number;
+    seatsPerFlight?: number;
+    occupancyPct?: number;
+  }> = [];
+
+  if (!route.isCargo) {
+    if ((route.quarterlyFirstRevenue ?? 0) > 0 || (route.quarterlyFirstPax ?? 0) > 0) {
+      revRows.push({
+        label: "First class",
+        paxPerDay: (route.quarterlyFirstPax ?? 0) / Math.max(1, QD * route.dailyFrequency),
+        fare: route.firstFare ?? undefined,
+        revenue: route.quarterlyFirstRevenue ?? 0,
+        occupancyPct: route.occupancyFirst !== undefined ? route.occupancyFirst * 100 : undefined,
+      });
+    }
+    if ((route.quarterlyBusRevenue ?? 0) > 0 || (route.quarterlyBusPax ?? 0) > 0) {
+      revRows.push({
+        label: "Business",
+        paxPerDay: (route.quarterlyBusPax ?? 0) / Math.max(1, QD * route.dailyFrequency),
+        fare: route.busFare ?? undefined,
+        revenue: route.quarterlyBusRevenue ?? 0,
+        occupancyPct: route.occupancyBus !== undefined ? route.occupancyBus * 100 : undefined,
+      });
+    }
+    if ((route.quarterlyEconRevenue ?? 0) > 0 || (route.quarterlyEconPax ?? 0) > 0) {
+      revRows.push({
+        label: "Economy",
+        paxPerDay: (route.quarterlyEconPax ?? 0) / Math.max(1, QD * route.dailyFrequency),
+        fare: route.econFare ?? undefined,
+        revenue: route.quarterlyEconRevenue ?? 0,
+        occupancyPct: route.occupancyEcon !== undefined ? route.occupancyEcon * 100 : undefined,
+      });
+    }
+    if ((route.bellyCargoRevenue ?? 0) > 0 || (route.bellyDailyTonnesUsed ?? 0) > 0) {
+      revRows.push({
+        label: "Belly cargo",
+        dailyTonnes: route.bellyDailyTonnesUsed ?? 0,
+        revenue: route.bellyCargoRevenue ?? 0,
+      });
+    }
+  } else {
+    revRows.push({
+      label: "Cargo (full hold)",
+      dailyTonnes: route.avgOccupancy * route.dailyFrequency, // approximation; engine doesn't surface daily tonnes on cargo routes today
+      ratePerTonne: route.cargoRatePerTonne ?? undefined,
+      revenue: route.cargoRevenue ?? route.quarterlyRevenue,
+    });
+  }
+
+  // Cost rows. Fuel is direct (route-attributable, exact); everything
+  // else is allocated by revenue-share at the team level.
+  const fuelSavings = route.quarterlyFuelTankSavings ?? 0;
+  const costRows: Array<{ label: string; amount: number; hint?: string; bold?: boolean }> = [];
+  costRows.push({
+    label: "Fuel (direct)",
+    amount: route.quarterlyFuelCost,
+    hint:
+      fuelSavings > 0
+        ? `Saved ${fmtMoney(fuelSavings)} via hub fuel tank (5% off spot index).`
+        : undefined,
+  });
+  if (route.quarterlySlotCostAllocation !== undefined) {
+    costRows.push({
+      label: "Slot allocation",
+      amount: route.quarterlySlotCostAllocation,
+      hint: "Your share of the team's slot-fee pool, weighted by revenue contribution.",
+    });
+  }
+  if (route.allocatedStaff !== undefined) costRows.push({ label: "Staff share", amount: route.allocatedStaff });
+  if (route.allocatedMarketing !== undefined) costRows.push({ label: "Marketing share", amount: route.allocatedMarketing });
+  if (route.allocatedService !== undefined && route.allocatedService > 1) costRows.push({ label: "Service share", amount: route.allocatedService });
+  if (route.allocatedOperations !== undefined && route.allocatedOperations > 1) costRows.push({ label: "Operations share", amount: route.allocatedOperations });
+  if (route.allocatedCustomerService !== undefined && route.allocatedCustomerService > 1) costRows.push({ label: "Customer-service share", amount: route.allocatedCustomerService });
+  if (route.allocatedMaintenance !== undefined) costRows.push({ label: "Maintenance share", amount: route.allocatedMaintenance });
+  if (route.allocatedHubFee !== undefined && route.allocatedHubFee > 1) costRows.push({ label: "Hub fee share", amount: route.allocatedHubFee });
+  if (route.allocatedDepreciation !== undefined && route.allocatedDepreciation > 1) costRows.push({ label: "Depreciation share", amount: route.allocatedDepreciation });
+  if (route.allocatedInterest !== undefined && route.allocatedInterest > 1) costRows.push({ label: "Interest share", amount: route.allocatedInterest });
+  if (route.allocatedTaxes !== undefined && route.allocatedTaxes > 1) costRows.push({ label: "Taxes & levies share", amount: route.allocatedTaxes });
+
+  const totalRevenue = revRows.reduce((s, r) => s + r.revenue, 0);
+  const totalCost = costRows.reduce((s, r) => s + r.amount, 0);
+  const operatingProfit = totalRevenue - totalCost;
+
+  return (
+    <div className="rounded-md border border-line bg-surface-2/30 p-3 space-y-3">
+      <div className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+        Revenue &amp; cost breakdown
+      </div>
+
+      {/* Revenue block */}
+      {revRows.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">Revenue</div>
+          <div className="space-y-1">
+            {revRows.map((r) => (
+              <BreakdownRow
+                key={r.label}
+                label={r.label}
+                detail={
+                  r.paxPerDay !== undefined && r.fare !== undefined
+                    ? `${Math.round(r.paxPerDay).toLocaleString()} pax/day × ${fmtMoney(r.fare)} fare${
+                        r.occupancyPct !== undefined ? ` · ${Math.round(r.occupancyPct)}% load` : ""
+                      }`
+                    : r.dailyTonnes !== undefined && r.ratePerTonne !== undefined
+                      ? `${r.dailyTonnes.toFixed(1)} t/day × $${r.ratePerTonne.toFixed(2)}/t`
+                      : r.dailyTonnes !== undefined
+                        ? `${r.dailyTonnes.toFixed(1)} t/day belly`
+                        : undefined
+                }
+                amount={r.revenue}
+                positive
+              />
+            ))}
+            <BreakdownRow label="Total quarter revenue" amount={totalRevenue} positive bold />
+          </div>
+        </div>
+      )}
+
+      {/* Cost block */}
+      <div className="space-y-1.5 pt-2 border-t border-line/60">
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">Cost</div>
+        <div className="space-y-1">
+          {costRows.map((r) => (
+            <BreakdownRow key={r.label} label={r.label} amount={r.amount} detail={r.hint} negative />
+          ))}
+          <BreakdownRow label="Total quarter cost" amount={totalCost} negative bold />
+        </div>
+      </div>
+
+      {/* Net */}
+      <div className="pt-2 border-t border-line/60">
+        <BreakdownRow
+          label="Operating profit"
+          amount={operatingProfit}
+          positive={operatingProfit >= 0}
+          negative={operatingProfit < 0}
+          bold
+        />
+        <div className="text-[0.6875rem] text-ink-muted leading-snug mt-1">
+          Cost categories are allocated to this route by its share of team revenue.
+          Fuel is direct (exact); the rest is share-based and sums to the team total
+          when aggregated across every active route.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Per-cabin demand-vs-capacity cell used in the projection box.
+ * Shows the player whether a specific cabin is over-supplied (capacity
+ * far above class demand → seats will fly empty) or under-supplied
+ * (demand spills out → losing yield to competitors). Each cell shows
+ * `demand/day · capacity/day · coverage%` with a tone hint.
+ */
+function ClassDemandCell({
+  label, demand, capacity,
+}: { label: string; demand: number; capacity: number }) {
+  const coverage = demand > 0 ? Math.min(1, capacity / demand) : 1;
+  const oversupplied = capacity > demand * 1.5 && demand > 0;
+  const undersupplied = demand > capacity * 1.3 && capacity > 0;
+  const tone = undersupplied
+    ? "text-warning"
+    : oversupplied
+      ? "text-ink-muted"
+      : "text-ink";
+  return (
+    <div className="space-y-0.5">
+      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">{label}</div>
+      <div className={cn("tabular font-mono", tone)}>
+        {Math.round(demand).toLocaleString()} / {Math.round(capacity).toLocaleString()}
+      </div>
+      <div className="text-[0.625rem] text-ink-muted">
+        {demand > 0
+          ? `${Math.min(999, Math.round(coverage * 100))}% covered`
+          : "no demand"}
+      </div>
+    </div>
+  );
+}
+
+function BreakdownRow({
+  label, amount, detail, positive, negative, bold,
+}: {
+  label: string;
+  amount: number;
+  detail?: string;
+  positive?: boolean;
+  negative?: boolean;
+  bold?: boolean;
+}) {
+  return (
+    <div className={cn("space-y-0.5", bold && "pt-1 mt-1 border-t border-line/40")}>
+      <div className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
+        <span className={cn(bold ? "text-ink font-semibold" : "text-ink-2")}>{label}</span>
+        <span className={cn(
+          "tabular font-mono",
+          bold && "font-semibold",
+          positive && "text-positive",
+          negative && "text-negative",
+        )}>
+          {positive ? "+" : negative ? "−" : ""}{fmtMoney(Math.abs(amount))}
+        </span>
+      </div>
+      {detail && (
+        <div className="text-[0.6875rem] text-ink-muted leading-snug">{detail}</div>
       )}
     </div>
   );
