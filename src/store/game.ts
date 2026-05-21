@@ -129,6 +129,100 @@ const MOCK_COMPETITOR_HEXES: ReadonlyArray<string> = [
   "#9A7D3D", "#C23B1F", "#6B5F88", "#4B7A2E",
 ];
 
+function normalizeTeamRuntimeFields(team: Team): Team {
+  const routes = Array.isArray(team.routes) ? team.routes : [];
+  const fleet = Array.isArray(team.fleet) ? team.fleet : [];
+  const slotsByAirport = team.slotsByAirport ?? (team.hubCode ? { [team.hubCode]: 30 } : {});
+  const airportLeases = team.airportLeases ?? (() => {
+    const leases: Record<string, AirportLease> = {};
+    const usage: Record<string, number> = {};
+    for (const r of routes) {
+      if (r.status === "closed") continue;
+      const wf = r.dailyFrequency * 7;
+      usage[r.originCode] = (usage[r.originCode] ?? 0) + wf;
+      usage[r.destCode] = (usage[r.destCode] ?? 0) + wf;
+    }
+    for (const code of Object.keys(slotsByAirport)) {
+      usage[code] = Math.max(usage[code] ?? 0, slotsByAirport[code] ?? 0);
+    }
+    for (const code of Object.keys(usage)) {
+      leases[code] = { slots: usage[code], totalWeeklyCost: 0 };
+    }
+    return leases;
+  })();
+  const baseSliders = team.sliders ?? {
+    staff: 2,
+    marketing: 2,
+    service: 2,
+    rewards: 2,
+    operations: 2,
+    customerService: 2,
+  };
+  return {
+    ...team,
+    secondaryHubCodes: team.secondaryHubCodes ?? [],
+    members: team.members ?? [
+      { role: "CEO", name: "Your CEO", mvpPts: 0, cards: [] },
+      { role: "CFO", name: "Your CFO", mvpPts: 0, cards: [] },
+      { role: "CMO", name: "Your CMO", mvpPts: 0, cards: [] },
+      { role: "CHRO", name: "Your CHRO", mvpPts: 0, cards: [] },
+    ],
+    loans: Array.isArray(team.loans) ? team.loans : [],
+    fleet,
+    routes: routes.map((r) => ({
+      ...r,
+      econFare: r.econFare ?? null,
+      busFare: r.busFare ?? null,
+      firstFare: r.firstFare ?? null,
+      cargoRatePerTonne: r.cargoRatePerTonne ?? null,
+      isCargo: r.isCargo ?? false,
+      consecutiveQuartersActive: r.consecutiveQuartersActive ?? 0,
+      consecutiveLosingQuarters: r.consecutiveLosingQuarters ?? 0,
+    })),
+    sliders: {
+      staff: baseSliders.staff ?? 2,
+      marketing: baseSliders.marketing ?? 2,
+      service: baseSliders.service ?? 2,
+      rewards: baseSliders.rewards ?? 2,
+      operations: baseSliders.operations ?? 2,
+      customerService: baseSliders.customerService ?? 2,
+    },
+    sliderStreaks: team.sliderStreaks ?? {} as Team["sliderStreaks"],
+    decisions: Array.isArray(team.decisions) ? team.decisions : [],
+    flags: new Set<string>(
+      Array.isArray(team.flags)
+        ? team.flags
+        : team.flags
+          ? Array.from(team.flags)
+          : [],
+    ),
+    deferredEvents: Array.isArray(team.deferredEvents) ? team.deferredEvents : [],
+    timedModifiers: Array.isArray(team.timedModifiers) ? team.timedModifiers : [],
+    routeObligations: Array.isArray(team.routeObligations) ? team.routeObligations : [],
+    rcfBalanceUsd: team.rcfBalanceUsd ?? 0,
+    taxLossCarryForward: Array.isArray(team.taxLossCarryForward) ? team.taxLossCarryForward : [],
+    insurancePolicy: team.insurancePolicy ?? "none",
+    fuelTanks: team.fuelTanks ?? { small: 0, medium: 0, large: 0 },
+    fuelStorageLevelL: team.fuelStorageLevelL ?? 0,
+    fuelStorageAvgCostPerL: team.fuelStorageAvgCostPerL ?? 0,
+    slotsByAirport,
+    airportLeases,
+    cargoStorageActivations: team.cargoStorageActivations ?? (team.hubCode ? [team.hubCode] : []),
+    hubInvestments: team.hubInvestments ?? {
+      fuelReserveTankHubs: [],
+      maintenanceDepotHubs: [],
+      premiumLoungeHubs: [],
+      opsExpansionSlots: 0,
+    },
+    subsidiaries: team.subsidiaries ?? [],
+    labourRelationsScore: team.labourRelationsScore ?? 50,
+    milestones: team.milestones ?? [],
+    consecutiveProfitableQuarters: team.consecutiveProfitableQuarters ?? 0,
+    pendingSlotBids: Array.isArray(team.pendingSlotBids) ? team.pendingSlotBids : [],
+    financialsByQuarter: Array.isArray(team.financialsByQuarter) ? team.financialsByQuarter : [],
+  };
+}
+
 // ─── Game store ─────────────────────────────────────────────
 export interface GameStore extends GameState {
   // Last quarter close result (for the modal)
@@ -2935,7 +3029,7 @@ export const useGame = create<GameStore>()(
         // cash awards, doubled brand/loyalty deltas, two debt instruments
         // from one S7 acquisition. Skip silently if a decision for this
         // scenario+quarter already exists.
-        const alreadyDecided = player.decisions.some(
+        const alreadyDecided = (player.decisions ?? []).some(
           (d) => d.scenarioId === scenarioId && d.quarter === s.currentQuarter,
         );
         if (alreadyDecided) return;
@@ -2964,7 +3058,7 @@ export const useGame = create<GameStore>()(
         };
 
         const updated = applyOptionEffect(player, option.effect, s.currentQuarter);
-        updated.decisions = [...updated.decisions, decision];
+        updated.decisions = [...(updated.decisions ?? []), decision];
 
         // Debt assumption (e.g. S7 Full Acquisition's $180M of inherited
         // liabilities). Materializes as a real LoanInstrument at the
@@ -3272,8 +3366,8 @@ export const useGame = create<GameStore>()(
       },
 
       closeQuarter: () => {
-        const s = get();
-        if (s.isObserver) return;
+        const current = get();
+        if (current.isObserver) return;
 
         // Phase 6 P0 — re-entrancy guard. Two human players in a
         // self-guided cohort both mark ready within ~50ms; both
@@ -3282,8 +3376,10 @@ export const useGame = create<GameStore>()(
         // store advances while the server CAS rejects the second
         // write, leaving the local clock 1 quarter ahead of the
         // server). Take the lock as the very first thing.
-        if (s.isClosing) return;
-        set({ isClosing: true });
+        if (current.isClosing) return;
+        const normalizedTeams = (current.teams ?? []).map(normalizeTeamRuntimeFields);
+        set({ isClosing: true, teams: normalizedTeams });
+        const s = { ...current, teams: normalizedTeams };
 
         // Phase 6 P1 — timing telemetry. closeQuarter is the
         // heaviest hot path in the engine. Log every close's
@@ -3311,6 +3407,8 @@ export const useGame = create<GameStore>()(
             });
           }
         };
+
+        try {
 
         // Phase 8.3 — defensive auto-end. If we're in a multiplayer
         // game (session.gameId is set) and zero human teams remain,
@@ -3374,7 +3472,7 @@ export const useGame = create<GameStore>()(
           // format games see their proportional scenarios at the right
           // quarter (not always the absolute 40-round target).
           const pending = scenariosForQuarter(s.currentQuarter, getTotalRounds(s)).filter(
-            (sc) => !player.decisions.some(
+            (sc) => !(player.decisions ?? []).some(
               (d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter,
             ),
           );
@@ -4253,13 +4351,17 @@ export const useGame = create<GameStore>()(
         const teamsAfterBotScenarios = teamsAfterBotTurns.map((t) => {
           if (!t.botDifficulty) return t;
           if (scenariosThisQuarter.length === 0) return t;
-          let updated = { ...t, flags: new Set(t.flags) };
+          let updated = {
+            ...t,
+            flags: new Set(t.flags),
+            decisions: t.decisions ?? [],
+          };
           const newDecisions: ScenarioDecision[] = [];
           for (const sc of scenariosThisQuarter) {
             // Skip if already decided (defensive — bots shouldn't have
             // decisions yet, but guards against double-apply on
             // snapshot/restore replays).
-            if (updated.decisions.some(
+            if ((updated.decisions ?? []).some(
               (d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter,
             )) continue;
             // Walk eligible options — skip blocked-by-flags and
@@ -4303,7 +4405,7 @@ export const useGame = create<GameStore>()(
             });
           }
           if (newDecisions.length > 0) {
-            updated = { ...updated, decisions: [...updated.decisions, ...newDecisions] };
+            updated = { ...updated, decisions: [...(updated.decisions ?? []), ...newDecisions] };
           }
           return updated;
         });
@@ -4880,6 +4982,20 @@ export const useGame = create<GameStore>()(
         }
 
         reportTiming();
+        } catch (err) {
+          console.error("[closeQuarter] failed", err);
+          captureEvent("closeQuarter.error", "error", {
+            quarter: s.currentQuarter,
+            teams: s.teams.length,
+            message: err instanceof Error ? err.message : String(err),
+          });
+          set({ isClosing: false, phase: "playing", lastCloseResult: null });
+          toast.negative(
+            "Quarter close failed",
+            err instanceof Error ? err.message : "Unexpected engine state. The game is unlocked so you can retry.",
+          );
+          reportTiming();
+        }
       },
 
       advanceToNext: () => {
@@ -5578,6 +5694,10 @@ export const useGame = create<GameStore>()(
             t.id === meId ? { ...t, readyForNextQuarter: ready } : t,
           ),
         });
+        const readySync = get().pushStateToServer("player.readyForNextQuarter", {
+          teamId: meId,
+          ready,
+        });
         // Re-evaluate after the set so allActiveTeamsReady reads the
         // fresh team list. Only fire auto-advance when:
         //   - the flip was a "true" (player marked ready, not unmarked)
@@ -5602,17 +5722,29 @@ export const useGame = create<GameStore>()(
         const gameId = session.gameId;
         if (!gameId) return;
         (async () => {
+          const syncResult = await readySync;
+          if (!syncResult.ok) return;
+
           // Try to fetch the latest members (with last_seen_at).
           // On failure, fall back to the strict "every human ready"
           // gate — better to wait than to advance prematurely.
           let staleHumans = new Set<string>();
           try {
             const res = await fetch(
-              `/api/games/load?gameId=${encodeURIComponent(gameId)}`,
+              `/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`,
               { cache: "no-store" },
             );
             if (res.ok) {
               const json = await res.json();
+              const latestState = json?.state?.state_json;
+              const localSessionId = get().localSessionId;
+              if (latestState && localSessionId) {
+                get().hydrateFromServerState({
+                  stateJson: latestState,
+                  mySessionId: localSessionId,
+                  dbVersion: json.state.version,
+                });
+              }
               const now = Date.now();
               const LONG_AWAY_MS = 5 * 60 * 1000;
               for (const m of (json.members ?? []) as Array<{
@@ -5802,16 +5934,9 @@ export const useGame = create<GameStore>()(
         }
         try {
           // Mirror the onRehydrateStorage hook: flags arrays → Sets.
-          const teams = restored.teams.map((t) => ({
-            ...t,
-            flags: new Set<string>(
-              Array.isArray(t.flags)
-                ? t.flags
-                : t.flags
-                  ? Array.from(t.flags)
-                  : [],
-            ),
-          })) as Team[];
+          const teams = restored.teams.map((t) =>
+            normalizeTeamRuntimeFields(t as Team),
+          ) as Team[];
 
           // Bind activeTeamId to whichever team this session has claimed.
           // sessionId is always user.id (Supabase auth — real or anonymous),
@@ -7081,6 +7206,7 @@ export const useGame = create<GameStore>()(
             }
           }
         }
+        state.teams = (state.teams ?? []).map((t) => normalizeTeamRuntimeFields(t as Team));
         state.teams = state.teams.map((t) => {
           const flags = new Set(Array.isArray(t.flags) ? t.flags : Array.from(t.flags ?? []));
           // (Removed: the debug "+$900M Meridian Air cash grant" used during

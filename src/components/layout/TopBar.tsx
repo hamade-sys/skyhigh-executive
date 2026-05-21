@@ -17,6 +17,7 @@ import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash,
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 import { airlineColorFor, type AirlineColorId } from "@/lib/games/airline-colors";
+import { toast } from "@/store/toasts";
 
 export function TopBar() {
   // Fine-grained subscriptions so unrelated store writes don't re-render this.
@@ -595,8 +596,18 @@ function CloseQuarterButton() {
                 setPendingClose(true);
                 requestAnimationFrame(() => {
                   requestAnimationFrame(() => {
-                    closeQuarter();
-                    setPendingClose(false);
+                    try {
+                      closeQuarter();
+                    } catch (err) {
+                      console.error("[quarter-close] failed", err);
+                      useGame.setState({ isClosing: false, phase: "playing" });
+                      toast.negative(
+                        "Quarter close failed",
+                        err instanceof Error ? err.message : "The engine hit an unexpected state. The game is unlocked so you can retry.",
+                      );
+                    } finally {
+                      setPendingClose(false);
+                    }
                   });
                 });
               }
