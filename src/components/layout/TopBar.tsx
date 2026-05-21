@@ -572,8 +572,8 @@ function CloseQuarterButton() {
         : `${dormantRoutes.length} active route${dormantRoutes.length === 1 ? "" : "s"} with no aircraft`,
       detail: dormantRoutes.length === 0
         ? "Every active route has at least one operating aircraft."
-        : "Slots are leased but no flights are scheduled. Assign aircraft or close the route.",
-      status: dormantRoutes.length === 0 ? "ok" : "warn",
+        : "BLOCKING — slots are leased but no flights are scheduled. Assign aircraft or close the route(s) before advancing the quarter. The close button is disabled until this clears.",
+      status: dormantRoutes.length === 0 ? "ok" : "danger",
       panel: "routes",
       cta: "Open Routes",
     },
@@ -620,6 +620,15 @@ function CloseQuarterButton() {
   ];
 
   const issueCount = checks.filter((c) => c.status === "warn" || c.status === "danger").length;
+
+  // Hard-block: an active route with zero operating aircraft is almost
+  // always a mistake — slots are being leased and paid for with no
+  // flights running. Pre-fix the modal informed the player but let
+  // them advance anyway. For workshop facilitators, this is the kind
+  // of slip that justifies a confirm gate. Other warn-level checks
+  // (losing routes, thin cash) stay informational so the player can
+  // still take strategic risks.
+  const hardBlocked = dormantRoutes.length > 0;
 
   // ── Handler: player clicks "End Quarter →" (multiplayer) ────────────
   // Calls /api/games/request-quarter-close which:
@@ -837,7 +846,14 @@ function CloseQuarterButton() {
           </Button>
           <Button
             variant="primary"
+            disabled={hardBlocked}
+            title={
+              hardBlocked
+                ? `Cannot close: ${dormantRoutes.length} active route${dormantRoutes.length === 1 ? "" : "s"} with no aircraft. Assign aircraft or close the route(s) first.`
+                : undefined
+            }
             onClick={() => {
+              if (hardBlocked) return; // defence-in-depth, button is disabled
               setConfirmOpen(false);
               if (isMultiplayerSelfGuided) {
                 // Request close via server — broadcasts countdown to peers.
@@ -862,11 +878,13 @@ function CloseQuarterButton() {
               }
             }}
           >
-            {isMultiplayerSelfGuided
-              ? (issueCount === 0 ? "End quarter →" : "End quarter anyway →")
-              : isMultiplayerFacilitated
-                ? (issueCount === 0 ? "Advance quarter →" : "Advance anyway →")
-              : (issueCount === 0 ? "Close quarter →" : "Close anyway →")}
+            {hardBlocked
+              ? "Fix dormant routes first"
+              : isMultiplayerSelfGuided
+                ? (issueCount === 0 ? "End quarter →" : "End quarter anyway →")
+                : isMultiplayerFacilitated
+                  ? (issueCount === 0 ? "Advance quarter →" : "Advance anyway →")
+                  : (issueCount === 0 ? "Close quarter →" : "Close anyway →")}
           </Button>
         </ModalFooter>
       </Modal>

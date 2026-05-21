@@ -580,6 +580,31 @@ export function FleetPanel() {
                       {f.customSeats && (
                         <Badge tone="warning" title="Custom cabin layout">Custom cabin</Badge>
                       )}
+                      {/* Per-tail aging warning — surfaces individual
+                          airframes within 4 quarters of mandatory
+                          retirement. The top-of-panel KPI card counts
+                          aging-by-spec, but the player needs the
+                          per-tail signal to decide which specific
+                          plane to refit, reassign, or replace.
+                          Pre-fix this lived only on the spec-group
+                          row + the Aging modal; this badge surfaces
+                          it inline. */}
+                      {f.status === "active" && remainingQ > 0 && remainingQ <= 4 && (
+                        <Badge
+                          tone="warning"
+                          title={`Retires in ${remainingQ} quarter${remainingQ === 1 ? "" : "s"} (Q${f.retirementQuarter}). Order a replacement or apply a lifespan refit if eligible.`}
+                        >
+                          Aging · retires Q{f.retirementQuarter}
+                        </Badge>
+                      )}
+                      {f.status === "active" && remainingQ === 0 && (
+                        <Badge
+                          tone="negative"
+                          title="Retires at this quarter close. Any routes assigned to this plane will be left without aircraft unless a replacement is staged."
+                        >
+                          Retiring this quarter
+                        </Badge>
+                      )}
                     </div>
                     <div className="text-[0.75rem] text-ink-muted flex items-center gap-1.5">
                       {route ? (
