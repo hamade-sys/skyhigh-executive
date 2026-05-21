@@ -14,6 +14,7 @@ import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
 import { useGame, selectPlayer } from "@/store/game";
 import type { AircraftSpec } from "@/types/game";
+import { LEASE_FLEET_RATIO_CAP } from "@/lib/lease";
 
 /**
  * Purchase Order modal — Air-Tycoon-style aircraft order customization.
@@ -103,7 +104,40 @@ function PurchaseOrderBody({
     return { first: Math.round(f), business: Math.round(b), economy: Math.round(y) };
   }, [spec, isPassenger, defaultEquivalents]);
 
-  const [quantity, setQuantity] = useState(prefill?.quantity ?? 1);
+  // Lease-cap headroom — when leasing, the team's leased-fleet share
+  // must stay ≤50%. Pre-fix the modal let the user crank the qty up
+  // to 20 and then the order silently failed with a toast that
+  // sometimes hid behind the modal scrim. Now we compute the actual
+  // maximum leasable qty up-front and clamp the stepper to it.
+  //
+  // Math: with `bought` non-leased-eligible aircraft and `leased`
+  // already-leased ones, adding `k` more leased gives ratio
+  // (leased+k)/(bought+leased+k). Setting that ≤ 0.50 → k ≤ bought - leased.
+  // Edge case: empty fleet → k ≤ 0 (any single lease is 100% of the
+  // fleet, over the cap). Player must buy first.
+  const player = useGame(selectPlayer);
+  const leaseHeadroom = useMemo(() => {
+    if (!player) return Infinity;
+    const eligible = player.fleet.filter(
+      (f) => f.status === "active" || f.status === "ordered",
+    );
+    const leased = eligible.filter((f) => f.acquisitionType === "lease").length;
+    const bought = eligible.length - leased;
+    // bought - leased is the integer headroom under a 0.5 cap. Clamp
+    // to 0 so we don't return a negative number when the team is
+    // already over-leased (e.g. after a buy-to-lease conversion).
+    return Math.max(0, bought - leased);
+  }, [player]);
+  const qtyHardCap = 20;
+  const qtyMaxAllowed =
+    acquisitionType === "lease"
+      ? Math.min(qtyHardCap, leaseHeadroom)
+      : qtyHardCap;
+  // If a prefill quantity comes in above the cap, clamp it.
+  const [quantity, setQuantity] = useState(() => {
+    const requested = prefill?.quantity ?? 1;
+    return Math.min(Math.max(1, requested), Math.max(1, qtyMaxAllowed));
+  });
   // Engine + fuselage are READ-ONLY from prefill — chosen on the
   // AircraftMarketModal expanded card. Showing them again as
   // editable fields earlier let the player override their previous
@@ -239,15 +273,39 @@ function PurchaseOrderBody({
             </span>
             <button
               type="button"
-              onClick={() => setQuantity(Math.min(20, quantity + 1))}
+              onClick={() => setQuantity(Math.min(qtyMaxAllowed, quantity + 1))}
               aria-label="Increase quantity"
               className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-[1.125rem] font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-              disabled={quantity >= 20}
+              disabled={quantity >= qtyMaxAllowed}
+              title={
+                acquisitionType === "lease" && quantity >= qtyMaxAllowed
+                  ? leaseHeadroom === 0
+                    ? "Leased aircraft can't exceed 50% of your fleet — buy at least one plane first."
+                    : `Capped at ${qtyMaxAllowed} more lease${qtyMaxAllowed === 1 ? "" : "s"} to keep leased share at or below ${Math.round(LEASE_FLEET_RATIO_CAP * 100)}%.`
+                  : undefined
+              }
             >
               <span aria-hidden="true">+</span>
             </button>
             <div className="flex-1 text-[0.75rem] text-ink-muted leading-relaxed">
-              All aircraft in this order are configured identically. Max 20 per order.
+              All aircraft in this order are configured identically.{" "}
+              {acquisitionType === "lease" ? (
+                leaseHeadroom === 0 ? (
+                  <span className="text-warning">
+                    No lease headroom — your fleet is already at the {Math.round(LEASE_FLEET_RATIO_CAP * 100)}% leased cap. Buy a plane first, then return here.
+                  </span>
+                ) : (
+                  <>
+                    Max{" "}
+                    <span className="font-mono font-semibold text-ink">
+                      {qtyMaxAllowed}
+                    </span>{" "}
+                    {qtyMaxAllowed === 1 ? "lease" : "leases"} this order — keeps your leased share at or below {Math.round(LEASE_FLEET_RATIO_CAP * 100)}%.
+                  </>
+                )
+              ) : (
+                <>Max 20 per order.</>
+              )}
             </div>
           </div>
         </Section>
@@ -502,6 +560,11 @@ function PurchaseOrderBody({
           totalCost={totalCost}
           quantity={quantity}
           onOrder={handleOrder}
+          /* Lease over-cap defence: even with the stepper clamped, a
+             user could in theory paste/type a higher number via dev
+             tools. The order button disables when the qty exceeds the
+             lease headroom so the silent-fail path can't reopen. */
+          leaseHeadroom={acquisitionType === "lease" ? leaseHeadroom : null}
         />
       </ModalFooter>
     </Modal>
@@ -592,34 +655,47 @@ function CashAffordabilityRow({ totalCost }: { totalCost: number }) {
   );
 }
 
-/** Order button with built-in cash check. When the player has enough
- *  cash the button is its normal CTA; when short, it disables but
- *  rewrites its label to call out the gap so the player knows WHY. */
+/** Order button with built-in cash + lease-cap checks. When either
+ *  check fails the button is disabled and rewrites its label to call
+ *  out the gap so the player understands why. Cash shortfall is the
+ *  common case; lease-cap exceeded only fires as a safety net (the
+ *  qty stepper above already clamps to the cap). */
 function CashAwareOrderButton({
-  totalCost, quantity, onOrder,
+  totalCost, quantity, onOrder, leaseHeadroom,
 }: {
   totalCost: number;
   quantity: number;
   onOrder: () => void;
+  /** Remaining lease headroom on a 50% cap. null for buy orders, a
+   *  number ≥ 0 for lease orders. */
+  leaseHeadroom: number | null;
 }) {
   const player = useGame(selectPlayer);
   if (!player) return null;
   const shortfall = Math.max(0, totalCost - player.cashUsd);
+  const overLeaseCap = leaseHeadroom !== null && quantity > leaseHeadroom;
   const canAfford = shortfall === 0;
+  const canOrder = canAfford && !overLeaseCap;
   return (
     <Button
       variant="primary"
-      onClick={canAfford ? onOrder : undefined}
-      disabled={!canAfford}
+      onClick={canOrder ? onOrder : undefined}
+      disabled={!canOrder}
       title={
-        canAfford
+        canOrder
           ? undefined
-          : `Need ${fmtMoney(shortfall)} more cash. Borrow from Financials → Borrowing or trim the order.`
+          : overLeaseCap
+            ? leaseHeadroom === 0
+              ? "No lease headroom — fleet is already at the 50% lease cap. Buy a plane first."
+              : `Can only lease ${leaseHeadroom} more to stay under the 50% cap.`
+            : `Need ${fmtMoney(shortfall)} more cash. Borrow from Financials → Borrowing or trim the order.`
       }
     >
-      {canAfford
-        ? <>Order {quantity} → {fmtMoney(totalCost)}</>
-        : <>Need {fmtMoney(shortfall)} more cash</>
+      {overLeaseCap
+        ? <>{leaseHeadroom === 0 ? "No lease headroom" : `Max ${leaseHeadroom} lease${leaseHeadroom === 1 ? "" : "s"}`}</>
+        : canAfford
+          ? <>Order {quantity} → {fmtMoney(totalCost)}</>
+          : <>Need {fmtMoney(shortfall)} more cash</>
       }
     </Button>
   );
