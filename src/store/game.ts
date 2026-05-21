@@ -4061,7 +4061,20 @@ export const useGame = create<GameStore>()(
 
         // Sequential reduce — threads `claimedODs` so later bots avoid the
         // same city pairs that earlier bots already picked this quarter.
-        const { teams: teamsAfterBotTurns } = s.teams.reduce<{
+        //
+        // Pre-fix this reduce iterated `s.teams` — the PRE-early-auction
+        // state. So a bot that just won 5 slots at JFK in the early
+        // auction was unaware of the win when planning its next moves
+        // — it still saw the old lease count and bid for the slots it
+        // had already won. Drained cash, double-counted deficits, and
+        // contributed to "bots have 0 routes" symptom. Now we iterate
+        // the post-early-auction list `[teamReady, ...rivalsAfterActivation]`
+        // so each bot sees its CURRENT slot holdings.
+        const teamsForBotPhase: typeof s.teams = [
+          teamReady,
+          ...rivalsAfterActivation,
+        ];
+        const { teams: teamsAfterBotTurns } = teamsForBotPhase.reduce<{
           teams: typeof s.teams;
           claimedODs: Set<string>;
         }>(

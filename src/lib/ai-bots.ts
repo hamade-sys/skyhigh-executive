@@ -104,10 +104,21 @@ interface BotProfile {
   scenarioPicks: Record<string, string>;
 }
 
+// Slot-bid multipliers bumped per user feedback: bot networks were
+// invisible mid-game because bots kept losing slot auctions to humans.
+// The new spread separates the three tiers more aggressively:
+//   easy   1.0 → 1.1  (token bump; should still lose contested airports
+//                       to a deliberate human bidder)
+//   medium 1.25 → 1.5 (genuinely competitive at uncontested airports;
+//                       loses to humans who actively over-bid)
+//   hard   1.6 → 2.2  (over-bids most casual humans by default; combined
+//                       with PR #42's 15%/quarter escalation, a hard bot
+//                       at quarter 7+ bids ~6.6× the tier base, which
+//                       wins almost every auction)
 const PROFILES: Record<BotDifficulty, BotProfile> = {
   easy: {
     orderAircraftCashRatio: 2.0,   // needs 2× price in cash (cautious)
-    slotBidMultiplier: 1.0,
+    slotBidMultiplier: 1.1,
     pricingBias: 0,
     debtTolerance: 0,
     scenarioPicks: {
@@ -119,7 +130,7 @@ const PROFILES: Record<BotDifficulty, BotProfile> = {
   },
   medium: {
     orderAircraftCashRatio: 1.4,
-    slotBidMultiplier: 1.25,
+    slotBidMultiplier: 1.5,
     pricingBias: 0,
     debtTolerance: 0.4,
     scenarioPicks: {
@@ -132,7 +143,7 @@ const PROFILES: Record<BotDifficulty, BotProfile> = {
   },
   hard: {
     orderAircraftCashRatio: 1.0,   // buy immediately once you can afford it
-    slotBidMultiplier: 1.6,
+    slotBidMultiplier: 2.2,
     pricingBias: 1,
     debtTolerance: 0.7,
     scenarioPicks: {
