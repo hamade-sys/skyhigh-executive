@@ -55,9 +55,16 @@ function LoginInner() {
     }
   }, [search]);
 
-  // If already signed in, bounce to next destination
+  // If already signed in (with a REAL account, not an anonymous
+  // session), bounce to next destination. Anonymous users are NOT
+  // bounced — they reach /login intentionally from gated pages like
+  // /games/new which require a real account to host. Pre-fix the
+  // is_anonymous check was missing, so /games/new → /login →
+  // /games/new ping-ponged anonymous users in an infinite redirect
+  // loop and the page visibly flickered as both routes rendered
+  // their intermediate placeholders mid-redirect.
   useEffect(() => {
-    if (!authLoading && user) router.replace(nextPath);
+    if (!authLoading && user && !user.is_anonymous) router.replace(nextPath);
   }, [authLoading, user, router, nextPath]);
 
   async function go(fn: () => Promise<{ ok: true } | { ok: false; error: string }>, label: typeof loading) {
