@@ -3971,11 +3971,22 @@ export const useGame = create<GameStore>()(
         // CRITICAL: persist the post-close fleet + routes so future quarter
         // closes see depreciated bookValues, accumulated maintenance deficit,
         // and the newly-realised revenue/cost/occupancy numbers per route.
+        //
+        // Fold insurance proceeds into `result.newCashUsd` BEFORE the
+        // result lands in `lastCloseResult` (further below) — otherwise
+        // the Quarter Close modal renders the pre-insurance cash while
+        // the TopBar shows the post-insurance cash, and the player sees
+        // a different number on the modal than on the live UI the
+        // instant they close it. The Q close summary now matches the
+        // actual cashUsd carried on the team.
+        if (insuranceProceeds > 0) {
+          result.newCashUsd = result.newCashUsd + insuranceProceeds;
+        }
         const closed: Team = {
           ...teamReady,
           fleet: result.newFleet,
           routes: result.newRoutes,
-          cashUsd: result.newCashUsd + insuranceProceeds,
+          cashUsd: result.newCashUsd,
           rcfBalanceUsd: result.newRcfBalance,
           brandPts: result.newBrandPts,
           opsPts: result.newOpsPts,
