@@ -2310,6 +2310,22 @@ export interface QuarterCloseResult {
   passengerTax: number;
   fuelExcise: number;
   rcfInterest: number;
+  /** Net change in the team's RCF (revolving credit) balance this
+   *  quarter. Positive = auto-drew more from the facility (cash was
+   *  going negative); negative = auto-repaid (cash was positive,
+   *  outstanding RCF cleared). Surfaced on the Quarter Close modal
+   *  recon block so the player sees their financing activity itemised
+   *  rather than buried under "Financing / other". */
+  rcfDrawDelta: number;
+  /** Non-operating cash inflow that lands during the quarter close
+   *  but flows around the netProfit accounting line — scrap value
+   *  from retired airframes, hull-insurance payouts on losses, etc.
+   *  Engine returns 0; the store's closeQuarter overwrites with its
+   *  own accumulator. Surfaced as its own row in the modal's "How
+   *  cash changed" reconciliation block so the player sees the math
+   *  add up (prevCash + netProfit + insuranceProceeds + rcfDrawDelta
+   *  = newCashUsd). */
+  insuranceProceeds: number;
   netProfit: number;
   newCashUsd: number;
   newRcfBalance: number;
@@ -3082,6 +3098,11 @@ export function runQuarterClose(
   // ─ Cash flow + RCF auto-draw (A8) ──────────────────────
   let newCashUsd = next.cashUsd + netProfit;
   let newRcfBalance = next.rcfBalanceUsd;
+  // Track the starting RCF balance so we can compute this quarter's
+  // draw / repay delta and expose it as a separate line on the
+  // QuarterCloseModal recon block. Without this, the modal lumped RCF
+  // activity into a vague "Financing / other" row.
+  const startingRcfBalance = newRcfBalance;
   // First, if cash is positive and RCF is drawn, auto-repay
   if (newCashUsd > 0 && newRcfBalance > 0) {
     const repay = Math.min(newCashUsd, newRcfBalance);
@@ -3518,6 +3539,13 @@ export function runQuarterClose(
     passengerTax,
     fuelExcise,
     rcfInterest,
+    rcfDrawDelta: newRcfBalance - startingRcfBalance,
+    // Engine doesn't know about scrap / hull-insurance payouts —
+    // those land in closeQuarter (see store/game.ts insuranceProceeds
+    // accumulator). The store overwrites this with its own number
+    // right after the engine returns. Default 0 keeps the type
+    // honest for any caller that doesn't pass through the store.
+    insuranceProceeds: 0,
     netProfit,
     newCashUsd,
     newRcfBalance,
