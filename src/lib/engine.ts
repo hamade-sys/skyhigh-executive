@@ -1418,13 +1418,15 @@ export function computeRouteEconomics(
     const totalFuelBurnPerFlight =
       planes.length > 0 ? fuelBurnSumPerFlight / planes.length : 0;
     // Fuel-tank discount on cargo routes too — mirrors the passenger
-    // path. The catalogue promises a per-route fuel discount when the
-    // origin hub has a fuel reserve tank; cargo routes earn it on the
-    // same basis. Track the savings so the route detail modal can say
-    // "Fuel: $X (saved $Y via fuel tank)" inline.
+    // path. Phase 1B: raised 0.95 → 0.85 (5% → 15% off spot index) to
+    // honor the subsidiary catalogue copy in src/data/subsidiaries.ts:89
+    // ("...and a 15% fuel discount on routes from this city"). The 25%
+    // bulk-buy discount stacks on top via the runQuarterClose storage-
+    // consumption swap; this routing discount applies to whatever
+    // wasn't covered by storage at quarter close.
     const cargoHasFuelTank =
       team.hubInvestments?.fuelReserveTankHubs?.includes(route.originCode);
-    const cargoFuelTankDiscount = cargoHasFuelTank ? 0.95 : 1.0;
+    const cargoFuelTankDiscount = cargoHasFuelTank ? 0.85 : 1.0;
     const cargoFuelBaselineCost =
       totalFuelBurnPerFlight * fuelPricePerL * route.dailyFrequency * QUARTER_DAYS;
     const quarterlyFuelCost = cargoFuelBaselineCost * cargoFuelTankDiscount;
@@ -1827,13 +1829,19 @@ export function computeRouteEconomics(
       : team.flags.has("hedged_50_50")
         ? (100 / fuelIndex + 1) / 2
         : 1;
-  // Fuel reserve tank at the origin hub: 5% fuel discount on routes from there.
-  // Compute the un-discounted cost first so the route detail modal can
-  // show the savings explicitly ("Fuel $1.8M (saved $0.4M via fuel tank)")
-  // rather than the player having to guess what the discount delivered.
+  // Fuel reserve tank at the origin hub: 15% fuel discount on routes
+  // from there (Phase 1B raised from 5% → 15% to honor the subsidiary
+  // catalogue copy in src/data/subsidiaries.ts:89 "...and a 15% fuel
+  // discount on routes from this city"). The 25% bulk-buy discount
+  // stacks on top via runQuarterClose's storage-consumption swap; this
+  // routing discount applies to whatever wasn't covered by storage at
+  // quarter close. Compute the un-discounted cost first so the route
+  // detail modal can show the savings explicitly ("Fuel $1.8M (saved
+  // $0.4M via hub fuel tank)") rather than have the player guess what
+  // the discount delivered.
   const hasFuelTank =
     team.hubInvestments?.fuelReserveTankHubs?.includes(route.originCode);
-  const fuelTankDiscount = hasFuelTank ? 0.95 : 1.0;
+  const fuelTankDiscount = hasFuelTank ? 0.85 : 1.0;
   const fuelBaselineCost =
     totalFuelBurnPerFlight * fuelPricePerL *
     route.dailyFrequency * QUARTER_DAYS * hedge;
@@ -2918,22 +2926,23 @@ export function runQuarterClose(
     );
   }
 
-  // ─ Hub Investments: Fuel Reserve Tank reduces fuel cost at that hub's routes
-  if (next.hubInvestments?.fuelReserveTankHubs.length > 0) {
-    let fuelSavings = 0;
-    for (const r of next.routes.filter((r) => r.status === "active")) {
-      const touchesInvestedHub =
-        next.hubInvestments.fuelReserveTankHubs.includes(r.originCode) ||
-        next.hubInvestments.fuelReserveTankHubs.includes(r.destCode);
-      if (touchesInvestedHub) {
-        fuelSavings += r.quarterlyFuelCost * 0.15;
-      }
-    }
-    if (fuelSavings > 0) {
-      fuelCost -= fuelSavings;
-      notes.push(`Fuel Reserve Tank saved $${(fuelSavings / 1e6).toFixed(1)}M`);
-    }
-  }
+  // ─ Hub Investments: Fuel Reserve Tank (Phase 1B note) ───────────
+  // The legacy team-level −15% fuel-savings block lived here. It was
+  // a duplicate of the per-route discount applied inside
+  // computeRouteEconomics (the `fuelTankDiscount` factor on the
+  // origin-side), AND it incorrectly counted destCode matches as
+  // depot-discounted (the catalogue copy is "...from this city",
+  // origin-only). Pre-Phase-1B that stacked into a ~19% effective
+  // discount; post-Phase-1B it would have stacked into ~27%. Both
+  // contradict the "15%" catalogue promise.
+  //
+  // The per-route discount in computeRouteEconomics now delivers the
+  // catalogue's 15% exactly (origin-only, applied to the spot price
+  // before storage swap). The fuel-storage block below still runs
+  // and provides the additional 25% bulk-buy savings on whatever
+  // litres the player pre-stocked. Net behaviour: 15% baseline
+  // routing discount + bulk-buy discount on stored fuel = clean
+  // delivery of both halves of the subsidiary catalogue copy.
 
   // ─ Fuel Storage reconciliation (PRD E2) ────────────────
   // Route economics computed fuel at market; draw from storage first if any.
