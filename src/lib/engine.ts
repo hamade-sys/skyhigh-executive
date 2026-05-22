@@ -1154,7 +1154,7 @@ export function customerServiceOccupancyMultiplier(s: Sliders): number {
 }
 
 // ─── Route quarterly economics ─────────────────────────────
-const QUARTER_DAYS = 91;
+export const QUARTER_DAYS = 91;
 
 /** Quarterly hub terminal fee by tier (PRD §4.2). */
 export function hubTerminalFeeUsd(cityCode: string): number {
@@ -1177,6 +1177,54 @@ export interface RouteEconomics {
   quarterlyFuelCost: number;
   quarterlySlotCost: number;
   quarterlyProfit: number;
+
+  // ── Per-class drill-down (Phase 1A) ─────────────────────────────
+  // Populated by computeRouteEconomics so the route detail modal can
+  // show "First class 31 pax/day × $800 = $5.6M/Q" instead of one
+  // opaque revenue number. All optional — preview callers may omit
+  // them via blankEconomics. Cargo routes leave per-class fields at 0
+  // and use the cargo path (see passengerRevenue=0, cargoRevenue=Σ).
+  /** Daily passengers carried in each cabin (post-capacity-cap). */
+  dailyPaxFirst?: number;
+  dailyPaxBus?: number;
+  dailyPaxEcon?: number;
+  /** Per-class quarterly revenue contribution (USD). */
+  quarterlyFirstRevenue?: number;
+  quarterlyBusRevenue?: number;
+  quarterlyEconRevenue?: number;
+  /** Per-class occupancy (0..1) — load factor by cabin. */
+  occupancyFirst?: number;
+  occupancyBus?: number;
+  occupancyEcon?: number;
+  /** Belly cargo on a passenger route (USD revenue and daily tonnes). */
+  bellyCargoRevenue?: number;
+  bellyDailyTonnesUsed?: number;
+  /** Clean revenue split — pax vs cargo (pax routes split fares vs
+   *  belly cargo; cargo routes have passengerRevenue=0). */
+  passengerRevenue?: number;
+  cargoRevenue?: number;
+  /** Per-class fares the engine landed on this quarter (USD/seat).
+   *  Includes the yield-management lift on cabins under pressure. */
+  fareFirst?: number;
+  fareBus?: number;
+  fareEcon?: number;
+  /** Per-class seat capacity per flight (after custom-cabin overrides
+   *  + cabin amenity multipliers). Mirrors the engine's internal
+   *  seatsPerFlight/dailyCapacity shape. */
+  seatsFirst?: number;
+  seatsBus?: number;
+  seatsEcon?: number;
+  /** Per-class daily demand (post-loyalty-and-competition-pressure),
+   *  before capacity-capping. Surfaced in the projection box so the
+   *  player sees "50 first-class demand/day, only 12 seats configured". */
+  dailyDemandFirst?: number;
+  dailyDemandBus?: number;
+  dailyDemandEcon?: number;
+  /** Dollars saved this quarter from the hub fuel-tank discount.
+   *  Equal to the difference between (no-discount fuel cost) and
+   *  (discounted fuel cost). Zero for routes without a fuel tank
+   *  at origin. Surfaced inline on the fuel cost line. */
+  quarterlyFuelTankSavings?: number;
 }
 
 export function slotFeeUsd(tier: 1 | 2 | 3 | 4): number {
@@ -1369,8 +1417,18 @@ export function computeRouteEconomics(
     }, 0);
     const totalFuelBurnPerFlight =
       planes.length > 0 ? fuelBurnSumPerFlight / planes.length : 0;
-    const quarterlyFuelCost =
+    // Fuel-tank discount on cargo routes too — mirrors the passenger
+    // path. The catalogue promises a per-route fuel discount when the
+    // origin hub has a fuel reserve tank; cargo routes earn it on the
+    // same basis. Track the savings so the route detail modal can say
+    // "Fuel: $X (saved $Y via fuel tank)" inline.
+    const cargoHasFuelTank =
+      team.hubInvestments?.fuelReserveTankHubs?.includes(route.originCode);
+    const cargoFuelTankDiscount = cargoHasFuelTank ? 0.95 : 1.0;
+    const cargoFuelBaselineCost =
       totalFuelBurnPerFlight * fuelPricePerL * route.dailyFrequency * QUARTER_DAYS;
+    const quarterlyFuelCost = cargoFuelBaselineCost * cargoFuelTankDiscount;
+    const cargoFuelTankSavings = cargoFuelBaselineCost - quarterlyFuelCost;
 
     return {
       distanceKm,
@@ -1383,6 +1441,33 @@ export function computeRouteEconomics(
       quarterlyFuelCost,
       quarterlySlotCost,
       quarterlyProfit: quarterlyRevenue - quarterlyFuelCost - quarterlySlotCost,
+      // Per-class fields are zero for cargo routes (no passengers).
+      dailyPaxFirst: 0,
+      dailyPaxBus: 0,
+      dailyPaxEcon: 0,
+      quarterlyFirstRevenue: 0,
+      quarterlyBusRevenue: 0,
+      quarterlyEconRevenue: 0,
+      occupancyFirst: 0,
+      occupancyBus: 0,
+      occupancyEcon: 0,
+      // Cargo-only revenue split: all revenue is cargo, none passenger.
+      // Belly fields stay 0 — cargo routes use the main hold, not the
+      // belly of a passenger aircraft.
+      bellyCargoRevenue: 0,
+      bellyDailyTonnesUsed: 0,
+      passengerRevenue: 0,
+      cargoRevenue: quarterlyRevenue,
+      fareFirst: 0,
+      fareBus: 0,
+      fareEcon: 0,
+      seatsFirst: 0,
+      seatsBus: 0,
+      seatsEcon: 0,
+      dailyDemandFirst: 0,
+      dailyDemandBus: 0,
+      dailyDemandEcon: 0,
+      quarterlyFuelTankSavings: cargoFuelTankSavings,
     };
   }
 
@@ -1698,9 +1783,18 @@ export function computeRouteEconomics(
     bellyCargoTonnesUsed = dailyTonnesUsed * QUARTER_DAYS;
     // Belly pricing: 80% of dedicated cargo rate (parcels/mail vs full
     // pallets), scaled by route pricing tier same as passenger fares.
+    // Phase 1A: the player can OVERRIDE the belly rate via the same
+    // route.cargoRatePerTonne field that the cargo-route slider uses.
+    // On a passenger route, the slider's default lands at this 0.80×
+    // tier-base value; setting a higher rate extracts more belly
+    // revenue at the cost of suppressing belly tonnes vs rivals (the
+    // dampening happens in the demand pool at routeDemandPerDay, so
+    // it's already in place — no separate elasticity model needed for
+    // this v1 of the editor).
     const baseCargoRate = distanceKm < 3000 ? 3.5 : 5.5;
     const tierMult = PRICE_TIER[route.pricingTier];
-    const pricePerTonne = baseCargoRate * tierMult * 0.80;
+    const defaultBellyRate = baseCargoRate * tierMult * 0.80;
+    const pricePerTonne = route.cargoRatePerTonne ?? defaultBellyRate;
     bellyCargoRevenue = bellyCargoTonnesUsed * pricePerTonne * 1000;
     quarterlyRevenue += bellyCargoRevenue;
   }
@@ -1733,14 +1827,18 @@ export function computeRouteEconomics(
       : team.flags.has("hedged_50_50")
         ? (100 / fuelIndex + 1) / 2
         : 1;
-  // Fuel reserve tank at the origin hub: 5% fuel discount on routes from there
+  // Fuel reserve tank at the origin hub: 5% fuel discount on routes from there.
+  // Compute the un-discounted cost first so the route detail modal can
+  // show the savings explicitly ("Fuel $1.8M (saved $0.4M via fuel tank)")
+  // rather than the player having to guess what the discount delivered.
   const hasFuelTank =
     team.hubInvestments?.fuelReserveTankHubs?.includes(route.originCode);
   const fuelTankDiscount = hasFuelTank ? 0.95 : 1.0;
-
-  const quarterlyFuelCost =
+  const fuelBaselineCost =
     totalFuelBurnPerFlight * fuelPricePerL *
-    route.dailyFrequency * QUARTER_DAYS * hedge * fuelTankDiscount;
+    route.dailyFrequency * QUARTER_DAYS * hedge;
+  const quarterlyFuelCost = fuelBaselineCost * fuelTankDiscount;
+  const fuelTankSavings = fuelBaselineCost - quarterlyFuelCost;
 
   // Slot fees (PRD update — Model B): the per-route slot cost is now zero
   // because slot fees are charged ONCE per quarter at the team level (sum
@@ -1750,6 +1848,37 @@ export function computeRouteEconomics(
   const quarterlySlotCost = 0;
 
   const quarterlyProfit = quarterlyRevenue - quarterlyFuelCost - quarterlySlotCost;
+
+  // ── Per-class quarterly revenue + occupancy (Phase 1A) ──────
+  // Identical math to the blended `quarterlyRevenue` above, just kept
+  // unaggregated so the route detail modal can render the breakdown.
+  // We compute these AFTER the post-yield fares are finalised because
+  // yield management can shift fares per cabin.
+  const quarterlyFirstRevenue = quarterlyFirstPax * firstFare;
+  const quarterlyBusRevenue   = quarterlyBusPax   * busFare;
+  const quarterlyEconRevenue  = quarterlyEconPax  * econFare;
+  const occupancyFirst =
+    dailyCapacityFirst > 0
+      ? Math.max(0, Math.min(1.0, dailyPaxFirst / dailyCapacityFirst))
+      : 0;
+  const occupancyBus =
+    dailyCapacityBus > 0
+      ? Math.max(0, Math.min(1.0, dailyPaxBus / dailyCapacityBus))
+      : 0;
+  const occupancyEcon =
+    dailyCapacityEcon > 0
+      ? Math.max(0, Math.min(1.0, dailyPaxEcon / dailyCapacityEcon))
+      : 0;
+  // Revenue split: passenger fares vs belly cargo. Net of any
+  // refunds the engine would have surfaced (none today). Sums match
+  // the headline `quarterlyRevenue` to the cent.
+  const passengerRevenue =
+    quarterlyFirstRevenue + quarterlyBusRevenue + quarterlyEconRevenue;
+  // bellyCargoRevenue is already accumulated above; bellyCargoTonnesUsed
+  // is in quarterly units. Expose the daily rate too because that's
+  // the form the player intuitively reads ("8.4 t/day of belly").
+  const bellyDailyTonnesUsed =
+    QUARTER_DAYS > 0 ? bellyCargoTonnesUsed / QUARTER_DAYS : 0;
 
   return {
     distanceKm,
@@ -1762,6 +1891,30 @@ export function computeRouteEconomics(
     quarterlyFuelCost,
     quarterlySlotCost,
     quarterlyProfit,
+    // Per-class drill-down (Phase 1A)
+    dailyPaxFirst,
+    dailyPaxBus,
+    dailyPaxEcon,
+    quarterlyFirstRevenue,
+    quarterlyBusRevenue,
+    quarterlyEconRevenue,
+    occupancyFirst,
+    occupancyBus,
+    occupancyEcon,
+    bellyCargoRevenue,
+    bellyDailyTonnesUsed,
+    passengerRevenue,
+    cargoRevenue: bellyCargoRevenue,
+    fareFirst: firstFare,
+    fareBus: busFare,
+    fareEcon: econFare,
+    seatsFirst: seatsPerFlight.first,
+    seatsBus: seatsPerFlight.bus,
+    seatsEcon: seatsPerFlight.econ,
+    dailyDemandFirst,
+    dailyDemandBus,
+    dailyDemandEcon,
+    quarterlyFuelTankSavings: fuelTankSavings,
   };
 }
 
@@ -2613,6 +2766,29 @@ export function runQuarterClose(
       r.quarterlyRevenue = boostedRevenue;
       r.quarterlyFuelCost = econ.quarterlyFuelCost;
       r.quarterlySlotCost = econ.quarterlySlotCost;
+
+      // ── Per-class drill-down (Phase 1A) ────────────────────
+      // Scale the per-class quarterly counts by the same Legacy +
+      // First-Mover boosters that the headline revenue was scaled
+      // by, so the breakdown reconciles back to the headline.
+      const revBoost = legacyBonus * firstMoverBonus;
+      r.quarterlyFirstPax = (econ.dailyPaxFirst ?? 0) * QUARTER_DAYS;
+      r.quarterlyBusPax = (econ.dailyPaxBus ?? 0) * QUARTER_DAYS;
+      r.quarterlyEconPax = (econ.dailyPaxEcon ?? 0) * QUARTER_DAYS;
+      r.quarterlyFirstRevenue = (econ.quarterlyFirstRevenue ?? 0) * revBoost;
+      r.quarterlyBusRevenue = (econ.quarterlyBusRevenue ?? 0) * revBoost;
+      r.quarterlyEconRevenue = (econ.quarterlyEconRevenue ?? 0) * revBoost;
+      r.occupancyFirst = econ.occupancyFirst;
+      r.occupancyBus = econ.occupancyBus;
+      r.occupancyEcon = econ.occupancyEcon;
+      r.bellyDailyTonnesUsed = econ.bellyDailyTonnesUsed;
+      r.bellyCargoRevenue = (econ.bellyCargoRevenue ?? 0) * revBoost;
+      r.passengerRevenue = (econ.passengerRevenue ?? 0) * revBoost;
+      r.cargoRevenue = r.isCargo
+        ? boostedRevenue
+        : (econ.cargoRevenue ?? 0) * revBoost;
+      r.quarterlyFuelTankSavings = econ.quarterlyFuelTankSavings;
+
       // Increment Legacy counter
       r.consecutiveQuartersActive = (r.consecutiveQuartersActive ?? 0) + 1;
       // Route profitability streak (PRD G2 / F11.3)
@@ -3080,12 +3256,83 @@ export function runQuarterClose(
   const totalCostsAfterTax = Math.max(0, revenue - netProfit);
   const allocPool = Math.max(0, totalCostsAfterTax - fuelCost);
   const totalRevenueForAlloc = revenue;
+
+  // ── Per-category allocation (Phase 1A) ──────────────────
+  // Split the allocation across the team's cost categories so the
+  // route detail modal can render line items rather than one opaque
+  // number. Maintenance includes hubFee post-fold; we expose hubFee
+  // as a separate display row using the pre-fold value, with the rest
+  // of maintenance shown net. The other "taxes & levies" bucket
+  // absorbs passengerTax + fuelExcise + carbonLevy + tax + fines.
+  const maintenanceForAlloc = Math.max(0, maintenanceCost - hubFee);
+  const taxesAndLeviesForAlloc =
+    passengerTax + fuelExcise + carbonLevy + tax + obligationFinesUsd;
+  // Re-derive interestForAlloc from `interest + rcfInterest`; this is
+  // the line the player sees as "Interest" on the financials. RCF
+  // interest is folded into it for the route allocation because the
+  // player can't disentangle that from regular interest at the route
+  // level.
+  const interestForAlloc = interest + rcfInterest;
   for (const r of next.routes) {
     if (r.status !== "active") continue;
     const routeRev = r.quarterlyRevenue ?? 0;
     const revShare = totalRevenueForAlloc > 0 ? routeRev / totalRevenueForAlloc : 0;
     const allocatedNonFuel = allocPool * revShare;
     r.quarterlyAllocatedCost = (r.quarterlyFuelCost ?? 0) + allocatedNonFuel;
+
+    // Per-category breakdown (Phase 1A) — uses the same revShare
+    // weight that drives the aggregate `quarterlyAllocatedCost`. The
+    // categories below sum to (allocPool × revShare) + insurancePremium
+    // share + leaseFees share + hubFee share. We surface every line
+    // so the modal's cost breakdown reconciles to the headline.
+    r.allocatedStaff = staffCost * revShare;
+    r.allocatedMarketing = marketingCost * revShare;
+    r.allocatedService = serviceCost * revShare;
+    r.allocatedOperations = operationsCost * revShare;
+    r.allocatedCustomerService = customerServiceCost * revShare;
+    r.allocatedMaintenance =
+      (maintenanceForAlloc + insurancePremium + leaseFeesUsd) * revShare;
+    r.allocatedHubFee = hubFee * revShare;
+    r.allocatedDepreciation = depreciation * revShare;
+    r.allocatedInterest = interestForAlloc * revShare;
+    r.allocatedTaxes = taxesAndLeviesForAlloc * revShare;
+
+    // Slot allocation: replaces the deprecated quarterlySlotCost (which
+    // is always 0 post-v2 and was being rendered as the misleading "$0
+    // slot" line). We allocate the team's slot-fee pool by the same
+    // revenue-share weight used for the other cost categories. (Weekly-
+    // frequency weighting would be more accurate; for the v1 of this
+    // breakdown, revenue-share is consistent with how every other line
+    // is allocated, so the math obviously ties out.)
+    r.quarterlySlotCostAllocation = slotCost * revShare;
+
+    // Demand-shock multiplier captured for the route detail modal's
+    // "why did revenue dip" hint. cityEventImpact returns 0 (no event)
+    // up to ±some percent — we surface the worse of origin/dest to
+    // give the player a single number. Cargo routes read the cargo
+    // dimension; passenger routes average tourism + business (same
+    // shape as the upstream routeDemandPerDay blend).
+    const evtA = cityEventImpact(r.originCode, ctx.quarter);
+    const evtB = cityEventImpact(r.destCode, ctx.quarter);
+    const eventA = r.isCargo
+      ? evtA.cargo / 100
+      : ((evtA.tourism + evtA.business) / 2) / 100;
+    const eventB = r.isCargo
+      ? evtB.cargo / 100
+      : ((evtB.tourism + evtB.business) / 2) / 100;
+    // Match the engine's clamp behavior (DEMAND_FLOOR for passenger /
+    // cargo) so the display number is exactly what the engine used.
+    const floor = r.isCargo ? DEMAND_FLOOR_CARGO : DEMAND_FLOOR_PASSENGER;
+    const multA = Math.max(floor, 1 + eventA);
+    const multB = Math.max(floor, 1 + eventB);
+    // Use the worse-of-two ends — a route is suppressed by whichever
+    // endpoint has the larger negative event.
+    const shockMult = Math.min(multA, multB);
+    if (Math.abs(shockMult - 1) > 0.01) {
+      r.lastQuarterDemandShockMult = shockMult;
+    } else {
+      r.lastQuarterDemandShockMult = undefined;
+    }
   }
   // Update routeBreakdown so anyone consuming it (digest, AI bots) sees
   // the allocated profit instead of revenue − fuel.

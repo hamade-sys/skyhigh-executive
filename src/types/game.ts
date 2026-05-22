@@ -187,6 +187,72 @@ export interface Route {
    *  rather than a misleadingly-fat margin from revenue − fuel only. */
   quarterlyAllocatedCost?: number;
 
+  // ── Per-class revenue + occupancy drill-down (Phase 1A) ────────
+  // Populated each quarter by runQuarterClose. The engine has always
+  // computed these intermediates inside computeRouteEconomics; the
+  // RouteDetailModal can now show them as line items instead of the
+  // opaque aggregate that Hamade flagged ("no per-class revenue
+  // breakdown"). All optional — older saves render as before.
+
+  /** Daily pax flying first / business / economy class on this
+   *  route (post-capacity-cap). Multiply by QUARTER_DAYS × dailyFreq
+   *  for the quarterly count. */
+  quarterlyFirstPax?: number;
+  quarterlyBusPax?: number;
+  quarterlyEconPax?: number;
+  /** Revenue attributable to each cabin this quarter, USD. */
+  quarterlyFirstRevenue?: number;
+  quarterlyBusRevenue?: number;
+  quarterlyEconRevenue?: number;
+  /** Daily tonnes of belly cargo carried on a passenger route whose
+   *  aircraft has a cargo-belly upgrade. Zero for cargo-only routes
+   *  (their cargo goes through the main hold, not the belly). */
+  bellyDailyTonnesUsed?: number;
+  /** Belly-cargo revenue this quarter, USD. Sums into the headline
+   *  quarterlyRevenue alongside passenger revenue. */
+  bellyCargoRevenue?: number;
+  /** Clean split of quarterly revenue by source. For cargo routes this
+   *  is all cargoRevenue; for passenger routes with belly cargo it
+   *  splits passenger fares from belly tonne-mile revenue. */
+  passengerRevenue?: number;
+  cargoRevenue?: number;
+  /** Occupancy by cabin (0..1). Helps the player see "F is at 30%
+   *  but Y is at 88% — I'm under-pricing economy". */
+  occupancyFirst?: number;
+  occupancyBus?: number;
+  occupancyEcon?: number;
+
+  // ── Per-route cost-category allocation (Phase 1A) ──────────────
+  /** Allocation breakdown of quarterlyAllocatedCost across the team-
+   *  level cost categories the route absorbs. Lets the route detail
+   *  modal say "Staff share $1.2M, Marketing share $0.4M, …" instead
+   *  of one opaque allocated number. All values are USD. */
+  allocatedStaff?: number;
+  allocatedMarketing?: number;
+  allocatedService?: number;
+  allocatedOperations?: number;
+  allocatedCustomerService?: number;
+  allocatedMaintenance?: number;
+  allocatedDepreciation?: number;
+  allocatedInterest?: number;
+  allocatedTaxes?: number;
+  allocatedHubFee?: number;
+  /** Slot allocation under the v2 team-level slot pool. Replaces the
+   *  deprecated quarterlySlotCost field (which always reads 0 post-v2
+   *  and was rendered as "slot $0.0M" — misleading). Calculated by
+   *  weighted-frequency share at quarter close. */
+  quarterlySlotCostAllocation?: number;
+  /** Dollars saved this quarter from the hub fuel-tank discount (vs
+   *  the same burn at the unhedged spot index). Surfaced inline on
+   *  the fuel cost line so the player sees the investment paying
+   *  off: "Fuel $1.8M (saved $0.4M via fuel tank)". */
+  quarterlyFuelTankSavings?: number;
+  /** Demand-shock multiplier applied to this route's demand this
+   *  quarter (1.0 = no event). When < 1 (or > 1), surfaces a hint
+   *  in the route detail modal explaining a sudden revenue swing
+   *  ("Q5 demand was 0.92× normal due to news events"). */
+  lastQuarterDemandShockMult?: number;
+
   /** True if route carries cargo instead of passengers. */
   isCargo?: boolean;
 
