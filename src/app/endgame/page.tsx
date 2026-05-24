@@ -44,7 +44,15 @@ export default function Endgame() {
   const [dbLoading, setDbLoading] = useState<boolean>(!!gameId);
 
   useEffect(() => {
+    // Phase C — C2: lint flags setDbLoading as a setState-in-effect.
+    // Both branches are correct and load-bearing: when gameId is null
+    // we MUST flip dbLoading off (otherwise the endgame UI never
+    // mounts), and when we have a gameId we MUST flip it on before
+    // the async fetch. There's no infinite loop because the deps are
+    // [gameId] only — setDbLoading doesn't trigger the effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!gameId) { setDbLoading(false); return; }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDbLoading(true);
     fetch(`/api/games/load?gameId=${encodeURIComponent(gameId)}&includeState=1`, {
       cache: "no-store",

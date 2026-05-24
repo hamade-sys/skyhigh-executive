@@ -497,8 +497,12 @@ function CloseQuarterButton() {
   // Reset iRequested when the quarter actually advances (store
   // clears quarterCloseRequest and hydrateFromServerState fires).
   // We detect this by watching currentQuarter.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Phase C — C2: lint flags setIRequested inside the effect. Safe:
+  // the effect's only purpose is to reset state when the quarter
+  // changes; deps are [currentQuarter] only, and iRequested isn't
+  // in them, so no loop.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIRequested(false);
     autoCloseAttemptedQuarterRef.current = null;
   }, [currentQuarter]);

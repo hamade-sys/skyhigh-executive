@@ -3,5 +3,11 @@
   "buildCommand": "next build",
   "installCommand": "npm install",
   "outputDirectory": ".next",
-  "regions": ["sin1"]
+  "regions": ["sin1"],
+  "crons": [
+    {
+      "path": "/api/cron/stale-games",
+      "schedule": "0 4 * * *"
+    }
+  ]
 }

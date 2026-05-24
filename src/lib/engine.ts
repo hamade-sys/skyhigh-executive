@@ -3109,8 +3109,12 @@ export function runQuarterClose(
   // Fuel tank maintenance (PRD E2)
   maintenanceCost += fuelTankMaint;
 
-  // Hub Maintenance Depot (PRD D4): 20% fleet maintenance reduction per depot
-  const depotCount = next.hubInvestments?.maintenanceDepotHubs.length ?? 0;
+  // Hub Maintenance Depot (PRD D4): 20% fleet maintenance reduction per depot.
+  // Phase C — C3: guard the inner array too. Legacy saves (or a
+  // corrupt hydrate) can hand us `hubInvestments: {}` — outer ?. saves
+  // us from .maintenanceDepotHubs being undefined, but accessing
+  // .length on undefined throws. Belt and braces.
+  const depotCount = next.hubInvestments?.maintenanceDepotHubs?.length ?? 0;
   if (depotCount > 0) {
     const reduction = Math.min(0.5, depotCount * 0.2);
     const saved = maintenanceCost * reduction;
