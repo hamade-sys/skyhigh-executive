@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getSupabaseUrl } from "@/lib/supabase/env";
+import { safeRelativePath } from "@/lib/url-safety";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,9 +20,16 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  // Default to home page so returning players get smart-redirected
-  // to their active game via the active-membership check there.
-  const next = url.searchParams.get("next") || "/";
+  // Phase A — S3: open-redirect fix. Pre-fix this was:
+  //   const next = url.searchParams.get("next") || "/";
+  //   ...NextResponse.redirect(new URL(next, url.origin))
+  // The `new URL(next, base)` constructor ignores the base when `next`
+  // is an absolute URL like `https://evil.com/phish` — so an attacker
+  // could send a phishing victim through a legitimate OAuth flow and
+  // then bounce them off-site with referrer leaking the freshly-set
+  // session context. `safeRelativePath` rejects any value that isn't
+  // a strict same-origin path, falling back to home on attack input.
+  const next = safeRelativePath(url.searchParams.get("next"), "/");
   if (!code) {
     return NextResponse.redirect(new URL("/login?error=missing_code", url.origin));
   }

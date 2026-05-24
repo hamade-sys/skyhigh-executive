@@ -63,10 +63,14 @@ export function ActiveGameRibbon() {
     let cancelled = false;
     async function refresh() {
       try {
-        const res = await fetch(
-          `/api/games/active-membership?sessionId=${encodeURIComponent(user!.id)}`,
-          { cache: "no-store" },
-        );
+        // Phase A — S2: the API now derives the user id from the
+        // auth cookie. Passing `sessionId` in the URL was the IDOR
+        // surface (anyone could query for any user's active game).
+        // Cookies travel automatically via fetch's `credentials:
+        // "same-origin"` default.
+        const res = await fetch("/api/games/active-membership", {
+          cache: "no-store",
+        });
         const json = await res.json();
         if (cancelled) return;
         const g = json?.game as ActiveGame | null;

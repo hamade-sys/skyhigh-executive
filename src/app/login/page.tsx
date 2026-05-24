@@ -17,6 +17,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, ArrowRight, Mail } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
+import { safeRelativePath } from "@/lib/url-safety";
 
 function LoginInner() {
   const {
@@ -40,7 +41,11 @@ function LoginInner() {
   // Where to send the user after a successful sign-in.
   // Default to home page so the active-membership check there can
   // redirect returning players straight back into their active game.
-  const nextPath = search.get("next") || "/";
+  // Phase A — S3: `safeRelativePath` rejects absolute / protocol-
+  // relative URLs (open-redirect phishing). Pre-fix `?next=//evil
+  // .com/phish` or `?next=https://evil.com/phish` would bounce the
+  // user off-site immediately after their legitimate sign-in.
+  const nextPath = safeRelativePath(search.get("next"), "/");
 
   // Surface auth errors from /auth/callback redirects.
   useEffect(() => {

@@ -1,29 +1,44 @@
 /**
- * GET /api/games/active-membership?sessionId=X
+ * GET /api/games/active-membership
  *
- * Returns the most recent game this player (identified by their
- * Supabase user.id) is a member of that is still active (status
- * "lobby" or "playing").
+ * Returns the most recent game the AUTHENTICATED user is a member of
+ * that is still active (status "lobby" or "playing").
  *
  * Used by the home page to redirect returning players straight back
  * into their game — replaces the old browser-stored "skyforce:activeGame"
  * key which only worked on the same device/browser.
  *
+ * Auth (Phase A — security hotfix S2):
+ *   The user id is now derived from the cookie-bound auth session.
+ *   Pre-fix the route took `sessionId` from the URL query string
+ *   with no auth check — an attacker could iterate user UUIDs and
+ *   learn what game any user was in (a privacy-leaking IDOR).
+ *
+ *   Read path → uses `getSessionUserId()` (fast cookie-only check,
+ *   no network round-trip to Supabase Auth). The cost-benefit on
+ *   reads doesn't justify the ~150ms `getUser()` call.
+ *
  * Response shapes:
- *   { game: { id, status, name } }   — active game found
- *   { game: null }                   — no active game for this session
+ *   { game: { id, status, name, ... } }  — active game found
+ *   { game: null }                       — no auth OR no active game
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
+import { getSessionUserId } from "@/lib/supabase/server-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const sessionId = req.nextUrl.searchParams.get("sessionId");
-    if (!sessionId || sessionId.length < 8) {
+    // Derive the session id from the auth cookie — NEVER from the
+    // URL. Returning `{ game: null }` (200) rather than a 401 is
+    // intentional: the home page calls this on every load including
+    // anonymous lobby visits, and the ribbon just doesn't render
+    // when game is null. A 401 here would cascade into UI noise.
+    const sessionId = await getSessionUserId();
+    if (!sessionId) {
       return NextResponse.json({ game: null });
     }
 
@@ -116,7 +131,11 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: msg, game: null }, { status: 500 });
+    // Don't leak raw error strings to the client — log server-side,
+    // return a generic message. The home-page ribbon treats any
+    // non-200 as "no active game", which is the safe default.
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    console.error("[/api/games/active-membership] internal error:", detail);
+    return NextResponse.json({ game: null }, { status: 500 });
   }
 }
