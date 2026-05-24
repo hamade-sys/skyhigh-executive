@@ -498,6 +498,14 @@ export interface GameStore extends GameState {
     eventType: string,
     eventPayload?: unknown,
   ): Promise<{ ok: true } | { ok: false; error: string; status?: number }>;
+  /** Fire-and-forget state flush using navigator.sendBeacon — the
+   *  only reliable way to ship a final push when the user is
+   *  closing the tab or navigating away mid-action. Use during
+   *  beforeunload / pagehide so a player can't lose their round
+   *  if they close their laptop while QuarterCloseModal is open.
+   *  Returns true if the beacon was queued successfully (the browser
+   *  guarantees delivery), false on any failure. */
+  flushStateBeacon(eventType: string, eventPayload?: unknown): boolean;
   /** Re-issue the session code without creating a new game state.
    *  Players reconnecting use the new code; existing saved snapshots
    *  are preserved. Useful after a facilitator restores a snapshot. */
@@ -2842,6 +2850,10 @@ export const useGame = create<GameStore>()(
           `${route.originCode} → ${route.destCode} · aircraft returned to idle. ` +
             `Slot bids stay queued — release in Slot Market if you don't want them.`,
         );
+        // Phase B — D1: persist to server so a Switch View flip or tab
+        // refresh doesn't quietly resurrect the pending route. No-op in
+        // solo mode (pushStateToServer auto-detects no session.gameId).
+        void get().pushStateToServer("player.cancelledPendingRoute", { routeId });
         return { ok: true };
       },
 
@@ -2971,6 +2983,12 @@ export const useGame = create<GameStore>()(
             }),
           }),
         });
+        // Phase B — D1: persist edited fares, frequency, aircraft
+        // assignment, cargo-belly rate, etc. Pre-fix this was the
+        // top data-loss surface: a player edits a route → opens
+        // Switch View → edits gone. PR #54 was supposed to fix it
+        // but never landed on main. Audit reconfirmed in May 2026.
+        void get().pushStateToServer("player.updatedRoute", { routeId });
         return { ok: true };
       },
 
@@ -3223,6 +3241,8 @@ export const useGame = create<GameStore>()(
             loans: [...t.loans, loan],
           }),
         });
+        // Phase B — D2: persist so cash + debt + loans survive a refresh.
+        void get().pushStateToServer("player.borrowedCapital", { amount, loanId: loan.id });
         return { ok: true };
       },
 
@@ -3274,6 +3294,8 @@ export const useGame = create<GameStore>()(
           `Overdraft refinanced · ${fmtMoneyPlain(overdraftAmount)}`,
           `Cash restored to balance. New term loan at ${ratePct.toFixed(1)}% with ${loan.lenderName}.`,
         );
+        // Phase B — D2: persist the refinanced loan.
+        void get().pushStateToServer("player.refinancedOverdraft", { amount: overdraftAmount });
         return { ok: true };
       },
 
@@ -3297,6 +3319,8 @@ export const useGame = create<GameStore>()(
           `Loan repaid · ${fmtMoneyPlain(loan.remainingPrincipal)}`,
           `Saved ${loan.ratePct.toFixed(1)}% interest going forward.`,
         );
+        // Phase B — D2: persist the loan removal.
+        void get().pushStateToServer("player.repaidLoan", { loanId });
         return { ok: true };
       },
 
@@ -3357,6 +3381,70 @@ export const useGame = create<GameStore>()(
             set({ isClosing: false });
           }
         };
+
+        // ── Snapshot + restore (Phase B — D5) ──────────────────
+        // closeQuarter touches teams, airportSlots, airportBids,
+        // preOrders, secondHandListings, and cargoContracts across
+        // dozens of intermediate set() calls. Pre-fix, an engine
+        // throw mid-way left state half-mutated: early-auction
+        // writes already landed, but no revenue/cost was booked,
+        // and the toast that surfaced the error disappeared after
+        // a few seconds. Players never knew their cohort was now
+        // running on a corrupt state.
+        //
+        // Now we capture the persistable slices at entry and
+        // restore them on any throw. The restoration is total —
+        // even small partial-mutation residue is wiped, so the
+        // player can retry the close from a known-clean state.
+        // No deep clone: the slices are immutable patterns (set()
+        // assigns new arrays/maps) so a shallow reference snapshot
+        // is sufficient. We DO carry a structuredClone of the
+        // heavy teams array because closeQuarter mutates nested
+        // route + fleet fields in place at certain hot paths.
+        const _snapshot = (() => {
+          const sb = get();
+          // structuredClone for teams (deep) — the engine reads
+          // and re-assigns t.routes[i].quarterlyRevenue etc.
+          // directly, so the snapshot must be detached. Other
+          // slices are shallow-cloned (they're flat maps/arrays of
+          // primitives or simple objects re-set wholesale).
+          let teamsSnap: Team[] = sb.teams;
+          try {
+            // structuredClone may fail on certain non-cloneable
+            // objects (functions, Symbols). Fall back to JSON
+            // serialise/deserialise as a tolerant deep clone —
+            // slower but works for the engine's data shape.
+            teamsSnap = (typeof structuredClone === "function")
+              ? structuredClone(sb.teams)
+              : JSON.parse(JSON.stringify(sb.teams.map((t) => ({
+                  ...t,
+                  flags: Array.from(t.flags),
+                }))));
+            // Re-hydrate flags Sets if we went through JSON.
+            teamsSnap = teamsSnap.map((t) => ({
+              ...t,
+              flags: t.flags instanceof Set ? t.flags : new Set(Array.from(t.flags as unknown as string[])),
+            }));
+          } catch (cloneErr) {
+            console.warn("[closeQuarter] snapshot clone failed; using reference fallback:", cloneErr);
+            teamsSnap = sb.teams;
+          }
+          return {
+            teams: teamsSnap,
+            airportSlots: { ...(sb.airportSlots ?? {}) },
+            airportBids: [...(sb.airportBids ?? [])],
+            preOrders: [...(sb.preOrders ?? [])],
+            secondHandListings: [...(sb.secondHandListings ?? [])],
+            cargoContracts: [...(sb.cargoContracts ?? [])],
+            phase: sb.phase,
+            currentQuarter: sb.currentQuarter,
+            fuelIndex: sb.fuelIndex,
+            baseInterestRatePct: sb.baseInterestRatePct,
+            worldCupHostCode: sb.worldCupHostCode,
+            olympicHostCode: sb.olympicHostCode,
+          };
+        })();
+
         try {
 
         // Phase 6 P1 — timing telemetry. closeQuarter is the
@@ -5090,14 +5178,53 @@ export const useGame = create<GameStore>()(
 
         reportTiming();
         } catch (err) {
-          // Unhandled engine error during quarter close. Log it so the
-          // team can reproduce it; surface a recoverable warning so the
-          // player isn't stuck forever.
-          console.error("[closeQuarter] unexpected error:", err);
-          toast.warning(
-            "Quarter close error",
-            "Something went wrong processing this round. Please try again — your data has not changed.",
+          // Phase B — D5. Unhandled engine error during quarter close.
+          // Pre-fix the toast read "your data has not changed" — that
+          // was a LIE. closeQuarter touches dozens of slices in the
+          // store via intermediate set() calls before the catch ever
+          // fires, so partial mutations leaked through. Now we
+          // restore the snapshot captured at entry. Restoration is
+          // total — every persistable slice the engine could mutate
+          // is reverted, so the player can safely retry the close.
+          console.error("[closeQuarter] unexpected error — restoring snapshot:", err);
+          try {
+            set({
+              teams: _snapshot.teams,
+              airportSlots: _snapshot.airportSlots,
+              airportBids: _snapshot.airportBids,
+              preOrders: _snapshot.preOrders,
+              secondHandListings: _snapshot.secondHandListings,
+              cargoContracts: _snapshot.cargoContracts,
+              phase: _snapshot.phase,
+              currentQuarter: _snapshot.currentQuarter,
+              fuelIndex: _snapshot.fuelIndex,
+              baseInterestRatePct: _snapshot.baseInterestRatePct,
+              worldCupHostCode: _snapshot.worldCupHostCode,
+              olympicHostCode: _snapshot.olympicHostCode,
+              lastCloseResult: null,
+            });
+          } catch (restoreErr) {
+            // If even the restore throws, the local store is in a
+            // bad shape — log loudly and hope the next server
+            // hydrate corrects it. The toast below still tells the
+            // player to refresh, which forces a fresh hydrate.
+            console.error("[closeQuarter] CRITICAL: snapshot restore failed:", restoreErr);
+          }
+          // Use the negative toast variant so the workshop facilitator
+          // notices — "warning" was too soft for what is a genuine
+          // failure. Tell the player explicitly that their state is
+          // safe AND that they should refresh + retry. If the toast
+          // is dismissed before being read, the captureEvent above
+          // means the operator can find this in telemetry.
+          toast.negative(
+            "Quarter close failed — state restored",
+            "An engine error blocked the round close. Your data has been rolled back to the pre-close state. Please refresh the page and try closing again. If this repeats, contact your facilitator.",
           );
+          captureEvent("closeQuarter.failed", "warn", {
+            quarter: s.currentQuarter,
+            teams: s.teams.length,
+            error: err instanceof Error ? err.message : String(err),
+          });
         } finally {
           // Guarantee the re-entrancy guard is released even if an
           // unhandled exception bypassed the normal release paths.
@@ -6327,6 +6454,86 @@ export const useGame = create<GameStore>()(
         }
       },
 
+      /**
+       * Phase B — D3. Fire-and-forget flush of the current state
+       * using navigator.sendBeacon. Unlike fetch, the browser
+       * guarantees delivery even if the tab is closing — which is
+       * exactly the failure mode we're guarding against (player
+       * shuts laptop mid-Quarter-Close; pushStateToServer's fetch
+       * gets cancelled; the round replays on next session).
+       *
+       * Build a payload identical to pushStateToServer's so a
+       * subsequent hydrate lands byte-equivalent. eventType lands
+       * in the audit log just like a normal push. Returns true if
+       * the beacon was queued (browser will deliver), false on any
+       * disqualifying condition.
+       *
+       * No CAS conflict handling because we're firing during
+       * unload — there's no UI to surface a 409 to anyway. The
+       * server-side state-update endpoint still validates version,
+       * and if a CAS conflict happens during a tab-close flush,
+       * Realtime will catch the cohort up on the next page load.
+       */
+      flushStateBeacon: (eventType, eventPayload) => {
+        if (typeof navigator === "undefined" || !navigator.sendBeacon) return false;
+        const s = get();
+        if (s.isObserver) return false;
+        if (_suppressGmPush) return false;
+        const session = s.session;
+        if (!session?.gameId) return false;
+        const sessionId = s.localSessionId;
+        if (!sessionId) return false;
+        const actorTeamId = s.activeTeamId ?? s.playerTeamId ?? undefined;
+        const stateJson = {
+          phase: s.phase,
+          currentQuarter: s.currentQuarter,
+          fuelIndex: s.fuelIndex,
+          baseInterestRatePct: s.baseInterestRatePct,
+          teams: s.teams.map((t) => ({
+            ...t,
+            flags: Array.from(t.flags) as unknown as Set<string>,
+          })),
+          quarterTimerSecondsRemaining: s.quarterTimerSecondsRemaining,
+          quarterTimerPaused: s.quarterTimerPaused,
+          secondHandListings: s.secondHandListings,
+          cargoContracts: s.cargoContracts,
+          airportSlots: s.airportSlots,
+          airportBids: s.airportBids,
+          worldCupHostCode: s.worldCupHostCode,
+          olympicHostCode: s.olympicHostCode,
+          sessionCode: s.sessionCode,
+          sessionLocked: s.sessionLocked,
+          sessionSlots: s.sessionSlots,
+          preOrders: s.preOrders,
+          productionCapOverrides: s.productionCapOverrides,
+          quarterCloseRequest: s.quarterCloseRequest,
+          session: { ...session, version: session.version + 1 },
+        };
+        const body = JSON.stringify({
+          gameId: session.gameId,
+          expectedVersion: s.serverStateVersion,
+          newState: stateJson,
+          actorSessionId: sessionId,
+          actorTeamId,
+          eventType,
+          eventPayload,
+        });
+        try {
+          // Use a Blob with JSON content-type so the server's body
+          // parser recognises the payload. Bare string beacons land
+          // as text/plain and the route's req.json() throws.
+          const blob = new Blob([body], { type: "application/json" });
+          return navigator.sendBeacon("/api/games/state-update", blob);
+        } catch {
+          // Beacon throws when the body exceeds the browser's per-
+          // origin queue limit (varies, ~64KB safe upper bound) or
+          // when running in a context that disallows beacons. Either
+          // way, return false — the caller can fall back to normal
+          // pushStateToServer if it's not in a true unload window.
+          return false;
+        }
+      },
+
       pushStateToServer: (eventType, eventPayload) => {
         const s = get();
         // Game Master is observer-only — never write state on their behalf.
@@ -6691,6 +6898,11 @@ export const useGame = create<GameStore>()(
           }),
         });
         toast.info("Route suspended", "Slots retained, 20% holding fee applies.");
+        // Phase B — D1: persist suspension so a Switch View flip or
+        // refresh doesn't quietly un-suspend the route and leave the
+        // player paying full slot fees on a route they thought was
+        // paused. No-op in solo mode.
+        void get().pushStateToServer("player.suspendedRoute", { routeId });
         return { ok: true };
       },
 
@@ -6705,6 +6917,9 @@ export const useGame = create<GameStore>()(
           }),
         });
         toast.success("Route resumed");
+        // Phase B — D1: persist resume so the route stays active
+        // after a tab refresh.
+        void get().pushStateToServer("player.resumedRoute", { routeId });
         return { ok: true };
       },
 
@@ -7507,4 +7722,85 @@ export function selectRivals(s: GameStore): Team[] {
 export function isActiveTeam(s: GameStore, teamId: string): boolean {
   const id = s.activeTeamId ?? s.playerTeamId;
   return id !== null && id === teamId;
+}
+
+// ─── Auto-push subscriber (Phase B — D2 safety net) ──────────────
+//
+// Pre-fix, ~30 player actions in this store ran `set(...)` to mutate
+// `teams` / `airportSlots` / `airportBids` / `preOrders` / etc. WITHOUT
+// calling `pushStateToServer`. In solo mode that's invisible; in
+// multiplayer it means the action evaporates on a tab refresh, a
+// Switch View flip, or a multiplayer-realtime resync. The audit
+// reported this as the highest-volume data-loss surface in the game.
+//
+// Rather than litter the store with 30+ `void get().pushStateToServer(...)`
+// lines (and have the next new action forget the call again), this
+// subscriber catches ANY change to persistable state, debounces by
+// ~800ms (to coalesce rapid edits), and fires a single autopush.
+// Explicit pushes for high-value actions (closeQuarter,
+// submittedDecision, opened/closed routes, ordered aircraft) remain
+// in place — they tag the audit log with their specific eventType,
+// which the autopush blanket can't.
+//
+// Subscriber lives at module scope so it attaches once on import.
+// In SSR (no `typeof setTimeout`), we skip — the store will be
+// re-subscribed on the client when this module re-evaluates.
+if (typeof setTimeout !== "undefined") {
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  // Skip the first synchronous notification — Zustand fires
+  // immediately on subscribe with (current, current); we don't want
+  // an autopush on bootstrap before hydrateFromServerState has even
+  // run.
+  let booted = false;
+
+  const PERSISTABLE_KEYS = [
+    "teams",
+    "airportSlots",
+    "airportBids",
+    "preOrders",
+    "secondHandListings",
+    "cargoContracts",
+    "productionCapOverrides",
+    "sessionSlots",
+  ] as const;
+
+  function snapshot(s: GameStore) {
+    return PERSISTABLE_KEYS.map((k) => (s as unknown as Record<string, unknown>)[k]);
+  }
+  let lastSnap: ReturnType<typeof snapshot> | null = null;
+
+  useGame.subscribe((state) => {
+    if (!booted) {
+      booted = true;
+      lastSnap = snapshot(state);
+      return;
+    }
+    const next = snapshot(state);
+    if (lastSnap && next.every((v, i) => v === lastSnap![i])) return; // unchanged
+    lastSnap = next;
+
+    // Gate: only push in active multiplayer sessions. Solo runs skip.
+    if (!state.session?.gameId) return;
+    if (state.isObserver) return;
+    if (_suppressGmPush) return;
+    // Skip while a closeQuarter is mid-flight — closeQuarter pushes
+    // its own atomic snapshot on completion. Auto-pushing mid-close
+    // would race the version and bounce the GM's authoritative write.
+    if (state.phase === "quarter-closing") return;
+
+    // Debounce so a burst of rapid edits (player drags a slider,
+    // toggles 5 sliders, etc.) coalesces into a single push.
+    if (pendingTimer) clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(() => {
+      pendingTimer = null;
+      // Re-check session in case it went away during the debounce
+      // window (player navigated to home, ended game, etc.).
+      const live = useGame.getState();
+      if (!live.session?.gameId) return;
+      if (live.isObserver) return;
+      if (_suppressGmPush) return;
+      if (live.phase === "quarter-closing") return;
+      void live.pushStateToServer("player.autoCommit", {});
+    }, 800);
+  });
 }

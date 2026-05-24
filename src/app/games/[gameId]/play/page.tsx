@@ -35,6 +35,7 @@ import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { GameCanvas } from "@/components/game/GameCanvas";
 import { useGameRealtime } from "@/lib/games/use-game-realtime";
 import { useHeartbeat } from "@/lib/games/use-heartbeat";
+import { useUnloadFlush } from "@/lib/games/use-unload-flush";
 import { CohortReveal, hasSeenCohortReveal } from "@/components/game/CohortReveal";
 // TopBar import removed — GameCanvas mounts it internally (Phase 4.7).
 
@@ -254,6 +255,12 @@ export default function GamePlayPage({
   // closes their tab or backgrounds it. Solo runs (no gameId) skip
   // the heartbeat.
   useHeartbeat(gameId);
+
+  // Phase B — D3: on tab close / page hide, fire a sendBeacon flush
+  // of the current store state so a laptop-shut mid-Quarter-Close (or
+  // mid-debounced auto-push) doesn't lose the round. Solo runs and
+  // observers skip the flush internally.
+  useUnloadFlush();
 
   // Group-C — subscribe to the game:<id> broadcast channel for
   // forfeit / auto-end / start / lock events. The

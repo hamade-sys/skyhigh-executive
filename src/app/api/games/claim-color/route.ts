@@ -8,11 +8,18 @@
  *   - Caller identity is server-derived (Phase 1 hardening). Body
  *     param `actorSessionId` is no longer accepted.
  *   - `assertMembership` confirms the caller is a member of the game.
- *   - Atomic uniqueness: the color is written to the caller's
- *     `game_members.airline_color_id` only if no OTHER member of
- *     the same game has it. Race-safe via the WHERE NOT EXISTS
- *     subquery in the Postgres update — losers see 0 rows updated
- *     and get a 409 telling them the color was claimed in flight.
+ *   - **Atomic uniqueness** (Phase B — D4 hardening). Database-
+ *     enforced via the unique partial index
+ *     `game_members_airline_color_per_game_key` on
+ *     `(game_id, airline_color_id) WHERE airline_color_id IS NOT NULL`
+ *     (shipped in migration 0004). Pre-fix the route did a
+ *     SELECT-then-UPDATE TOCTOU race: two players claiming the same
+ *     color in the same ~1ms window could both pass the peek and
+ *     both write, leaving the index violated in legacy DBs OR
+ *     surfacing as a 500 in modern ones. Now we attempt the UPDATE
+ *     directly and translate the PG 23505 unique violation into a
+ *     clean 409 "Color already taken." Postgres serialises the
+ *     constraint check; only one writer ever wins.
  *
  * The Team object in `game_state.state_json` is updated separately
  * by the client (the store's `setAirlineColor` action runs locally,
@@ -59,52 +66,43 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supa = getServerClient() as any;
 
-    // Step 1: peek for conflicts BEFORE writing. Cheaper than the
-    // CAS-style approach for a tiny 8-row keyspace.
-    const peekResult = await supa
-      .from("game_members")
-      .select("session_id, airline_color_id")
-      .eq("game_id", gameId)
-      .eq("airline_color_id", colorId)
-      .neq("session_id", userId)
-      .maybeSingle();
-    if (peekResult.error) {
-      const msg = peekResult.error.message ?? "";
-      // The most common runtime error here is "column 'airline_color_id'
-      // does not exist" — that's migration 0004 not yet applied. The
-      // client picker treats this softly (saves locally + warns the
-      // user). Surface a clean diagnostic instead of the raw PG msg.
-      if (
-        msg.toLowerCase().includes("airline_color_id") ||
-        msg.toLowerCase().includes("does not exist") ||
-        msg.toLowerCase().includes("undefined column")
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "Color sync is offline — the airline_color_id column is missing on game_members. Operator action: apply migration 0004_airline_colors.sql against Supabase, then this endpoint comes online.",
-          },
-          { status: 503 },
-        );
-      }
-      return NextResponse.json({ error: msg }, { status: 500 });
-    }
-    if (peekResult.data) {
-      return NextResponse.json(
-        { error: "Color already taken by another airline." },
-        { status: 409 },
-      );
-    }
-
-    // Step 2: write our claim. Idempotent — if the caller already
-    // owns this color, the row update is a no-op.
+    // Phase B — D4: atomic claim. Postgres enforces uniqueness via
+    // the partial index on (game_id, airline_color_id). We attempt
+    // the UPDATE directly. If two players race for the same color,
+    // exactly one UPDATE succeeds; the other receives a 23505
+    // unique-violation which we translate to a 409.
+    //
+    // No peek-before-write — the peek was the TOCTOU race itself.
+    // The DB is the only source of truth that's safe under
+    // concurrent writes.
     const { error: writeErr } = await supa
       .from("game_members")
       .update({ airline_color_id: colorId })
       .eq("game_id", gameId)
       .eq("session_id", userId);
+
     if (writeErr) {
       const msg = writeErr.message ?? "";
+      const code = writeErr.code ?? "";
+
+      // 23505 = unique_violation. The partial index
+      // game_members_airline_color_per_game_key forbids two members
+      // of the same game holding the same color, so this means
+      // another player claimed it microseconds ago.
+      if (
+        code === "23505" ||
+        msg.toLowerCase().includes("duplicate key") ||
+        msg.toLowerCase().includes("unique constraint")
+      ) {
+        return NextResponse.json(
+          { error: "Color already taken by another airline." },
+          { status: 409 },
+        );
+      }
+
+      // Migration 0004 not applied — column doesn't exist on this DB.
+      // Surface as a clean operator-actionable diagnostic rather than
+      // a raw PG message.
       if (
         msg.toLowerCase().includes("airline_color_id") ||
         msg.toLowerCase().includes("does not exist") ||
@@ -118,12 +116,23 @@ export async function POST(req: NextRequest) {
           { status: 503 },
         );
       }
-      return NextResponse.json({ error: msg }, { status: 500 });
+
+      // Anything else — log server-side, return generic message to
+      // the client (don't leak Supabase / PG error strings).
+      console.error("[/api/games/claim-color] write failed:", msg, code);
+      return NextResponse.json(
+        { error: "Could not claim color. Please retry." },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({ ok: true, colorId });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    console.error("[/api/games/claim-color] internal error:", detail);
+    return NextResponse.json(
+      { error: "Internal error claiming color." },
+      { status: 500 },
+    );
   }
 }
