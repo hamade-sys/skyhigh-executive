@@ -363,6 +363,22 @@ export function NavRail() {
           <span className="text-[0.5625rem] uppercase tracking-wider mt-0.5">News</span>
         </button>
       )}
+
+      {/* Phase D — D-001: version + commit footer.
+          Tiny, muted, bottom-of-rail. Lets the operator (or me, when
+          debugging a workshop incident) verify which build is
+          running. NEXT_PUBLIC_GIT_SHA is wired in next.config.ts
+          from Vercel's VERCEL_GIT_COMMIT_SHA env var (falls back to
+          "dev" locally). Only renders when the rail is expanded;
+          collapsed rail keeps the icon-only aesthetic clean. */}
+      {expanded && (
+        <div
+          className="border-t border-line px-3 py-1.5 text-[0.5625rem] text-ink-muted/70 font-mono tabular leading-tight"
+          title={`Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · commit ${process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}`}
+        >
+          v{process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · {process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}
+        </div>
+      )}
     </aside>
   );
 }

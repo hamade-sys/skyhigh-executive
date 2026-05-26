@@ -170,7 +170,11 @@ export function TopBar() {
         <Divider />
         <Kpi label="Airline value" value={fmtMoney(airlineValue)} emphasize />
         <Divider />
-        <Kpi label="Brand rating" value={brandRating(displayTeam).grade} />
+        {/* Phase D — D-006: shortened from "Brand rating" to "Brand"
+            so the label fits the 7.5rem KPI column width without
+            truncating to "Brand R..". The value (A/B/C/D grade) is
+            unambiguous on its own. */}
+        <Kpi label="Brand" value={brandRating(displayTeam).grade} />
         {!viewingRival && displayTeam.rcfBalanceUsd > 0 && (
           <>
             <Divider />
@@ -1258,7 +1262,9 @@ function AirlineSwitcher({
 function GameMenu() {
   const router = useRouter();
   const resetGame = useGame((g) => g.resetGame);
+  const restartGame = useGame((g) => g.restartGame);
   const phase = useGame((g) => g.phase);
+  const teams = useGame(useShallow((g) => g.teams));
   const sessionGameId = useGame((g) => g.session?.gameId ?? null);
   const sessionGameMasterId = useGame(
     (g) => g.session?.gameMasterSessionId ?? g.session?.facilitatorSessionId ?? null,
@@ -1271,8 +1277,20 @@ function GameMenu() {
     !!sessionGameMasterId &&
     !!localSessionId &&
     sessionGameMasterId === localSessionId;
+
+  // Single-player restart eligibility — exactly one human team, and
+  // the game is actively being played (not in onboarding or
+  // post-endgame). For multi-human cohorts the restart would erase
+  // everyone else's progress without their consent, so it's hidden
+  // there. Facilitators can still force-end via the existing path.
+  const humanTeamCount = teams.filter(
+    (t) => (t.controlledBy ?? (t.isPlayer ? "human" : "bot")) === "human",
+  ).length;
+  const canRestart = humanTeamCount === 1 && phase === "playing";
+
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
   const [forceEndConfirmOpen, setForceEndConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -1419,6 +1437,21 @@ function GameMenu() {
               role="menu"
               className="absolute right-0 top-9 z-[61] w-56 rounded-lg border border-line bg-surface shadow-[var(--shadow-3)] py-1.5"
             >
+              {/* Solo-only: Restart from Q1 with the same cohort */}
+              {canRestart && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    setRestartConfirmOpen(true);
+                  }}
+                  className="w-full text-left px-3 py-2 text-[0.8125rem] text-ink hover:bg-surface-hover flex items-center gap-2"
+                >
+                  <RotateCcw size={13} className="text-ink-muted" />
+                  <span>Restart from Q1</span>
+                </button>
+              )}
               <button
                 type="button"
                 role="menuitem"
@@ -1576,6 +1609,52 @@ function GameMenu() {
           >
             <X size={14} className="mr-1" />
             {submitting ? "Working…" : "End game for everyone"}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/* Restart-from-Q1 confirmation (solo only). Preserves team
+          identity — same airline name, color, doctrine, hub, same
+          bot rivals with same difficulty — but wipes simulation
+          state (cash, fleet routes, debts, financials, decisions,
+          milestones). The cohort starts fresh at Q1 without going
+          back through onboarding. Different from "End game & start
+          over" which wipes EVERYTHING including team setup. */}
+      <Modal
+        open={restartConfirmOpen}
+        onClose={() => setRestartConfirmOpen(false)}
+      >
+        <ModalHeader>Restart from Q1?</ModalHeader>
+        <ModalBody>
+          <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
+            All airlines reset to their Q1 starting positions —
+            starter fleet, $350M onboarding budget, brand/loyalty/ops
+            at 50. You and the bot rivals keep your names, colors,
+            doctrines, and hubs. Only the simulation rewinds.
+          </p>
+          <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
+            Use this to retry a tough scenario or experiment with a
+            different opening strategy. There&rsquo;s no undo —
+            current quarter, fleet, routes, decisions, and financial
+            history are erased.
+          </p>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="ghost"
+            onClick={() => setRestartConfirmOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              restartGame();
+              setRestartConfirmOpen(false);
+            }}
+          >
+            <RotateCcw size={14} className="mr-1" />
+            Restart from Q1
           </Button>
         </ModalFooter>
       </Modal>

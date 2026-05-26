@@ -9,6 +9,7 @@ import {
   Polyline,
   Tooltip,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -439,6 +440,30 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
   );
 });
 
+/**
+ * Phase D — D-002: zoom tracker. Reports the current Leaflet zoom
+ * level up to the parent WorldMap so the city-label rendering can
+ * tier off it. At low zoom (zoomed-out, world-view) we suppress
+ * non-network non-tier-1 labels so the satellite map doesn't drown
+ * in overlapping text. Sits as a non-rendering child inside
+ * MapContainer so it can call useMap() / useMapEvents.
+ */
+function ZoomTracker({ onZoomChange }: { onZoomChange: (z: number) => void }) {
+  const map = useMap();
+  useMapEvents({
+    zoomend: () => onZoomChange(map.getZoom()),
+  });
+  // Report the initial zoom too so the first render uses the right
+  // tier even before any user interaction.
+  useEffect(() => {
+    onZoomChange(map.getZoom());
+    // We only want this once on mount; deps deliberately omitted
+    // to avoid bouncing on every parent re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
+}
+
 function MapEventBridge({
   onClickEmpty,
 }: {
@@ -488,6 +513,12 @@ export function WorldMap({
   const [hoverCode, setHoverCode] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const gameId = useGame((s) => s.session?.gameId ?? null);
+  // Phase D — D-002: live zoom level. Cities-render gates labels on
+  // this so a fully-zoomed-out world view doesn't drown in
+  // overlapping European city names. Initial value matches the
+  // MapContainer's `zoom={3}` prop so the first render lands on the
+  // right tier before the user interacts.
+  const [mapZoom, setMapZoom] = useState<number>(3);
 
   // Resolve the team's airline-palette color once so hub pills, route
   // ribbons, and the legend swatch all draw from the same source.
@@ -575,7 +606,16 @@ export function WorldMap({
         zoom={3}
         minZoom={2}
         maxZoom={6}
-        worldCopyJump
+        /* Phase D — D-003: dropped `worldCopyJump`. With it on,
+           panning the map westward past the antimeridian triggered
+           a teleport to the equivalent eastern position with a new
+           tile load — during the ~200ms reload the canvas was
+           BLANK and pins/labels disappeared, looking like the page
+           had broken. Without worldCopyJump, the user can pan
+           continuously and the satellite tiles wrap naturally
+           (Leaflet's default behaviour with `noWrap=false` on the
+           tile layer). Markers stay anchored to one longitude band
+           but that's no worse than the prior snap-back. */
         scrollWheelZoom
         zoomControl={false}
         style={{ width: "100%", height: "100%", background: "var(--map-ocean-deep)" }}
@@ -589,6 +629,7 @@ export function WorldMap({
         />
 
         <MapEventBridge onClickEmpty={() => onClearSelection?.()} />
+        <ZoomTracker onZoomChange={setMapZoom} />
 
         {/* Rival routes (muted dashed) — driven from each rival's actual
             `routes` array so the map reflects bot activity in real time:
@@ -826,6 +867,28 @@ export function WorldMap({
           // Every city shows its name; size + emphasis scales by tier and network status.
           const isNetworkAirport = isHub || isSecondaryHub || inNetwork;
 
+          // Phase D — D-002: zoom-tiered label visibility. At low
+          // zoom the world view drowns in overlapping city text
+          // (especially Europe). Show only the labels that earn
+          // their pixels:
+          //   - zoom ≥ 4: show all city labels (current behaviour)
+          //   - zoom = 3: show network + tier-1 + tier-2 cities only
+          //   - zoom ≤ 2: show network + tier-1 cities only
+          // Hub / secondary hub / selected / hovered cities ALWAYS
+          // show their label regardless of zoom — those are the
+          // player's anchors.
+          const alwaysShowLabel = isNetworkAirport || isSelected || hoverCode === c.code;
+          let showLabel: boolean;
+          if (alwaysShowLabel) {
+            showLabel = true;
+          } else if (mapZoom >= 4) {
+            showLabel = true;
+          } else if (mapZoom === 3) {
+            showLabel = c.tier <= 2;
+          } else {
+            showLabel = c.tier === 1;
+          }
+
           return (
             <Fragment key={c.code}>
               {/* Invisible click halo — sits beneath the visible dot
@@ -906,9 +969,13 @@ export function WorldMap({
               className="sf-city"
             >
               {/* Selection ring (orange) — Leaflet doesn't expose ring directly,
-                  use Tooltip permanent class as visual hint */}
+                  use Tooltip permanent class as visual hint.
+                  Phase D — D-002: `permanent` only when showLabel
+                  is true; otherwise the tooltip is non-permanent and
+                  shows only on hover. That keeps the dot clickable
+                  + identifiable without crowding the world view. */}
               <Tooltip
-                permanent
+                permanent={showLabel}
                 direction="bottom"
                 offset={[0, isHub ? 4 : 2]}
                 className={cn(
@@ -921,25 +988,35 @@ export function WorldMap({
                 opacity={1}
               >
                 <div className="sf-city-label">
+                  {/* Phase D — D-005: hub aesthetic redesign.
+                      Pre-fix the hub was identified by a big bold
+                      "HUB" pill in the team color — visually heavy
+                      and redundant (a colored pin on the map already
+                      says "your hub"). Now: small color-coded ring
+                      with a tiny home glyph beside the city name. The
+                      secondary hub gets a similar but smaller dashed
+                      ring. Subtle and on-brand. */}
                   {isHub && (
                     <span
-                      className="sf-hub-pill"
-                      style={{ background: teamColor }}
-                    >
-                      HUB
-                    </span>
+                      className="sf-hub-mark"
+                      style={{
+                        background: teamColor,
+                        boxShadow: `0 0 0 2px ${teamColor}33`,
+                      }}
+                      aria-label="Primary hub"
+                      title="Primary hub"
+                    />
                   )}
                   {isSecondaryHub && !isHub && (
                     <span
-                      className="sf-hub-pill"
+                      className="sf-hub-mark sf-hub-mark--secondary"
                       style={{
-                        background: "var(--bg)",
-                        color: teamColor,
-                        border: `1px dashed ${teamColor}`,
+                        background: "transparent",
+                        boxShadow: `inset 0 0 0 1.5px ${teamColor}`,
                       }}
-                    >
-                      HUB·2
-                    </span>
+                      aria-label="Secondary hub"
+                      title="Secondary hub"
+                    />
                   )}
                   <span className="sf-city-name">{c.name}</span>
                   {flights > 0 && (
@@ -960,23 +1037,58 @@ export function WorldMap({
           );
         })}
 
-        {/* Rival hub markers */}
+        {/* Rival hub markers.
+            Phase D — D-004: resolve each rival's airline color via
+            the canonical airlineColorFor() helper so the picker-
+            selected palette is consistent everywhere. Pre-fix this
+            used rv.color (the legacy hex) which for bots was a
+            randomly-assigned MOCK_COMPETITOR_HEXES value — totally
+            disconnected from the player's chosen palette, and
+            visibly mismatched with the rival's leaderboard /
+            avatar color. Now it draws from the same source as
+            their TopBar avatar + leaderboard tint.
+
+            Also rendered with a higher radius (8 vs 5) so the
+            rival hub color actually pops on the satellite map.
+            Inner solid disc + outer color ring make the airline
+            identity unmistakable at the world view. */}
         {(rivals ?? []).map((rv) => {
           const hub = CITIES_BY_CODE[rv.hubCode];
           if (!hub) return null;
+          const rivalColor = airlineColorFor({
+            colorId: rv.airlineColorId as AirlineColorId | undefined,
+            fallbackKey: rv.id,
+          }).hex;
           return (
-            <CircleMarker
-              key={`rv-hub-${rv.id}`}
-              center={[hub.lat, hub.lon]}
-              radius={5}
-              pathOptions={{
-                color: "white",
-                weight: 1,
-                fillColor: rv.color,
-                fillOpacity: 0.7,
-                dashArray: "2 2",
-              }}
-            />
+            <Fragment key={`rv-hub-${rv.id}`}>
+              {/* Outer color ring — the visible identifier */}
+              <CircleMarker
+                center={[hub.lat, hub.lon]}
+                radius={8}
+                pathOptions={{
+                  color: rivalColor,
+                  weight: 2.5,
+                  fillColor: rivalColor,
+                  fillOpacity: 0.35,
+                }}
+                interactive={false}
+              />
+              {/* Inner solid disc — kept small so it doesn't fight
+                  the player's own hub when both are on the same
+                  city (rare, but happens in lobbies that allow
+                  duplicate hub picks). */}
+              <CircleMarker
+                center={[hub.lat, hub.lon]}
+                radius={3.5}
+                pathOptions={{
+                  color: "white",
+                  weight: 1,
+                  fillColor: rivalColor,
+                  fillOpacity: 0.95,
+                }}
+                interactive={false}
+              />
+            </Fragment>
           );
         })}
       </MapContainer>

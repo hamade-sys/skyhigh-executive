@@ -428,6 +428,19 @@ export interface GameStore extends GameState {
   closeQuarter(): void;
   advanceToNext(): void;
   resetGame(): void;
+  /** Restart the current game from Q1 while PRESERVING team identity.
+   *  Pre-restart: keeps team names, codes, colors, hubs, doctrines,
+   *  controlledBy, bot difficulty, session bindings. Resets simulation
+   *  state: cash, fleet, routes, debts, financials history, decisions,
+   *  milestones, brand/loyalty/ops points, RCF, fuel storage, hub
+   *  investments, slot bids, deferred events.
+   *
+   *  Intended for single-player games (one human + rest bots) where
+   *  the player wants to retry from Q1 without re-doing onboarding.
+   *  The UI should gate the call on `humanTeams.length === 1`, but
+   *  the action itself doesn't enforce that — facilitators may also
+   *  call it to reset a stuck cohort. */
+  restartGame(): void;
 
   /** GM / facilitator fast-forward — runs all bot AI turns and advances
    *  the quarter without requiring a human player. Only works when
@@ -5946,6 +5959,123 @@ export const useGame = create<GameStore>()(
           productionCapOverrides: {},
           quarterCloseRequest: null,
         });
+      },
+
+      /**
+       * Restart the game from Q1 — preserves team identity, resets
+       * simulation state. The player keeps their company name, color,
+       * doctrine, hub, and the bot rivals' identities are preserved
+       * too. Only the simulated world rewinds.
+       *
+       * Use case: solo player playing 1-on-bots wants to retry from
+       * the start without redoing onboarding (picking colors, hubs,
+       * doctrines, etc.) all over again.
+       *
+       * Implementation:
+       *   1. Snapshot each team's identity fields (name, code, color,
+       *      hub, doctrine, controlledBy, claimedBySessionId,
+       *      airlineColorId, marketingLevel, salaryPhilosophy,
+       *      csrTheme, marketFocus, geographicPriority,
+       *      pricingPhilosophy, playerDisplayName, botDifficulty).
+       *   2. For each team, rebuild via createInitializedTeamFromOnboarding
+       *      — which restores starter fleet, starter slots,
+       *      starting cash, brand/loyalty/ops at 50, Q1 financials
+       *      backfill row.
+       *   3. Re-attach botDifficulty (factory function doesn't take it
+       *      as a parameter; copy it from the snapshot post-build).
+       *   4. Reset global state: currentQuarter=1, fuelIndex=100,
+       *      baseInterestRatePct=5.5, airportSlots via
+       *      makeInitialAirportSlots, airportBids/preOrders/listings
+       *      cleared.
+       *   5. Reset phase to "playing" (Q1 is the first playable
+       *      quarter; onboarding already happened originally).
+       *   6. Push the new state to server so the persisted record
+       *      matches and any other browsers in this game receive
+       *      the restart via Realtime.
+       *
+       * Calls pushStateToServer with eventType "game.restarted" so
+       * the action shows up in the audit log. Silent-409 list does
+       * NOT include this event — a 409 here is meaningful (someone
+       * else updated state mid-restart) and the silent path would
+       * leave the cohort half-restarted; the client correctly
+       * surfaces the conflict.
+       */
+      restartGame: () => {
+        const s = get();
+        if (s.isObserver) return;
+
+        // Rebuild each team via the factory. Identity fields are
+        // copied from the existing team; simulation fields are
+        // reset by the factory.
+        const restartedTeams: Team[] = s.teams.map((t) => {
+          const fresh = createInitializedTeamFromOnboarding({
+            airlineName: t.name,
+            code: t.code,
+            color: t.color,
+            hubCode: t.hubCode,
+            doctrine: t.doctrine,
+            tagline: t.tagline,
+            marketFocus: t.marketFocus,
+            geographicPriority: t.geographicPriority,
+            pricingPhilosophy: t.pricingPhilosophy,
+            salaryPhilosophy: t.salaryPhilosophy,
+            marketingLevel: t.marketingLevel,
+            csrTheme: t.csrTheme,
+            controlledBy: t.controlledBy ?? (t.isPlayer ? "human" : "bot"),
+            claimedBySessionId: t.claimedBySessionId ?? null,
+            playerDisplayName: t.playerDisplayName ?? null,
+            airlineColorId: t.airlineColorId ?? null,
+          });
+          // Preserve the team ID so existing membership rows in
+          // game_members still resolve to the right team. The factory
+          // generates a new ID; overwrite with the original.
+          fresh.id = t.id;
+          // Re-attach botDifficulty — factory doesn't take it as a
+          // parameter, but it must survive the restart so bots keep
+          // their difficulty setting.
+          if (t.botDifficulty != null) {
+            fresh.botDifficulty = t.botDifficulty;
+          }
+          // Preserve readyForNextQuarter as false on restart so the
+          // player has to explicitly mark ready for the new Q1.
+          fresh.readyForNextQuarter = false;
+          fresh.readyForQuarter = undefined;
+          return fresh;
+        });
+
+        set({
+          phase: "playing",
+          currentQuarter: 1,
+          fuelIndex: 100,
+          baseInterestRatePct: 5.5,
+          teams: restartedTeams,
+          lastCloseResult: null,
+          quarterTimerSecondsRemaining: null,
+          quarterTimerPaused: false,
+          secondHandListings: [],
+          cargoContracts: [],
+          airportSlots: makeInitialAirportSlots(),
+          airportBids: [],
+          preOrders: [],
+          productionCapOverrides: {},
+          quarterCloseRequest: null,
+          worldCupHostCode: null,
+          olympicHostCode: null,
+        });
+
+        // Push the restart to the server so the persisted state matches
+        // and any other browsers in this game receive the restart via
+        // Realtime. No `_suppressGmPush` guard because restart is a
+        // single atomic mutation; we want it persisted immediately.
+        void get().pushStateToServer("game.restarted", {
+          teamCount: restartedTeams.length,
+          humanCount: restartedTeams.filter((t) => t.controlledBy === "human").length,
+        });
+
+        toast.accent(
+          "Game restarted",
+          "All airlines reset to Q1 starting positions. Same teams, fresh simulation.",
+        );
       },
 
       // ── Multiplayer-aware ready flag ─────────────────────────

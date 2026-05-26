@@ -345,6 +345,8 @@ dialog:not([open]) {
   gap: 1px;
 }
 .sf-hub-pill {
+  /* Legacy class — kept in case any other surface still uses it.
+     Hub labels on the map use .sf-hub-mark instead now. */
   display: inline-block;
   font-family: var(--font-sans);
   font-size: 9px;
@@ -356,6 +358,22 @@ dialog:not([open]) {
   margin-bottom: 1px;
   text-shadow: none;
   -webkit-text-stroke: 0;
+}
+/* Phase D — D-005: subtle hub indicator. A small color-coded dot
+   sitting above the city name. Primary hub = filled circle with a
+   soft glow; secondary hub = open ring. Replaces the loud "HUB" /
+   "HUB·2" pills that used to sit above hub city names and visually
+   dominated the map. */
+.sf-hub-mark {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-bottom: 3px;
+}
+.sf-hub-mark--secondary {
+  width: 7px;
+  height: 7px;
 }
 /* All city labels: same size, same color (white), thin sharp outline.
    No tier-aware sizing — every city is a peer on the map. */
