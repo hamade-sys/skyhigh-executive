@@ -1947,12 +1947,46 @@ function blankEconomics(distanceKm: number): RouteEconomics {
 }
 
 // ─── Depreciation (PRD §6.4) ───────────────────────────────
+/**
+ * Book value depreciation curve.
+ *
+ * Phase E (May 26 2026) — applied a steep first-quarter step-down
+ * so "fresh planes" can't be flipped without realising a meaningful
+ * loss. Pre-Phase-E the curve was a flat 1.25%/quarter compound
+ * decay, meaning a 1-quarter-old plane was worth ~98.75% of its
+ * purchase price — selling it back to the broker even at full
+ * book value was nearly break-even. Players exploited this by
+ * over-ordering and re-listing the surplus for almost no loss.
+ *
+ * The new curve mirrors real aircraft depreciation more honestly:
+ *
+ *   q=0   (just purchased)    100% of purchase
+ *   q=1   (one quarter later)  80% of purchase  ← step-down ("drive off the lot")
+ *   q=2   (two quarters later) ~78.8%
+ *   q=N   (N quarters later)   80% × 0.985^(N-1), floored at 10%
+ *
+ * So a player who buys at $25M, lists for resale next quarter and
+ * gets broker-bought at 75% of book = 0.75 × $20M = $15M proceeds
+ * = $10M realised loss (40% of purchase price). That's the
+ * "flipping is expensive" signal the previous curve missed.
+ *
+ * Aircraft older than ~25 quarters still hit the 10% floor (a
+ * 28-quarter-old plane near retirement is worth scrap value
+ * regardless). Nothing in the game economy assumes a higher
+ * floor.
+ */
 export function depreciateBookValue(
   purchasePrice: number,
   quartersSincePurchase: number,
 ): number {
   const floor = purchasePrice * 0.1;
-  const decayed = purchasePrice * Math.pow(0.9875, quartersSincePurchase);
+  // Brand-new (q=0): full purchase price.
+  if (quartersSincePurchase <= 0) return purchasePrice;
+  // First quarter: 20% drop ("new car" depreciation).
+  // From q=1 onwards: 1.5% per quarter compounding on top of the
+  // initial 80%.
+  const firstQuarterValue = purchasePrice * 0.80;
+  const decayed = firstQuarterValue * Math.pow(0.985, quartersSincePurchase - 1);
   return Math.max(floor, decayed);
 }
 
