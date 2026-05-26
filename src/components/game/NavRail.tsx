@@ -364,21 +364,25 @@ export function NavRail() {
         </button>
       )}
 
-      {/* Phase D — D-001: version + commit footer.
-          Tiny, muted, bottom-of-rail. Lets the operator (or me, when
-          debugging a workshop incident) verify which build is
-          running. NEXT_PUBLIC_GIT_SHA is wired in next.config.ts
-          from Vercel's VERCEL_GIT_COMMIT_SHA env var (falls back to
-          "dev" locally). Only renders when the rail is expanded;
-          collapsed rail keeps the icon-only aesthetic clean. */}
-      {expanded && (
-        <div
-          className="border-t border-line px-3 py-1.5 text-[0.5625rem] text-ink-muted/70 font-mono tabular leading-tight"
-          title={`Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · commit ${process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}`}
-        >
-          v{process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · {process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}
-        </div>
-      )}
+      {/* Version + commit footer. Tiny, muted, bottom-of-rail.
+          Always rendered (was previously gated on `expanded` and
+          invisible when the rail was collapsed). The collapsed
+          variant shows just the short SHA so the operator can still
+          verify which build is running without expanding.
+
+          NEXT_PUBLIC_GIT_SHA is wired in next.config.ts from
+          VERCEL_GIT_COMMIT_SHA. */}
+      <div
+        className={cn(
+          "border-t border-line text-[0.5625rem] text-ink-muted/70 font-mono tabular leading-tight",
+          expanded ? "px-3 py-1.5 text-left" : "px-1 py-1.5 text-center",
+        )}
+        title={`Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · commit ${process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}`}
+      >
+        {expanded
+          ? <>v{process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · {process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}</>
+          : <>{(process.env.NEXT_PUBLIC_GIT_SHA ?? "dev").slice(0, 5)}</>}
+      </div>
     </aside>
   );
 }

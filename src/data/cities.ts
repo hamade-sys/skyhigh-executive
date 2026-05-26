@@ -1545,6 +1545,119 @@ export const CITIES: City[] = [
     "lon": 115.97,
     "lat": -31.94,
     "character": "Mining boom drives business demand surge."
+  },
+  // ──────────────────────────────────────────────────────────
+  // May 26, 2026 — workshop additions per user request
+  // (Baghdad, Honolulu, Phoenix, Karachi, Addis Ababa, Tehran,
+  // Lyon). Tier + demand values calibrated against neighbouring
+  // markets: regional capitals get tier 2, secondary/leisure
+  // markets get tier 3. Growth rates conservative — facilitators
+  // can tune if a specific scenario needs it.
+  // ──────────────────────────────────────────────────────────
+  {
+    "code": "BGW",
+    "name": "Baghdad",
+    "region": "me",
+    "regionName": "Middle East",
+    "tier": 3,
+    "tourism": 60,
+    "business": 110,
+    "amplifier": 1.1,
+    "tourismGrowth": 2,
+    "businessGrowth": 3,
+    "lon": 44.23,
+    "lat": 33.26,
+    "character": "Reconstruction-era business growth; thin leisure demand."
+  },
+  {
+    "code": "HNL",
+    "name": "Honolulu",
+    "region": "na",
+    "regionName": "North America",
+    "tier": 2,
+    "tourism": 220,
+    "business": 75,
+    "amplifier": 1.6,
+    "tourismGrowth": 1.5,
+    "businessGrowth": 0.8,
+    "lon": -157.92,
+    "lat": 21.32,
+    "character": "Tourism-dominated Pacific gateway between Americas and Asia."
+  },
+  {
+    "code": "PHX",
+    "name": "Phoenix",
+    "region": "na",
+    "regionName": "North America",
+    "tier": 2,
+    "tourism": 130,
+    "business": 145,
+    "amplifier": 1.2,
+    "tourismGrowth": 1.4,
+    "businessGrowth": 1.6,
+    "lon": -112.01,
+    "lat": 33.44,
+    "character": "Sunbelt growth corridor; semiconductors + retiree tourism."
+  },
+  {
+    "code": "KHI",
+    "name": "Karachi",
+    "region": "as",
+    "regionName": "Asia",
+    "tier": 2,
+    "tourism": 70,
+    "business": 170,
+    "amplifier": 1.3,
+    "tourismGrowth": 1.5,
+    "businessGrowth": 3,
+    "lon": 67.16,
+    "lat": 24.91,
+    "character": "South Asia's commercial port; cargo-heavy trade flows."
+  },
+  {
+    "code": "ADD",
+    "name": "Addis Ababa",
+    "region": "af",
+    "regionName": "Africa",
+    "tier": 2,
+    "tourism": 75,
+    "business": 130,
+    "amplifier": 1.3,
+    "tourismGrowth": 1.8,
+    "businessGrowth": 3.5,
+    "lon": 38.80,
+    "lat": 8.98,
+    "character": "African Union HQ; the continent's diplomatic + cargo crossroads."
+  },
+  {
+    "code": "IKA",
+    "name": "Tehran",
+    "region": "me",
+    "regionName": "Middle East",
+    "tier": 2,
+    "tourism": 80,
+    "business": 150,
+    "amplifier": 1.2,
+    "tourismGrowth": 1.2,
+    "businessGrowth": 1.8,
+    "lon": 51.31,
+    "lat": 35.42,
+    "character": "Regional capital with constrained international links; thick domestic-feeder business demand."
+  },
+  {
+    "code": "LYS",
+    "name": "Lyon",
+    "region": "eu",
+    "regionName": "Europe",
+    "tier": 3,
+    "tourism": 95,
+    "business": 110,
+    "amplifier": 1.1,
+    "tourismGrowth": 1.0,
+    "businessGrowth": 1.2,
+    "lon": 5.09,
+    "lat": 45.73,
+    "character": "France's second metro; finance + biotech corridor between Paris and Geneva."
   }
 ];
 

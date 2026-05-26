@@ -352,11 +352,13 @@ function phaseFromId(id: string): number {
  *  function compares only the fields that affect this route's render,
  *  so unrelated route changes don't bubble in. */
 const ActiveRouteArc = memo(function ActiveRouteArc({
-  route, teamColor, isNew,
+  route, isNew, hasAircraft, isLosing, isCompetitive,
 }: {
   route: Route;
-  teamColor: string;
   isNew: boolean;
+  hasAircraft: boolean;
+  isLosing: boolean;
+  isCompetitive: boolean;
 }) {
   const a = CITIES_BY_CODE[route.originCode];
   const b = CITIES_BY_CODE[route.destCode];
@@ -365,28 +367,35 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
     return greatCirclePath(a.lon, a.lat, b.lon, b.lat, 64);
   }, [a, b]);
   if (!a || !b || positions.length === 0) return null;
-  const profitable = route.avgOccupancy > 0.7;
-  const losing = route.avgOccupancy > 0 && route.avgOccupancy < 0.5;
-  const passengerColor = profitable
-    ? "#1E6B5C"
-    : losing
-      ? "#C23B1F"
-      : teamColor;
-  const cargoColor = profitable
-    ? PENDING_GOLD
-    : losing
-      ? "#C23B1F"
-      : "#F2C063";
-  const color = route.isCargo ? cargoColor : passengerColor;
+
+  // Route color scheme (May 26 workshop spec):
+  //   • White         — normal passenger route
+  //   • Yellow shade  — cargo route
+  //   • Red           — unserved (no active aircraft) OR losing
+  //                     money (load < 50% past Q2)
+  //   • Slow pulse    — competitive (rival flies same OD)
+  // Red overrides everything except the cargo/yellow base — a losing
+  // cargo route still reads as red, not yellow, so triage is obvious.
+  const isProblem = !hasAircraft || isLosing;
+  const baseColor = isProblem
+    ? "#DC2626"                       // red-600
+    : route.isCargo
+      ? "#FFD58A"                     // warm yellow for cargo
+      : "#FFFFFF";                    // white for passenger
   const dur = flightDurationMs(route.distanceKm, route.dailyFrequency);
   const phase = phaseFromId(route.id);
   const showSecondPlane = route.dailyFrequency >= 3;
+  // Competitive routes get a CSS pulse animation via className.
+  // Defined in globals.css as @keyframes sf-route-pulse.
+  const competitiveClass = isCompetitive && !isProblem
+    ? "sf-route-competitive"
+    : undefined;
   return (
     <Fragment>
       <Polyline
         positions={positions}
         pathOptions={{
-          color, weight: 4, opacity: 0.14, lineCap: "round", interactive: false,
+          color: baseColor, weight: 4, opacity: 0.14, lineCap: "round", interactive: false,
         }}
       />
       {isNew && (
@@ -401,11 +410,12 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
       <Polyline
         positions={positions}
         pathOptions={{
-          color,
-          weight: route.isCargo ? 1.1 : 1.5,
-          opacity: route.isCargo ? 0.7 : 0.9,
+          color: baseColor,
+          weight: route.isCargo ? 1.4 : 1.8,
+          opacity: route.isCargo ? 0.85 : 0.95,
           lineCap: "round",
           dashArray: route.isCargo ? "1 5" : undefined,
+          className: competitiveClass,
         }}
       />
       <FlyingPlane
@@ -427,7 +437,9 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
 }, (prev, next) => {
   // Only re-render when something this route actually depends on changes.
   if (prev.isNew !== next.isNew) return false;
-  if (prev.teamColor !== next.teamColor) return false;
+  if (prev.hasAircraft !== next.hasAircraft) return false;
+  if (prev.isLosing !== next.isLosing) return false;
+  if (prev.isCompetitive !== next.isCompetitive) return false;
   const a = prev.route;
   const b = next.route;
   return (
@@ -593,6 +605,46 @@ export function WorldMap({
   const activeRoutes = team.routes.filter((r) => r.status === "active");
   const pendingRoutes = team.routes.filter((r) => r.status === "pending");
 
+  // Route render flags (May 26 redesign per workshop spec):
+  //   • Passenger routes = WHITE
+  //   • Cargo routes    = yellow
+  //   • Unserved or losing routes (no plane assigned, OR low load) = RED
+  //   • Competitive routes (rival flies same OD) = slow pulse fade
+  //
+  // Computed upstream so ActiveRouteArc stays a pure-prop component
+  // and React.memo can short-circuit re-renders cleanly.
+  const rivalODs = useMemo(() => {
+    const s = new Set<string>();
+    for (const rv of rivals ?? []) {
+      for (const rr of rv.routes ?? []) {
+        if (rr.status !== "active" && rr.status !== "pending") continue;
+        // Direction-agnostic OD key (matches engine's odKey helper).
+        const k = rr.originCode < rr.destCode
+          ? `${rr.originCode}|${rr.destCode}`
+          : `${rr.destCode}|${rr.originCode}`;
+        s.add(k);
+      }
+    }
+    return s;
+  }, [rivals]);
+
+  function routeFlagsFor(r: Route) {
+    // Has at least one ACTIVE aircraft assigned (not retired/grounded/ordered)?
+    const hasAircraft = (r.aircraftIds ?? []).some((id) => {
+      const f = team.fleet.find((x) => x.id === id);
+      return !!f && f.status === "active";
+    });
+    // Losing money: load < 50% AND not brand-new (first 2 quarters get a pass).
+    const ageQ = currentQuarter - r.openQuarter;
+    const isLosing = ageQ >= 2 && r.avgOccupancy > 0 && r.avgOccupancy < 0.5;
+    // Rival flies same OD?
+    const odK = r.originCode < r.destCode
+      ? `${r.originCode}|${r.destCode}`
+      : `${r.destCode}|${r.originCode}`;
+    const isCompetitive = rivalODs.has(odK);
+    return { hasAircraft, isLosing, isCompetitive };
+  }
+
   return (
     <div
       ref={containerRef}
@@ -700,20 +752,19 @@ export function WorldMap({
             FlyingPlane's animation useEffect to tear down and restart
             and forcing Leaflet to redraw every Polyline — the visible
             "flicker every once in a while" the user reported. */}
-        {activeRoutes.map((r) => (
-          <ActiveRouteArc
-            key={r.id}
-            route={r}
-            // Pre-Phase-9 this read `team.color` — the legacy
-            // hash-assigned palette which is what produced the
-            // purple/violet "rival" arcs that confused players whose
-            // chosen airline color was something else (e.g. amber).
-            // The hub badge already uses `teamColor` from
-            // airlineColorFor() above; route arcs now match.
-            teamColor={teamColor}
-            isNew={r.openQuarter === currentQuarter}
-          />
-        ))}
+        {activeRoutes.map((r) => {
+          const { hasAircraft, isLosing, isCompetitive } = routeFlagsFor(r);
+          return (
+            <ActiveRouteArc
+              key={r.id}
+              route={r}
+              isNew={r.openQuarter === currentQuarter}
+              hasAircraft={hasAircraft}
+              isLosing={isLosing}
+              isCompetitive={isCompetitive}
+            />
+          );
+        })}
 
         {/* Pending route arcs — dashed amber to signal "awaiting auction" */}
         {pendingRoutes.map((r) => {
@@ -747,8 +798,13 @@ export function WorldMap({
             className: "",
             // 36×36 stage, two pulse rings + center beacon. Inline color
             // = team brand so the beacon reads as "yours" at a glance.
+            // Fix (May 26): was using team.color (the legacy hardcoded
+            // "#14355E" navy from team-factory) — produced the purple
+            // hub the player complained about. Now uses teamColor
+            // (resolved via airlineColorFor) so it matches the avatar
+            // + leaderboard.
             html: `
-              <div style="position:relative;width:36px;height:36px;color:${team.color}">
+              <div style="position:relative;width:36px;height:36px;color:${teamColor}">
                 <span class="sf-hub-pulse"></span>
                 <span class="sf-hub-pulse sf-hub-pulse--delayed"></span>
                 <span class="sf-hub-beacon" style="
@@ -777,7 +833,7 @@ export function WorldMap({
           const beaconIcon = L.divIcon({
             className: "",
             html: `
-              <div style="position:relative;width:28px;height:28px;color:${team.color};opacity:0.75">
+              <div style="position:relative;width:28px;height:28px;color:${teamColor};opacity:0.75">
                 <span class="sf-hub-pulse"></span>
                 <span class="sf-hub-beacon" style="
                   width:6px;height:6px;left:50%;top:50%;
@@ -848,7 +904,7 @@ export function WorldMap({
           const fillColor = isSelected
             ? "#fde047"  // amber-300 — high-contrast selection state
             : isHub || isSecondaryHub || inNetwork
-              ? team.color
+              ? teamColor          // Fixed (May 26): was team.color (legacy navy hardcoded), now matches airlineColorFor palette
               : "#fef9ec";
           const fillOpacity = 1.0;
           const strokeColor = isSelected
@@ -867,27 +923,17 @@ export function WorldMap({
           // Every city shows its name; size + emphasis scales by tier and network status.
           const isNetworkAirport = isHub || isSecondaryHub || inNetwork;
 
-          // Phase D — D-002: zoom-tiered label visibility. At low
-          // zoom the world view drowns in overlapping city text
-          // (especially Europe). Show only the labels that earn
-          // their pixels:
-          //   - zoom ≥ 4: show all city labels (current behaviour)
-          //   - zoom = 3: show network + tier-1 + tier-2 cities only
-          //   - zoom ≤ 2: show network + tier-1 cities only
-          // Hub / secondary hub / selected / hovered cities ALWAYS
-          // show their label regardless of zoom — those are the
-          // player's anchors.
-          const alwaysShowLabel = isNetworkAirport || isSelected || hoverCode === c.code;
-          let showLabel: boolean;
-          if (alwaysShowLabel) {
-            showLabel = true;
-          } else if (mapZoom >= 4) {
-            showLabel = true;
-          } else if (mapZoom === 3) {
-            showLabel = c.tier <= 2;
-          } else {
-            showLabel = c.tier === 1;
-          }
+          // Label visibility — show ALL city names by default.
+          // (Earlier Phase D D-002 tried to suppress non-network
+          // labels at low zoom to clean up the world view, but the
+          // user reported they could no longer find small towns
+          // even when zoomed in. Reverted to "always permanent" —
+          // crowding is the lesser evil vs hidden cities.)
+          // mapZoom is kept here in case a future iteration wants
+          // a less aggressive tier (e.g. hover-only at zoom <= 2
+          // for tier-4 only).
+          void mapZoom;
+          const showLabel = true;
 
           return (
             <Fragment key={c.code}>
@@ -988,36 +1034,13 @@ export function WorldMap({
                 opacity={1}
               >
                 <div className="sf-city-label">
-                  {/* Phase D — D-005: hub aesthetic redesign.
-                      Pre-fix the hub was identified by a big bold
-                      "HUB" pill in the team color — visually heavy
-                      and redundant (a colored pin on the map already
-                      says "your hub"). Now: small color-coded ring
-                      with a tiny home glyph beside the city name. The
-                      secondary hub gets a similar but smaller dashed
-                      ring. Subtle and on-brand. */}
-                  {isHub && (
-                    <span
-                      className="sf-hub-mark"
-                      style={{
-                        background: teamColor,
-                        boxShadow: `0 0 0 2px ${teamColor}33`,
-                      }}
-                      aria-label="Primary hub"
-                      title="Primary hub"
-                    />
-                  )}
-                  {isSecondaryHub && !isHub && (
-                    <span
-                      className="sf-hub-mark sf-hub-mark--secondary"
-                      style={{
-                        background: "transparent",
-                        boxShadow: `inset 0 0 0 1.5px ${teamColor}`,
-                      }}
-                      aria-label="Secondary hub"
-                      title="Secondary hub"
-                    />
-                  )}
+                  {/* No standalone "hub mark" dot. The city marker
+                      itself is colored in the player's brand color
+                      for hubs and connected cities (see fillColor
+                      logic above). That's the visual identifier;
+                      no extra glyph needed. Earlier this had a
+                      tiny dot above the name and the player
+                      correctly flagged it as useless clutter. */}
                   <span className="sf-city-name">{c.name}</span>
                   {flights > 0 && (
                     <span className="sf-flights">
@@ -1119,26 +1142,41 @@ export function WorldMap({
           <span className="w-1.5 h-1.5 rounded-full bg-ink-muted" />
           <span className="text-ink-2">Cities</span>
         </span>
-        {/* Route line colour key — explains why some routes turn green
-            and others red. Driven by avgOccupancy: ≥70% = profitable
-            (green pax, gold cargo); <50% = underloaded (red); rest =
-            airline brand colour (mid-range, no signal). Earlier the
-            colour mapping was invisible to the player and they
-            wondered why their lines varied. */}
+        {/* Route line colour key (May 26 workshop spec):
+            • White = passenger
+            • Yellow = cargo (dashed)
+            • Red = unserved (no plane) or losing money
+            • Slow pulse = competitive (rival on same OD) */}
         <span className="flex items-center gap-1.5 border-l border-line pl-3">
           <svg width="20" height="6" aria-hidden>
-            <line x1="0" y1="3" x2="20" y2="3" stroke="#1E6B5C" strokeWidth="2" />
+            <line x1="0" y1="3" x2="20" y2="3" stroke="#FFFFFF" strokeWidth="2" />
           </svg>
-          <span className="text-ink-2" title="Route occupancy ≥70% — profitable">
-            Strong route
+          <span className="text-ink-2" title="Passenger route">
+            Passenger
           </span>
         </span>
         <span className="flex items-center gap-1.5">
           <svg width="20" height="6" aria-hidden>
-            <line x1="0" y1="3" x2="20" y2="3" stroke="#C23B1F" strokeWidth="2" />
+            <line x1="0" y1="3" x2="20" y2="3" stroke="#FFD58A" strokeWidth="2" strokeDasharray="1 4" />
           </svg>
-          <span className="text-ink-2" title="Route occupancy below 50% — underloaded, losing money">
-            Underloaded
+          <span className="text-ink-2" title="Cargo route">
+            Cargo
+          </span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <svg width="20" height="6" aria-hidden>
+            <line x1="0" y1="3" x2="20" y2="3" stroke="#DC2626" strokeWidth="2" />
+          </svg>
+          <span className="text-ink-2" title="Route with no aircraft assigned, or losing money (load below 50% past Q2)">
+            Unserved / losing
+          </span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <svg width="20" height="6" aria-hidden className="sf-route-competitive">
+            <line x1="0" y1="3" x2="20" y2="3" stroke="#FFFFFF" strokeWidth="2" />
+          </svg>
+          <span className="text-ink-2" title="A rival flies the same origin↔destination — pulse indicates contested demand pool">
+            Competitive (pulse)
           </span>
         </span>
         {pendingRoutes.length > 0 && (
