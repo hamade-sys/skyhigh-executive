@@ -680,134 +680,179 @@ export function FleetPanel() {
                     </div>
                   </div>
 
-                  {/* Action row — proper Buttons that route through the new
-                      Sell + Retire modals. No more native prompt() / confirm(). */}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {!f.ecoUpgrade && f.status === "active" && (expanded.ecoUpgradeUsd ?? 0) > 0 && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setRetrofitState({
-                          kind: "eco",
-                          aircraftId: f.id,
-                          name: expanded.name,
-                          tail: f.id.slice(-6).toUpperCase(),
-                          costUsd: expanded.ecoUpgradeUsd ?? 0,
-                          effectLine: "−10% fuel burn",
-                        })}
-                        title={`Eco engine retrofit · ${fmtMoney(expanded.ecoUpgradeUsd ?? 0)} · −10% fuel burn`}
-                      >
-                        + Eco · {fmtMoney(expanded.ecoUpgradeUsd ?? 0)}
-                      </Button>
-                    )}
-                    {!f.engineUpgrade && (f.status === "active" || f.status === "grounded") && (
-                      <>
-                        <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
-                          kind: "engine",
-                          engineType: "fuel",
-                          aircraftId: f.id,
-                          name: expanded.name,
-                          tail: f.id.slice(-6).toUpperCase(),
-                          costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "fuel"),
-                          effectLine: "+10% range · −10% fuel burn",
-                        })} title="Fuel-efficient engine: +10% range, −10% fuel burn">
-                          + Fuel engine
-                        </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
-                          kind: "engine",
-                          engineType: "power",
-                          aircraftId: f.id,
-                          name: expanded.name,
-                          tail: f.id.slice(-6).toUpperCase(),
-                          costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "power"),
-                          effectLine: "+10% cruise speed → tighter schedule",
-                        })} title="Power engine: +10% cruise speed">
-                          + Power engine
-                        </Button>
-                        <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
-                          kind: "engine",
-                          engineType: "super",
-                          aircraftId: f.id,
-                          name: expanded.name,
-                          tail: f.id.slice(-6).toUpperCase(),
-                          costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "super"),
-                          effectLine: "+10% range · −10% fuel burn · +10% speed",
-                        })} title="Super engine: combines fuel + power">
-                          + Super
-                        </Button>
-                      </>
-                    )}
-                    {!f.fuselageUpgrade && (f.status === "active" || f.status === "grounded") && (
-                      <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
-                        kind: "fuselage",
-                        aircraftId: f.id,
-                        name: expanded.name,
-                        tail: f.id.slice(-6).toUpperCase(),
-                        costUsd: fuselageUpgradeCostUsd(expanded.buyPriceUsd),
-                        effectLine: "−10% fuel burn · stacks with engine retrofit",
-                      })} title="Anti-drag fuselage coating · −10% fuel burn">
-                        + Fuselage
-                      </Button>
-                    )}
-                    {f.acquisitionType === "buy" && f.status === "active" && (
-                      <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
-                        kind: "quickService",
-                        aircraftId: f.id,
-                        name: expanded.name,
-                        tail: f.id.slice(-6).toUpperCase(),
-                        costUsd: Math.round(f.bookValue * 0.05),
-                        effectLine: "Cabin satisfaction restored · no downtime",
-                      })} title={`Quick service · ${fmtMoney(f.bookValue * 0.05)} · cabin sat. restored, no downtime`}>
-                        Quick svc
-                      </Button>
-                    )}
-                    {f.acquisitionType === "buy" && f.status === "active" && (
-                      <Button size="sm" variant="secondary" onClick={() => setRetrofitState({
-                        kind: "fullReno",
-                        aircraftId: f.id,
-                        name: expanded.name,
-                        tail: f.id.slice(-6).toUpperCase(),
-                        costUsd: Math.round(Math.max(f.bookValue * 0.20, f.purchasePrice * 0.05)),
-                        cabinConfig: f.cabinConfig,
-                        effectLine: "+8Q lifespan · 1Q downtime · airframe refurb",
-                      })} title={`Full renovation · ${fmtMoney(Math.max(f.bookValue * 0.20, f.purchasePrice * 0.05))} · +8Q lifespan, 1Q downtime`}>
-                        Full reno
-                      </Button>
-                    )}
-                    {f.acquisitionType === "buy" && f.status === "active" && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setSellState({
-                          aircraftId: f.id,
-                          bookValue: f.bookValue,
-                          // "Market value" anchor for the upper bound is
-                          // the airframe's current new-build list price —
-                          // captures appreciation on hot models even when
-                          // the player's specific airframe is depreciated.
-                          marketValue: expanded.buyPriceUsd,
-                          name: expanded.name,
-                          price: Math.round(f.bookValue * 1.0),
-                        })}
-                      >
-                        Sell
-                      </Button>
-                    )}
-                    {f.status !== "retired" && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="!text-negative hover:!bg-[var(--negative-soft)]"
-                        onClick={() => setRetireState({
-                          aircraftId: f.id,
-                          name: expanded.name,
-                          tail: f.id.slice(-6).toUpperCase(),
-                        })}
-                      >
-                        Retire
-                      </Button>
-                    )}
-                  </div>
+                  {/* ── PER-AIRCRAFT ACTION SURFACE ──────────────────────
+                      Redesigned (May 2026): the three high-stakes
+                      lifecycle decisions — Renovate · Sell · Retire —
+                      sit as PROMINENT outcome cards. Customisations
+                      (eco / engine / fuselage / quick service) are a
+                      subtle chip row above them so the hierarchy
+                      matches the decision weight.
+                      Note: any structural config grounds the plane
+                      for 1 Q via renovationCompleteQuarter — see the
+                      addEcoUpgrade / retrofitEngine / retrofitFuselage
+                      handlers in game.ts. */}
+                  {/* Subtle customisations strip */}
+                  {(
+                    (!f.ecoUpgrade && f.status === "active" && (expanded.ecoUpgradeUsd ?? 0) > 0) ||
+                    (!f.engineUpgrade && (f.status === "active" || f.status === "grounded")) ||
+                    (!f.fuselageUpgrade && (f.status === "active" || f.status === "grounded")) ||
+                    (f.acquisitionType === "buy" && f.status === "active")
+                  ) && (
+                    <div className="mt-3">
+                      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+                        Customisations
+                        <span className="ml-1.5 normal-case tracking-normal text-[0.6875rem] text-ink-muted/80">
+                          (each grounds the plane for 1 quarter)
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {!f.ecoUpgrade && f.status === "active" && (expanded.ecoUpgradeUsd ?? 0) > 0 && (
+                          <button
+                            onClick={() => setRetrofitState({
+                              kind: "eco",
+                              aircraftId: f.id,
+                              name: expanded.name,
+                              tail: f.id.slice(-6).toUpperCase(),
+                              costUsd: expanded.ecoUpgradeUsd ?? 0,
+                              effectLine: "−10% fuel burn · 1Q downtime",
+                            })}
+                            title={`Eco engine retrofit · ${fmtMoney(expanded.ecoUpgradeUsd ?? 0)} · −10% fuel burn · grounds 1Q`}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors"
+                          >
+                            + Eco · {fmtMoney(expanded.ecoUpgradeUsd ?? 0)}
+                          </button>
+                        )}
+                        {!f.engineUpgrade && (f.status === "active" || f.status === "grounded") && (
+                          <>
+                            <button onClick={() => setRetrofitState({
+                              kind: "engine",
+                              engineType: "fuel",
+                              aircraftId: f.id,
+                              name: expanded.name,
+                              tail: f.id.slice(-6).toUpperCase(),
+                              costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "fuel"),
+                              effectLine: "+10% range · −10% fuel burn · 1Q downtime",
+                            })} title="Fuel-efficient engine: +10% range, −10% fuel burn · grounds 1Q"
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                              + Fuel engine
+                            </button>
+                            <button onClick={() => setRetrofitState({
+                              kind: "engine",
+                              engineType: "power",
+                              aircraftId: f.id,
+                              name: expanded.name,
+                              tail: f.id.slice(-6).toUpperCase(),
+                              costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "power"),
+                              effectLine: "+10% cruise speed · 1Q downtime",
+                            })} title="Power engine: +10% cruise speed · grounds 1Q"
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                              + Power engine
+                            </button>
+                            <button onClick={() => setRetrofitState({
+                              kind: "engine",
+                              engineType: "super",
+                              aircraftId: f.id,
+                              name: expanded.name,
+                              tail: f.id.slice(-6).toUpperCase(),
+                              costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "super"),
+                              effectLine: "+10% range · −10% fuel burn · +10% speed · 1Q downtime",
+                            })} title="Super engine: combines fuel + power · grounds 1Q"
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                              + Super
+                            </button>
+                          </>
+                        )}
+                        {!f.fuselageUpgrade && (f.status === "active" || f.status === "grounded") && (
+                          <button onClick={() => setRetrofitState({
+                            kind: "fuselage",
+                            aircraftId: f.id,
+                            name: expanded.name,
+                            tail: f.id.slice(-6).toUpperCase(),
+                            costUsd: fuselageUpgradeCostUsd(expanded.buyPriceUsd),
+                            effectLine: "−10% fuel burn · stacks · 1Q downtime",
+                          })} title="Anti-drag fuselage coating · −10% fuel burn · grounds 1Q"
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                            + Fuselage
+                          </button>
+                        )}
+                        {f.acquisitionType === "buy" && f.status === "active" && (
+                          <button onClick={() => setRetrofitState({
+                            kind: "quickService",
+                            aircraftId: f.id,
+                            name: expanded.name,
+                            tail: f.id.slice(-6).toUpperCase(),
+                            costUsd: Math.round(f.bookValue * 0.05),
+                            effectLine: "Cabin satisfaction restored · no downtime",
+                          })} title={`Quick service · ${fmtMoney(f.bookValue * 0.05)} · cabin sat. restored, no downtime`}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                            Quick svc · no downtime
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PROMINENT lifecycle CTAs — these are the high-stakes
+                      decisions and get their own visual weight. The
+                      fleet table already filters retired planes out, so
+                      every row here is at least retire-able. */}
+                  <div className="mt-3 pt-3 border-t border-line/60">
+                      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2">
+                        Lifecycle decisions
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {f.acquisitionType === "buy" && f.status === "active" && (
+                          <button
+                            onClick={() => setRetrofitState({
+                              kind: "fullReno",
+                              aircraftId: f.id,
+                              name: expanded.name,
+                              tail: f.id.slice(-6).toUpperCase(),
+                              costUsd: Math.round(Math.max(f.bookValue * 0.20, f.purchasePrice * 0.05)),
+                              cabinConfig: f.cabinConfig,
+                              effectLine: "+8Q lifespan · 1Q downtime · airframe refurb",
+                            })}
+                            title={`Full renovation · ${fmtMoney(Math.max(f.bookValue * 0.20, f.purchasePrice * 0.05))} · +8Q lifespan, 1Q downtime`}
+                            className="rounded-lg border border-accent/40 bg-accent/5 hover:bg-accent/10 text-left px-3 py-2.5 transition-colors"
+                          >
+                            <div className="text-[0.8125rem] font-semibold text-ink">Renovate</div>
+                            <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                              +8Q lifespan · 1Q downtime · {fmtMoney(Math.max(f.bookValue * 0.20, f.purchasePrice * 0.05))}
+                            </div>
+                          </button>
+                        )}
+                        {f.acquisitionType === "buy" && f.status === "active" && (
+                          <button
+                            onClick={() => setSellState({
+                              aircraftId: f.id,
+                              bookValue: f.bookValue,
+                              marketValue: expanded.buyPriceUsd,
+                              name: expanded.name,
+                              price: Math.round(f.bookValue * 1.0),
+                            })}
+                            className="rounded-lg border border-line hover:border-ink-muted bg-surface hover:bg-surface-hover text-left px-3 py-2.5 transition-colors"
+                          >
+                            <div className="text-[0.8125rem] font-semibold text-ink">Sell</div>
+                            <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                              Broker buys ≤75% of book · marketplace ≥75%
+                            </div>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setRetireState({
+                            aircraftId: f.id,
+                            name: expanded.name,
+                            tail: f.id.slice(-6).toUpperCase(),
+                          })}
+                          className="rounded-lg border border-negative/30 hover:border-negative/60 bg-[var(--negative-soft)]/40 hover:bg-[var(--negative-soft)] text-left px-3 py-2.5 transition-colors text-negative"
+                        >
+                          <div className="text-[0.8125rem] font-semibold">Retire</div>
+                          <div className="text-[0.6875rem] opacity-80 mt-0.5">
+                            Permanent · removes from fleet
+                          </div>
+                        </button>
+                      </div>
+                    </div>
                 </div>
               );
             })}

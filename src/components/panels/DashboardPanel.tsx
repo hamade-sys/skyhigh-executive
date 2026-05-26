@@ -63,7 +63,7 @@ export function DashboardPanel() {
           <SnapCard
             label="Cash"
             value={fmtMoney(player.cashUsd)}
-            sub={`Debt ${fmtMoney(player.totalDebtUsd)}`}
+            sub={`Debt ${fmtMoney(player.totalDebtUsd + (player.rcfBalanceUsd ?? 0))}`}
             icon={<Wallet size={12} />}
           />
           <SnapCard

@@ -2150,17 +2150,41 @@ export const useGame = create<GameStore>()(
         if (player.cashUsd < spec.ecoUpgradeUsd)
           return { ok: false, error: "Insufficient cash" };
 
+        // PRD May 2026: any structural config grounds the plane for 1 Q.
+        // Eco engine retrofit is bay work — wing/fairing pulls, fuel
+        // system mods — and a real airline takes the airframe off-line
+        // for the duration. Use the same renovationCompleteQuarter
+        // field the auto-restore at quarter close already reads.
+        const wasOnRoute = !!plane.routeId;
         set({
           teams: s.teams.map((t) =>
             t.id !== s.playerTeamId ? t : {
               ...t,
               cashUsd: t.cashUsd - spec.ecoUpgradeUsd,
               fleet: t.fleet.map((f) => f.id === aircraftId
-                ? { ...f, ecoUpgrade: true, ecoUpgradeQuarter: s.currentQuarter, ecoUpgradeCost: spec.ecoUpgradeUsd }
+                ? {
+                    ...f,
+                    ecoUpgrade: true,
+                    ecoUpgradeQuarter: s.currentQuarter,
+                    ecoUpgradeCost: spec.ecoUpgradeUsd,
+                    status: "grounded" as const,
+                    routeId: null,
+                    renovationCompleteQuarter: s.currentQuarter + 1,
+                  }
                 : f),
+              routes: t.routes.map((r) => ({
+                ...r,
+                aircraftIds: r.aircraftIds.filter((id) => id !== aircraftId),
+              })),
             },
           ),
         });
+        toast.info(
+          `${spec.name} grounded for eco retrofit`,
+          wasOnRoute
+            ? `Aircraft pulled from its route · returns next quarter`
+            : `1 quarter downtime · −10% fuel burn on return`,
+        );
         return { ok: true };
       },
 
@@ -2186,20 +2210,36 @@ export const useGame = create<GameStore>()(
         if (player.cashUsd < cost)
           return { ok: false, error: `Need ${fmtMoneyPlain(cost)} cash` };
 
+        // PRD May 2026: structural retrofit grounds the airframe for 1 Q.
+        const wasOnRoute = !!plane.routeId;
         set({
           teams: s.teams.map((t) =>
             t.id !== s.playerTeamId ? t : {
               ...t,
               cashUsd: t.cashUsd - cost,
               fleet: t.fleet.map((f) =>
-                f.id === aircraftId ? { ...f, engineUpgrade: kind } : f,
+                f.id === aircraftId
+                  ? {
+                      ...f,
+                      engineUpgrade: kind,
+                      status: "grounded" as const,
+                      routeId: null,
+                      renovationCompleteQuarter: s.currentQuarter + 1,
+                    }
+                  : f,
               ),
+              routes: t.routes.map((r) => ({
+                ...r,
+                aircraftIds: r.aircraftIds.filter((id) => id !== aircraftId),
+              })),
             },
           ),
         });
-        toast.success(
-          `Engine retrofit installed`,
-          `${AIRCRAFT_BY_ID[plane.specId]?.name} · ${kind} · −${fmtMoneyPlain(cost)}`,
+        toast.info(
+          `${AIRCRAFT_BY_ID[plane.specId]?.name} grounded for engine retrofit`,
+          wasOnRoute
+            ? `Aircraft pulled from its route · ${kind} engine · returns next quarter`
+            : `1 quarter downtime · ${kind} engine · −${fmtMoneyPlain(cost)}`,
         );
         return { ok: true };
       },
@@ -2279,20 +2319,36 @@ export const useGame = create<GameStore>()(
         if (player.cashUsd < cost)
           return { ok: false, error: `Need ${fmtMoneyPlain(cost)} cash` };
 
+        // PRD May 2026: fuselage coating grounds for 1 Q (hangar work).
+        const wasOnRoute = !!plane.routeId;
         set({
           teams: s.teams.map((t) =>
             t.id !== s.playerTeamId ? t : {
               ...t,
               cashUsd: t.cashUsd - cost,
               fleet: t.fleet.map((f) =>
-                f.id === aircraftId ? { ...f, fuselageUpgrade: true } : f,
+                f.id === aircraftId
+                  ? {
+                      ...f,
+                      fuselageUpgrade: true,
+                      status: "grounded" as const,
+                      routeId: null,
+                      renovationCompleteQuarter: s.currentQuarter + 1,
+                    }
+                  : f,
               ),
+              routes: t.routes.map((r) => ({
+                ...r,
+                aircraftIds: r.aircraftIds.filter((id) => id !== aircraftId),
+              })),
             },
           ),
         });
-        toast.success(
-          `Fuselage coating applied`,
-          `${AIRCRAFT_BY_ID[plane.specId]?.name} · −10% fuel burn · −${fmtMoneyPlain(cost)}`,
+        toast.info(
+          `${AIRCRAFT_BY_ID[plane.specId]?.name} grounded for fuselage coating`,
+          wasOnRoute
+            ? `Aircraft pulled from its route · returns next quarter`
+            : `1 quarter downtime · −10% fuel burn on return`,
         );
         return { ok: true };
       },
@@ -2761,8 +2817,15 @@ export const useGame = create<GameStore>()(
               newActivations.push(code);
             }
           }
-          if (setupCost > player.cashUsd)
-            return { ok: false, error: `Cargo storage setup requires $${(setupCost / 1_000_000).toFixed(1)}M` };
+          // CHANGE (May 2026): no hard cash gate on cargo-storage
+          // activation. If the player's cash can't cover the setup,
+          // we still let the route open — the deficit drops cash
+          // negative, and the engine's RCF auto-draw at quarter close
+          // absorbs it at 2× base rate (the "premium" running-cost
+          // category the user described). Opening a route at cash=0
+          // therefore becomes a deliberate leverage decision rather
+          // than a hard block, which lines up with how a real airline
+          // funds incremental ops through its overdraft facility.
         }
 
         set({
@@ -2780,8 +2843,21 @@ export const useGame = create<GameStore>()(
           ),
         });
         if (setupCost > 0) {
-          toast.info("Cargo storage activated",
-            `${newActivations.join(" + ")} · $${(setupCost / 1_000_000).toFixed(1)}M one-time`);
+          // When the setup pushed cash negative, flag it explicitly so
+          // the player knows the deficit will hit the premium-rate
+          // RCF at quarter close instead of silently treating it as
+          // free expansion. We don't move money into the RCF here —
+          // the engine's auto-draw logic owns that transition — but
+          // the toast sets expectation about the interest cost.
+          const pushedNegative = (player.cashUsd - setupCost) < 0;
+          if (pushedNegative) {
+            toast.warning("Cargo storage activated — running on overdraft",
+              `${newActivations.join(" + ")} · $${(setupCost / 1_000_000).toFixed(1)}M. ` +
+              `Cash deficit will draw from your RCF at 2× base rate at quarter close.`);
+          } else {
+            toast.info("Cargo storage activated",
+              `${newActivations.join(" + ")} · $${(setupCost / 1_000_000).toFixed(1)}M one-time`);
+          }
         }
         if (willBePending) {
           toast.warning(

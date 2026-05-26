@@ -151,7 +151,17 @@ export function TopBar() {
         <Divider />
         <Kpi
           label="Debt"
-          value={fmtMoney(displayTeam.totalDebtUsd)}
+          // BUG FIX (May 2026): Debt KPI now rolls up totalDebtUsd
+          // + rcfBalanceUsd. Previously the KPI showed only the
+          // commercial-loan principal; RCF auto-draws (the engine's
+          // overdraft that activates when cash < 0) only appeared as
+          // a separate pill *if* drawn. A player with losses absorbed
+          // entirely by RCF saw "Debt $110M" unchanged for many
+          // quarters while cash hovered near 0 — couldn't tell where
+          // the money was going. The combined figure makes total
+          // liabilities visible at a glance; the RCF pill below still
+          // surfaces the *premium-rate* portion as a separate warning.
+          value={fmtMoney(displayTeam.totalDebtUsd + (displayTeam.rcfBalanceUsd ?? 0))}
           // 3-state risk ladder per workshop feedback. Replaces the
           // binary "any debt = red" signal that warned for healthy
           // leverage. Thresholds:
@@ -159,9 +169,10 @@ export function TopBar() {
           //   0.5 — 1.0× OR RCF drawn       → warn (stretched)
           //   > 1.0× airline value          → neg  (distressed)
           tone={(() => {
-            if (displayTeam.totalDebtUsd <= 0) return undefined;
+            const total = displayTeam.totalDebtUsd + (displayTeam.rcfBalanceUsd ?? 0);
+            if (total <= 0) return undefined;
             if (airlineValue <= 0) return "neg" as const;
-            const ratio = displayTeam.totalDebtUsd / airlineValue;
+            const ratio = total / airlineValue;
             if (ratio > 1.0) return "neg" as const;
             if (ratio >= 0.5 || displayTeam.rcfBalanceUsd > 0) return "warn" as const;
             return undefined;

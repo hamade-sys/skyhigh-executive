@@ -118,7 +118,15 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
     // route attempt is misleading.
     setBidPrices({});
     setBidSlots({});
-  }, [isOpen, origin, dest, forceCargo, player]);
+    // BUG FIX (May 2026): previously the deps array included the full
+    // `player` object. Every parent re-render (heartbeat, store push,
+    // ready-state poll) handed down a fresh `player` reference, which
+    // re-fired this effect and wiped the just-applied Ultra preset
+    // back to "standard". Pin to the player's *id* so the reset only
+    // fires when the modal is genuinely re-opened for a different
+    // team — not on every unrelated store push.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, origin, dest, forceCargo, player?.id]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Cap frequency to the engine-computed max as soon as aircraft selection
