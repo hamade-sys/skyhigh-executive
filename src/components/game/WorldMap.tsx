@@ -377,10 +377,17 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
   // Red overrides everything except the cargo/yellow base — a losing
   // cargo route still reads as red, not yellow, so triage is obvious.
   const isProblem = !hasAircraft || isLosing;
+  // Route palette (May 26 workshop spec, refined May 28):
+  //   • White         — passenger
+  //   • Mustard       — cargo (strong, readable on satellite imagery —
+  //                     the previous #FFD58A read too faint against the
+  //                     teal hub circles)
+  //   • Red           — unserved / losing
+  //   • Slow pulse    — competitive (rival flies same OD)
   const baseColor = isProblem
     ? "#DC2626"                       // red-600
     : route.isCargo
-      ? "#FFD58A"                     // warm yellow for cargo
+      ? "#F5A623"                     // mustard
       : "#FFFFFF";                    // white for passenger
   const dur = flightDurationMs(route.distanceKm, route.dailyFrequency);
   const phase = phaseFromId(route.id);
@@ -392,17 +399,20 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
     : undefined;
   return (
     <Fragment>
+      {/* Soft glow underlayer — slightly wider than the main stroke
+          so the line reads as a luminescent ribbon, not a flat hairline.
+          Thinner overall than pre-refactor per user feedback. */}
       <Polyline
         positions={positions}
         pathOptions={{
-          color: baseColor, weight: 4, opacity: 0.14, lineCap: "round", interactive: false,
+          color: baseColor, weight: 3, opacity: 0.12, lineCap: "round", interactive: false,
         }}
       />
       {isNew && (
         <Polyline
           positions={positions}
           pathOptions={{
-            color: "#FFB94D", weight: 6, opacity: 0.35,
+            color: "#FFB94D", weight: 4.5, opacity: 0.32,
             lineCap: "round", interactive: false,
           }}
         />
@@ -411,10 +421,13 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
         positions={positions}
         pathOptions={{
           color: baseColor,
-          weight: route.isCargo ? 1.4 : 1.8,
-          opacity: route.isCargo ? 0.85 : 0.95,
+          // Thinner per May 28 workshop note. Cargo stays slightly
+          // lighter than passenger for the dashed-vs-solid contrast.
+          weight: route.isCargo ? 1.1 : 1.3,
+          // Bumped cargo opacity so the mustard reads at glance.
+          opacity: route.isCargo ? 0.95 : 0.95,
           lineCap: "round",
-          dashArray: route.isCargo ? "1 5" : undefined,
+          dashArray: route.isCargo ? "2 5" : undefined,
           className: competitiveClass,
         }}
       />
@@ -803,15 +816,16 @@ export function WorldMap({
             // hub the player complained about. Now uses teamColor
             // (resolved via airlineColorFor) so it matches the avatar
             // + leaderboard.
+            // FIX (May 28): dropped the inner .sf-hub-beacon span.
+            // The hub city's own CircleMarker (rendered later in the
+            // map, drawn ON TOP) already provides the colored core —
+            // the beacon's 8px dot was producing a duplicate "weird
+            // dot above the hub" the user reported. Now the beacon is
+            // purely the two pulse rings.
             html: `
               <div style="position:relative;width:36px;height:36px;color:${teamColor}">
                 <span class="sf-hub-pulse"></span>
                 <span class="sf-hub-pulse sf-hub-pulse--delayed"></span>
-                <span class="sf-hub-beacon" style="
-                  width:8px;height:8px;left:50%;top:50%;
-                  transform:translate(-50%,-50%);
-                  position:absolute;inset:auto;
-                "></span>
               </div>
             `,
             iconSize: [36, 36],
@@ -832,14 +846,12 @@ export function WorldMap({
           if (!hub) return null;
           const beaconIcon = L.divIcon({
             className: "",
+            // Same fix as the primary hub — secondary beacons also
+            // drop the inner dot. The CircleMarker for the city
+            // provides the colored core.
             html: `
               <div style="position:relative;width:28px;height:28px;color:${teamColor};opacity:0.75">
                 <span class="sf-hub-pulse"></span>
-                <span class="sf-hub-beacon" style="
-                  width:6px;height:6px;left:50%;top:50%;
-                  transform:translate(-50%,-50%);
-                  position:absolute;inset:auto;
-                "></span>
               </div>
             `,
             iconSize: [28, 28],
@@ -914,9 +926,14 @@ export function WorldMap({
               : inNetwork
                 ? "#ffffff"
                 : "#1a1a1a";
+          // Thinner outlines per May 28 workshop note — the previous
+          // weights (2.5 / 2 / 1.8) read as chunky and made route lines
+          // appear to dive INTO the city's centre rather than terminate
+          // at the outline. Thinner outlines + opaque fill = clean
+          // "line hits the rim" silhouette.
           const strokeWeight = isSelected
-            ? 3
-            : isHub ? 2.5 : isSecondaryHub ? 2 : inNetwork ? 1.8 : 1.4;
+            ? 2
+            : isHub ? 1.4 : isSecondaryHub ? 1.2 : inNetwork ? 1 : 0.8;
           // Bump the radius on selection so it really pops on the map
           const finalRadius = isSelected ? Math.max(radius + 3, 9) : radius;
 
@@ -1157,7 +1174,7 @@ export function WorldMap({
         </span>
         <span className="flex items-center gap-1.5">
           <svg width="20" height="6" aria-hidden>
-            <line x1="0" y1="3" x2="20" y2="3" stroke="#FFD58A" strokeWidth="2" strokeDasharray="1 4" />
+            <line x1="0" y1="3" x2="20" y2="3" stroke="#F5A623" strokeWidth="2" strokeDasharray="2 4" />
           </svg>
           <span className="text-ink-2" title="Cargo route">
             Cargo
@@ -1171,11 +1188,18 @@ export function WorldMap({
             Unserved / losing
           </span>
         </span>
+        {/* Unified competitive indicator (May 28 workshop note):
+            "rival" and "competitive" used to be two legend entries —
+            one for rival route lines and one for the pulse on your
+            own contested routes. The user found this confusing
+            because they read as the same concept. Now there is ONE
+            entry: the pulse. Rival lines still render on the map but
+            without their own legend chip. */}
         <span className="flex items-center gap-1.5">
           <svg width="20" height="6" aria-hidden className="sf-route-competitive">
             <line x1="0" y1="3" x2="20" y2="3" stroke="#FFFFFF" strokeWidth="2" />
           </svg>
-          <span className="text-ink-2" title="A rival flies the same origin↔destination — pulse indicates contested demand pool">
+          <span className="text-ink-2" title="A rival flies the same origin↔destination — pulse indicates contested demand pool. Rival route lines on the map use the same pulse cue.">
             Competitive (pulse)
           </span>
         </span>
@@ -1195,14 +1219,9 @@ export function WorldMap({
             <span className="text-ink-2">New this round</span>
           </span>
         )}
-        {(rivals?.length ?? 0) > 0 && (
-          <span className="flex items-center gap-1.5 border-l border-line pl-3">
-            <svg width="20" height="6" aria-hidden>
-              <line x1="0" y1="3" x2="20" y2="3" stroke="#9C8757" strokeWidth="1" strokeDasharray="2 4" opacity="0.6" />
-            </svg>
-            <span className="text-ink-2">Rivals</span>
-          </span>
-        )}
+        {/* "Rivals" legend item removed (May 28) — merged into the
+            single "Competitive (pulse)" entry above. Rival route lines
+            still draw on the map, just without a separate legend chip. */}
         <span className="hidden lg:inline text-ink-muted border-l border-line pl-3">
           Drag to pan · scroll to zoom · world wraps
         </span>

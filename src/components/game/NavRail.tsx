@@ -364,24 +364,22 @@ export function NavRail() {
         </button>
       )}
 
-      {/* Version + commit footer. Tiny, muted, bottom-of-rail.
-          Always rendered (was previously gated on `expanded` and
-          invisible when the rail was collapsed). The collapsed
-          variant shows just the short SHA so the operator can still
-          verify which build is running without expanding.
-
-          NEXT_PUBLIC_GIT_SHA is wired in next.config.ts from
-          VERCEL_GIT_COMMIT_SHA. */}
+      {/* Version footer (May 28 redesign).
+          The previous footer showed a 5-char git SHA when collapsed
+          ("f2371") and "v0.1.0 · f2371c3" when expanded — the user
+          couldn't tell what build of the product they were on at a
+          glance. Now it shows the semver only, prefixed with V, in
+          both states (e.g. "V2.0.0"). SHA stays in the tooltip for
+          operator debugging. NEXT_PUBLIC_APP_VERSION is wired in
+          next.config.ts from package.json. */}
       <div
         className={cn(
           "border-t border-line text-[0.5625rem] text-ink-muted/70 font-mono tabular leading-tight",
           expanded ? "px-3 py-1.5 text-left" : "px-1 py-1.5 text-center",
         )}
-        title={`Version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · commit ${process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}`}
+        title={`V${process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · commit ${process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}`}
       >
-        {expanded
-          ? <>v{process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · {process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}</>
-          : <>{(process.env.NEXT_PUBLIC_GIT_SHA ?? "dev").slice(0, 5)}</>}
+        V{process.env.NEXT_PUBLIC_APP_VERSION ?? "?"}
       </div>
     </aside>
   );
