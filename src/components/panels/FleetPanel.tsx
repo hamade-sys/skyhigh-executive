@@ -828,19 +828,33 @@ export function FleetPanel() {
         );
       })()}
 
-      {/* Sell modal — proper UI replacing the legacy native prompt(). */}
+      {/* Sell modal — proper UI replacing the legacy native prompt().
+          Phase E: surfaces the broker-buy threshold so the player
+          knows whether their chosen price will trigger an instant
+          buy by the broker (≤75% of current book value) or a normal
+          marketplace listing. */}
       {sellState && (() => {
         const minPrice = Math.round(sellState.bookValue * 0.20);
         const maxPrice = Math.round(sellState.marketValue * 1.20);
         const clamped = Math.max(minPrice, Math.min(maxPrice, sellState.price));
+        // Phase E — broker threshold = 75% of book value. At or
+        // below this, the broker instantly buys the plane (player
+        // cashes out THIS quarter at the listed price); broker
+        // re-lists at full book. Above this, normal marketplace.
+        const brokerThreshold = Math.round(sellState.bookValue * 0.75);
+        const isBrokerSale = clamped <= brokerThreshold;
+        const realisedLoss = sellState.bookValue - clamped;
+        const realisedLossPct = sellState.bookValue > 0
+          ? (realisedLoss / sellState.bookValue) * 100
+          : 0;
         return (
-        <Modal open onClose={() => setSellState(null)} className="w-[min(520px,calc(100vw-3rem))]">
+        <Modal open onClose={() => setSellState(null)} className="w-[min(560px,calc(100vw-3rem))]">
           <ModalHeader>
             <h2 className="font-display text-[1.25rem] text-ink leading-tight">
               List {sellState.name} for sale
             </h2>
             <p className="text-[0.8125rem] text-ink-muted mt-1">
-              Floor 20% of book value ({fmtMoney(sellState.bookValue)}); ceiling 120% of new-build market price ({fmtMoney(sellState.marketValue)}).
+              Floor 20% of book ({fmtMoney(minPrice)}); ceiling 120% of new-build ({fmtMoney(maxPrice)}).
             </p>
           </ModalHeader>
           <ModalBody className="space-y-3">
@@ -865,12 +879,56 @@ export function FleetPanel() {
                 <span><span className="text-ink-muted/70">120% market ·</span> Max {fmtMoney(maxPrice)}</span>
               </div>
               <div className="text-[0.625rem] text-ink-muted tabular font-mono">
-                Reference · book {fmtMoney(sellState.bookValue)} · market {fmtMoney(sellState.marketValue)}
+                Reference · book {fmtMoney(sellState.bookValue)} · market {fmtMoney(sellState.marketValue)} · broker threshold {fmtMoney(brokerThreshold)}
               </div>
             </div>
-            <p className="text-[0.75rem] text-ink-muted leading-relaxed">
-              Used aircraft surface in the secondary market under your airline name. Below book = fast clear at a loss; near book = clears within a quarter or two; above market = stale listing unless the model is in short supply.
-            </p>
+
+            {/* Phase E — outcome preview. Two cards, only one
+                "active" based on where the slider lands. The
+                broker card glows when the asking is ≤ threshold;
+                the marketplace card glows above. Keeps the player
+                informed about which path they're choosing without
+                making them read fine print. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className={cn(
+                "rounded-md border p-3 transition-colors",
+                isBrokerSale
+                  ? "border-warning bg-[var(--warning-soft)]"
+                  : "border-line bg-surface-2/30 opacity-60",
+              )}>
+                <div className="text-[0.625rem] uppercase tracking-wider font-semibold text-warning mb-1">
+                  Broker instant buy {isBrokerSale && "· selected"}
+                </div>
+                <div className="text-[0.8125rem] text-ink-2 leading-snug">
+                  At or below 75% of book ({fmtMoney(brokerThreshold)}), the broker takes the plane immediately.
+                  You get the cash this quarter; broker re-lists at full book.
+                </div>
+                {isBrokerSale && (
+                  <div className="mt-2 text-[0.75rem] text-ink-2 tabular font-mono">
+                    Realised loss: <span className="text-negative font-semibold">−{fmtMoney(realisedLoss)}</span>
+                    <span className="text-ink-muted ml-1">({realisedLossPct.toFixed(0)}% of book)</span>
+                  </div>
+                )}
+              </div>
+              <div className={cn(
+                "rounded-md border p-3 transition-colors",
+                !isBrokerSale
+                  ? "border-primary bg-[var(--accent-soft)]"
+                  : "border-line bg-surface-2/30 opacity-60",
+              )}>
+                <div className="text-[0.625rem] uppercase tracking-wider font-semibold text-primary mb-1">
+                  Marketplace listing {!isBrokerSale && "· selected"}
+                </div>
+                <div className="text-[0.8125rem] text-ink-2 leading-snug">
+                  Above 75% of book, the plane sits on the open market under your airline name. Clears when another player buys at your price.
+                </div>
+                {!isBrokerSale && (
+                  <div className="mt-2 text-[0.75rem] text-ink-2 tabular font-mono">
+                    May take 1–3 quarters to clear. No cash until a buyer accepts.
+                  </div>
+                )}
+              </div>
+            </div>
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" onClick={() => setSellState(null)}>Cancel</Button>
@@ -882,11 +940,12 @@ export function FleetPanel() {
                   toast.negative("Listing failed", r.error ?? "Could not list this aircraft for sale.");
                   return;
                 }
-                toast.success("Listed for sale", `${sellState.name} at ${fmtMoney(clamped)}`);
                 setSellState(null);
               }}
             >
-              List at {fmtMoney(clamped)}
+              {isBrokerSale
+                ? `Sell to broker · ${fmtMoney(clamped)}`
+                : `List at ${fmtMoney(clamped)}`}
             </Button>
           </ModalFooter>
         </Modal>
