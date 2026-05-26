@@ -503,8 +503,13 @@ export function WorldMap({
   const [legendOpen, setLegendOpen] = useState<boolean>(currentQuarter <= 1);
 
   useEffect(() => {
+    // Phase C — C2: setLegendOpen in the Q1/no-gameId branch is
+    // load-bearing (resets the legend to open whenever quarter goes
+    // back to Q1 or game changes). Safe — deps are [currentQuarter,
+    // gameId] only.
     let cancelled = false;
     if (currentQuarter <= 1 || !gameId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLegendOpen(true);
       return;
     }

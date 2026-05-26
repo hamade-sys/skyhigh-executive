@@ -4176,12 +4176,23 @@ export const useGame = create<GameStore>()(
 
         // Sequential reduce — threads `claimedODs` so later bots avoid the
         // same city pairs that earlier bots already picked this quarter.
+        //
+        // Phase C — M4: per-bot try/catch. Pre-fix, a single bot's
+        // bad decision (NaN in pricing, route-plan throwing, etc.)
+        // would crash the entire closeQuarter for every player in
+        // the cohort. Now we isolate per-bot failures: log loudly,
+        // surface a telemetry event, but carry forward THAT bot's
+        // untouched state and continue with the rest. The cohort
+        // still completes the quarter; one bot just stays put for
+        // a round (which is the same observable behaviour as a
+        // human player who didn't take any actions).
         const { teams: teamsAfterBotTurns } = s.teams.reduce<{
           teams: typeof s.teams;
           claimedODs: Set<string>;
         }>(
           ({ teams: acc, claimedODs }, t) => {
             if (!t.botDifficulty) return { teams: [...acc, t], claimedODs };
+            try {
             let updated = { ...t };
 
             // Transition bot aircraft from "ordered" → "active" once a
@@ -4462,6 +4473,27 @@ export const useGame = create<GameStore>()(
               updated = { ...updated, pendingSlotBids: newPending };
             }
             return { teams: [...acc, updated], claimedODs };
+            } catch (botErr) {
+              // Phase C — M4: one bot's bad decision MUST NOT crash
+              // the entire cohort's close. Log loudly, fire a
+              // telemetry event so the operator sees it in their
+              // observability stack, and carry forward the bot's
+              // untouched state. The cohort completes the quarter;
+              // this bot just stays put (same observable behaviour
+              // as a human player who skipped the round).
+              console.error(
+                `[closeQuarter] bot ${t.id} (${t.name}, ${t.botDifficulty}) crashed — isolating:`,
+                botErr,
+              );
+              captureEvent("closeQuarter.botCrashed", "warn", {
+                quarter: s.currentQuarter,
+                teamId: t.id,
+                teamName: t.name,
+                botDifficulty: t.botDifficulty,
+                error: botErr instanceof Error ? botErr.message : String(botErr),
+              });
+              return { teams: [...acc, t], claimedODs };
+            }
           },
           { teams: [], claimedODs: new Set<string>() },
         );
@@ -6320,6 +6352,14 @@ export const useGame = create<GameStore>()(
               : null);
 
           // Mirror the onRehydrateStorage hook: flags arrays → Sets.
+          // Phase C — C4: harden the array slices BEFORE they land in
+          // the store. Engine code at multiple sites reads
+          // `team.fleet.filter(...)`, `team.routes.filter(...)`, etc.
+          // without optional-chain guards. A corrupt state_json with
+          // `fleet: null` (legacy save, partial write, prototype-
+          // pollution payload) would crash every player in the
+          // cohort the moment the engine tried to iterate. Defaulting
+          // here means the engine never sees a non-array.
           const teams = restored.teams.map((t) => {
             const base = {
               ...t,
@@ -6330,6 +6370,24 @@ export const useGame = create<GameStore>()(
                     ? Array.from(t.flags)
                     : [],
               ),
+              fleet: Array.isArray(t.fleet) ? t.fleet : [],
+              routes: Array.isArray(t.routes) ? t.routes : [],
+              loans: Array.isArray(t.loans) ? t.loans : [],
+              decisions: Array.isArray(t.decisions) ? t.decisions : [],
+              subsidiaries: Array.isArray(t.subsidiaries) ? t.subsidiaries : [],
+              secondaryHubCodes: Array.isArray(t.secondaryHubCodes) ? t.secondaryHubCodes : [],
+              financialsByQuarter: Array.isArray(t.financialsByQuarter) ? t.financialsByQuarter : [],
+              // hubInvestments is an object, not array — default to
+              // empty object so engine's outer ?. and the new inner
+              // .maintenanceDepotHubs?.length guard both no-op.
+              hubInvestments: t.hubInvestments ?? {
+                fuelReserveTankHubs: [],
+                maintenanceDepotHubs: [],
+                premiumLoungeHubs: [],
+                opsExpansionSlots: 0,
+              },
+              fuelTanks: t.fuelTanks ?? { small: 0, medium: 0, large: 0 },
+              airportLeases: t.airportLeases ?? {},
             } as Team;
 
             // Ready flags are quarter-scoped. If the payload carries a

@@ -144,6 +144,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "eventType required" }, { status: 400 });
     }
 
+    // Phase C — M3: server-side sanity validation. Pre-fix the route
+    // accepted any JSON for `newState`. A buggy or malicious client
+    // could push `cashUsd: NaN`, `dailyFrequency: -1`, or 10,000
+    // synthetic teams — the engine's arithmetic would propagate the
+    // NaN, the slot math would underflow, or the payload would DoS
+    // every Realtime subscriber. validateNewStateShape catches the
+    // obvious shape violations cheaply. The deep engine invariants
+    // (cash conservation, ownership, etc.) are still enforced
+    // further down via the per-team ownership check.
+    const validationError = validateNewStateShape(newState);
+    if (validationError) {
+      return NextResponse.json(
+        { error: `State validation failed: ${validationError}` },
+        { status: 400 },
+      );
+    }
+
     // Verify membership before any write. assertMembership checks
     // game_members for (gameId, userId) — if no row, fall back to
     // assertHostOrFacilitator: the game creator's authenticated user.id
@@ -373,7 +390,123 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ state: result.data });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    // Don't leak raw error strings to the client. Log server-side
+    // (Vercel function logs) for the operator's debugging.
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    console.error("[/api/games/state-update] internal error:", detail);
+    return NextResponse.json({ error: "Failed to apply state update." }, { status: 500 });
   }
+}
+
+/**
+ * Phase C — M3: cheap structural validation of the `newState`
+ * payload before we let it land in the database. Returns null if
+ * shape is acceptable, or a short reason string if it should be
+ * rejected.
+ *
+ * NOT a full engine-invariant check — that would duplicate engine
+ * logic and is hard to keep in sync. The goal here is to catch the
+ * obvious garbage that would break downstream readers:
+ *   - Non-finite numerics (NaN, Infinity) that propagate through
+ *     the engine's arithmetic and produce silently-broken state.
+ *   - Negative or unreasonable values on numeric fields.
+ *   - Wildly oversized arrays (DoS surface).
+ *   - Required fields missing.
+ *
+ * Anything subtler than that is enforced by the per-team ownership
+ * check + CAS version pipeline further down the route.
+ */
+function validateNewStateShape(state: unknown): string | null {
+  if (typeof state !== "object" || state === null) return "state must be an object";
+  const s = state as Record<string, unknown>;
+
+  // currentQuarter — should be 1..200 (max campaign length)
+  if (typeof s.currentQuarter !== "number" || !Number.isFinite(s.currentQuarter)) {
+    return "currentQuarter must be a finite number";
+  }
+  if (s.currentQuarter < 1 || s.currentQuarter > 200) {
+    return `currentQuarter out of range: ${s.currentQuarter}`;
+  }
+
+  // fuelIndex / baseInterestRatePct — sanity ranges
+  if (s.fuelIndex !== undefined) {
+    if (typeof s.fuelIndex !== "number" || !Number.isFinite(s.fuelIndex)) {
+      return "fuelIndex must be a finite number";
+    }
+    if (s.fuelIndex < 0 || s.fuelIndex > 1000) return "fuelIndex out of range";
+  }
+  if (s.baseInterestRatePct !== undefined) {
+    if (typeof s.baseInterestRatePct !== "number" || !Number.isFinite(s.baseInterestRatePct)) {
+      return "baseInterestRatePct must be a finite number";
+    }
+    if (s.baseInterestRatePct < 0 || s.baseInterestRatePct > 100) {
+      return "baseInterestRatePct out of range";
+    }
+  }
+
+  // teams — required, array, capped at 12 (game's max_teams ceiling)
+  if (!Array.isArray(s.teams)) return "teams must be an array";
+  if (s.teams.length > 12) return `too many teams: ${s.teams.length} (max 12)`;
+
+  for (let i = 0; i < s.teams.length; i++) {
+    const team = s.teams[i] as Record<string, unknown>;
+    if (typeof team !== "object" || team === null) {
+      return `teams[${i}] must be an object`;
+    }
+    if (typeof team.id !== "string" || team.id.length === 0) {
+      return `teams[${i}].id required`;
+    }
+    // Cash, debt, RCF — all must be finite (any NaN/Infinity here
+    // breaks the engine's arithmetic).
+    for (const key of ["cashUsd", "totalDebtUsd", "rcfBalanceUsd"]) {
+      const v = team[key];
+      if (v !== undefined && (typeof v !== "number" || !Number.isFinite(v))) {
+        return `teams[${i}].${key} must be a finite number`;
+      }
+    }
+    // Brand / loyalty / ops points — 0..100 bounded
+    for (const key of ["brandPts", "customerLoyaltyPct", "opsPts"]) {
+      const v = team[key];
+      if (v !== undefined) {
+        if (typeof v !== "number" || !Number.isFinite(v)) {
+          return `teams[${i}].${key} must be a finite number`;
+        }
+        if (v < -50 || v > 150) {
+          // Allow a small overshoot window (legitimate engine math
+          // can briefly exceed 100 before clamping), but reject
+          // absurd values that indicate corruption.
+          return `teams[${i}].${key} out of plausible range: ${v}`;
+        }
+      }
+    }
+    // Routes — array, cap
+    if (team.routes !== undefined) {
+      if (!Array.isArray(team.routes)) return `teams[${i}].routes must be an array`;
+      if (team.routes.length > 200) return `teams[${i}].routes too long`;
+      for (let j = 0; j < (team.routes as unknown[]).length; j++) {
+        const r = (team.routes as Array<Record<string, unknown>>)[j];
+        if (typeof r !== "object" || r === null) continue;
+        if (r.dailyFrequency !== undefined) {
+          const df = r.dailyFrequency;
+          if (typeof df !== "number" || !Number.isFinite(df)) {
+            return `teams[${i}].routes[${j}].dailyFrequency must be a finite number`;
+          }
+          if (df < 0 || df > 50) {
+            return `teams[${i}].routes[${j}].dailyFrequency out of range: ${df}`;
+          }
+        }
+      }
+    }
+    // Fleet — array, cap
+    if (team.fleet !== undefined) {
+      if (!Array.isArray(team.fleet)) return `teams[${i}].fleet must be an array`;
+      if (team.fleet.length > 500) return `teams[${i}].fleet too long`;
+    }
+    if (team.loans !== undefined) {
+      if (!Array.isArray(team.loans)) return `teams[${i}].loans must be an array`;
+      if (team.loans.length > 100) return `teams[${i}].loans too long`;
+    }
+  }
+
+  return null;
 }

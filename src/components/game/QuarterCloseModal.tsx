@@ -43,8 +43,15 @@ export function QuarterCloseModal() {
   //    wrong, the modal won't repeat itself.
   const SHOWN_KEY = "skyforce:milestonesShown:v1";
   useEffect(() => {
+    // Phase C — C2: lint flags the synchronous setMilestonesShown
+    // calls. Both are safe: the no-gameId branch resets the local
+    // ledger when the game changes, and the .then callback runs
+    // after a microtask (no longer "synchronous in effect"). Deps
+    // are [gameId, result?.quarter] only — setMilestonesShown is
+    // not in the deps, so there's no loop risk.
     let cancelled = false;
     if (!gameId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMilestonesShown(new Set());
       return;
     }
@@ -67,9 +74,16 @@ export function QuarterCloseModal() {
   // When the modal renders new milestones, persist them to the shown
   // ledger immediately so any subsequent re-render won't show them
   // again. Effect runs only when the set of "new this time" changes.
+  //
+  // Phase C — C2: lint flags setMilestonesShown because it appears in
+  // the deps via milestonesActuallyNew (computed from milestonesShown).
+  // The guard `if (milestonesActuallyNew.length === 0) return` breaks
+  // the loop: after the set, milestonesActuallyNew re-computes to []
+  // and the next effect run early-returns. Safe but flagged.
   useEffect(() => {
     if (milestonesActuallyNew.length === 0) return;
     const merged = Array.from(new Set([...milestonesShown, ...milestonesActuallyNew]));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMilestonesShown(new Set(merged));
     if (gameId) void setGamePreference(gameId, SHOWN_KEY, merged);
   }, [gameId, milestonesActuallyNew, milestonesShown]);

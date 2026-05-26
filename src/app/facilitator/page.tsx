@@ -761,6 +761,11 @@ function SavesView({ gameId }: { gameId: string | null }) {
   }
 
   useEffect(() => {
+    // Phase C — C2: refresh() awaits an async call then setSnapshots.
+    // Lint flags this because the setState happens inside an effect's
+    // microtask chain. Safe — deps are [gameId] only, and the effect
+    // only runs when gameId changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [gameId]);
 

@@ -252,9 +252,16 @@ function GameCard({ game }: { game: JoinableGame }) {
   const memberCount = game.member_count ?? 0;
   const seatsRemaining = game.max_teams - memberCount;
 
-  // Relative "finished X ago" label for ended games
+  // Relative "finished X ago" label for ended games.
+  // Phase C — C2: React 19's react-hooks/purity rule forbids
+  // Date.now() during render. The label is informational only and
+  // the lobby card re-renders rarely (poll-driven, ~15s). Computing
+  // the delta at render time keeps the label fresh without an
+  // effect+setState dance. The lint disable is intentional and
+  // narrow — only the single Date.now() call needs it.
   const finishedAgo = (() => {
     if (!ended || !game.ended_at) return null;
+    // eslint-disable-next-line react-hooks/purity
     const diffMs = Date.now() - new Date(game.ended_at).getTime();
     const mins = Math.round(diffMs / 60_000);
     if (mins < 60) return `${mins}m ago`;
