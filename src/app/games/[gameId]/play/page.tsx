@@ -200,8 +200,25 @@ export default function GamePlayPage({
   // new state for this game. Each game has its own game_state row
   // (keyed by game_id) so this subscription is perfectly isolated —
   // updates from other games never reach this listener.
+  // MAJOR FIX (May 2026): in a solo game (1 human + N bots) the only
+  // writer is this browser. The bots run CLIENT-SIDE inside the same
+  // JS context — they mutate the local store directly, not through
+  // any /api endpoint. The postgres_changes subscription below was
+  // designed for multi-human cohorts where a peer's push needs to
+  // catch us up. In solo mode it instead echoes the player's OWN
+  // writes back from the server, and when two of those writes
+  // interleave (e.g. quarter timer push + cancel-route push) the
+  // later broadcast can carry a snapshot that pre-dates the cancel
+  // → the local mutation looks like it "comes back" a beat later.
+  // Gating the subscription on multi-human eliminates the entire
+  // self-echo class for solo workshops without losing cohort sync.
+  const humanCount = useGame((s) =>
+    s.teams.filter((t) => t.controlledBy === "human").length,
+  );
+  const isMultiHuman = humanCount >= 2;
   useEffect(() => {
     if (!hydrated || !sessionId) return;
+    if (!isMultiHuman) return; // solo mode — see comment above
     const supa = getBrowserClient();
     if (!supa) return; // Supabase not configured (local dev without env vars)
 
@@ -238,7 +255,7 @@ export default function GamePlayPage({
     return () => {
       supa.removeChannel(channel);
     };
-  }, [hydrated, gameId, sessionId]);
+  }, [hydrated, gameId, sessionId, isMultiHuman]);
 
   // Phase 8.3 — when the engine transitions to endgame (last human
   // forfeited, or final round closed), route this browser to the
@@ -267,7 +284,11 @@ export default function GamePlayPage({
   // postgres_changes subscription above handles the heavy state
   // refetch; this hook just routes when the game ends or another
   // team flips to bot, both of which warrant an immediate refresh.
-  useGameRealtime(hydrated ? gameId : null, {
+  // Solo games never need broadcast-channel sync: there are no peers
+  // to forfeit, no GM to lock the game. Gate the channel so we don't
+  // even hold the websocket open in solo mode. (Same reasoning as the
+  // postgres_changes gate above — see big comment there.)
+  useGameRealtime(hydrated && isMultiHuman ? gameId : null, {
     onAutoEnded: () => {
       router.replace("/endgame");
     },
