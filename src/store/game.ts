@@ -6439,12 +6439,42 @@ export const useGame = create<GameStore>()(
             if (res.status === 409) {
               // Non-gameplay-critical events (timer adjustments, minor state
               // saves) can legitimately race with a larger authoritative
-              // write like game.quarterClosed. Re-hydrating on those benign
-              // conflicts is actively harmful: e.g. the quarter timer's
-              // auto-start push can lose a CAS race against quarterClosed,
-              // and a full hydrate in that tiny window briefly wipes the
-              // just-advanced local state, kicking /play back to its loading
-              // gate. Let Realtime / the winning write catch us up instead.
+              // write. Re-hydrating on those benign conflicts is actively
+              // harmful: e.g. the quarter timer's auto-start push can lose
+              // a CAS race against another write, and a full hydrate in
+              // that tiny window briefly wipes the just-advanced local
+              // state, kicking /play back to its loading gate. Let
+              // Realtime / the winning write catch us up instead.
+              //
+              // EMERGENCY HOTFIX (May 26 2026): added `game.quarterClosed`,
+              // `game.ended`, and `game.botRoundAdvanced` to the silent
+              // list. Workshop replay surfaced this race:
+              //   1. closeQuarter pushes "game.quarterClosed" with
+              //      expectedVersion=N (cash going $32.5M → $0 locally).
+              //   2. Before that push lands, ANOTHER browser-side write
+              //      (heartbeat ack, slot bid, etc.) lands at the server
+              //      and bumps version to N+1.
+              //   3. The closeQuarter push lands second, sees version
+              //      N+1 vs expected N → 409.
+              //   4. The 409 handler refetched server state, which at
+              //      that moment was version N+1 — the OTHER write
+              //      applied, but closeQuarter's mutations were NEVER
+              //      persisted to the server. Refetch revives pre-close
+              //      cash, suspends bot turns, prevents pre-order
+              //      advancement.
+              //   5. Player sees cash glitch back to $32.5M, bots
+              //      "stuck", planes "not arriving."
+              //
+              // Silencing closeQuarter's 409 means: trust the local
+              // engine's close output. Realtime will deliver the
+              // server's eventual canonical state (after the conflict
+              // resolves naturally via the next push or a peer's
+              // broadcast). Local state is already correct from the
+              // engine run; we don't need a rehydrate to set it again.
+              //
+              // game.ended and game.botRoundAdvanced get the same
+              // treatment because they're the same "major write
+              // racing against minor concurrent writes" pattern.
               const SILENT_409_EVENTS = new Set([
                 "game.timerStarted",
                 "game.timerPaused",
@@ -6452,6 +6482,9 @@ export const useGame = create<GameStore>()(
                 "game.timerExtended",
                 "player.savedSliders",
                 "game.colorClaimed",
+                "game.quarterClosed",
+                "game.ended",
+                "game.botRoundAdvanced",
               ]);
               const shouldHydrateAfter409 = !SILENT_409_EVENTS.has(eventType);
               const humanCount = get().teams.filter(
