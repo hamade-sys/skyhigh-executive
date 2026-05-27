@@ -6616,7 +6616,63 @@ export const useGame = create<GameStore>()(
                 opsExpansionSlots: 0,
               },
               fuelTanks: t.fuelTanks ?? { small: 0, medium: 0, large: 0 },
-              airportLeases: t.airportLeases ?? {},
+              airportLeases: (() => {
+                // ──────────────────────────────────────────────────
+                // ONE-TIME LEASE REPRICE (May 2026 rebalance v2.1.0)
+                // The v2.1 rebalance cut slot tier prices ~9× from
+                // the original schedule (T1 $45K → $5K weekly). But
+                // every existing lease has its old `totalWeeklyCost`
+                // baked in from when it was originally won at auction,
+                // so the engine still bills the OLD rate forever.
+                // Workshop players reported "slot prices still 30-40%
+                // of revenue" after the rebalance shipped — exactly
+                // this stale-lease bug.
+                //
+                // Migration: for each existing lease, recompute the
+                // base rate from the airport's tier and preserve any
+                // genuine auction premium proportionally. If the
+                // player paid 1.5× the OLD base, they keep paying
+                // 1.5× the NEW base.
+                //
+                // Caveat: we don't know the "old base" with certainty
+                // for legacy saves, so we use the pre-v2.1 schedule
+                // (T1 45000 / T2 30000 / T3 15000 / T4 7500) as the
+                // implied reference and floor the per-slot avg at
+                // the new base. Players who weren't bidding strategy
+                // get exactly the new base; players who were paying
+                // premium keep their relative position.
+                // ──────────────────────────────────────────────────
+                const incoming = t.airportLeases ?? {};
+                const OLD_BASE: Record<number, number> = {
+                  1: 45_000, 2: 30_000, 3: 15_000, 4: 7_500,
+                };
+                const NEW_BASE: Record<number, number> = {
+                  1: 5_000, 2: 3_500, 3: 1_500, 4: 750,
+                };
+                const out: typeof incoming = {};
+                for (const code of Object.keys(incoming)) {
+                  const lease = incoming[code];
+                  if (!lease || lease.slots === 0) { out[code] = lease; continue; }
+                  // The hub-given starter slots are stored with
+                  // totalWeeklyCost = 0 (free). Preserve that.
+                  if (lease.totalWeeklyCost === 0) { out[code] = lease; continue; }
+                  const city = CITIES_BY_CODE[code];
+                  const tier = (city?.tier ?? 2) as 1 | 2 | 3 | 4;
+                  const oldBase = OLD_BASE[tier] ?? 30_000;
+                  const newBase = NEW_BASE[tier] ?? 3_500;
+                  const avgPerSlot = lease.totalWeeklyCost / lease.slots;
+                  // Premium ratio cap at 3× so a player who massively
+                  // overbid in a contested auction doesn't end up
+                  // paying 5-10× the new market rate after migration.
+                  const premiumRatio = Math.max(1, Math.min(3, avgPerSlot / oldBase));
+                  const newPerSlot = newBase * premiumRatio;
+                  out[code] = {
+                    slots: lease.slots,
+                    totalWeeklyCost: Math.round(lease.slots * newPerSlot),
+                  };
+                }
+                return out;
+              })(),
             } as Team;
 
             // Ready flags are quarter-scoped. If the payload carries a
