@@ -87,6 +87,29 @@ const RIVAL_HUB_FALLBACKS: Record<string, string[]> = {
   ORD: ["JFK", "LAX", "SFO", "LHR"],
 };
 
+/** Longitude offsets used to render every marker + polyline at three
+ *  longitude bands so the map wraps seamlessly when the user pans
+ *  east or west past the antimeridian. Leaflet's worldCopyJump
+ *  teleports the map view, but doesn't duplicate markers or vector
+ *  layers — they stay anchored at their original lng. Without this
+ *  triple-band render, Asian cities vanish when the player scrolls
+ *  west of the Americas (and vice versa).
+ *
+ *  Cost: ~300 markers (100 cities × 3 bands) + 3× polylines per
+ *  route. Acceptable on the target hardware. */
+const LONGITUDE_BANDS = [-360, 0, 360] as const;
+
+/** Shift every (lat, lon) by the given longitude offset. Used by the
+ *  triple-band wrap so a single polyline renders in three world
+ *  copies. */
+function shiftPolyline(
+  positions: Array<[number, number]>,
+  lonOffset: number,
+): Array<[number, number]> {
+  if (lonOffset === 0) return positions;
+  return positions.map(([lat, lon]) => [lat, lon + lonOffset]);
+}
+
 /** Sample N points along a great-circle path from a→b, blended
  *  toward the rhumb-line for a more visually subtle curve, and
  *  unwrapped across the antimeridian so trans-Pacific routes
@@ -411,52 +434,59 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
     : undefined;
   return (
     <Fragment>
-      {/* Soft glow underlayer — slightly wider than the main stroke
-          so the line reads as a luminescent ribbon, not a flat hairline.
-          Thinner overall than pre-refactor per user feedback. */}
-      <Polyline
-        positions={positions}
-        pathOptions={{
-          color: baseColor, weight: 3, opacity: 0.12, lineCap: "round", interactive: false,
-        }}
-      />
-      {isNew && (
-        <Polyline
-          positions={positions}
-          pathOptions={{
-            color: "#FFB94D", weight: 4.5, opacity: 0.32,
-            lineCap: "round", interactive: false,
-          }}
-        />
-      )}
-      <Polyline
-        positions={positions}
-        pathOptions={{
-          color: baseColor,
-          // Thinner per May 28 workshop note. Cargo stays slightly
-          // lighter than passenger for the dashed-vs-solid contrast.
-          weight: route.isCargo ? 1.1 : 1.3,
-          // Bumped cargo opacity so the mustard reads at glance.
-          opacity: route.isCargo ? 0.95 : 0.95,
-          lineCap: "round",
-          dashArray: route.isCargo ? "2 5" : undefined,
-          className: competitiveClass,
-        }}
-      />
-      <FlyingPlane
-        positions={positions}
-        durationMs={dur}
-        phase={phase}
-        cargo={!!route.isCargo}
-      />
-      {showSecondPlane && (
-        <FlyingPlane
-          positions={positions}
-          durationMs={dur}
-          phase={(phase + 0.5) % 1}
-          cargo={!!route.isCargo}
-        />
-      )}
+      {/* Triple-band wrap: render the polyline + flying-plane sprite
+          at lng-360, lng, lng+360 so trans-Pacific / trans-Atlantic
+          routes are visible no matter which world copy the user
+          panned into. */}
+      {LONGITUDE_BANDS.map((lonOffset) => {
+        const bandPositions = shiftPolyline(positions, lonOffset);
+        return (
+          <Fragment key={lonOffset}>
+            {/* Soft glow underlayer — slightly wider than the main
+                stroke so the line reads as a luminescent ribbon. */}
+            <Polyline
+              positions={bandPositions}
+              pathOptions={{
+                color: baseColor, weight: 3, opacity: 0.12, lineCap: "round", interactive: false,
+              }}
+            />
+            {isNew && (
+              <Polyline
+                positions={bandPositions}
+                pathOptions={{
+                  color: "#FFB94D", weight: 4.5, opacity: 0.32,
+                  lineCap: "round", interactive: false,
+                }}
+              />
+            )}
+            <Polyline
+              positions={bandPositions}
+              pathOptions={{
+                color: baseColor,
+                weight: route.isCargo ? 1.1 : 1.3,
+                opacity: route.isCargo ? 0.95 : 0.95,
+                lineCap: "round",
+                dashArray: route.isCargo ? "2 5" : undefined,
+                className: competitiveClass,
+              }}
+            />
+            <FlyingPlane
+              positions={bandPositions}
+              durationMs={dur}
+              phase={phase}
+              cargo={!!route.isCargo}
+            />
+            {showSecondPlane && (
+              <FlyingPlane
+                positions={bandPositions}
+                durationMs={dur}
+                phase={(phase + 0.5) % 1}
+                cargo={!!route.isCargo}
+              />
+            )}
+          </Fragment>
+        );
+      })}
     </Fragment>
   );
 }, (prev, next) => {
@@ -727,16 +757,19 @@ export function WorldMap({
             (r) => r.status === "active" || r.status === "pending",
           );
           if (realRoutes.length > 0) {
+            // Triple-band wrap — render each rival route at all 3
+            // longitude offsets so they're visible no matter where
+            // the player pans.
             return realRoutes
-              .map((r) => {
+              .flatMap((r) => {
                 const a = CITIES_BY_CODE[r.originCode];
                 const b = CITIES_BY_CODE[r.destCode];
-                if (!a || !b) return null;
+                if (!a || !b) return [];
                 const positions = greatCirclePath(a.lon, a.lat, b.lon, b.lat, 32);
-                return (
+                return LONGITUDE_BANDS.map((lonOffset) => (
                   <Polyline
-                    key={`r-${rv.id}-${r.id}`}
-                    positions={positions}
+                    key={`r-${rv.id}-${r.id}-${lonOffset}`}
+                    positions={shiftPolyline(positions, lonOffset)}
                     pathOptions={{
                       color: rv.color,
                       weight: 0.8,
@@ -744,22 +777,21 @@ export function WorldMap({
                       dashArray: r.status === "pending" ? "1 6" : "2 4",
                     }}
                   />
-                );
-              })
-              .filter(Boolean) as React.ReactElement[];
+                ));
+              });
           }
           // Fallback: hand-seeded hub spokes — only if the rival has no
           // recorded routes yet.
           const fallbackDests = RIVAL_HUB_FALLBACKS[rv.hubCode] ?? [];
           return fallbackDests
-            .map((destCode) => {
+            .flatMap((destCode) => {
               const d = CITIES_BY_CODE[destCode];
-              if (!d) return null;
+              if (!d) return [];
               const positions = greatCirclePath(hub.lon, hub.lat, d.lon, d.lat, 32);
-              return (
+              return LONGITUDE_BANDS.map((lonOffset) => (
                 <Polyline
-                  key={`r-${rv.id}-${destCode}`}
-                  positions={positions}
+                  key={`r-${rv.id}-${destCode}-${lonOffset}`}
+                  positions={shiftPolyline(positions, lonOffset)}
                   pathOptions={{
                     color: rv.color,
                     weight: 0.8,
@@ -767,9 +799,8 @@ export function WorldMap({
                     dashArray: "2 4",
                   }}
                 />
-              );
-            })
-            .filter(Boolean) as React.ReactElement[];
+              ));
+            });
         })}
 
         {/* Player route arcs — rendered via memoized child so each
@@ -966,23 +997,20 @@ export function WorldMap({
           void mapZoom;
           const showLabel = true;
 
-          return (
-            <Fragment key={c.code}>
+          // Triple-band wrap (May 2026): render each city at lng-360,
+          // lng, lng+360 so the map flows seamlessly when the player
+          // scrolls past the antimeridian. The label tooltip rides
+          // along inside the visible CircleMarker, so each band has
+          // its own label too. Click handlers fire from whichever
+          // copy the user clicks; that's fine because they all bind
+          // to the same onCityClick.
+          return LONGITUDE_BANDS.map((lonOffset) => (
+            <Fragment key={`${c.code}-${lonOffset}`}>
               {/* Invisible click halo — sits beneath the visible dot
                   with a much larger radius (≥14px) so the city is
-                  comfortably clickable without pixel-precision aim.
-                  Leaflet z-orders later markers ABOVE earlier ones,
-                  so this halo lives BELOW the visible CircleMarker
-                  yet still receives clicks via the same handler.
-                  Single + double click both bubble to the visible
-                  marker's handlers via the shared callback.
-
-                  Replaces the prior "click slightly above the dot"
-                  bug — visible radius was 1.4-2.5px on most cities,
-                  so the player had to pixel-aim. Now there's a 14px
-                  invisible target around every dot. */}
+                  comfortably clickable without pixel-precision aim. */}
               <CircleMarker
-                center={[c.lat, c.lon]}
+                center={[c.lat, c.lon + lonOffset]}
                 radius={Math.max(14, finalRadius + 6)}
                 pathOptions={{
                   color: "transparent",
@@ -1014,7 +1042,7 @@ export function WorldMap({
                 }}
               />
             <CircleMarker
-              center={[c.lat, c.lon]}
+              center={[c.lat, c.lon + lonOffset]}
               radius={finalRadius}
               pathOptions={{
                 color: strokeColor,
@@ -1088,7 +1116,7 @@ export function WorldMap({
               </Tooltip>
             </CircleMarker>
             </Fragment>
-          );
+          ));
         })}
 
         {/* Rival hub markers.
