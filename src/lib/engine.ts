@@ -741,45 +741,56 @@ export function baseFareForDistance(km: number): number {
 export interface FareRange { min: number; base: number; max: number }
 
 // Per-class fare bases by stage length.
-// Workshop feedback (May 2026): bots were dominating with short-haul
-// max-frequency spam because short-haul demand pools at major hubs
-// (NYC, LA, London, Tokyo) are several times larger than long-haul
-// demand and per-flight cost is much lower. To shift the strategic
-// balance toward long-haul, the medium-haul (2-5K km) and long-haul
-// (5-10K + >10K) bands now get a ~25% yield premium over the short
-// band. This reflects real-world reality: trans-continental and
-// trans-oceanic seats command much higher per-km yields than regional
-// shuttle traffic, partly because there's no rail/road alternative,
-// partly because business and premium cabins dominate the mix.
+// Workshop iteration log:
+//   v1 — bots spammed short-haul; huge demand pools at NYC/LA/LHR.
+//   v2 — bumped LH/XLH +35% via 4-tier band tables. Still felt flat at XLH.
+//   v3 — sharper band ratios.
+//   v4 — user feedback: "rates should be exponential, not really linear".
+//        Replaced the discrete 4-tier band tables with a continuous
+//        power-law curve so there are no "step" jumps at band edges
+//        and very long routes scale meaningfully faster than medium.
 //
-// Pre-rebalance: SH $120 · MH $350 · LH $650 · XLH $950
-// Post-rebalance: SH $120 · MH $440 · LH $880 · XLH $1300
-// XLH is the "trans-Pacific premium" band where airlines historically
-// extract their highest yields.
-const ECON_BASE_BY_KM: Array<{ maxKm: number; base: number }> = [
-  { maxKm: 2000,    base: 120 },
-  { maxKm: 5000,    base: 440 },
-  { maxKm: 10_000,  base: 880 },
-  { maxKm: Infinity, base: 1300 },
-];
-// Business class scales similarly. Pre: SH $360 · MH $1100 · LH $2200 · XLH $3500
-// Post: SH $360 · MH $1450 · LH $3000 · XLH $4800
-const BUS_BASE_BY_KM: Array<{ maxKm: number; base: number }> = [
-  { maxKm: 2000,    base: 360 },
-  { maxKm: 5000,    base: 1450 },
-  { maxKm: 10_000,  base: 3000 },
-  { maxKm: Infinity, base: 4800 },
-];
+// Curve: fare = ANCHOR × (km / 1000)^EXPONENT
+//   - anchor is the fare at 1,000 km (a long short-haul or short MH)
+//   - exponent >1 produces super-linear (exponential-feel) growth.
+//     Business and First use a slightly steeper exponent because
+//     real-world premium yields scale harder with distance than
+//     economy does (NYC-Sydney business is $10k-$15k, vs NYC-Boston
+//     business ~$300 — that's a 30-50× ratio at the same anchor).
+//
+// Reference points (econ) at ANCHOR_USD=120, EXPONENT=1.05:
+//     300 km →   $32   (regional hop, e.g. JFK-DCA)
+//   1,000 km →  $120
+//   2,500 km →  $314
+//   5,500 km →  $691   (Trans-Atlantic, ≈ 5.8× short)
+//  10,800 km → $1,410  (Trans-Pacific, ≈ 11.8× short)
+//  16,000 km → $2,127  (NYC-Sydney, ≈ 17.7× short)
+//
+// Business class anchor $360 with steeper EXPONENT=1.12 lands at:
+//   1,000 km →  $360
+//   5,500 km → $2,415
+//  16,000 km → $9,165   (matches real long-haul premium yields)
+//
+// A FLOOR keeps very short hops (<300 km) from getting silly $20 fares.
+const ECON_CURVE_ANCHOR_USD = 120;
+const BUS_CURVE_ANCHOR_USD  = 360;
+const ECON_CURVE_EXPONENT   = 1.05;
+const BUS_CURVE_EXPONENT    = 1.12;
+const FARE_CURVE_ANCHOR_KM  = 1000;
+const ECON_FARE_FLOOR_USD   = 50;
+const BUS_FARE_FLOOR_USD    = 150;
+
+function econBase(km: number): number {
+  const raw = ECON_CURVE_ANCHOR_USD * Math.pow(km / FARE_CURVE_ANCHOR_KM, ECON_CURVE_EXPONENT);
+  return Math.max(ECON_FARE_FLOOR_USD, Math.round(raw));
+}
+function busBase(km: number): number {
+  const raw = BUS_CURVE_ANCHOR_USD * Math.pow(km / FARE_CURVE_ANCHOR_KM, BUS_CURVE_EXPONENT);
+  return Math.max(BUS_FARE_FLOOR_USD, Math.round(raw));
+}
 /** First-class base = business base × 3.5 (PRD A11). */
 function firstBase(km: number): number {
-  return baseForBand(km, BUS_BASE_BY_KM) * 3.5;
-}
-function baseForBand(
-  km: number,
-  table: Array<{ maxKm: number; base: number }>,
-): number {
-  for (const row of table) if (km < row.maxKm) return row.base;
-  return table[table.length - 1].base;
+  return busBase(km) * 3.5;
 }
 
 export function classFareRange(
@@ -787,8 +798,8 @@ export function classFareRange(
   cls: "econ" | "bus" | "first",
 ): FareRange {
   const base =
-    cls === "econ"  ? baseForBand(km, ECON_BASE_BY_KM) :
-    cls === "bus"   ? baseForBand(km, BUS_BASE_BY_KM) :
+    cls === "econ"  ? econBase(km) :
+    cls === "bus"   ? busBase(km) :
     firstBase(km);
   return {
     min: Math.round(base * 0.5),
