@@ -1,6 +1,6 @@
 {
   "name": "skyforce",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "private": true,
   "description": "SkyForce — 20-quarter airline strategy simulation. Each airline is a single account in a 2–10 team multiplayer environment.",
   "scripts": {

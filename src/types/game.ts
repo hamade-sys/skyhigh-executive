@@ -252,6 +252,12 @@ export interface Route {
    *  in the route detail modal explaining a sudden revenue swing
    *  ("Q5 demand was 0.92× normal due to news events"). */
   lastQuarterDemandShockMult?: number;
+  /** Subsidiary-demand multiplier applied to this route's passenger
+   *  revenue this quarter (1.0 = no demand-side subsidiaries at
+   *  endpoints). Stored separately so the route detail modal can
+   *  break out "+$X.XM from subsidiaries at LHR / JFK" as a line
+   *  item. Computed by subsidiaryDemandMultiplier() in engine.ts. */
+  lastQuarterSubsidiaryMult?: number;
 
   /** True if route carries cargo instead of passengers. */
   isCargo?: boolean;

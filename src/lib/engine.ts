@@ -2940,6 +2940,12 @@ export function runQuarterClose(
         ? boostedRevenue
         : (econ.cargoRevenue ?? 0) * revBoost;
       r.quarterlyFuelTankSavings = econ.quarterlyFuelTankSavings;
+      // Subsidiary demand premium — surface on the route detail
+      // modal as a line item so the player sees the moat working.
+      // computeRouteEconomics already applied this multiplier inside
+      // quarterlyRevenue; here we just store the multiplier for UI.
+      const subMult = subsidiaryDemandMultiplier(next, r);
+      r.lastQuarterSubsidiaryMult = subMult > 1.0001 ? subMult : undefined;
 
       // Increment Legacy counter
       r.consecutiveQuartersActive = (r.consecutiveQuartersActive ?? 0) + 1;
@@ -3719,12 +3725,53 @@ export function runQuarterClose(
   if (longHaulBrandBonus > 0) {
     notes.push(`Long-haul prestige: +${longHaulBrandBonus.toFixed(1)} brand pts`);
   }
-  const newBrandPts = Math.max(0, next.brandPts + brandDelta + dissonanceBrandPenalty + longHaulBrandBonus);
+
+  // Premium-Hub synergy (May 2026 amendment).
+  // When a team owns 3+ subsidiaries at a single city, that city
+  // graduates to "Premium Hub" status — additional brand + loyalty
+  // bonuses that compound the per-subsidiary demand bonus already
+  // baked into route revenue. Rewards focused capital deployment
+  // (build out one city as a flagship hub) over thinly-spread
+  // investment across the network.
+  //   3 subs @ city → +0.4 brand pts/Q, +0.2 loyalty drift
+  //   4 subs        → +0.7 brand pts/Q, +0.4 loyalty drift
+  //   5+ subs       → +1.1 brand pts/Q, +0.7 loyalty drift
+  // Multiple Premium Hubs stack; total capped at +5 brand pts / +3
+  // loyalty drift to keep things bounded for the cohort.
+  let synergyBrandBonus = 0;
+  let synergyLoyaltyDelta = 0;
+  if ((next.subsidiaries?.length ?? 0) >= 3) {
+    const cityCount = new Map<string, number>();
+    for (const sub of next.subsidiaries ?? []) {
+      cityCount.set(sub.cityCode, (cityCount.get(sub.cityCode) ?? 0) + 1);
+    }
+    for (const [, count] of cityCount) {
+      if (count >= 5)      { synergyBrandBonus += 1.1; synergyLoyaltyDelta += 0.7; }
+      else if (count === 4){ synergyBrandBonus += 0.7; synergyLoyaltyDelta += 0.4; }
+      else if (count === 3){ synergyBrandBonus += 0.4; synergyLoyaltyDelta += 0.2; }
+    }
+    synergyBrandBonus = Math.min(5, synergyBrandBonus);
+    synergyLoyaltyDelta = Math.min(3, synergyLoyaltyDelta);
+    if (synergyBrandBonus > 0) {
+      notes.push(`Premium Hub synergy: +${synergyBrandBonus.toFixed(1)} brand pts, +${synergyLoyaltyDelta.toFixed(1)}% loyalty drift`);
+    }
+  }
+
+  const newBrandPts = Math.max(
+    0,
+    next.brandPts + brandDelta + dissonanceBrandPenalty + longHaulBrandBonus + synergyBrandBonus,
+  );
   const newOpsPts = Math.max(0, next.opsPts + opsDelta);
-  // Loyalty drifts toward 50 slightly, plus slider delta
+  // Loyalty drifts toward 50 slightly, plus slider delta + premium-
+  // hub drift bonus (drift toward 100, not 50, since loyal customers
+  // anchored by city-side investments don't decay to mean).
   const drift = (50 - next.customerLoyaltyPct) * 0.03;
+  const premiumHubLoyaltyDrift = synergyLoyaltyDelta > 0
+    ? (100 - next.customerLoyaltyPct) * 0.01 * synergyLoyaltyDelta
+    : 0;
   const newLoyalty = clamp(
-    0, 100, next.customerLoyaltyPct + loyaltyDelta + drift + dissonanceLoyaltyPenalty,
+    0, 100,
+    next.customerLoyaltyPct + loyaltyDelta + drift + premiumHubLoyaltyDrift + dissonanceLoyaltyPenalty,
   );
 
   // Update team state for Brand Value calc

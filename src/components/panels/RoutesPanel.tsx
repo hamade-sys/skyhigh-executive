@@ -2527,6 +2527,15 @@ function RouteBreakdown({ route }: { route: Route }) {
     });
   }
 
+  // Subsidiary demand premium — surface as its own revenue line so
+  // the player sees the moat working ("+$X.XM from your lounges at
+  // LHR + JFK"). Calculated as quarterlyRevenue × (1 − 1/mult) since
+  // the engine bakes the multiplier directly into quarterlyRevenue.
+  const subMult = route.lastQuarterSubsidiaryMult;
+  const subPremium = subMult && subMult > 1
+    ? route.quarterlyRevenue * (1 - 1 / subMult)
+    : 0;
+
   // Cost rows. Fuel is direct (route-attributable, exact); everything
   // else is allocated by revenue-share at the team level.
   const fuelSavings = route.quarterlyFuelTankSavings ?? 0;
@@ -2557,7 +2566,7 @@ function RouteBreakdown({ route }: { route: Route }) {
   if (route.allocatedInterest !== undefined && route.allocatedInterest > 1) costRows.push({ label: "Interest share", amount: route.allocatedInterest });
   if (route.allocatedTaxes !== undefined && route.allocatedTaxes > 1) costRows.push({ label: "Taxes & levies share", amount: route.allocatedTaxes });
 
-  const totalRevenue = revRows.reduce((s, r) => s + r.revenue, 0);
+  const totalRevenue = revRows.reduce((s, r) => s + r.revenue, 0) + subPremium;
   const totalCost = costRows.reduce((s, r) => s + r.amount, 0);
   const operatingProfit = totalRevenue - totalCost;
 
@@ -2591,6 +2600,14 @@ function RouteBreakdown({ route }: { route: Route }) {
                 positive
               />
             ))}
+            {subPremium > 0 && (
+              <BreakdownRow
+                label="Subsidiary demand premium"
+                detail={`+${(((subMult ?? 1) - 1) * 100).toFixed(1)}% lift from your hotels / lounges / limos at this route's endpoints`}
+                amount={subPremium}
+                positive
+              />
+            )}
             <BreakdownRow label="Total quarter revenue" amount={totalRevenue} positive bold />
           </div>
         </div>
