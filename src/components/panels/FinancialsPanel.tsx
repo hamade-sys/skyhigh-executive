@@ -75,16 +75,46 @@ export function FinancialsPanel() {
           : { tone: "neg", label: "Covenant breach",
               detail: "Debt is beyond the safe covenant band. New borrowing is likely blocked and refinancing will price at distressed rates." };
 
-  // ── Cash runway: how many quarters of cash at current burn rate.
-  //    Burn rate = max(0, last quarter's cost − revenue). If the
-  //    airline is profitable, runway is "indefinite" (∞). The display
-  //    caps at 24Q (6 years) so the bar doesn't render off-screen.
-  const lastNetCashFlow = last ? last.revenue - last.costs : 0;
-  const burnPerQ = lastNetCashFlow < 0 ? -lastNetCashFlow : 0;
-  const runwayQ = burnPerQ > 0 ? Math.floor(player.cashUsd / burnPerQ) : Infinity;
-  const runwayCappedQ = runwayQ === Infinity ? 24 : Math.min(runwayQ, 24);
+  // ── Distress runway (May 2026 redesign): how many quarters can
+  //    cash on hand cover the FIXED costs that would keep running
+  //    even if every revenue source stopped today? Workshop feedback
+  //    flagged the old "if profitable → Indefinite" runway as useless
+  //    — it told the player nothing about their fragility.
+  //
+  //    The right framing for an executive: "if my routes stopped
+  //    earning tomorrow, how long do I have before bankruptcy?"
+  //    That's cash divided by the obligations that don't go away when
+  //    flights stop:
+  //      • Staff at 60% of current (some payroll could be cut fast,
+  //        but corporate / pilots-under-contract / minimums stay)
+  //      • Slot lease fees (recurring, contractual — can't release
+  //        slots instantly without quarter-close auction mechanics)
+  //      • Aircraft lease fees (locked term commitments)
+  //      • Maintenance at 70% of current (parked planes still need
+  //        preservation programs, scheduled checks)
+  //      • Hub terminal fees (recurring)
+  //      • Insurance premium (must cover even parked airframes)
+  //      • Interest on debt + RCF interest (contractual)
+  //
+  //    Costs that DISAPPEAR in distress: fuel (no flights), marketing
+  //    (cut immediately), taxes (no revenue), some operations slider.
+  const distressFixedCostPerQ = last
+    ? (last.staffCost ?? 0) * 0.6 +
+      (last.slotCost ?? 0) +
+      (last.leaseFeesUsd ?? 0) +
+      (last.maintenanceCost ?? 0) * 0.7 +
+      (last.insuranceCost ?? 0) +
+      (last.interest ?? 0)
+    : 0;
+  const burnPerQ = Math.max(0, distressFixedCostPerQ);
+  // Floor the runway calc at 1Q of burn so a fresh game with no
+  // financials yet doesn't crash on division by zero.
+  const runwayQ = burnPerQ > 0
+    ? Math.max(0, Math.floor(player.cashUsd / burnPerQ))
+    : (player.cashUsd > 0 ? 24 : 0);
+  const runwayCappedQ = Math.min(runwayQ, 24);
   const runwayTone: "pos" | "neg" | "warn" | "neutral" =
-    runwayQ === Infinity ? "pos" :
+    runwayQ >= 12 ? "pos" :
     runwayQ <= 2 ? "neg" :
     runwayQ <= 6 ? "warn" : "neutral";
 
@@ -1217,7 +1247,7 @@ function CovenantGauge({
 function CashRunwayGauge({
   quarters, cappedQ, tone, burnPerQ,
 }: {
-  /** Raw quarters of runway, may be Infinity. */
+  /** Raw distress runway in quarters (cash / fixed-cost burn). */
   quarters: number;
   /** Display value capped at 24Q for the bar fill. */
   cappedQ: number;
@@ -1225,12 +1255,11 @@ function CashRunwayGauge({
   burnPerQ: number;
 }) {
   const fillPct = (cappedQ / 24) * 100;
-  const isInfinite = quarters === Infinity;
   return (
     <div className="mt-3 rounded-md border border-line bg-surface-2/30 p-3">
       <div className="flex items-baseline justify-between mb-1.5">
         <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
-          Cash runway
+          Distress runway
         </span>
         <span
           className={`tabular font-mono text-[0.875rem] font-semibold ${
@@ -1239,7 +1268,7 @@ function CashRunwayGauge({
             tone === "warn" ? "text-warning" : "text-ink"
           }`}
         >
-          {isInfinite ? "Indefinite" : `${quarters}Q`}
+          {quarters >= 24 ? "24Q+" : `${quarters}Q`}
         </span>
       </div>
       <div className="relative h-2 rounded-full bg-surface-2 overflow-hidden">
@@ -1260,29 +1289,22 @@ function CashRunwayGauge({
         <span>24Q+</span>
       </div>
       <div className="mt-1.5 text-[0.6875rem] text-ink-2 leading-relaxed">
-        {isInfinite ? (
-          <>
-            <span className="font-semibold uppercase tracking-wider text-[0.625rem] text-positive mr-1.5">
-              Profitable
-            </span>
-            Last quarter you ran a surplus — runway grows as cash builds.
-          </>
-        ) : (
-          <>
-            <span
-              className={`font-semibold uppercase tracking-wider text-[0.625rem] mr-1.5 ${
-                tone === "neg" ? "text-negative" : tone === "warn" ? "text-warning" : "text-ink-muted"
-              }`}
-            >
-              Burning {fmtMoney(burnPerQ)}/Q
-            </span>
-            {tone === "neg"
-              ? "Cash runs out before next reporting cycle — refinance or cut spend now."
-              : tone === "warn"
-                ? "Less than 18 months of runway. Consider refinancing or trimming sliders."
-                : "Plenty of cushion at the current burn rate."}
-          </>
-        )}
+        <span
+          className={`font-semibold uppercase tracking-wider text-[0.625rem] mr-1.5 ${
+            tone === "neg" ? "text-negative" :
+            tone === "warn" ? "text-warning" :
+            tone === "pos" ? "text-positive" : "text-ink-muted"
+          }`}
+        >
+          {burnPerQ > 0 ? `Fixed burn ${fmtMoney(burnPerQ)}/Q` : "No fixed costs"}
+        </span>
+        {tone === "neg"
+          ? "If revenue stopped today, you'd run out of cash within 2 quarters. Sell planes or refinance to extend runway."
+          : tone === "warn"
+            ? "If revenue stopped today, you'd survive less than 18 months. Build reserves before expansion."
+            : tone === "pos"
+              ? "If revenue stopped today, you'd cover fixed costs for 3+ years. Strong reserve position."
+              : "If revenue stopped today, cash covers fixed costs for 6-12 months. Comfortable but not abundant."}
       </div>
     </div>
   );
