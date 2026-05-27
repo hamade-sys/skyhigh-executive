@@ -516,6 +516,15 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
         </div>
       </section>
 
+      {/* ── Rival intel ─────────────────────────────────────────────
+          Workshop feedback (v2.6 ship): now that bots build their own
+          subsidiaries (hard 25%/Q, hot bots stacking demand moats at
+          their hubs), the player needs visibility into rival footprint
+          so the moat mechanic creates real competitive pressure. This
+          section ranks rivals by subsidiary count + Premium Hub status.
+          Hidden when there are no rivals (solo onboarding mode). */}
+      <RivalSubsidiaryIntel />
+
       {/* Build modal */}
       <Modal open={!!buildOpen} onClose={() => { setBuildOpen(null); setError(null); }}>
         {buildOpen && (() => {
@@ -1062,6 +1071,115 @@ const TANK_SPECS = {
   large:  { cost: 15_000_000, capacityL: 150_000_000, label: "Large" },
 } as const;
 const MAX_STORAGE_L = 300_000_000;
+
+/** Rival subsidiary intel — competitive-pressure card showing what
+ *  the other airlines are building. Drives the workshop "they're
+ *  stacking flagship lounges at LHR — I need to counter at JFK"
+ *  moment. Hidden in solo-onboarding (no rivals). */
+function RivalSubsidiaryIntel() {
+  const player = useGame(selectPlayer);
+  const teams = useGame((s) => s.teams);
+  if (!player) return null;
+  const rivals = teams.filter((t) => t.id !== player.id);
+  if (rivals.length === 0) return null;
+
+  // Compute per-rival stats: total subsidiary count, top city by
+  // count, premium-hub status (3+ at one city), best tier present.
+  const rivalStats = rivals
+    .map((r) => {
+      const subs = r.subsidiaries ?? [];
+      if (subs.length === 0) return null;
+      const cityCount = new Map<string, number>();
+      for (const s of subs) {
+        cityCount.set(s.cityCode, (cityCount.get(s.cityCode) ?? 0) + 1);
+      }
+      const sortedCities = Array.from(cityCount.entries())
+        .sort((a, b) => b[1] - a[1]);
+      const topCity = sortedCities[0];
+      const premiumHubCities = sortedCities.filter(([, c]) => c >= 3).map(([code]) => code);
+      const bestTier: "basic" | "premium" | "flagship" = subs.some((s) => s.tier === "flagship")
+        ? "flagship"
+        : subs.some((s) => s.tier === "premium")
+          ? "premium"
+          : "basic";
+      return {
+        team: r,
+        subCount: subs.length,
+        topCity: topCity ? { code: topCity[0], count: topCity[1] } : null,
+        premiumHubCities,
+        bestTier,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => b.subCount - a.subCount);
+
+  if (rivalStats.length === 0) {
+    return (
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          Rival intel · subsidiary footprint
+        </div>
+        <div className="rounded-md border border-line bg-surface-2/30 px-3 py-3 text-[0.75rem] text-ink-muted leading-snug">
+          No rivals have built subsidiaries yet — first-mover advantage is still open.
+          A flagship lounge at your hub city right now will out-yield any rival catching
+          up later.
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        Rival intel · subsidiary footprint
+      </div>
+      <div className="rounded-md border border-line bg-surface overflow-hidden">
+        <div className="divide-y divide-line">
+          {rivalStats.slice(0, 5).map((rs) => {
+            const tierClass = rs.bestTier === "flagship"
+              ? "bg-[var(--positive-soft)] text-positive"
+              : rs.bestTier === "premium"
+                ? "bg-[var(--accent-soft)] text-accent"
+                : "bg-surface-2 text-ink-muted";
+            const tierLabel = rs.bestTier === "flagship" ? "Flagship"
+              : rs.bestTier === "premium" ? "Premium" : "Basic";
+            return (
+              <div key={rs.team.id} className="px-3 py-2 flex items-center gap-3">
+                <div
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ background: rs.team.color ?? "#888" }}
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[0.8125rem] font-semibold text-ink truncate">
+                    {rs.team.name}
+                  </div>
+                  <div className="text-[0.625rem] text-ink-muted">
+                    {rs.subCount} subsidiar{rs.subCount === 1 ? "y" : "ies"}
+                    {rs.topCity && ` · top: ${rs.topCity.code} (${rs.topCity.count})`}
+                    {rs.premiumHubCities.length > 0 && (
+                      <span className="text-positive ml-1">
+                        · Premium Hub: {rs.premiumHubCities.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className={`text-[0.5625rem] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded shrink-0 ${tierClass}`}>
+                  {tierLabel}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="text-[0.625rem] text-ink-muted mt-1.5 leading-snug">
+        Premium Hub = a city where the rival owns 3+ subsidiaries.
+        Routes through their Premium Hubs collect a brand + loyalty bonus
+        that compounds against you on shared OD pairs.
+      </div>
+    </section>
+  );
+}
 
 function FuelHedgingSection() {
   const player = useGame(selectPlayer);
