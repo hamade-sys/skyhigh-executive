@@ -378,6 +378,23 @@ export function FleetPanel() {
                         {spec.family === "passenger"
                           ? `${spec.seats.first}F/${spec.seats.business}C/${spec.seats.economy}Y · ${spec.rangeKm.toLocaleString()} km`
                           : `${spec.cargoTonnes ?? 0}T · ${spec.rangeKm.toLocaleString()} km`}
+                        {/* Surface customization at the type-row level
+                            so the player can see at a glance whether
+                            any aircraft of this type have been re-
+                            configured (renovation flow lets them
+                            change seat counts). Expanding the row
+                            shows the actual config range. */}
+                        {(() => {
+                          const customCount = player.fleet.filter(
+                            (f) => f.specId === spec.id && f.customSeats !== undefined && f.status !== "retired",
+                          ).length;
+                          if (customCount === 0) return null;
+                          return (
+                            <span className="ml-1.5 text-warning">
+                              · {customCount} custom
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="py-2.5 px-3 text-right tabular font-display text-[1.25rem] text-ink leading-none">
@@ -509,12 +526,56 @@ export function FleetPanel() {
                     inline string and reads like a proper datasheet. */}
                 <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[0.75rem]">
                   <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Cabin</div>
-                    <div className="font-mono tabular text-ink mt-0.5">
-                      {expanded.family === "passenger"
-                        ? `${expanded.seats.first}F/${expanded.seats.business}C/${expanded.seats.economy}Y`
-                        : `${expanded.cargoTonnes ?? 0}T cargo`}
+                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                      Cabin
                     </div>
+                    {/* Real cabin display (May 2026 fix): the previous
+                        version showed the catalog spec, which made
+                        customized aircraft look like they had reverted
+                        ("0F" for an A320 the player set to 4F via
+                        renovation). Now we compute the range across
+                        the player's actual fleet of this type and show
+                        either the unanimous config or a min-max range
+                        with a "varies" hint. */}
+                    {expanded.family === "passenger" ? (() => {
+                      const fleetOfType = player.fleet.filter(
+                        (f) => f.specId === expanded.id && f.status !== "retired",
+                      );
+                      const configs = fleetOfType.map((f) =>
+                        f.customSeats ?? expanded.seats,
+                      );
+                      if (configs.length === 0) {
+                        return (
+                          <div className="font-mono tabular text-ink mt-0.5">
+                            {expanded.seats.first}F/{expanded.seats.business}C/{expanded.seats.economy}Y
+                          </div>
+                        );
+                      }
+                      const firstMin = Math.min(...configs.map((c) => c.first));
+                      const firstMax = Math.max(...configs.map((c) => c.first));
+                      const busMin = Math.min(...configs.map((c) => c.business));
+                      const busMax = Math.max(...configs.map((c) => c.business));
+                      const ecoMin = Math.min(...configs.map((c) => c.economy));
+                      const ecoMax = Math.max(...configs.map((c) => c.economy));
+                      const fmt = (lo: number, hi: number) => lo === hi ? `${lo}` : `${lo}-${hi}`;
+                      const hasVariance = firstMin !== firstMax || busMin !== busMax || ecoMin !== ecoMax;
+                      return (
+                        <>
+                          <div className="font-mono tabular text-ink mt-0.5">
+                            {fmt(firstMin, firstMax)}F/{fmt(busMin, busMax)}C/{fmt(ecoMin, ecoMax)}Y
+                          </div>
+                          {hasVariance && (
+                            <div className="text-[0.5625rem] text-ink-muted mt-0.5">
+                              varies · spec {expanded.seats.first}F/{expanded.seats.business}C/{expanded.seats.economy}Y
+                            </div>
+                          )}
+                        </>
+                      );
+                    })() : (
+                      <div className="font-mono tabular text-ink mt-0.5">
+                        {expanded.cargoTonnes ?? 0}T cargo
+                      </div>
+                    )}
                   </div>
                   <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
                     <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Range</div>
