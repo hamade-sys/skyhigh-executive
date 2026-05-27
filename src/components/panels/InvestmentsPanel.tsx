@@ -57,8 +57,99 @@ import { toast } from "@/store/toasts";
  *  to the loaded-player render. */
 export function InvestmentsPanel() {
   const player = useGame(selectPlayer);
+  const isObserver = useGame((s) => s.isObserver);
   if (!player) return null;
+  // CRITICAL FIX (May 2026): when viewing a rival airline (observer
+  // mode flipped by Switch view), the panel was crashing because
+  // every action (buildSubsidiary, upgradeSubsidiary, fuel buy etc.)
+  // operates on the player's team, not the team being viewed. The
+  // resulting state mismatch + click handlers reading rival fields
+  // triggered a runtime error.
+  // Read-only summary in observer mode keeps the screen safe and
+  // gives the player at-a-glance intel on the rival's footprint.
+  if (isObserver) {
+    return <RivalInvestmentsReadOnly rival={player} />;
+  }
   return <InvestmentsPanelInner playerId={player.id} />;
+}
+
+/** Read-only investments view for the Switch-view rival mode.
+ *  Surfaces what a competitor publicly does: subsidiary count by
+ *  type, Premium Hub cities, fuel-storage / maintenance / lounge
+ *  hub investments. No actions, no financials. */
+function RivalInvestmentsReadOnly({ rival }: { rival: import("@/types/game").Team }) {
+  const subs = rival.subsidiaries ?? [];
+  // Group by city to surface Premium Hub status (3+ at one city).
+  const cityCount = new Map<string, number>();
+  const typeCount = new Map<string, number>();
+  for (const s of subs) {
+    cityCount.set(s.cityCode, (cityCount.get(s.cityCode) ?? 0) + 1);
+    typeCount.set(s.type, (typeCount.get(s.type) ?? 0) + 1);
+  }
+  const premiumHubs = Array.from(cityCount.entries()).filter(([, c]) => c >= 3);
+  const tierBest = subs.some((s) => s.tier === "flagship") ? "Flagship"
+    : subs.some((s) => s.tier === "premium") ? "Premium" : "Basic";
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border border-line bg-surface-2/30 px-3 py-2">
+        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+          Rival intel · {rival.name}
+        </div>
+        <div className="text-[0.75rem] text-ink-muted mt-0.5">
+          View-only — financial details (cash, debt, revenue per asset) are private.
+        </div>
+      </div>
+
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          Subsidiary footprint
+        </div>
+        {subs.length === 0 ? (
+          <div className="rounded-md border border-dashed border-line px-3 py-4 text-center text-[0.75rem] text-ink-muted">
+            No subsidiaries built yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="rounded-md border border-line bg-surface px-3 py-2.5 grid grid-cols-3 gap-2 text-[0.75rem]">
+              <div>
+                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Total</div>
+                <div className="font-mono tabular text-ink text-[1rem] font-semibold">{subs.length}</div>
+              </div>
+              <div>
+                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Best tier</div>
+                <div className="text-ink text-[0.875rem] font-semibold">{tierBest}</div>
+              </div>
+              <div>
+                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Premium Hubs</div>
+                <div className="text-ink text-[0.875rem] font-semibold">{premiumHubs.length}</div>
+              </div>
+            </div>
+            {premiumHubs.length > 0 && (
+              <div className="text-[0.6875rem] text-positive leading-snug">
+                Premium Hubs (3+ subs/city): {premiumHubs.map(([c, n]) => `${c} (${n})`).join(", ")}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-1.5 text-[0.75rem]">
+              {Array.from(typeCount.entries())
+                .sort((a, b) => b[1] - a[1])
+                .map(([type, count]) => {
+                  const cities = subs.filter((s) => s.type === type).map((s) => s.cityCode);
+                  return (
+                    <div key={type} className="rounded-md border border-line bg-surface px-2 py-1.5">
+                      <div className="text-ink-2 capitalize">{type.replace(/-/g, " ")}</div>
+                      <div className="text-[0.625rem] text-ink-muted">
+                        {count} × at {cities.join(", ")}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }
 
 function InvestmentsPanelInner({ playerId }: { playerId: string }) {

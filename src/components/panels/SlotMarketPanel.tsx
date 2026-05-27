@@ -29,6 +29,7 @@ import { Search, Calendar, ChevronRight, ChevronDown, ExternalLink } from "lucid
  */
 export function SlotMarketPanel() {
   const player = useGame(selectPlayer);
+  const teams = useGame((s) => s.teams);
   const airportSlots = useGame((s) => s.airportSlots);
   const submitSlotBid = useGame((s) => s.submitSlotBid);
   const cancelSlotBid = useGame((s) => s.cancelSlotBid);
@@ -156,6 +157,16 @@ export function SlotMarketPanel() {
           const expanded = expandedCode === c.code;
           const isOwnHub = c.code === player.hubCode;
           const isSecondary = player.secondaryHubCodes.includes(c.code);
+          // Airport ownership badge (May 2026 workshop): airports are
+          // "Publicly Owned" by default. When a team purchases full
+          // ownership of an airport (Sprint 10 airport-ownership flow),
+          // `airportSlots[code].ownerTeamId` is set. Surface that here
+          // so the player can see which rival has captured which hub.
+          const airportOwnerId = state?.ownerTeamId ?? null;
+          const airportOwnerTeam = airportOwnerId
+            ? teams.find((t) => t.id === airportOwnerId) ?? null
+            : null;
+          const isOwnedByPlayer = airportOwnerId === player.id;
 
           return (
             <div
@@ -212,6 +223,27 @@ export function SlotMarketPanel() {
                   {myBid && (
                     <span className="text-[0.5625rem] uppercase tracking-wider text-warning font-bold shrink-0">
                       BID PENDING
+                    </span>
+                  )}
+                  {/* Airport ownership pill: publicly owned by default,
+                      colored when a team has captured the airport. */}
+                  {airportOwnerTeam ? (
+                    <span
+                      className="text-[0.5625rem] uppercase tracking-wider font-bold shrink-0 px-1.5 py-0.5 rounded"
+                      style={{
+                        background: `${airportOwnerTeam.color ?? "#888"}1A`,
+                        color: airportOwnerTeam.color ?? "#888",
+                      }}
+                      title={`Airport owned by ${airportOwnerTeam.name}${isOwnedByPlayer ? " (you)" : ""}`}
+                    >
+                      {isOwnedByPlayer ? "OWNED · YOU" : `OWNED · ${airportOwnerTeam.code ?? airportOwnerTeam.name.slice(0, 3).toUpperCase()}`}
+                    </span>
+                  ) : (
+                    <span
+                      className="text-[0.5625rem] uppercase tracking-wider text-ink-muted font-medium shrink-0 hidden sm:inline"
+                      title="No team has acquired this airport — slot fees flow to the public authority"
+                    >
+                      PUBLIC
                     </span>
                   )}
                 </div>
