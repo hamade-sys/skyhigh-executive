@@ -325,16 +325,28 @@ function FlyingPlane({
  *  ratio to ~1.5× preserves "busy routes feel busier" without making
  *  thin long-haul look like it's crawling.
  */
-function flightDurationMs(distanceKm: number, dailyFreq: number): number {
-  // Faster on shorter routes, slower on long-haul. Scale by frequency
-  // so a busy route's plane circles back faster than a thin one — but
-  // cap the dampening so a daily-1 long-haul doesn't crawl 5× slower
-  // than an 8/day CRJ short-hop. Range: [0.85, 1.4] → at most 1.65×
-  // slowdown ratio across the freq spectrum.
-  const baseMs = 6_000 + Math.sqrt(distanceKm) * 80; // 6-15s typical
-  const rawScale = 1 / Math.max(0.5, Math.log10(1 + dailyFreq));
-  const freqScale = Math.max(0.85, Math.min(1.4, rawScale));
-  return Math.round(baseMs * freqScale);
+function flightDurationMs(distanceKm: number, _dailyFreq: number): number {
+  // Linear distance-proportional crossing time (May 2026 fix).
+  // Workshop feedback: "Airplanes going long distance for bot accounts
+  // are still travelling unbelievably fast — physics not applied."
+  // The prior sqrt-based formula compressed long-haul too much — a
+  // 10,800km trans-Pacific finished in ~14s while a 300km short-hop
+  // took ~7.5s, less than a 2× ratio for a 36× distance ratio.
+  //
+  // New formula: 4s base offset + 1.8ms per km. So:
+  //    300 km  →  4.5s  (regional hop)
+  //  5,540 km  → 14.0s  (Trans-Atlantic JFK-LHR)
+  // 10,800 km  → 23.4s  (Trans-Pacific JFK-NRT)
+  // 16,000 km  → 32.8s  (JFK-SYD — feels appropriately long)
+  //
+  // Frequency dampening removed. Frequency now affects ONLY how many
+  // plane instances render on the route (FlyingPlane component
+  // already shows a second plane when dailyFreq ≥ 3). A single
+  // crossing of a single airframe always takes the same time,
+  // regardless of how many trips the route runs per day. That's
+  // basic physics — a 777 at cruise covers km at a fixed rate.
+  void _dailyFreq;
+  return Math.round(4_000 + distanceKm * 1.8);
 }
 
 /** Hash a route id to a stable 0..1 phase so identical routes don't

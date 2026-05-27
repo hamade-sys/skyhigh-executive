@@ -1179,6 +1179,19 @@ function AirlineSwitcher({
   onSelect: (id: string) => void;
 }) {
   const all = [player, ...rivals];
+  // Airport-ownership lookup: walk airportSlots once and tally how
+  // many airports each team owns. Surfaced inline on each team card
+  // (workshop ask "should show us here if they own airports").
+  const airportSlots = useGame((s) => s.airportSlots);
+  const airportsOwnedByTeam = (() => {
+    const out = new Map<string, number>();
+    for (const slot of Object.values(airportSlots ?? {})) {
+      if (slot.ownerTeamId) {
+        out.set(slot.ownerTeamId, (out.get(slot.ownerTeamId) ?? 0) + 1);
+      }
+    }
+    return out;
+  })();
   return (
     <Modal open={open} onClose={onClose}>
       <ModalHeader>
@@ -1242,6 +1255,15 @@ function AirlineSwitcher({
                 </div>
                 <div className="text-[0.6875rem] text-ink-muted mt-0.5 truncate">
                   Hub {t.hubCode} · {fleetSize} aircraft · {activeRoutes} routes
+                  {(() => {
+                    const apts = airportsOwnedByTeam.get(t.id) ?? 0;
+                    if (apts === 0) return null;
+                    return (
+                      <span className="text-positive ml-1">
+                        · {apts} airport{apts === 1 ? "" : "s"} owned
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
               {isActive && (
