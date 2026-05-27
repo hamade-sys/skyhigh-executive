@@ -31,6 +31,7 @@ import type {
   CargoBellyTier,
   DoctrineId,
 } from "@/types/game";
+import { SUBSIDIARY_TIER_REV_MULT } from "@/types/game";
 
 const M = 1_000_000;
 
@@ -2971,16 +2972,30 @@ export function runQuarterClose(
     const updatedSubs = (next.subsidiaries ?? []).map((sub) => {
       const entry = SUBSIDIARY_CATALOG_BY_TYPE[sub.type];
       if (!entry) return sub;
-      const subRevenue = entry.revenuePerQuarterUsd * sub.conditionPct;
+      // Tier multiplier — basic (1.0) / premium (1.6) / flagship (2.4)
+      // applies on top of conditionPct so a flagship hotel running at
+      // 70% condition still out-earns a basic hotel at 100%.
+      const tier = sub.tier ?? "basic";
+      const tierMult = SUBSIDIARY_TIER_REV_MULT[tier] ?? 1.0;
+      const subRevenue = entry.revenuePerQuarterUsd * sub.conditionPct * tierMult;
       subsidiaryRevenueUsd += subRevenue;
       revenue += subRevenue;
       // Appreciation: lerp toward the ceiling at the configured rate.
-      const ceiling = sub.purchaseCostUsd * 1.5;
+      // Ceiling tracks total invested (basic = 1.0×, premium = 1.5×,
+      // flagship = 2.0× of original setupCost) so upgrades grow the
+      // sellable asset value, not just the income.
+      const tierCostMult = tier === "flagship" ? 2.0 : tier === "premium" ? 1.5 : 1.0;
+      const ceiling = sub.purchaseCostUsd * tierCostMult * 1.5;
       const newValue = Math.min(
         ceiling,
         sub.marketValueUsd + (ceiling - sub.marketValueUsd) * 0.02,
       );
-      return { ...sub, marketValueUsd: newValue };
+      // Condition decay — 2% per quarter. Refurbish action restores
+      // to 1.0 for 15% of current market value. Workshop intent: turn
+      // every subsidiary into a quarterly "expand · refurbish · sell"
+      // decision rather than fire-and-forget rent collection.
+      const newCondition = Math.max(0.4, sub.conditionPct - 0.02);
+      return { ...sub, marketValueUsd: newValue, conditionPct: newCondition };
     });
     next.subsidiaries = updatedSubs;
   }

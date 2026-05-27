@@ -906,6 +906,12 @@ export interface GameState {
   phase: GamePhase;
   currentQuarter: number;         // 1..20
   fuelIndex: number;              // 100 = baseline
+  /** Recent fuel-index history (last ~16 quarters). Captured at every
+   *  quarter close so the InvestmentsPanel Fuel Hedging surface can
+   *  render a sparkline and a "good time to buy / sell" hint without
+   *  having to walk per-team financialsByQuarter. Optional so legacy
+   *  saves hydrate cleanly. */
+  fuelIndexHistory?: Array<{ quarter: number; index: number }>;
   baseInterestRatePct: number;    // e.g. 3.5
   teams: Team[];
   playerTeamId: string | null;
@@ -1050,10 +1056,37 @@ export interface Subsidiary {
   /** Current market value — appreciates toward 1.5× over the campaign
    *  unless cancelled or condition collapses. Drives the sell-back price. */
   marketValueUsd: number;
-  /** 0..1 condition multiplier on revenue. Default 1.0; future events
-   *  (fire, strike, regional shock) can knock it down. */
+  /** 0..1 condition multiplier on revenue. Decays 2%/Q at quarter
+   *  close; restored to 1.0 via the Refurbish action (costs 15% of
+   *  current market value). Future events (fire, strike, regional
+   *  shock) can also knock it down. */
   conditionPct: number;
+  /** Upgrade tier. Each step pays an additional 50% of the original
+   *  setup cost and multiplies revenue + operational bonus:
+   *    basic    → 1.0× rev, 1.0× ops bonus  (default)
+   *    premium  → 1.6× rev, 1.3× ops bonus  (+50% extra paid)
+   *    flagship → 2.4× rev, 1.7× ops bonus  (+100% extra paid total)
+   *  Adds a quarterly "expand existing vs build new" decision. */
+  tier?: "basic" | "premium" | "flagship";
 }
+
+/** Subsidiary tier multipliers. Single source of truth used by the
+ *  engine (for revenue + operational-bonus scaling) and by the UI
+ *  (for the upgrade button copy and projected-yield previews). */
+export const SUBSIDIARY_TIER_REV_MULT: Record<NonNullable<Subsidiary["tier"]>, number> = {
+  basic: 1.0,
+  premium: 1.6,
+  flagship: 2.4,
+};
+export const SUBSIDIARY_TIER_OPS_MULT: Record<NonNullable<Subsidiary["tier"]>, number> = {
+  basic: 1.0,
+  premium: 1.3,
+  flagship: 1.7,
+};
+/** Cost of the NEXT upgrade as a multiple of the subsidiary's original
+ *  setupCost. basic→premium costs +0.5×, premium→flagship costs +0.5×.
+ *  Total invested at flagship = 2.0× setupCost. */
+export const SUBSIDIARY_UPGRADE_COST_MULT = 0.5;
 
 /** Aircraft pre-order entry. Pre-orders open 2 rounds before unlock
  *  (announcement window) and continue past unlock as the manufacturing

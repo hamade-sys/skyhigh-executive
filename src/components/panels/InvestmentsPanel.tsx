@@ -24,6 +24,10 @@ import {
   SUBSIDIARY_BY_TYPE,
 } from "@/data/subsidiaries";
 import type { SubsidiaryType, Subsidiary } from "@/types/game";
+import {
+  SUBSIDIARY_TIER_REV_MULT,
+  SUBSIDIARY_UPGRADE_COST_MULT,
+} from "@/types/game";
 import { cn } from "@/lib/cn";
 import { FUEL_BASELINE_USD_PER_L } from "@/lib/engine";
 import { toast } from "@/store/toasts";
@@ -65,6 +69,8 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
   const teams = useGame((s) => s.teams);
   const buildSubsidiary = useGame((s) => s.buildSubsidiary);
   const sellSubsidiary = useGame((s) => s.sellSubsidiary);
+  const upgradeSubsidiary = useGame((s) => s.upgradeSubsidiary);
+  const refurbishSubsidiary = useGame((s) => s.refurbishSubsidiary);
   const offerSubsidiaryToRival = useGame((s) => s.offerSubsidiaryToRival);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const [buildOpen, setBuildOpen] = useState<{ type: SubsidiaryType } | null>(null);
@@ -89,10 +95,13 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
     return m;
   }, [owned]);
 
-  // Quarterly portfolio revenue + total mark-to-market value
+  // Quarterly portfolio revenue + total mark-to-market value.
+  // Tier multipliers apply on top of condition: basic 1.0×, premium
+  // 1.6×, flagship 2.4× of the catalog base revenue (see engine).
   const portfolioRevenue = owned.reduce((sum, s) => {
     const e = SUBSIDIARY_BY_TYPE[s.type];
-    return sum + (e?.revenuePerQuarterUsd ?? 0) * s.conditionPct;
+    const tierMult = SUBSIDIARY_TIER_REV_MULT[s.tier ?? "basic"] ?? 1.0;
+    return sum + (e?.revenuePerQuarterUsd ?? 0) * s.conditionPct * tierMult;
   }, 0);
   const portfolioValue = owned.reduce((sum, s) => sum + s.marketValueUsd, 0);
 
@@ -188,7 +197,21 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                       //    a defensible upper-bound estimate without
                       //    history.) Compared to setup cost, surfaces
                       //    "paid back" or "X% to breakeven".
-                      const ratePerQ = entry.revenuePerQuarterUsd * sub.conditionPct;
+                      const tier = sub.tier ?? "basic";
+                      const tierMult = SUBSIDIARY_TIER_REV_MULT[tier];
+                      const ratePerQ = entry.revenuePerQuarterUsd * sub.conditionPct * tierMult;
+                      const upgradeCost = Math.round(entry.setupCostUsd * SUBSIDIARY_UPGRADE_COST_MULT);
+                      const refurbCost = Math.round(sub.marketValueUsd * 0.15);
+                      const conditionPct = Math.round(sub.conditionPct * 100);
+                      const conditionTone: "pos" | "warn" | "neg" =
+                        conditionPct >= 85 ? "pos" : conditionPct >= 50 ? "warn" : "neg";
+                      const tierLabel = tier === "basic" ? "Basic"
+                        : tier === "premium" ? "Premium" : "Flagship";
+                      const tierToneClass = tier === "flagship"
+                        ? "bg-[var(--positive-soft)] text-positive"
+                        : tier === "premium"
+                          ? "bg-[var(--accent-soft)] text-accent"
+                          : "bg-surface-2 text-ink-muted";
                       const cumulativeEarned = ratePerQ * ageQ;
                       const paybackPct = sub.purchaseCostUsd > 0
                         ? Math.min(1, cumulativeEarned / sub.purchaseCostUsd)
@@ -206,6 +229,9 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                               <span className="font-mono tabular text-ink text-[0.8125rem]">{sub.cityCode}</span>
                               <span className="text-[0.8125rem] text-ink-2 truncate">
                                 {city?.name ?? sub.cityCode}
+                              </span>
+                              <span className={`text-[0.5625rem] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${tierToneClass}`}>
+                                {tierLabel}
                               </span>
                               <span className="text-[0.625rem] text-ink-muted">
                                 acquired {fmtQuarter(sub.acquiredAtQuarter)} · {ageQ}Q held
@@ -231,16 +257,46 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                               )}
                               {entry.operationalBonus && ` · ${entry.operationalBonus}`}
                             </div>
+                            {/* Condition bar — drives the Refurbish CTA below.
+                                Pos green ≥85%, amber 50-85%, red <50%. */}
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted shrink-0 w-[60px]">
+                                Condition
+                              </span>
+                              <div className="flex-1 h-1 bg-surface-2 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-[width] duration-[var(--dur-fast)] ${
+                                    conditionTone === "pos" ? "bg-positive" :
+                                    conditionTone === "warn" ? "bg-warning" : "bg-negative"
+                                  }`}
+                                  style={{ width: `${conditionPct}%` }}
+                                />
+                              </div>
+                              <span className={`text-[0.625rem] tabular font-mono shrink-0 w-[36px] text-right ${
+                                conditionTone === "pos" ? "text-positive" :
+                                conditionTone === "warn" ? "text-warning" : "text-negative"
+                              }`}>
+                                {conditionPct}%
+                              </span>
+                            </div>
                             {/* Payback progress bar — only renders for cash-
                                 generating subsidiaries. Bar fills as
                                 cumulative earnings approach the original
                                 setup cost. */}
                             {entry.revenuePerQuarterUsd > 0 && !isPaidBack && (
-                              <div className="mt-1 h-1 bg-surface-2 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-accent transition-[width] duration-[var(--dur-fast)]"
-                                  style={{ width: `${(paybackPct * 100).toFixed(0)}%` }}
-                                />
+                              <div className="mt-1 flex items-center gap-2">
+                                <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted shrink-0 w-[60px]">
+                                  Payback
+                                </span>
+                                <div className="flex-1 h-1 bg-surface-2 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-accent transition-[width] duration-[var(--dur-fast)]"
+                                    style={{ width: `${(paybackPct * 100).toFixed(0)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[0.625rem] tabular font-mono shrink-0 w-[36px] text-right text-ink-muted">
+                                  {Math.round(paybackPct * 100)}%
+                                </span>
                               </div>
                             )}
                           </div>
@@ -254,16 +310,40 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
+                            {/* Upgrade — only when tier can still go up */}
+                            {tier !== "flagship" && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  const r = upgradeSubsidiary(sub.id);
+                                  if (!r.ok) setError(r.error ?? "Upgrade failed");
+                                }}
+                                title={`Upgrade to ${tier === "basic" ? "Premium (1.6× revenue)" : "Flagship (2.4× revenue)"} for ${fmtMoney(upgradeCost)}. Resets condition to 100%.`}
+                              >
+                                Upgrade · {fmtMoney(upgradeCost)}
+                              </Button>
+                            )}
+                            {/* Refurbish — only when condition has decayed */}
+                            {sub.conditionPct < 0.9 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  const r = refurbishSubsidiary(sub.id);
+                                  if (!r.ok) setError(r.error ?? "Refurb failed");
+                                }}
+                                title={`Restore condition to 100% for ${fmtMoney(refurbCost)} (15% of market value).`}
+                              >
+                                Refurbish · {fmtMoney(refurbCost)}
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => {
                                 setOfferSub(sub);
-                                // Default the asking price to mark-to-market
-                                // so the seller can quickly accept "as-is".
                                 setOfferPriceUsd(Math.round(sub.marketValueUsd));
-                                // Default rival = first non-player team that
-                                // has cash; user can change.
                                 const firstRival = teams.find(
                                   (t) => t.id !== player.id && t.cashUsd > 0,
                                 );
@@ -986,6 +1066,7 @@ const MAX_STORAGE_L = 300_000_000;
 function FuelHedgingSection() {
   const player = useGame(selectPlayer);
   const fuelIndex = useGame((s) => s.fuelIndex);
+  const fuelIndexHistory = useGame((s) => s.fuelIndexHistory ?? []);
   const buyFuelTank = useGame((s) => s.buyFuelTank);
   const buyBulkFuel = useGame((s) => s.buyBulkFuel);
   const sellStoredFuel = useGame((s) => s.sellStoredFuel);
@@ -1010,6 +1091,52 @@ function FuelHedgingSection() {
   const valueAtMarket = storedL * marketPricePerL;
   const unrealizedPnL = valueAtMarket - valueAtCost;
 
+  // ─── Gamified market read ────────────────────────────────────
+  // Turns fuel hedging from a passive button-screen into a real
+  // trading decision. The verdict reflects how much the player
+  // SHOULD care THIS QUARTER about fuel, based on three signals:
+  //   1. Current index relative to baseline (100)
+  //   2. Whether storage is empty/full/in-between
+  //   3. Stored fuel cost basis vs current market (P&L)
+  // Goal: every workshop player who opens this panel sees a
+  // headline that tells them what to do next.
+  let marketVerdict: {
+    label: string;
+    detail: string;
+    tone: "pos" | "neg" | "warn" | "neutral";
+  };
+  if (fuelIndex <= 85 && capacityL > storedL) {
+    marketVerdict = {
+      label: "BUY WINDOW OPEN",
+      detail: `Index ${Math.round(fuelIndex)} — well below baseline. Bulk @ $${bulkPricePerL.toFixed(3)}/L locks in a margin for the next price spike.`,
+      tone: "pos",
+    };
+  } else if (fuelIndex >= 115 && storedL > 0 && unrealizedPnL > 0) {
+    marketVerdict = {
+      label: "SELL WINDOW OPEN",
+      detail: `Index ${Math.round(fuelIndex)} — above baseline. Stored fuel is up ${fmtMoney(unrealizedPnL)} on cost basis. Lock in the profit?`,
+      tone: "pos",
+    };
+  } else if (fuelIndex >= 130 && storedL === 0) {
+    marketVerdict = {
+      label: "PRICE SPIKE — NO HEDGE",
+      detail: `Index ${Math.round(fuelIndex)} — spot is expensive and you're buying every litre at market. Build storage when index drops.`,
+      tone: "neg",
+    };
+  } else if (capacityL === 0) {
+    marketVerdict = {
+      label: "NO TANKS YET",
+      detail: "Install a tank to unlock the bulk-buy mechanic. First small tank pays back inside a year if you time even one spike.",
+      tone: "warn",
+    };
+  } else {
+    marketVerdict = {
+      label: "MARKET QUIET",
+      detail: `Index ${Math.round(fuelIndex)} — no decisive entry or exit. Hold position; watch for index < 90 or > 115.`,
+      tone: "neutral",
+    };
+  }
+
   return (
     <section>
       <div className="flex items-center justify-between mb-2">
@@ -1022,6 +1149,53 @@ function FuelHedgingSection() {
             then consume at quarter close when prices spike.
           </div>
         </div>
+      </div>
+
+      {/* ─── Market read + sparkline (May 2026 redesign) ──────────
+          Headline verdict tells the player what to do RIGHT NOW.
+          Sparkline plots last 8Q of fuel index with the baseline (100)
+          and the player's avg-cost basis (when fuel is stored) as
+          reference guides. Turns the static screen into a live
+          trading dashboard. */}
+      <div className={`rounded-lg border p-3 mb-3 flex items-stretch gap-4 ${
+        marketVerdict.tone === "pos" ? "border-positive/40 bg-[var(--positive-soft)]/40" :
+        marketVerdict.tone === "neg" ? "border-negative/40 bg-[var(--negative-soft)]/40" :
+        marketVerdict.tone === "warn" ? "border-warning/40 bg-[var(--warning-soft)]/40" :
+        "border-line bg-surface-2/30"
+      }`}>
+        <div className="flex-1 min-w-0">
+          <div className={`text-[0.6875rem] uppercase tracking-wider font-bold ${
+            marketVerdict.tone === "pos" ? "text-positive" :
+            marketVerdict.tone === "neg" ? "text-negative" :
+            marketVerdict.tone === "warn" ? "text-warning" : "text-ink-muted"
+          }`}>
+            {marketVerdict.label}
+          </div>
+          <div className="text-[0.75rem] text-ink-2 mt-1 leading-snug">
+            {marketVerdict.detail}
+          </div>
+          {/* Quick-action shortcut so the player can act without scrolling */}
+          {marketVerdict.tone === "pos" && (
+            <div className="mt-2">
+              {fuelIndex <= 85 && capacityL > storedL ? (
+                <Button size="sm" variant="primary" onClick={() => setBuyOpen(true)}>
+                  Buy fuel now →
+                </Button>
+              ) : storedL > 0 ? (
+                <Button size="sm" variant="primary" onClick={() => setSellOpen(true)}>
+                  Sell stored now →
+                </Button>
+              ) : null}
+            </div>
+          )}
+        </div>
+        <FuelIndexSparkline
+          history={fuelIndexHistory}
+          currentIndex={fuelIndex}
+          avgCostIndexEquivalent={avgCost > 0
+            ? Math.round((avgCost / FUEL_BASELINE_USD_PER_L) * 100 / 0.75)
+            : null}
+        />
       </div>
 
       {/* Top-line cards. Show ALWAYS — even with zero tanks — so the player
@@ -1204,6 +1378,122 @@ function FuelKpi({
         tone === "pos" ? "text-positive" : tone === "neg" ? "text-negative" : "text-ink",
       )}>{value}</div>
       {sub && <div className="text-[0.625rem] text-ink-muted mt-1 leading-snug">{sub}</div>}
+    </div>
+  );
+}
+
+/** Compact 8-quarter fuel index sparkline. Plots the index line, the
+ *  baseline (100), and — when the player has stored fuel — their
+ *  effective cost-basis index for instant visual P&L read-out.
+ *
+ *  Workshop intent: the player should be able to GLANCE at the chart
+ *  and know whether the index is trending up (sell), down (buy), or
+ *  flat. The line color flips to the verdict color (positive/negative)
+ *  so a single look from across the room communicates the state. */
+function FuelIndexSparkline({
+  history,
+  currentIndex,
+  avgCostIndexEquivalent,
+}: {
+  history: Array<{ quarter: number; index: number }>;
+  currentIndex: number;
+  /** The index-equivalent of the player's avg cost basis. When the
+   *  current index is above this, stored fuel is in profit. */
+  avgCostIndexEquivalent: number | null;
+}) {
+  const W = 140;
+  const H = 56;
+  const PAD = 4;
+
+  // Build the series — last 8 history points + the current spot.
+  const series = [
+    ...history.slice(-7),
+    { quarter: (history[history.length - 1]?.quarter ?? 0) + 1, index: currentIndex },
+  ];
+  if (series.length < 2) {
+    return (
+      <div className="shrink-0 w-[140px] h-[56px] flex items-center justify-center text-[0.625rem] text-ink-muted">
+        Awaiting market data
+      </div>
+    );
+  }
+
+  const indices = series.map((p) => p.index);
+  // Y-axis spans baseline ±35 for stable visual ground regardless of
+  // local volatility. Cap to actual min/max if they exceed.
+  const yMin = Math.min(65, ...indices) - 5;
+  const yMax = Math.max(135, ...indices) + 5;
+  const xStep = (W - PAD * 2) / (series.length - 1);
+  const yFor = (val: number) =>
+    H - PAD - ((val - yMin) / (yMax - yMin)) * (H - PAD * 2);
+
+  const points = series
+    .map((p, i) => `${PAD + i * xStep},${yFor(p.index)}`)
+    .join(" ");
+
+  // Trend: is the last value higher or lower than the average of the
+  // prior 3? Drives line color.
+  const tailAvg = series.slice(-4, -1).reduce((s, p) => s + p.index, 0) / Math.max(1, Math.min(3, series.length - 1));
+  const trendUp = currentIndex > tailAvg + 2;
+  const trendDown = currentIndex < tailAvg - 2;
+  const lineColor = trendUp ? "var(--negative)" : trendDown ? "var(--positive)" : "var(--accent)";
+
+  const baselineY = yFor(100);
+  const costBasisY = avgCostIndexEquivalent != null ? yFor(avgCostIndexEquivalent) : null;
+
+  return (
+    <div className="shrink-0">
+      <svg
+        width={W}
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        aria-label="Fuel index trend, last 8 quarters"
+      >
+        {/* Baseline (100) — dashed ink-muted guide */}
+        <line
+          x1={PAD} x2={W - PAD}
+          y1={baselineY} y2={baselineY}
+          stroke="var(--ink-muted)"
+          strokeWidth={0.75}
+          strokeDasharray="2 2"
+          opacity={0.5}
+        />
+        {/* Player cost basis — dashed positive guide when present */}
+        {costBasisY != null && (
+          <line
+            x1={PAD} x2={W - PAD}
+            y1={costBasisY} y2={costBasisY}
+            stroke="var(--positive)"
+            strokeWidth={0.75}
+            strokeDasharray="3 3"
+            opacity={0.6}
+          />
+        )}
+        {/* The trend line itself */}
+        <polyline
+          fill="none"
+          stroke={lineColor}
+          strokeWidth={1.75}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          points={points}
+        />
+        {/* Endpoint dot — the current quarter */}
+        {(() => {
+          const last = series[series.length - 1];
+          return (
+            <circle
+              cx={PAD + (series.length - 1) * xStep}
+              cy={yFor(last.index)}
+              r={2.5}
+              fill={lineColor}
+            />
+          );
+        })()}
+      </svg>
+      <div className="text-[0.5625rem] tabular font-mono text-ink-muted text-center mt-0.5">
+        Index · last {series.length}Q
+      </div>
     </div>
   );
 }

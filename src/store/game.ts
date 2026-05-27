@@ -115,6 +115,10 @@ import type {
   Sliders,
   Team,
 } from "@/types/game";
+import {
+  SUBSIDIARY_TIER_REV_MULT,
+  SUBSIDIARY_UPGRADE_COST_MULT,
+} from "@/types/game";
 
 // ─── Mocked competitor names for single-team leaderboard ────
 // Hub + brand-color cycle for solo-game competitors. Names are
@@ -258,6 +262,13 @@ export interface GameStore extends GameState {
    *  current marketValue (5% broker fee). If the subsidiary was the
    *  reason a hubInvestments entry existed, that entry is removed. */
   sellSubsidiary(subsidiaryId: string): { ok: boolean; error?: string; proceeds?: number };
+  /** Bump a subsidiary one tier (basic → premium → flagship). Costs
+   *  +50% of the original setupCost. Multiplies revenue and ops bonus
+   *  via SUBSIDIARY_TIER_REV_MULT / SUBSIDIARY_TIER_OPS_MULT. */
+  upgradeSubsidiary(subsidiaryId: string): { ok: boolean; error?: string };
+  /** Restore a subsidiary's conditionPct to 1.0 for 15% of its current
+   *  market value. Decays naturally 2%/Q via the engine. */
+  refurbishSubsidiary(subsidiaryId: string): { ok: boolean; error?: string };
 
   /** Offer an owned subsidiary to a specific rival airline at a chosen
    *  asking price. Rival auto-evaluates: accepts iff price ≤ 1.10 × the
@@ -1721,6 +1732,87 @@ export const useGame = create<GameStore>()(
             (entry?.operationalBonus ? `Operational bonus removed.` : ""),
         );
         return { ok: true, proceeds };
+      },
+
+      upgradeSubsidiary: (subsidiaryId) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const sub = (player.subsidiaries ?? []).find((x) => x.id === subsidiaryId);
+        if (!sub) return { ok: false, error: "Subsidiary not found" };
+        const currentTier = sub.tier ?? "basic";
+        if (currentTier === "flagship") {
+          return { ok: false, error: "Already at flagship tier — max level" };
+        }
+        const nextTier: "premium" | "flagship" =
+          currentTier === "basic" ? "premium" : "flagship";
+        const entry = SUBSIDIARY_BY_TYPE[sub.type];
+        if (!entry) return { ok: false, error: "Subsidiary type missing from catalog" };
+        const upgradeCost = Math.round(entry.setupCostUsd * SUBSIDIARY_UPGRADE_COST_MULT);
+        if (player.cashUsd < upgradeCost) {
+          return { ok: false, error: `Need ${fmtMoneyPlain(upgradeCost)} cash for the upgrade` };
+        }
+        // The upgrade also grows the asset's MARKET VALUE so the
+        // player gets credit on resale. Bumps current marketValue by
+        // the upgrade cost (full pass-through). Revenue multiplier
+        // applies at the next quarter-close via SUBSIDIARY_TIER_REV_MULT.
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            cashUsd: t.cashUsd - upgradeCost,
+            subsidiaries: (t.subsidiaries ?? []).map((x) =>
+              x.id === subsidiaryId
+                ? {
+                    ...x,
+                    tier: nextTier,
+                    marketValueUsd: x.marketValueUsd + upgradeCost,
+                    // Refurbish-on-upgrade: a fresh investment lifts
+                    // the subsidiary back to full condition. Saves
+                    // the player a click for the common "I just
+                    // expanded, surely it's in good shape" case.
+                    conditionPct: 1.0,
+                  }
+                : x,
+            ),
+          }),
+        });
+        toast.success(
+          `Upgraded · ${entry.name} @ ${sub.cityCode} → ${nextTier}`,
+          `Spent ${fmtMoneyPlain(upgradeCost)} · revenue now ${SUBSIDIARY_TIER_REV_MULT[nextTier].toFixed(1)}× base · condition refreshed.`,
+        );
+        void get().pushStateToServer("player.upgradedSubsidiary", { subsidiaryId, tier: nextTier });
+        return { ok: true };
+      },
+
+      refurbishSubsidiary: (subsidiaryId) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const sub = (player.subsidiaries ?? []).find((x) => x.id === subsidiaryId);
+        if (!sub) return { ok: false, error: "Subsidiary not found" };
+        if (sub.conditionPct >= 0.99) {
+          return { ok: false, error: "Already in pristine condition — no refurb needed" };
+        }
+        const cost = Math.round(sub.marketValueUsd * 0.15);
+        if (player.cashUsd < cost) {
+          return { ok: false, error: `Need ${fmtMoneyPlain(cost)} cash for the refurbishment` };
+        }
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            cashUsd: t.cashUsd - cost,
+            subsidiaries: (t.subsidiaries ?? []).map((x) =>
+              x.id === subsidiaryId ? { ...x, conditionPct: 1.0 } : x,
+            ),
+          }),
+        });
+        const entry = SUBSIDIARY_BY_TYPE[sub.type];
+        toast.success(
+          `Refurbished · ${entry?.name ?? sub.type} @ ${sub.cityCode}`,
+          `Spent ${fmtMoneyPlain(cost)} · condition restored to 100%.`,
+        );
+        void get().pushStateToServer("player.refurbishedSubsidiary", { subsidiaryId });
+        return { ok: true };
       },
 
       offerSubsidiaryToRival: (subsidiaryId, rivalTeamId, askingPriceUsd) => {
@@ -5318,22 +5410,91 @@ export const useGame = create<GameStore>()(
           }
         }
 
+        // ─── Auto-scrap stale second-hand listings (May 2026) ──
+        // Listings sitting unsold for ≥ 8 quarters get scrapped by the
+        // broker. The owner is credited 25% of the (depreciated) book
+        // value as salvage — better than $0 and aligned with the
+        // broker mechanic from the v1 plane-sell redesign. Without
+        // this sweep the secondary market accumulated dozens of
+        // "phantom" listings that no rival would ever buy at the
+        // owner's asking price.
+        const expiringListings = s.secondHandListings.filter((l) =>
+          (s.currentQuarter - l.listedAtQuarter) >= 8,
+        );
+        let teamsAfterScrap = teamsWithRank;
+        const scrapNotesByTeamId = new Map<string, { count: number; proceeds: number }>();
+        if (expiringListings.length > 0) {
+          // Estimate scrap value per listing: 25% of the implied book
+          // value at the listing's age. We don't have the in-flight
+          // book value at the time of listing, so use the asking
+          // price as a lower bound (the seller asked X, broker pays
+          // 25% of that on scrap).
+          const proceedsByTeam = new Map<string, number>();
+          for (const l of expiringListings) {
+            if (l.sellerTeamId === "admin" || l.sellerTeamId === "broker") continue;
+            const proceeds = Math.round(l.askingPriceUsd * 0.25);
+            proceedsByTeam.set(
+              l.sellerTeamId,
+              (proceedsByTeam.get(l.sellerTeamId) ?? 0) + proceeds,
+            );
+            const prior = scrapNotesByTeamId.get(l.sellerTeamId) ?? { count: 0, proceeds: 0 };
+            scrapNotesByTeamId.set(l.sellerTeamId, {
+              count: prior.count + 1,
+              proceeds: prior.proceeds + proceeds,
+            });
+          }
+          if (proceedsByTeam.size > 0) {
+            teamsAfterScrap = teamsAfterScrap.map((t) =>
+              proceedsByTeam.has(t.id)
+                ? { ...t, cashUsd: t.cashUsd + (proceedsByTeam.get(t.id) ?? 0) }
+                : t,
+            );
+          }
+        }
+        const survivingListings = s.secondHandListings.filter((l) =>
+          (s.currentQuarter - l.listedAtQuarter) < 8,
+        );
+
+        // ─── Fuel-index history (May 2026) ─────────────────────
+        // Push the just-rolled fuel index onto the history slice so the
+        // InvestmentsPanel Fuel Hedging surface can render a sparkline
+        // + a "good time to buy / sell" hint. Bounded to last 16 Q so
+        // the slice doesn't grow without limit across a 40-round game.
+        const newHistory = [
+          ...(s.fuelIndexHistory ?? []),
+          { quarter: s.currentQuarter, index: Math.round(clampedFuel) },
+        ].slice(-16);
+
         _closeCompleted = true; // mark before the set so finally sees it
         set({
-          teams: teamsWithRank,
+          teams: teamsAfterScrap,
           cargoContracts: updatedCargoContracts,
           lastCloseResult: result,
           phase: "quarter-closing",
           airportSlots: slotsAfterAuction,
           fuelIndex: clampedFuel,
+          fuelIndexHistory: newHistory,
           baseInterestRatePct: newBaseRate,
           preOrders: preOrdersAfterDelivery,
           marketHistory: newMarketHistory,
+          secondHandListings: survivingListings,
           // Release the re-entrancy guard atomically with the state
           // update — phase has flipped to "quarter-closing" so the
           // close has fully completed at this point.
           isClosing: false,
         });
+
+        // Toast the scrap result AFTER the set so the player sees it
+        // alongside the quarter-close digest.
+        if (scrapNotesByTeamId.size > 0) {
+          const playerScrap = scrapNotesByTeamId.get(s.playerTeamId ?? "");
+          if (playerScrap) {
+            toast.info(
+              `${playerScrap.count} listing${playerScrap.count === 1 ? "" : "s"} scrapped`,
+              `No buyers in 8 quarters — broker paid +${fmtMoneyPlain(playerScrap.proceeds)} salvage.`,
+            );
+          }
+        }
 
         // Phase 6 P0 — surface a sticky toast when the player's team
         // freshly went bankrupt this quarter. The engine's `notes`
