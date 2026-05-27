@@ -1311,15 +1311,22 @@ function FareSlider({
           )}
         </div>
       </div>
-      <input
-        type="range"
-        min={range.min}
-        max={range.max}
-        step={Math.max(1, Math.round((range.max - range.min) / 100))}
-        value={value}
-        onChange={(e) => onChange(parseInt(e.target.value, 10))}
-        className="w-full accent-primary"
-      />
+      {/* Wrapper with horizontal padding so the native range-slider
+          thumb doesn't visually overflow the track at min/max values.
+          Browser-default thumbs extend ~8-10px past the track endpoints
+          which made first-class at max value look "cut off" / glitchy. */}
+      <div className="px-1.5">
+        <input
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={Math.max(1, Math.round((range.max - range.min) / 100))}
+          value={value}
+          onChange={(e) => onChange(parseInt(e.target.value, 10))}
+          className="w-full accent-primary block"
+          style={{ boxSizing: "border-box" }}
+        />
+      </div>
       <div className="flex justify-between text-[0.6875rem] text-ink-muted tabular">
         <span>${range.min.toLocaleString()}</span>
         <span>base ${range.base.toLocaleString()}</span>
