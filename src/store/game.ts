@@ -4501,6 +4501,168 @@ export const useGame = create<GameStore>()(
               };
             }
 
+            // ── Bot subsidiary builds (May 2026 amendment) ─────────
+            // Without this, bots never built subsidiaries, so the
+            // player had zero competition on the demand-side moat
+            // mechanic v2.5 introduced. Light heuristic:
+            //   • Hard bots:   25% chance/Q to attempt a build
+            //   • Medium bots: 12% chance/Q
+            //   • Easy bots:    5% chance/Q
+            //   • Skip if cash < $60M (preserve operating reserve)
+            //   • Skip if already holding 6+ subsidiaries (avoid runaway)
+            //   • Pick a city from {hub, secondaries, top-revenue routes}
+            //     where they DON'T already have this type
+            //   • Prefer lounge/hotel/limo for hard bots (demand moat);
+            //     easy bots pick randomly from the catalog
+            //   • Cap to one build per bot per quarter
+            // Subsidiary upgrades: hard bots have a 20% chance/Q to
+            // upgrade a basic-tier subsidiary if cash > $30M reserve.
+            const buildChance = t.botDifficulty === "hard" ? 0.25
+              : t.botDifficulty === "medium" ? 0.12
+              : 0.05;
+            const subCount = (updated.subsidiaries ?? []).length;
+            if (updated.cashUsd >= 60_000_000 && subCount < 6 && Math.random() < buildChance) {
+              const ownedTypeCityPairs = new Set(
+                (updated.subsidiaries ?? []).map((sub) => `${sub.type}|${sub.cityCode}`),
+              );
+              // Candidate cities: hub + secondaries + top-3 most-served
+              const routeFreq = new Map<string, number>();
+              for (const rt of updated.routes) {
+                if (rt.status !== "active") continue;
+                routeFreq.set(rt.originCode, (routeFreq.get(rt.originCode) ?? 0) + rt.dailyFrequency);
+                routeFreq.set(rt.destCode, (routeFreq.get(rt.destCode) ?? 0) + rt.dailyFrequency);
+              }
+              const candidateCities = Array.from(new Set([
+                updated.hubCode,
+                ...(updated.secondaryHubCodes ?? []),
+                ...Array.from(routeFreq.entries())
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 3)
+                  .map(([code]) => code),
+              ]));
+              // Type preference by difficulty: hard prefers demand-side
+              // (lounge / hotel / limo); easy is uniform.
+              const preferredTypes: Array<{ type: import("@/types/game").SubsidiaryType; weight: number }> =
+                t.botDifficulty === "hard"
+                  ? [
+                      { type: "lounge", weight: 3 },
+                      { type: "hotel", weight: 3 },
+                      { type: "limo", weight: 2 },
+                      { type: "maintenance-hub", weight: 1 },
+                      { type: "fuel-storage", weight: 1 },
+                      { type: "catering", weight: 1 },
+                    ]
+                  : [
+                      { type: "hotel", weight: 2 },
+                      { type: "lounge", weight: 2 },
+                      { type: "limo", weight: 2 },
+                      { type: "catering", weight: 1 },
+                      { type: "maintenance-hub", weight: 1 },
+                      { type: "fuel-storage", weight: 1 },
+                      { type: "training-academy", weight: 1 },
+                    ];
+              const totalWeight = preferredTypes.reduce((s, x) => s + x.weight, 0);
+              let pick = Math.random() * totalWeight;
+              let chosenType: import("@/types/game").SubsidiaryType = preferredTypes[0].type;
+              for (const opt of preferredTypes) {
+                pick -= opt.weight;
+                if (pick <= 0) { chosenType = opt.type; break; }
+              }
+              const candidates = candidateCities.filter(
+                (c) => !ownedTypeCityPairs.has(`${chosenType}|${c}`),
+              );
+              const chosenCity = candidates[Math.floor(Math.random() * candidates.length)];
+              const catalogEntry = SUBSIDIARY_BY_TYPE[chosenType];
+              if (chosenCity && catalogEntry && updated.cashUsd >= catalogEntry.setupCostUsd) {
+                const newSub: import("@/types/game").Subsidiary = {
+                  id: mkId("sub"),
+                  type: chosenType,
+                  cityCode: chosenCity,
+                  acquiredAtQuarter: s.currentQuarter,
+                  purchaseCostUsd: catalogEntry.setupCostUsd,
+                  marketValueUsd: catalogEntry.setupCostUsd,
+                  conditionPct: 1.0,
+                  tier: "basic",
+                };
+                updated = {
+                  ...updated,
+                  cashUsd: updated.cashUsd - catalogEntry.setupCostUsd,
+                  subsidiaries: [...(updated.subsidiaries ?? []), newSub],
+                };
+                // Side-effect: maintain the legacy hubInvestments
+                // for engine bonuses that read from there (fuel tank,
+                // maintenance depot, premium lounge).
+                if (chosenType === "fuel-storage") {
+                  const arr = updated.hubInvestments?.fuelReserveTankHubs ?? [];
+                  if (!arr.includes(chosenCity)) {
+                    updated = {
+                      ...updated,
+                      hubInvestments: {
+                        ...updated.hubInvestments,
+                        fuelReserveTankHubs: [...arr, chosenCity],
+                      },
+                    };
+                  }
+                } else if (chosenType === "maintenance-hub") {
+                  const arr = updated.hubInvestments?.maintenanceDepotHubs ?? [];
+                  if (!arr.includes(chosenCity)) {
+                    updated = {
+                      ...updated,
+                      hubInvestments: {
+                        ...updated.hubInvestments,
+                        maintenanceDepotHubs: [...arr, chosenCity],
+                      },
+                    };
+                  }
+                } else if (chosenType === "lounge") {
+                  const arr = updated.hubInvestments?.premiumLoungeHubs ?? [];
+                  if (!arr.includes(chosenCity)) {
+                    updated = {
+                      ...updated,
+                      hubInvestments: {
+                        ...updated.hubInvestments,
+                        premiumLoungeHubs: [...arr, chosenCity],
+                      },
+                    };
+                  }
+                }
+              }
+            }
+
+            // Bot subsidiary upgrades — hard bots only, 20% chance/Q.
+            // Promote a random basic-tier subsidiary to premium when
+            // cash reserve allows (>$30M after the upgrade).
+            if (t.botDifficulty === "hard" && Math.random() < 0.20 && (updated.subsidiaries?.length ?? 0) > 0) {
+              const upgradable = (updated.subsidiaries ?? []).filter(
+                (sub) => (sub.tier ?? "basic") !== "flagship",
+              );
+              if (upgradable.length > 0) {
+                const target = upgradable[Math.floor(Math.random() * upgradable.length)];
+                const catalogEntry = SUBSIDIARY_BY_TYPE[target.type];
+                if (catalogEntry) {
+                  const upgradeCost = Math.round(catalogEntry.setupCostUsd * SUBSIDIARY_UPGRADE_COST_MULT);
+                  if (updated.cashUsd - upgradeCost >= 30_000_000) {
+                    const nextTier: "premium" | "flagship" =
+                      (target.tier ?? "basic") === "basic" ? "premium" : "flagship";
+                    updated = {
+                      ...updated,
+                      cashUsd: updated.cashUsd - upgradeCost,
+                      subsidiaries: (updated.subsidiaries ?? []).map((sub) =>
+                        sub.id === target.id
+                          ? {
+                              ...sub,
+                              tier: nextTier,
+                              marketValueUsd: sub.marketValueUsd + upgradeCost,
+                              conditionPct: 1.0,
+                            }
+                          : sub,
+                      ),
+                    };
+                  }
+                }
+              }
+            }
+
             // ── Route repricing ────────────────────────────────────
             // Adjust pricing tier based on occupancy history:
             // underfilled routes drop one tier; oversubscribed routes
