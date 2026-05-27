@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { SLIDER_LABELS, SLIDER_PCT_REVENUE, SLIDER_EFFECTS } from "@/lib/engine";
+import { SLIDER_LABELS, SLIDER_PCT_REVENUE, SLIDER_EFFECTS, STAFF_MULTIPLIER, baselineStaffCostUsd } from "@/lib/engine";
 import { useGame, selectPlayer } from "@/store/game";
 import type { SliderLevel, Sliders } from "@/types/game";
 import { cn } from "@/lib/cn";
@@ -133,10 +133,27 @@ export function OpsPanel() {
         </div>
       </div>
 
+      {/* Reference revenue for $-projection. Falls back to current
+          team revenue if no prior close. */}
+      {(() => null)()}
       {SLIDER_LIST.map(({ key, label, sub }) => {
         const level = player.sliders[key];
         const pctRev = SLIDER_PCT_REVENUE[level];
         const e = SLIDER_EFFECTS[key][level];
+        // Project the $/Q cost at each slider level so the player
+        // sees real-money impact when choosing Bare vs Maximum.
+        // Staff uses the baseline × STAFF_MULTIPLIER curve; %-of-rev
+        // sliders multiply against last quarter's revenue (or fall
+        // back to a typical \$30M run-rate when no prior close).
+        const refRevenue = lastClose?.revenue ?? 30_000_000;
+        const staffBase = baselineStaffCostUsd(player);
+        const projectedAtLevel = (i: number) => {
+          if (key === "staff") {
+            return staffBase * (STAFF_MULTIPLIER[i as SliderLevel] ?? 1.0);
+          }
+          return refRevenue * (SLIDER_PCT_REVENUE[i as SliderLevel] ?? 0);
+        };
+        const currentCost = projectedAtLevel(level);
         const streak = player.sliderStreaks[key];
         return (
           <div key={key} className="rounded-md border border-line bg-surface p-3">
@@ -151,24 +168,37 @@ export function OpsPanel() {
                   {key === "staff"
                     ? `×${[0.5, 0.75, 1.0, 1.1, 1.2, 1.5][level]} staff`
                     : `${(pctRev * 100).toFixed(0)}% of rev`}
+                  {" · "}
+                  <span className="text-ink-2 font-medium">
+                    ${(currentCost / 1_000_000).toFixed(1)}M/Q
+                  </span>
                 </div>
               </div>
             </div>
             <div className="flex gap-1 mb-2">
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <button
-                  key={i}
-                  onClick={() => setSliders({ [key]: i as SliderLevel })}
-                  className={cn(
-                    "flex-1 h-8 rounded-md text-[0.6875rem] font-medium transition-colors",
-                    i === level
-                      ? "bg-primary text-primary-fg"
-                      : "bg-surface-2 text-ink-2 hover:bg-surface-hover",
-                  )}
-                >
-                  {SLIDER_LABELS[i as SliderLevel].split(" ")[0]}
-                </button>
-              ))}
+              {[0, 1, 2, 3, 4, 5].map((i) => {
+                const projected = projectedAtLevel(i);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setSliders({ [key]: i as SliderLevel })}
+                    title={`${SLIDER_LABELS[i as SliderLevel]} · ~$${(projected / 1_000_000).toFixed(1)}M/Q`}
+                    className={cn(
+                      "flex-1 h-12 rounded-md text-[0.6875rem] font-medium transition-colors flex flex-col items-center justify-center gap-0.5",
+                      i === level
+                        ? "bg-primary text-primary-fg"
+                        : "bg-surface-2 text-ink-2 hover:bg-surface-hover",
+                    )}
+                  >
+                    <span>{SLIDER_LABELS[i as SliderLevel].split(" ")[0]}</span>
+                    <span className={cn(
+                      "text-[0.5625rem] tabular font-mono opacity-80",
+                    )}>
+                      ${(projected / 1_000_000).toFixed(1)}M
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.6875rem] text-ink-2">
               <span>Brand <span className={e.brandPts >= 0 ? "text-positive" : "text-negative"}>{e.brandPts >= 0 ? "+" : ""}{e.brandPts}/Q</span></span>
