@@ -86,11 +86,60 @@ export function DecisionsPanel() {
 
   return (
     <div className="space-y-4">
-      {currentScenarios.length === 0 ? (
-        <div className="py-8 text-center text-ink-muted text-[0.875rem] rounded-lg border border-dashed border-line">
-          No board decision this quarter.
-        </div>
-      ) : (
+      {currentScenarios.length === 0 ? (() => {
+        // Workshop UX (May 2026): the empty-state was a single flat
+        // sentence. Now surface the NEXT scheduled scenario so the
+        // player has a "watch this space" moment instead of a dead
+        // panel between board events.
+        const upcoming = SCENARIOS
+          .filter((sc) => sc.quarter > s.currentQuarter)
+          .sort((a, b) => a.quarter - b.quarter)
+          .slice(0, 3);
+        return (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-dashed border-line bg-surface-2/30 px-4 py-5 text-center">
+              <div className="text-[0.875rem] text-ink-2 font-medium">
+                No board decision this quarter
+              </div>
+              <div className="text-[0.6875rem] text-ink-muted mt-1 leading-relaxed">
+                Use the breathing room to expand fleet, refurbish a subsidiary,
+                or watch the fuel index.
+              </div>
+            </div>
+            {upcoming.length > 0 && (
+              <div>
+                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+                  Scheduled board events
+                </div>
+                <div className="space-y-1.5">
+                  {upcoming.map((sc) => {
+                    const q = sc.quarter;
+                    const qFromNow = q - s.currentQuarter;
+                    return (
+                      <div
+                        key={sc.id}
+                        className="flex items-baseline justify-between gap-3 px-3 py-2 rounded-md border border-line bg-surface text-[0.8125rem]"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-mono text-primary text-[0.75rem] shrink-0">
+                              {sc.id}
+                            </span>
+                            <span className="text-ink truncate">{sc.title}</span>
+                          </div>
+                          <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                            {fmtQuarter(q)} · {qFromNow}Q from now
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })() : (
         currentScenarios.map((sc) => {
           const submitted = player.decisions.find((d) => d.scenarioId === sc.id && d.quarter === s.currentQuarter);
           return (
