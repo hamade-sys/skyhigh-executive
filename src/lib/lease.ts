@@ -99,17 +99,12 @@ export function leaseEligibleSpecIds(
     return true;
   }
   function stockRank(a: AircraftSpec, b: AircraftSpec): number {
-    // Same fallback as effectiveProductionCap so the lease ranker
-    // agrees with the actual production pool.
-    const capOf = (s: AircraftSpec) => {
-      if (typeof s.productionCapPerQuarter === "number") return s.productionCapPerQuarter;
-      const p = s.buyPriceUsd;
-      if (p >= 300_000_000) return 1;
-      if (p >= 200_000_000) return 2;
-      if (p >= 100_000_000) return 3;
-      if (p >=  50_000_000) return 4;
-      return 6;
-    };
+    // Same fallback as effectiveProductionCap (8 below $100M, 3 above)
+    // so the lease ranker agrees with the actual production pool.
+    const capOf = (s: AircraftSpec) =>
+      typeof s.productionCapPerQuarter === "number"
+        ? s.productionCapPerQuarter
+        : (s.buyPriceUsd >= 100_000_000 ? 3 : 8);
     const ca = capOf(a);
     const cb = capOf(b);
     if (cb !== ca) return cb - ca;
