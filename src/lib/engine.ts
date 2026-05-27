@@ -31,9 +31,34 @@ import type {
   CargoBellyTier,
   DoctrineId,
 } from "@/types/game";
-import { SUBSIDIARY_TIER_REV_MULT } from "@/types/game";
+import {
+  SUBSIDIARY_TIER_REV_MULT,
+  SUBSIDIARY_TIER_OPS_MULT,
+  SUBSIDIARY_DEMAND_BONUS_PER_ENDPOINT,
+} from "@/types/game";
 
 const M = 1_000_000;
+
+/** Subsidiary route-revenue bonus. For every demand-side subsidiary
+ *  the team owns at the route's origin or destination city, add the
+ *  tier- and condition-scaled bonus. Stacks across subsidiaries —
+ *  flagship hotel + lounge + limo at both endpoints creates a real
+ *  competitive moat vs a rival flying the same OD without any
+ *  city-side investment. Bonus is capped at +25% so a player who
+ *  stacks 6+ flagships on one OD can't run away with the model. */
+function subsidiaryDemandMultiplier(team: Team, route: Route): number {
+  const subs = team.subsidiaries ?? [];
+  if (subs.length === 0) return 1.0;
+  let bonus = 0;
+  for (const sub of subs) {
+    if (sub.cityCode !== route.originCode && sub.cityCode !== route.destCode) continue;
+    const perType = SUBSIDIARY_DEMAND_BONUS_PER_ENDPOINT[sub.type] ?? 0;
+    if (perType === 0) continue;
+    const tierMult = SUBSIDIARY_TIER_OPS_MULT[sub.tier ?? "basic"] ?? 1.0;
+    bonus += perType * tierMult * sub.conditionPct;
+  }
+  return 1.0 + Math.min(0.25, bonus);
+}
 
 type ActiveDoctrineId = Exclude<DoctrineId, "safety-first">;
 
@@ -1795,10 +1820,15 @@ export function computeRouteEconomics(
   const quarterlyFirstPax = dailyPaxFirst * QUARTER_DAYS;
   const quarterlyBusPax   = dailyPaxBus   * QUARTER_DAYS;
   const quarterlyEconPax  = dailyPaxEcon  * QUARTER_DAYS;
-  let quarterlyRevenue =
+  // Subsidiary demand premium — every demand-side subsidiary the
+  // player owns at this route's endpoints lifts revenue (capped +25%).
+  // Calculated once here so per-class breakdowns stay proportional.
+  const subDemandMult = subsidiaryDemandMultiplier(team, route);
+  let quarterlyRevenue = (
     quarterlyFirstPax * firstFare +
     quarterlyBusPax * busFare +
-    quarterlyEconPax * econFare;
+    quarterlyEconPax * econFare
+  ) * subDemandMult;
 
   // ─ Cargo-belly contribution on passenger flights ──────────
   // Players can fit a Standard or Expanded cargo belly on each

@@ -7445,7 +7445,14 @@ export const useGame = create<GameStore>()(
           return { ok: false, error: "Invalid litres amount" };
         if (litres > player.fuelStorageLevelL)
           return { ok: false, error: `Only ${(player.fuelStorageLevelL / 1_000_000).toFixed(1)}M L in storage` };
-        const sellPrice = (s.fuelIndex / 100) * FUEL_BASELINE_USD_PER_L * 0.75;
+        // Sell price: 65% of current spot (vs buy at 75% of spot).
+        // 10% spread between bid and ask CLOSES the riskless-arbitrage
+        // loop that buying and selling at the same 0.75× created when
+        // the index didn't move. Player still profits handsomely on
+        // real spikes (buy at 0.75 × 0.85 × index 80 = $0.51/L; sell
+        // at 0.65 × 0.85 × index 130 = $0.72/L → 41% gain), but
+        // can't churn flat markets for free cash.
+        const sellPrice = (s.fuelIndex / 100) * FUEL_BASELINE_USD_PER_L * 0.65;
         const proceeds = litres * sellPrice;
         const newTotal = player.fuelStorageLevelL - litres;
         set({

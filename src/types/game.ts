@@ -1071,12 +1071,20 @@ export interface Subsidiary {
 }
 
 /** Subsidiary tier multipliers. Single source of truth used by the
- *  engine (for revenue + operational-bonus scaling) and by the UI
- *  (for the upgrade button copy and projected-yield previews). */
+ *  engine (for revenue + operational-bonus scaling), the demand-bonus
+ *  helper, and the UI (for upgrade button copy and yield previews).
+ *
+ *  ROI sanity check at FLAGSHIP (post-tune, May 2026):
+ *    Basic:    cost 1.0C  ·  rev 1.0R  ·  payback = C/R quarters
+ *    Premium:  cost 1.5C  ·  rev 1.6R  ·  delta payback (premium upgrade) = 0.5C / 0.6R ≈ 0.83 × base
+ *    Flagship: cost 2.0C  ·  rev 2.8R  ·  delta payback (flagship upgrade) = 0.5C / 1.2R ≈ 0.42 × base
+ *  → Flagship's marginal investment pays back >2× as fast as the
+ *    original build. Workshop intent: "expand existing flagship" is
+ *    the dominant strategic move once the network has stabilized. */
 export const SUBSIDIARY_TIER_REV_MULT: Record<NonNullable<Subsidiary["tier"]>, number> = {
   basic: 1.0,
   premium: 1.6,
-  flagship: 2.4,
+  flagship: 2.8,
 };
 export const SUBSIDIARY_TIER_OPS_MULT: Record<NonNullable<Subsidiary["tier"]>, number> = {
   basic: 1.0,
@@ -1087,6 +1095,43 @@ export const SUBSIDIARY_TIER_OPS_MULT: Record<NonNullable<Subsidiary["tier"]>, n
  *  setupCost. basic→premium costs +0.5×, premium→flagship costs +0.5×.
  *  Total invested at flagship = 2.0× setupCost. */
 export const SUBSIDIARY_UPGRADE_COST_MULT = 0.5;
+
+/** Per-quarter route-revenue uplift for each subsidiary type that has
+ *  a "demand-side" story. The bonus applies to ANY route touching the
+ *  city the subsidiary sits in, and is multiplied by the tier ops
+ *  multiplier and the subsidiary's current conditionPct.
+ *
+ *  Real-world story for each line:
+ *    • Lounge:    F/C passengers preferentially route through hubs
+ *                 with branded lounges (Emirates DXB, Qatar DOH lounges
+ *                 anchor the carrier's premium share).
+ *    • Hotel:     Business travellers loyalty-stack with airport
+ *                 hotel rewards programmes, slightly biasing their
+ *                 carrier choice when 2 airlines fly the same OD.
+ *    • Limo:      Door-to-door luxury transfer pulls high-yield
+ *                 business pax away from rivals on competitive routes.
+ *    • Catering:  Owned catering improves perceived service quality;
+ *                 small but real preference uplift.
+ *  At flagship × 100% condition × ops mult 1.7×:
+ *    Lounge   → +0.025 × 1.7 = +4.25% route revenue
+ *    Hotel    → +0.018 × 1.7 = +3.06%
+ *    Limo     → +0.015 × 1.7 = +2.55%
+ *    Catering → +0.010 × 1.7 = +1.70%
+ *  A player with Flagship hotel + lounge + limo at JFK + at LHR
+ *  collects +16% revenue on their JFK↔LHR route — meaningful
+ *  competitive moat vs a rival flying the same OD without any
+ *  city-side investment. */
+export const SUBSIDIARY_DEMAND_BONUS_PER_ENDPOINT: Record<SubsidiaryType, number> = {
+  lounge:             0.025,
+  hotel:              0.018,
+  limo:               0.015,
+  catering:           0.010,
+  // Operational subsidiaries — their value is the operational bonus,
+  // not a demand-side uplift. Leave at 0.
+  "maintenance-hub":  0,
+  "fuel-storage":     0,
+  "training-academy": 0,
+};
 
 /** Aircraft pre-order entry. Pre-orders open 2 rounds before unlock
  *  (announcement window) and continue past unlock as the manufacturing
