@@ -4270,6 +4270,9 @@ export const useGame = create<GameStore>()(
           worldCupHostCode: s.worldCupHostCode,
           olympicHostCode: s.olympicHostCode,
           allTeams: s.teams,
+          // Plumb the cohort's board-decisions toggle so the engine
+          // skips deferred-event resolution in self-guided games.
+          boardDecisionsEnabled: s.session?.boardDecisionsEnabled ?? true,
           // P0 fix: thread the post-early-auction slot pool. Earlier this
           // was `s.airportSlots` (the pre-auction state), so slots
           // awarded in the early auction were invisible here AND to the
@@ -7737,25 +7740,17 @@ export const useGame = create<GameStore>()(
         if (pricePerSlot < basePrice)
           return { ok: false, error: `Minimum $${(basePrice / 1_000).toFixed(0)}K/slot at Tier ${city.tier}` };
         const maxCost = slots * pricePerSlot;
-        if (player.cashUsd < maxCost) {
-          // The auction holds the maximum bid in escrow until close —
-          // we need real cash, not borrowing headroom. Explain WHY +
-          // what to do, especially when the player is in overdraft
-          // (where "need $X cash" sounds like a paradox to them).
-          const need = (maxCost / 1_000_000).toFixed(1);
-          if (player.cashUsd < 0) {
-            const overdraft = (-player.cashUsd / 1_000_000).toFixed(1);
-            return {
-              ok: false,
-              error: `Slot auctions hold the bid in escrow until close. You're $${overdraft}M overdrawn, so there's no cash to lock up. Refinance your overdraft (Financials → Borrowing) or borrow $${need}M+ first, then come back and bid.`,
-            };
-          }
-          const shortfall = ((maxCost - player.cashUsd) / 1_000_000).toFixed(1);
-          return {
-            ok: false,
-            error: `Slot auctions hold the bid in escrow until close. Need $${need}M available cash; you're $${shortfall}M short. Borrow or trim spend before bidding.`,
-          };
-        }
+        // CHANGE (May 2026 workshop): the old cash gate blocked the
+        // entire bid when the player was in overdraft, forcing them
+        // to refinance first. Real airlines bid on slot pools through
+        // their working-capital facility — they don't pre-load cash
+        // into escrow. Behaviour now: if cash is short, the bid still
+        // queues, but the shortfall flows through to the RCF at
+        // quarter close (the engine's existing 2× base RCF mechanic
+        // handles the funding). Player gets an informational toast
+        // instead of a hard block. The auction itself still resolves
+        // by price-priority at close — running on overdraft doesn't
+        // give the bid any special preference.
         const existing = (player.pendingSlotBids ?? []).filter(
           (b) => b.airportCode !== airportCode,
         );
@@ -7768,8 +7763,21 @@ export const useGame = create<GameStore>()(
             ],
           }),
         });
-        toast.info(`Slot bid queued at ${airportCode}`,
-          `${slots} slots × $${(pricePerSlot / 1000).toFixed(0)}K = $${(maxCost / 1_000_000).toFixed(1)}M max`);
+        // Toast: if the bid pushed projected cash negative, signal
+        // that the shortfall will route through the RCF (at 2× base
+        // rate) at quarter close. Player can act on it before close
+        // by repaying, or accept the financing cost.
+        if (player.cashUsd < maxCost) {
+          const shortfall = Math.max(0, maxCost - player.cashUsd);
+          toast.warning(
+            `Slot bid queued · running on overdraft`,
+            `${slots} slots × $${(pricePerSlot / 1000).toFixed(0)}K = $${(maxCost / 1_000_000).toFixed(1)}M max. ` +
+            `$${(shortfall / 1_000_000).toFixed(1)}M will draw from RCF at 2× base rate if you win the auction.`,
+          );
+        } else {
+          toast.info(`Slot bid queued at ${airportCode}`,
+            `${slots} slots × $${(pricePerSlot / 1000).toFixed(0)}K = $${(maxCost / 1_000_000).toFixed(1)}M max`);
+        }
         return { ok: true };
       },
 

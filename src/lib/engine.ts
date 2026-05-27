@@ -2749,6 +2749,12 @@ export interface QuarterCloseContext {
   /** Snapshot of airportSlots (mirrors GameState.airportSlots) so the
    *  owner-revenue path can read ownerTeamId / totalCapacity etc. */
   airportSlots?: Record<string, AirportSlotState>;
+  /** Whether the cohort opted into facilitated board decisions for
+   *  this game. When `false`, the engine SKIPS both the scenario
+   *  auto-resolve at the top of close AND the deferred-event resolve
+   *  loop below — so a self-guided game never gets blindsided by a
+   *  decision the player never saw. Defaults to true for back-compat. */
+  boardDecisionsEnabled?: boolean;
 }
 
 export function runQuarterClose(
@@ -3586,12 +3592,24 @@ export function runQuarterClose(
   // ─ Resolve deferred events targeting this quarter ──────
   const triggeredEvents: QuarterCloseResult["triggeredEvents"] = [];
   const remainingDeferred: DeferredEvent[] = [];
+  // Gate the resolve loop on boardDecisionsEnabled (May 2026 workshop
+  // fix). Self-guided cohorts that opted out of board decisions were
+  // still getting blindsided by deferred-event outcomes from PREVIOUS
+  // sessions or auto-applied defaults — "Earlier decision · resolved
+  // this quarter: S2 War in the Corridor · fired -$30M" showing up
+  // unexplained. With this gate, no-decision mode drops every queued
+  // deferred event silently (cleared from team state below).
+  const boardDecisionsEnabled = ctx.boardDecisionsEnabled !== false;
   for (const ev of next.deferredEvents) {
     if (ev.resolved) continue;
     if (ev.targetQuarter !== ctx.quarter) {
       remainingDeferred.push(ev);
       continue;
     }
+    // When board decisions are disabled, mark as silently dropped and
+    // don't apply the effect. The event won't appear in triggeredEvents
+    // so the Quarter Close modal "Earlier decision" panel stays empty.
+    if (!boardDecisionsEnabled) continue;
     const roll = Math.random();
     if (roll <= ev.probability) {
       const eff = deserializeEffect(ev.effectJson);

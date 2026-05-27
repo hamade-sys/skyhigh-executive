@@ -942,6 +942,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
               <div className="font-semibold uppercase tracking-wider text-[0.6875rem] mb-1.5">
                 Projected occupancy · {(projection.occupancy * 100).toFixed(0)}%
               </div>
+              <div className="text-[0.625rem] text-ink-muted mb-1.5 leading-snug">
+                Baseline forecast — typical-quarter demand at the cities&apos; current population &amp; growth.
+                Actual occupancy each quarter shifts with seasonality (±20%), news events, and rivals on the same OD.
+              </div>
               {/* Two-column daily/weekly breakdown so units are explicit. */}
               <div className="grid grid-cols-2 gap-2 text-[0.75rem] mb-1.5">
                 <div className="rounded-md bg-surface/50 px-2 py-1.5">
@@ -1177,25 +1181,20 @@ export function BidRow({
         </span>
       </div>
 
-      {/* Cash escrow shortfall — pre-submit. Auctions hold the bid in
-          escrow until close, so borrowing headroom doesn't substitute
-          for cash. */}
+      {/* Cash shortfall — informational only (May 2026 workshop fix).
+          Auction bids that exceed available cash now flow through to
+          the RCF at quarter close, at the 2× base rate. The player
+          can still submit; we just warn that they're financing the
+          slot pool on overdraft. */}
       {cashShortfall > 0 && (
-        <div className="mt-2 rounded-md border border-negative bg-[var(--negative-soft)] px-2.5 py-1.5 text-[0.75rem]">
+        <div className="mt-2 rounded-md border border-warning bg-[var(--warning-soft)] px-2.5 py-1.5 text-[0.75rem]">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="font-semibold text-negative">
-              {isOverdraft ? "Overdraft" : "Cash short"} · ${(cashShortfall / 1_000_000).toFixed(2)}M
+            <span className="font-semibold text-warning">
+              {isOverdraft ? "Will run on overdraft" : "Cash short"} · ${(cashShortfall / 1_000_000).toFixed(2)}M
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                closePanel();
-                openPanel("reports");
-              }}
-              className="text-accent hover:underline text-[0.6875rem]"
-            >
-              Fix in Financials →
-            </button>
+            <span className="text-[0.625rem] text-ink-muted">
+              Funded via RCF at 2× base rate if you win
+            </span>
           </div>
         </div>
       )}

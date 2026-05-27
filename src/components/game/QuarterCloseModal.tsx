@@ -255,6 +255,57 @@ export function QuarterCloseModal() {
               />
             </div>
 
+            {/* Market conditions — fuel index + base rate with Δ
+                from prior quarter. Workshop ask (May 2026): "It should
+                show us the new and the change in fuel index, traveller's
+                index, cargo or economic metrics." Pulled from the
+                game-state slice (fuelIndexHistory tracks the last 16 Q
+                courtesy of v2.5.0). When no prior history exists (Q2
+                cohorts that just closed Q1), shows current only. */}
+            {(() => {
+              const hist = s.fuelIndexHistory ?? [];
+              // The latest entry in history is THIS quarter's index
+              // (pushed at the same close). The previous is one back.
+              const cur = hist.length > 0 ? hist[hist.length - 1].index : Math.round(s.fuelIndex);
+              const prev = hist.length > 1 ? hist[hist.length - 2].index : null;
+              const fuelDelta = prev != null ? cur - prev : null;
+              const baseRate = s.baseInterestRatePct;
+              return (
+                <div className="rounded-md border border-line bg-surface-2/40 p-3 grid grid-cols-2 gap-3 text-[0.75rem]">
+                  <div>
+                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                      Fuel index
+                    </div>
+                    <div className="font-display text-[1.125rem] tabular text-ink mt-0.5">
+                      {cur}
+                      {fuelDelta != null && fuelDelta !== 0 && (
+                        <span className={`ml-1.5 text-[0.75rem] tabular font-mono ${fuelDelta > 0 ? "text-negative" : "text-positive"}`}>
+                          {fuelDelta > 0 ? "↑" : "↓"}
+                          {Math.abs(fuelDelta)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                      {cur > 110 ? "Above baseline — bad for unhedged" :
+                       cur < 90 ? "Below baseline — bulk-buy window" :
+                       "Around baseline (100)"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                      Base interest rate
+                    </div>
+                    <div className="font-display text-[1.125rem] tabular text-ink mt-0.5">
+                      {baseRate.toFixed(1)}%
+                    </div>
+                    <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                      RCF rate at 2× = {(baseRate * 2).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Reconciliation line — shows the non-operating cash
                 flows that sit BETWEEN net profit and the headline
                 Cash-position delta. Without this, players see e.g.
