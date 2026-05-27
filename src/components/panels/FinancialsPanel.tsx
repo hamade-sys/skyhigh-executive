@@ -133,36 +133,58 @@ export function FinancialsPanel() {
             (very expensive); this lets the player convert the
             overdraft into a fresh term loan at the standard
             covenant-adjusted rate. */}
-        {player.cashUsd < 0 && (
-          <div className="rounded-md border border-negative bg-[var(--negative-soft)] p-3 mb-3 space-y-2">
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="font-semibold text-negative text-[0.8125rem]">
-                Overdraft active · {fmtMoney(-player.cashUsd)}
+        {player.cashUsd < 0 && (() => {
+          // Pre-compute refinance feasibility so we can disable the
+          // button visibly when the team is at the borrowing cap.
+          // Workshop feedback: previously the button always rendered
+          // active but silently failed on click (error went to a state
+          // var the player couldn't see). Now the button states are:
+          //   - active: borrowing cap allows the refi
+          //   - disabled with explainer: cap exhausted
+          const overdraftAmount = Math.ceil(-player.cashUsd / 1_000_000) * 1_000_000;
+          const canRefi = maxBorrow >= overdraftAmount;
+          const refiDisabledReason = !canRefi
+            ? `Borrowing cap is ${fmtMoney(maxBorrow)} but the overdraft is ${fmtMoney(overdraftAmount)}. Pay down existing debt or grow airline value to unlock more headroom.`
+            : null;
+          return (
+            <div className="rounded-md border border-negative bg-[var(--negative-soft)] p-3 mb-3 space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="font-semibold text-negative text-[0.8125rem]">
+                  Overdraft active · {fmtMoney(-player.cashUsd)}
+                </div>
+                <div className="text-[0.6875rem] tabular font-mono text-negative">
+                  paying ~{(s.baseInterestRatePct * 2).toFixed(1)}% RCF rate
+                </div>
               </div>
-              <div className="text-[0.6875rem] tabular font-mono text-negative">
-                paying ~{(s.baseInterestRatePct * 2).toFixed(1)}% RCF rate
-              </div>
+              <p className="text-[0.75rem] text-ink-2 leading-snug">
+                Your revolving credit facility is bridging the negative
+                balance at a penalty rate. Refinancing converts the
+                overdraft into a regular term loan at your effective
+                borrowing rate ({rate.toFixed(1)}%) — same payback profile
+                as a normal loan, much lower interest while it sits.
+              </p>
+              {refiDisabledReason && (
+                <p className="text-[0.6875rem] text-negative leading-snug font-medium">
+                  Refi blocked: {refiDisabledReason}
+                </p>
+              )}
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={!canRefi}
+                onClick={() => {
+                  const r = s.refinanceOverdraft();
+                  if (!r.ok) setError(r.error ?? "Refi failed");
+                }}
+                title={canRefi
+                  ? `Convert ${fmtMoney(overdraftAmount)} into a term loan at ${rate.toFixed(1)}%`
+                  : refiDisabledReason ?? ""}
+              >
+                Refinance overdraft →
+              </Button>
             </div>
-            <p className="text-[0.75rem] text-ink-2 leading-snug">
-              Your revolving credit facility is bridging the negative
-              balance at a penalty rate. Refinancing converts the
-              overdraft into a regular term loan at your effective
-              borrowing rate ({rate.toFixed(1)}%) — same payback profile
-              as a normal loan, much lower interest while it sits.
-            </p>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => {
-                const r = s.refinanceOverdraft();
-                if (!r.ok) setError(r.error ?? "Refi failed");
-              }}
-              title={`Convert ${fmtMoney(Math.ceil(-player.cashUsd / 1_000_000) * 1_000_000)} into a term loan at ${rate.toFixed(1)}%`}
-            >
-              Refinance overdraft →
-            </Button>
-          </div>
-        )}
+          );
+        })()}
 
         <div className="space-y-1.5 text-[0.8125rem]">
           <Row k="Base rate" v={`${s.baseInterestRatePct.toFixed(1)}%`} />

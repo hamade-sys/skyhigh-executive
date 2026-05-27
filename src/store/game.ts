@@ -4254,7 +4254,14 @@ export const useGame = create<GameStore>()(
             maintenanceCost: result.maintenanceCost,
             insuranceCost: result.insuranceCost,
             depreciation: result.depreciation,
-            interest: result.interest,
+            // Display rolls loan interest + RCF interest together so
+            // workshop participants see a single "Debt interest" total
+            // that matches their back-of-envelope math (principal × APR
+            // / 4). Previously stored loan interest only; RCF interest
+            // was computed by the engine but never surfaced on the P&L,
+            // so a team with $14.7M of RCF at 11% saw $1.6M of loan
+            // interest instead of the true ~$2.0M total.
+            interest: result.interest + (result.rcfInterest ?? 0),
             // Taxes & Government Levies bucket = corp tax + carbon
             // levy + passenger departure tax + fuel excise + S5
             // route-obligation fines. UI rolls these up into one row.
