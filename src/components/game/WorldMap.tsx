@@ -671,16 +671,18 @@ export function WorldMap({
         zoom={3}
         minZoom={2}
         maxZoom={6}
-        /* Phase D — D-003: dropped `worldCopyJump`. With it on,
-           panning the map westward past the antimeridian triggered
-           a teleport to the equivalent eastern position with a new
-           tile load — during the ~200ms reload the canvas was
-           BLANK and pins/labels disappeared, looking like the page
-           had broken. Without worldCopyJump, the user can pan
-           continuously and the satellite tiles wrap naturally
-           (Leaflet's default behaviour with `noWrap=false` on the
-           tile layer). Markers stay anchored to one longitude band
-           but that's no worse than the prior snap-back. */
+        /* Phase D — D-003 follow-up (May 2026):
+           Re-enabled `worldCopyJump`. The original D-003 dropped it
+           because a teleport across the antimeridian caused a brief
+           (~200ms) blank canvas during tile reload. But the
+           alternative — leaving markers anchored to a single
+           longitude band — meant scrolling west of the Americas
+           showed empty Pacific (no Tokyo, Sydney, Singapore) because
+           those markers physically sit at lng +120 to +180, not at
+           lng -240 to -180 where the wrapped tiles render.
+           A brief blank flicker is better than "the entire eastern
+           hemisphere disappeared." */
+        worldCopyJump
         scrollWheelZoom
         zoomControl={false}
         style={{ width: "100%", height: "100%", background: "var(--map-ocean-deep)" }}
