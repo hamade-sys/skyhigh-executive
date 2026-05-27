@@ -49,22 +49,33 @@ export const YEARLY_SLOTS_BY_TIER: Record<CityTier, number> = {
 
 /** Base price per slot at quarter-close auction (PRD scaling: T2 = anchor).
  *
- *  These are PER-WEEK rents. A team with 105 weekly slots at a T1 hub
- *  was previously paying ~$1.5M/Q × 105 = ~$160M just at one airport,
- *  which crushed the operating P&L disproportionately to the rest of
- *  the cost stack and to real-world numbers (Heathrow's recurring slot
- *  rent is ~$100K/year per slot, not per quarter).
+ *  These are PER-WEEK rents. Workshop feedback (May 2026): the prior
+ *  rates left routes consistently in the red because slot allocation
+ *  was eating 40-45% of per-route operating cost vs the real-world
+ *  industry share of 3-5% (US-domestic). A solo player with 105
+ *  weekly slots at JFK (T1) at the old $45K/wk would owe ~$30M per
+ *  quarter just for that one airport; on a $48M revenue route that's
+ *  already 60%+ of the cost stack before fuel/staff/maintenance.
  *
- *  Anchored T2 down 62.5% ($80K → $30K weekly), with the same relative
- *  spread across tiers preserved. Combined with the fuel-price triple
- *  in this same release, total operating cost stays roughly neutral
- *  but the mix shifts toward a more realistic share between fuel,
- *  slots, and the rest of the stack. */
+ *  Rates now sit ~4× lower:
+ *    T1 ~$520K/year per slot
+ *    T2 ~$360K/year per slot
+ *    T3 ~$155K/year per slot
+ *    T4 ~$78K/year per slot
+ *  Still 2-5× higher than Heathrow's published ~$100K/year recurring
+ *  rent — leaves auction headroom for competitive overbidding without
+ *  crushing the P&L. Combined with the fuel-burn bump in this release,
+ *  cost mix lands at fuel ~7-9% / slot ~15% / staff ~22% / maintenance
+ *  ~16%, which is closer to real-world without being slavishly so.
+ *
+ *  Previous: T1 $45K · T2 $30K · T3 $15K · T4 $7.5K
+ *  Now:      T1 $10K · T2 $7K  · T3 $3K  · T4 $1.5K
+ */
 export const BASE_SLOT_PRICE_BY_TIER: Record<CityTier, number> = {
-  1: 45_000, // 1.5× anchor
-  2: 30_000, // anchor
-  3: 15_000, // 0.5× anchor
-  4: 7_500,  // 0.25× anchor
+  1: 10_000, // 1.43× anchor
+  2: 7_000,  // anchor
+  3: 3_000,  // 0.43× anchor
+  4: 1_500,  // 0.21× anchor
 };
 
 /** Yearly slot tick — once per calendar year (every 4 rounds in the

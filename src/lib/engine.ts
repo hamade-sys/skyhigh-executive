@@ -55,6 +55,22 @@ function isDoctrine(team: { doctrine?: DoctrineId }, doctrine: ActiveDoctrineId)
  *  Both paths now share this constant. */
 export const FUEL_BASELINE_USD_PER_L = 0.85;
 
+/** Real-world fuel-burn calibration factor. The aircraft catalogue
+ *  in `src/data/aircraft.ts` lists `fuelBurnPerKm` values that came
+ *  from a mix of cruise-only sources; they sit ~60% of what real
+ *  block-fuel numbers look like (block fuel includes taxi, climb,
+ *  descent, hold — which inflate L/km by 30-40% over cruise).
+ *
+ *  Workshop feedback (May 2026): fuel was landing at only ~3% of
+ *  per-route operating cost. Real US-domestic airlines run fuel at
+ *  25-30% of operating cost. Applying a single 1.6× factor at the
+ *  consumption site (rather than editing 60+ catalogue rows) keeps
+ *  the spec sheet aligned with manufacturer cruise figures while
+ *  the engine sees the higher block-fuel burn the real world
+ *  actually charges for. Stacks correctly with the fuel-tank /
+ *  eco / engine-retrofit / fuselage discount multipliers above. */
+export const FUEL_BURN_REAL_WORLD_FACTOR = 1.6;
+
 /** Discontinued-type maintenance escalation (master ref Update 5).
  *  Once an aircraft type passes its `cutoffRound`, every still-flying
  *  example gets a maintenance penalty that climbs in 4-round brackets
@@ -302,13 +318,17 @@ export function effectiveRangeKm(
 
 /** Effective fuel burn after retrofits. "fuel" / "super" engine = ×0.9
  *  (−10% burn). Anti-drag fuselage coating = ×0.9 (−10% burn). The two
- *  stack multiplicatively (×0.81 combined = −19% burn). */
+ *  stack multiplicatively (×0.81 combined = −19% burn).
+ *
+ *  Applies the real-world block-fuel factor at the leaf so all
+ *  callers (route forecasts, fleet detail, savings calculators) see
+ *  the same number the quarter-close engine uses. */
 export function effectiveFuelBurnPerKm(
   spec: { fuelBurnPerKm: number },
   engineUpgrade?: "fuel" | "power" | "super" | null,
   fuselageUpgrade?: boolean,
 ): number {
-  let burn = spec.fuelBurnPerKm;
+  let burn = spec.fuelBurnPerKm * FUEL_BURN_REAL_WORLD_FACTOR;
   if (engineUpgrade === "fuel" || engineUpgrade === "super") burn *= 0.9;
   if (fuselageUpgrade) burn *= 0.9;
   return burn;
@@ -1414,11 +1434,13 @@ export function computeRouteEconomics(
       if (!spec) return sum;
       // Stack engine retrofit + eco + fuselage coating multiplicatively.
       // fuel/super engine = -10%, eco engine = -10%, fuselage coating = -10%
+      // Real-world block-fuel factor applied at the leaf — see
+      // FUEL_BURN_REAL_WORLD_FACTOR docstring.
       const fuelMult =
         (p.ecoUpgrade ? 0.9 : 1.0) *
         (p.engineUpgrade === "fuel" || p.engineUpgrade === "super" ? 0.9 : 1.0) *
         (p.fuselageUpgrade ? 0.9 : 1.0);
-      return sum + spec.fuelBurnPerKm * fuelMult * distanceKm;
+      return sum + spec.fuelBurnPerKm * FUEL_BURN_REAL_WORLD_FACTOR * fuelMult * distanceKm;
     }, 0);
     const totalFuelBurnPerFlight =
       planes.length > 0 ? fuelBurnSumPerFlight / planes.length : 0;
@@ -1817,11 +1839,13 @@ export function computeRouteEconomics(
     const spec = AIRCRAFT_BY_ID[p.specId];
     if (!spec) return sum;
     // Stack engine retrofit + eco + fuselage coating multiplicatively.
+    // Real-world block-fuel factor applied at the leaf — see
+    // FUEL_BURN_REAL_WORLD_FACTOR docstring.
     const fuelMult =
       (p.ecoUpgrade ? 0.9 : 1.0) *
       (p.engineUpgrade === "fuel" || p.engineUpgrade === "super" ? 0.9 : 1.0) *
       (p.fuselageUpgrade ? 0.9 : 1.0);
-    const burn = spec.fuelBurnPerKm * fuelMult * distanceKm;
+    const burn = spec.fuelBurnPerKm * FUEL_BURN_REAL_WORLD_FACTOR * fuelMult * distanceKm;
     return sum + burn;
   }, 0);
   const totalFuelBurnPerFlight =
