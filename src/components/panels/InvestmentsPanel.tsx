@@ -1086,10 +1086,15 @@ function FuelHedgingSection() {
   const fillPct = capacityL > 0 ? (storedL / capacityL) * 100 : 0;
   const depotHubs = player.hubInvestments?.fuelReserveTankHubs ?? [];
   const marketPricePerL = (fuelIndex / 100) * FUEL_BASELINE_USD_PER_L;
-  const bulkPricePerL = marketPricePerL * 0.75; // 25% off market
+  const bulkPricePerL = marketPricePerL * 0.75; // buy at 25% off spot
+  // Sell at 65% of spot (10% haircut vs buy) so there's no riskless
+  // round-trip on a flat market — see sellStoredFuel in store/game.ts.
+  // Stored-fuel P&L uses the SELL price, not spot, so the player sees
+  // what they'd actually realise if they liquidated right now.
+  const sellPricePerL = marketPricePerL * 0.65;
   const valueAtCost = storedL * avgCost;
-  const valueAtMarket = storedL * marketPricePerL;
-  const unrealizedPnL = valueAtMarket - valueAtCost;
+  const valueAtSell = storedL * sellPricePerL;
+  const unrealizedPnL = valueAtSell - valueAtCost;
 
   // ─── Gamified market read ────────────────────────────────────
   // Turns fuel hedging from a passive button-screen into a real
@@ -1354,7 +1359,7 @@ function FuelHedgingSection() {
         <SellFuelModal
           onClose={() => setSellOpen(false)}
           storedL={storedL}
-          sellPricePerL={bulkPricePerL}
+          sellPricePerL={sellPricePerL}
           avgCost={avgCost}
           onSell={(litres) => {
             const r = sellStoredFuel(litres);

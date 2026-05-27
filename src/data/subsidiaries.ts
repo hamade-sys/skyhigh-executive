@@ -15,13 +15,21 @@ import type { SubsidiaryType } from "@/types/game";
  * built and unset when it's sold.
  *
  * Pricing follows a "gateway then operating leverage" curve:
- *  - Hotel:           $40M setup → $1.5M/qtr  (4% net yield)
- *  - Limo service:    $8M setup  → $0.6M/qtr  (7.5% — operational asset)
- *  - Lounge:          $12M setup → $0.8M/qtr  + F/C occupancy bonus
+ *  - Hotel:           $40M setup → $1.5M/qtr  (4% net yield) + city-side demand pull
+ *  - Limo service:    $8M setup  → $0.6M/qtr  (7.5%) + city-side business demand pull
+ *  - Lounge:          $12M setup → $0.8M/qtr  + strongest city-side demand pull
  *  - Maintenance hub: $50M setup → break-even revenue, 20% maint discount
  *  - Fuel storage:    $20M setup → enables bulk-buy 25% discount
- *  - Catering:        $15M setup → $1.0M/qtr  + small ops bonus
+ *  - Catering:        $15M setup → $1.0M/qtr  + small per-route demand pull
  *  - Training academy: $30M setup → $0.9M/qtr + ops bonus
+ *
+ * TIERS (basic → premium → flagship):
+ *  Each upgrade pays +50% of the original setupCost and multiplies
+ *  revenue (1.0× / 1.6× / 2.8×) AND the demand-side bonus (1.0× /
+ *  1.3× / 1.7×). Total invested at flagship = 2.0× setupCost.
+ *  At flagship, marginal ROI is roughly 2.4× the base build's ROI —
+ *  intentionally so "expand existing flagship" is the dominant
+ *  late-game move once the network has stabilised.
  *
  * Numbers are per-asset; some types grant a stronger benefit when
  * placed at a hub vs a secondary city — the engine handles that
@@ -47,30 +55,31 @@ export const SUBSIDIARY_CATALOG: SubsidiaryCatalogEntry[] = [
   {
     type: "hotel",
     name: "Airport Hotel",
-    description: "Premium 5-star airport hotel under the airline's brand. Captures business-traveller layover revenue and reinforces the loyalty programme.",
-    pitch: "Diversify earnings beyond ticket sales. Hotel revenue compounds steadily through downturns.",
+    description: "Premium 5-star airport hotel under the airline's brand. Captures business-traveller layover revenue and quietly steers loyalty programme members onto YOUR flights when they fly out of this city.",
+    pitch: "Steady non-aviation income + a real demand pull on every route through this airport. Flagship hotels at both endpoints can push +6% revenue on the OD.",
     setupCostUsd: 40_000_000,
     revenuePerQuarterUsd: 1_500_000,
+    operationalBonus: "+1.8% × tier × condition route revenue through this city",
     icon: "BuildingMarket",
   },
   {
     type: "limo",
     name: "Limo & Chauffeur Service",
-    description: "Door-to-door luxury ground transfer service for first and business class passengers in selected cities.",
-    pitch: "Higher-value passengers stay longer in your loyalty programme.",
+    description: "Door-to-door luxury ground transfer for business and first class passengers. Real edge against rivals on shared OD pairs — high-yield travellers will swap carriers for a $0 limo home.",
+    pitch: "Cheapest demand-side bet in the catalogue. Pairs especially well with a Premium Lounge at the same city.",
     setupCostUsd: 8_000_000,
     revenuePerQuarterUsd: 600_000,
-    operationalBonus: "+2% F/C loyalty retention at this city",
+    operationalBonus: "+1.5% × tier × condition route revenue through this city",
     icon: "Car",
   },
   {
     type: "lounge",
     name: "Premium Lounge",
-    description: "Branded business and first-class lounge at the city's main airport. Improves F/C cabin yield on routes through this airport.",
-    pitch: "Owns the premium experience end-to-end. Subsidy + occupancy uplift.",
+    description: "Branded business and first-class lounge at the city's main airport. Premium passengers preferentially route through hubs with a strong lounge — Emirates DXB and Qatar DOH anchor their carrier's share this way.",
+    pitch: "Strongest demand pull in the catalogue. Flagship lounge at both endpoints = +8.5% revenue on the OD.",
     setupCostUsd: 12_000_000,
     revenuePerQuarterUsd: 800_000,
-    operationalBonus: "+8% F/C occupancy on routes touching this airport",
+    operationalBonus: "+2.5% × tier × condition route revenue through this city",
     icon: "Coffee",
   },
   {
@@ -96,11 +105,11 @@ export const SUBSIDIARY_CATALOG: SubsidiaryCatalogEntry[] = [
   {
     type: "catering",
     name: "Catering Kitchen",
-    description: "Owned in-flight catering operation at the city. Small standalone revenue plus operational efficiency for departing flights.",
-    pitch: "Steady margin, captures the catering markup that would otherwise go to a third party.",
+    description: "Owned in-flight catering at the city. Drops third-party markups, lifts perceived service quality, gives every route through this city a small demand pull.",
+    pitch: "Cheap, broad-stroke uplift. Small per-route bump that adds up across a 5+ route network.",
     setupCostUsd: 15_000_000,
     revenuePerQuarterUsd: 1_000_000,
-    operationalBonus: "+1 ops point per quarter while owned",
+    operationalBonus: "+1% × tier × condition route revenue through this city",
     icon: "Utensils",
   },
   {
