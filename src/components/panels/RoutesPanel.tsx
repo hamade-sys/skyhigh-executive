@@ -1145,23 +1145,34 @@ function RouteDetailModal({
       return;
     }
     // ── Path A: shortfall + bids set → submit each bid via the auction
-    //    queue, then save the rest of the patch with the *current*
-    //    daily frequency (NOT the bumped one). The frequency will
-    //    auto-bump after the auction clears next quarter close. This
-    //    replaces the old "save fails → see error message" UX.
+    //    queue, then save the route at the NEW (bumped) frequency.
+    //    The store flips the route to `pending` when the in-flight bid
+    //    covers the deficit. Pre-fix Path A saved at the OLD frequency
+    //    which meant the player saw no schedule change until next
+    //    quarter close — confusing, since the modal screen already
+    //    accepted their lift. Now the new weekly is recorded
+    //    immediately and the pending flag protects the slot-cap rule.
     if (hasShortfall) {
       if (!allBidsSet) {
         setError("Set your bid for each shortfall airport below before saving.");
         return;
       }
+      // Bid slot quantities, keyed by code. Used both to call
+      // submitSlotBid (per code) AND to inform the updateRoute
+      // deficit check so the same submission isn't rejected as
+      // "not enough slots" while the bid is in flight in the same
+      // store turn.
+      const bidQtyByCode: Record<string, number> = {};
       const bidErrs: string[] = [];
       if (shortfallOrigin > 0 && bidPrices[route.originCode] !== undefined) {
         const slots = bidSlots[route.originCode] ?? shortfallOrigin;
+        bidQtyByCode[route.originCode] = slots;
         const r = submitSlotBid(route.originCode, slots, bidPrices[route.originCode]!);
         if (!r.ok) bidErrs.push(`${route.originCode}: ${r.error}`);
       }
       if (shortfallDest > 0 && bidPrices[route.destCode] !== undefined) {
         const slots = bidSlots[route.destCode] ?? shortfallDest;
+        bidQtyByCode[route.destCode] = slots;
         const r = submitSlotBid(route.destCode, slots, bidPrices[route.destCode]!);
         if (!r.ok) bidErrs.push(`${route.destCode}: ${r.error}`);
       }
@@ -1169,17 +1180,15 @@ function RouteDetailModal({
         setError(`Slot bid${bidErrs.length === 1 ? "" : "s"} rejected — ${bidErrs.join(" · ")}`);
         return;
       }
-      // Save the non-frequency edits at the current daily frequency
-      // so the route doesn't break slot caps. Frequency auto-bumps
-      // after the auction clears.
       const r = updateRoute(route.id, {
         aircraftIds: selectedPlaneIds,
-        dailyFrequency: route.dailyFrequency,
+        dailyFrequency: Math.max(1 / 7, weeklyFreq / 7),
         pricingTier: tier,
         econFare,
         busFare,
         firstFare,
         cargoRatePerTonne: cargoRate,
+        slotBidsByCode: bidQtyByCode,
       });
       if (!r.ok) {
         setError(r.error ?? "Failed to save");
@@ -1187,13 +1196,25 @@ function RouteDetailModal({
       }
       toast.info(
         "Slot bids queued",
-        "Bids resolve at quarter close — schedule auto-updates if you win the slots.",
+        "Bids resolve at quarter close — route stays pending until you win the slots.",
       );
       onClose();
       return;
     }
 
     // Path B: no shortfall → standard save with the new frequency.
+    // We STILL pass any pendingSlotBids the team already has queued
+    // as slotBidsByCode, so a player who bid via SlotMarketPanel and
+    // then opens the route modal isn't blocked by a stale view of
+    // their own bid coverage. (Engine also looks at pendingSlotBids
+    // directly — this is belt + suspenders.)
+    const inFlightBidCoverage: Record<string, number> = {};
+    for (const b of player?.pendingSlotBids ?? []) {
+      if (b.airportCode === route.originCode || b.airportCode === route.destCode) {
+        inFlightBidCoverage[b.airportCode] =
+          (inFlightBidCoverage[b.airportCode] ?? 0) + b.slots;
+      }
+    }
     const r = updateRoute(route.id, {
       aircraftIds: selectedPlaneIds,
       // Preserve fractional daily — earlier this snapped 1-3 weekly
@@ -1206,6 +1227,9 @@ function RouteDetailModal({
       busFare,
       firstFare,
       cargoRatePerTonne: cargoRate,
+      slotBidsByCode: Object.keys(inFlightBidCoverage).length > 0
+        ? inFlightBidCoverage
+        : undefined,
     });
     if (!r.ok) {
       setError(r.error ?? "Failed to save");

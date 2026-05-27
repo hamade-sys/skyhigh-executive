@@ -420,6 +420,13 @@ export interface GameStore extends GameState {
     firstFare?: number | null;
     cargoRatePerTonne?: number | null;
     aircraftIds?: string[];
+    /** Pending slot-bids the caller is also submitting alongside this
+     *  route update. The deficit-check subtracts these so a player
+     *  who raises frequency AND bids for the missing slots in the
+     *  same submit doesn't get a chicken-and-egg "not enough slots"
+     *  block. Keyed by airport code; value is the number of WEEKLY
+     *  slots being bid for at that airport. */
+    slotBidsByCode?: Record<string, number>;
   }): { ok: boolean; error?: string };
 
   submitDecision(args: {
@@ -3144,6 +3151,13 @@ export const useGame = create<GameStore>()(
         // EXCLUDING this route, then add the proposed new weekly demand
         // (clampedDaily × 7) and compare against airportLeases.
         const proposedWeekly = Math.round(clampedDaily * 7);
+        // Whether the route will need to land in "pending" status due
+        // to a slot shortfall covered by in-flight bids. If the caller
+        // (RouteSetupModal Submit) is bidding for the deficit slots
+        // in the same submission, we let the route through but mark
+        // it pending so it doesn't earn revenue until the auction
+        // resolves at quarter close.
+        let willBePending = false;
         for (const code of [route.originCode, route.destCode]) {
           const slotsHeld = player.airportLeases?.[code]?.slots ?? 0;
           const usedByOthers = player.routes
@@ -3154,11 +3168,33 @@ export const useGame = create<GameStore>()(
             )
             .reduce((sum, r) => sum + r.dailyFrequency * 7, 0);
           if (usedByOthers + proposedWeekly > slotsHeld) {
-            const shortfall = usedByOthers + proposedWeekly - slotsHeld;
-            return {
-              ok: false,
-              error: `Not enough slots at ${code} — ${shortfall} more weekly slot${shortfall === 1 ? "" : "s"} needed. Lower the frequency, drop an aircraft, or bid for more slots in the Slot Market first.`,
-            };
+            const rawShortfall = usedByOthers + proposedWeekly - slotsHeld;
+            // Two sources of "in-flight" bid coverage count toward the
+            // shortfall: (1) bids passed inline via patch.slotBidsByCode
+            // when the caller is submitting a route edit AND a fresh
+            // slot bid in the same action, and (2) bids the player has
+            // ALREADY queued for this airport via SlotMarketPanel or a
+            // prior submission — these live on `player.pendingSlotBids`
+            // and are about to clear at the next quarter close. Without
+            // (2), a player who bids first, then opens the route modal
+            // to lift frequency, gets blocked because the modal sees
+            // their bid as "external" even though the auction is
+            // theirs to win. Workshop blocker observed May 2026.
+            const inlineBidCoverage = patch.slotBidsByCode?.[code] ?? 0;
+            const pendingBidCoverage = (player.pendingSlotBids ?? [])
+              .filter((b) => b.airportCode === code)
+              .reduce((sum, b) => sum + b.slots, 0);
+            const bidCoverage = inlineBidCoverage + pendingBidCoverage;
+            const shortfall = Math.max(0, rawShortfall - bidCoverage);
+            if (shortfall > 0) {
+              return {
+                ok: false,
+                error: `Not enough slots at ${code} — ${shortfall} more weekly slot${shortfall === 1 ? "" : "s"} needed (after bidding for ${bidCoverage}). Lower the frequency, drop an aircraft, or raise the slot bid first.`,
+              };
+            }
+            // Bid covers the shortfall — flag as pending. Route runs
+            // at the new frequency only after the auction resolves.
+            willBePending = true;
           }
         }
 
@@ -3176,6 +3212,12 @@ export const useGame = create<GameStore>()(
                 ? patch.cargoRatePerTonne
                 : r.cargoRatePerTonne,
               aircraftIds: newAircraftIds,
+              // If the lift requires a pending slot bid to clear, the
+              // route reverts to "pending" until the auction resolves
+              // at quarter close. Mirrors the openRoute pending flow
+              // so the player can't earn revenue on slots they don't
+              // own yet.
+              status: willBePending ? "pending" as const : r.status,
             }),
             fleet: t.fleet.map((f) => {
               if (patch.aircraftIds) {
