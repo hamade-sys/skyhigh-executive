@@ -61,38 +61,86 @@ export function leaseTermsFor(spec: AircraftSpec): LeaseTerms {
   };
 }
 
-/** Top-N specs eligible for lease at the given quarter, ranked by
- *  per-quarter production stock. We rank only specs that are currently
- *  available (unlocked AND not past cutoff) so a tier-1 widebody whose
- *  production line just closed is no longer leasable. */
+/** Specs eligible for lease at the given quarter.
+ *
+ *  Pre-rebalance bug (May 2026 workshop feedback): "the lease market
+ *  is only stuck with bombardier and embraer... nothing longhaul or
+ *  widebody." Root cause: the old ranker picked the top 7 passenger
+ *  specs purely by production-cap stock. Cheap regional jets had cap
+ *  8 vs widebodies at cap 5, so regionals filled all 7 slots and
+ *  every long-haul airframe was excluded from the lease tab.
+ *
+ *  Fix: split the passenger pool into haul-category buckets and pick
+ *  the top stock-ranked spec inside EACH bucket. Guarantees the
+ *  player sees a short-haul / mid-haul / long-haul mix every time.
+ *
+ *    Short-haul  (range ≤ 4,000 km): 3 slots — E-jets, CRJ, A319/A320
+ *    Mid-haul    (4,000 – 8,000 km): 2 slots — 737 MAX, A321XLR, 757
+ *    Long-haul   (>8,000 km):         2 slots — 787, A350, 777
+ *                                     Total 7.
+ *
+ *  Cargo bucket (3 slots) splits the same way:
+ *    Small/medium freighter (cargoTonnes ≤ 60): 1 slot
+ *    Large freighter (60 < cargoTonnes ≤ 100):  1 slot
+ *    Ultra freighter (cargoTonnes > 100):       1 slot
+ *
+ *  We rank only specs currently available (unlocked AND not past
+ *  cutoff). Within each bucket we sort by production cap desc, then
+ *  by buy price asc (cheaper airframe = bigger lessor pool willing to
+ *  underwrite). If a bucket runs out of eligible specs, the slot is
+ *  silently skipped — the lease tab never inflates with placeholders. */
 export function leaseEligibleSpecIds(
   specs: AircraftSpec[],
   currentQuarter: number,
 ): { passenger: Set<string>; cargo: Set<string> } {
-  function rank(family: "passenger" | "cargo", topN: number): Set<string> {
-    return new Set(
-      specs
-        .filter((s) => s.family === family)
-        .filter((s) => s.unlockQuarter <= currentQuarter)
-        .filter((s) => typeof s.cutoffRound !== "number" || currentQuarter <= s.cutoffRound)
-        // Production cap is the proxy for "stock the lessor has access to".
-        // Defaults: 8 standard / 5 premium ($80M+ widebodies). Sort desc.
-        .sort((a, b) => {
-          const ca = a.productionCapPerQuarter ?? (a.buyPriceUsd >= 80_000_000 ? 5 : 8);
-          const cb = b.productionCapPerQuarter ?? (b.buyPriceUsd >= 80_000_000 ? 5 : 8);
-          if (cb !== ca) return cb - ca;
-          // Tiebreaker: cheaper buy price first (more "commodity" airframe
-          // = bigger lessor pool willing to underwrite).
-          return a.buyPriceUsd - b.buyPriceUsd;
-        })
-        .slice(0, topN)
-        .map((s) => s.id),
-    );
+  function available(s: AircraftSpec): boolean {
+    if (s.unlockQuarter > currentQuarter) return false;
+    if (typeof s.cutoffRound === "number" && currentQuarter > s.cutoffRound) return false;
+    return true;
   }
-  return {
-    passenger: rank("passenger", LEASE_ELIGIBLE_PASSENGER_TOP_N),
-    cargo: rank("cargo", LEASE_ELIGIBLE_CARGO_TOP_N),
-  };
+  function stockRank(a: AircraftSpec, b: AircraftSpec): number {
+    // Same fallback as effectiveProductionCap so the lease ranker
+    // agrees with the actual production pool.
+    const capOf = (s: AircraftSpec) => {
+      if (typeof s.productionCapPerQuarter === "number") return s.productionCapPerQuarter;
+      const p = s.buyPriceUsd;
+      if (p >= 300_000_000) return 1;
+      if (p >= 200_000_000) return 2;
+      if (p >= 100_000_000) return 3;
+      if (p >=  50_000_000) return 4;
+      return 6;
+    };
+    const ca = capOf(a);
+    const cb = capOf(b);
+    if (cb !== ca) return cb - ca;
+    return a.buyPriceUsd - b.buyPriceUsd;
+  }
+
+  // Passenger buckets — by stage length (range)
+  const pax = specs.filter((s) => s.family === "passenger" && available(s));
+  const paxShort = pax.filter((s) => s.rangeKm <= 4_000).sort(stockRank);
+  const paxMid   = pax.filter((s) => s.rangeKm >  4_000 && s.rangeKm <= 8_000).sort(stockRank);
+  const paxLong  = pax.filter((s) => s.rangeKm >  8_000).sort(stockRank);
+  const passenger = new Set<string>([
+    ...paxShort.slice(0, 3).map((s) => s.id),
+    ...paxMid.slice(0, 2).map((s) => s.id),
+    ...paxLong.slice(0, 2).map((s) => s.id),
+  ]);
+
+  // Cargo buckets — by payload tonnage. Falls back to small bucket if
+  // a freighter spec is missing cargoTonnes (defensive against legacy
+  // catalogue rows).
+  const cgo = specs.filter((s) => s.family === "cargo" && available(s));
+  const cgoSmall = cgo.filter((s) => (s.cargoTonnes ?? 0) <=  60).sort(stockRank);
+  const cgoLarge = cgo.filter((s) => (s.cargoTonnes ?? 0) >   60 && (s.cargoTonnes ?? 0) <= 100).sort(stockRank);
+  const cgoUltra = cgo.filter((s) => (s.cargoTonnes ?? 0) >  100).sort(stockRank);
+  const cargo = new Set<string>([
+    ...cgoSmall.slice(0, 1).map((s) => s.id),
+    ...cgoLarge.slice(0, 1).map((s) => s.id),
+    ...cgoUltra.slice(0, 1).map((s) => s.id),
+  ]);
+
+  return { passenger, cargo };
 }
 
 /** Convenience — is this spec leasable for this team this quarter? */

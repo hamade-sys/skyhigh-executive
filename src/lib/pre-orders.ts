@@ -12,21 +12,33 @@ export const PREORDER_ANNOUNCEMENT_LEAD_ROUNDS = 2;
 export const PREORDER_DEPOSIT_PCT = 0.20;
 export const PREORDER_CANCEL_PENALTY_PCT = 0.50;
 
-/** Premium aircraft buy-price threshold. Above this we drop the per-quarter
- *  production cap from 8 → 5 to model genuine widebody supply scarcity
- *  (per master ref Q7 spec). Threshold chosen so all $80M+ airframes
- *  (787-8 and up, 777-300ER, A350, A380, etc.) hit the lower cap. */
+/** Premium aircraft buy-price threshold (legacy — kept for any
+ *  downstream consumers that still reference the old two-tier model). */
 export const PREMIUM_PRICE_THRESHOLD_USD = 80_000_000;
 
-/** Default per-quarter production cap. Standard narrow-bodies and most
- *  freighters use this value. */
+/** Legacy two-tier caps — kept as exports for compatibility with any
+ *  external consumer, but the resolver below now uses a finer 5-tier
+ *  scale to model real-world widebody scarcity properly. */
 export const DEFAULT_PRODUCTION_CAP = 8;
-/** Premium per-quarter production cap. */
 export const PREMIUM_PRODUCTION_CAP = 5;
 
-/** Resolve the effective per-quarter production cap for a spec, honouring
- *  any facilitator override stored in `productionCapOverrides[specId]`.
- *  Falls back to spec.productionCapPerQuarter or the price-tier default. */
+/** Five-tier price-keyed production caps (May 2026 — workshop feedback
+ *  "reduce overall supply, more scarcity on top airplanes"). Real-world
+ *  airframe makers deliver 50-80 narrowbodies per month but only 3-6
+ *  A380s per quarter. The game's pre-rebalance flat 5/8 split missed
+ *  this — every team could order as many widebodies as narrowbodies.
+ *
+ *  Tier  | Price band       | Cap | Real-world anchor
+ *  ------+------------------+-----+-----------------------------------
+ *  T1    | < $50M           |  6  | Embraer E190, CRJ — abundant
+ *  T2    | $50M – $99M      |  4  | A319/A320, 737-700/800 (1.5k/yr)
+ *  T3    | $100M – $199M    |  3  | 787-8, A330neo, 777-200 mid stock
+ *  T4    | $200M – $299M    |  2  | 787-10, 777-300ER, A350-900
+ *  T5    | ≥ $300M          |  1  | A380, 747-8I, 777-9X (showcase only)
+ *
+ *  Spec-level overrides (`spec.productionCapPerQuarter`) still take
+ *  precedence so workshop facilitators can hand-tune individual specs
+ *  via the admin panel; only the FALLBACK gets the new tiers. */
 export function effectiveProductionCap(
   spec: AircraftSpec,
   overrides: Record<string, number>,
@@ -36,9 +48,12 @@ export function effectiveProductionCap(
   if (typeof spec.productionCapPerQuarter === "number") {
     return Math.max(1, Math.floor(spec.productionCapPerQuarter));
   }
-  return spec.buyPriceUsd >= PREMIUM_PRICE_THRESHOLD_USD
-    ? PREMIUM_PRODUCTION_CAP
-    : DEFAULT_PRODUCTION_CAP;
+  const price = spec.buyPriceUsd;
+  if (price >= 300_000_000) return 1;  // mega: A380, 747-8I, 777X
+  if (price >= 200_000_000) return 2;  // large widebody
+  if (price >= 100_000_000) return 3;  // mid widebody / premium narrow
+  if (price >=  50_000_000) return 4;  // standard narrowbody
+  return 6;                            // regional jets
 }
 
 /** Pre-order announcement window opens at `unlockQuarter - 2` and runs
