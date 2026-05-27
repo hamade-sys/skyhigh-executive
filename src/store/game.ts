@@ -896,7 +896,7 @@ function makeStartingTeam(args: {
     routeObligations: [],
     rcfBalanceUsd: 0,
     taxLossCarryForward: [],
-    insurancePolicy: "none",
+    insurancePolicy: "medium",
     fuelTanks: { small: 0, medium: 0, large: 0 },
     fuelStorageLevelL: 0,
     fuelStorageAvgCostPerL: 0,
@@ -5923,7 +5923,7 @@ export const useGame = create<GameStore>()(
           rcfBalanceUsd: 0,
           loans: [],
           taxLossCarryForward: [],
-          insurancePolicy: "none",
+          insurancePolicy: "medium",
           fleet: [],
           routes: [],
           decisions: [],
@@ -6616,6 +6616,16 @@ export const useGame = create<GameStore>()(
                 opsExpansionSlots: 0,
               },
               fuelTanks: t.fuelTanks ?? { small: 0, medium: 0, large: 0 },
+              // Insurance migration (v2.1.1): teams seeded under the
+              // old "none" default land on Financials with $0 insurance,
+              // which workshop participants reject as unrealistic. Bump
+              // any legacy "none" to "medium" (0.3% of fleet value per
+              // quarter — the industry-standard floor). Players who
+              // INTENTIONALLY set low/high are preserved.
+              insurancePolicy:
+                t.insurancePolicy === "none" || !t.insurancePolicy
+                  ? "medium"
+                  : t.insurancePolicy,
               airportLeases: (() => {
                 // ──────────────────────────────────────────────────
                 // ONE-TIME LEASE REPRICE (May 2026 rebalance v2.1.0)

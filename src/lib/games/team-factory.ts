@@ -244,7 +244,13 @@ export function createInitializedTeamFromOnboarding(
     rcfBalanceUsd: 0,
     loans: [],
     taxLossCarryForward: [],
-    insurancePolicy: "none",
+    // Default to "medium" coverage — every operating airline carries
+    // at least medium hull-and-liability insurance. The previous
+    // "none" default rendered as $0 on the Financials tab which
+    // workshop participants (rightly) flagged as unrealistic. Players
+    // can downgrade to "low" or "none" via the team setup if they
+    // want to chase margin at the cost of accident exposure.
+    insurancePolicy: "medium",
     fleet: starterFleet,
     routes: [],
     decisions: [],
