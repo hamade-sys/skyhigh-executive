@@ -334,6 +334,12 @@ function LeaderboardButton() {
 function CloseQuarterButton() {
   const closeQuarter = useGame((s) => s.closeQuarter);
   const gmAdvanceQuarter = useGame((s) => s.gmAdvanceQuarter);
+  // Bulk dormant-route actions wired into the pre-flight blocker.
+  // Workshop ask (May 2026): the blocker pointed the player at the
+  // Routes panel to assign aircraft or close; for a workshop running
+  // short on time, suspending the entire batch inline is preferable.
+  const suspendRoute = useGame((s) => s.suspendRoute);
+  const closeRoute = useGame((s) => s.closeRoute);
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
   const localSessionId = useGame((s) => s.localSessionId);
   const currentQuarter = useGame((s) => s.currentQuarter);
@@ -855,7 +861,32 @@ function CloseQuarterButton() {
                   {c.detail}
                 </div>
               </div>
-              {c.cta && c.panel && (c.status === "warn" || c.status === "danger") && (
+              {c.id === "dormant" && c.status === "danger" && dormantRoutes.length > 0 && (
+                <div className="flex flex-col gap-1 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    title={`Suspend all ${dormantRoutes.length} dormant routes (keeps slot leases — resume later)`}
+                    onClick={() => {
+                      for (const r of dormantRoutes) suspendRoute(r.id);
+                    }}
+                  >
+                    Suspend all ({dormantRoutes.length})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="!text-negative"
+                    title={`Close all ${dormantRoutes.length} dormant routes (permanent — releases the route slots)`}
+                    onClick={() => {
+                      for (const r of dormantRoutes) closeRoute(r.id);
+                    }}
+                  >
+                    Close all
+                  </Button>
+                </div>
+              )}
+              {c.id !== "dormant" && c.cta && c.panel && (c.status === "warn" || c.status === "danger") && (
                 <Button
                   size="sm"
                   variant="ghost"
