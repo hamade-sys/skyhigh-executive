@@ -740,17 +740,35 @@ export function baseFareForDistance(km: number): number {
  *  and the bands were asymmetric so base never sat at the midpoint. */
 export interface FareRange { min: number; base: number; max: number }
 
+// Per-class fare bases by stage length.
+// Workshop feedback (May 2026): bots were dominating with short-haul
+// max-frequency spam because short-haul demand pools at major hubs
+// (NYC, LA, London, Tokyo) are several times larger than long-haul
+// demand and per-flight cost is much lower. To shift the strategic
+// balance toward long-haul, the medium-haul (2-5K km) and long-haul
+// (5-10K + >10K) bands now get a ~25% yield premium over the short
+// band. This reflects real-world reality: trans-continental and
+// trans-oceanic seats command much higher per-km yields than regional
+// shuttle traffic, partly because there's no rail/road alternative,
+// partly because business and premium cabins dominate the mix.
+//
+// Pre-rebalance: SH $120 · MH $350 · LH $650 · XLH $950
+// Post-rebalance: SH $120 · MH $440 · LH $880 · XLH $1300
+// XLH is the "trans-Pacific premium" band where airlines historically
+// extract their highest yields.
 const ECON_BASE_BY_KM: Array<{ maxKm: number; base: number }> = [
   { maxKm: 2000,    base: 120 },
-  { maxKm: 5000,    base: 350 },
-  { maxKm: 10_000,  base: 650 },
-  { maxKm: Infinity, base: 950 },
+  { maxKm: 5000,    base: 440 },
+  { maxKm: 10_000,  base: 880 },
+  { maxKm: Infinity, base: 1300 },
 ];
+// Business class scales similarly. Pre: SH $360 · MH $1100 · LH $2200 · XLH $3500
+// Post: SH $360 · MH $1450 · LH $3000 · XLH $4800
 const BUS_BASE_BY_KM: Array<{ maxKm: number; base: number }> = [
   { maxKm: 2000,    base: 360 },
-  { maxKm: 5000,    base: 1100 },
-  { maxKm: 10_000,  base: 2200 },
-  { maxKm: Infinity, base: 3500 },
+  { maxKm: 5000,    base: 1450 },
+  { maxKm: 10_000,  base: 3000 },
+  { maxKm: Infinity, base: 4800 },
 ];
 /** First-class base = business base × 3.5 (PRD A11). */
 function firstBase(km: number): number {
@@ -3622,7 +3640,30 @@ export function runQuarterClose(
     }
   }
 
-  const newBrandPts = Math.max(0, next.brandPts + brandDelta + dissonanceBrandPenalty);
+  // Long-haul prestige brand bonus (May 2026 — anti-short-haul-spam).
+  // Real flag carriers build brand on their trans-continental and
+  // trans-oceanic network: BA's LHR-JFK, Singapore's SQ-22, Emirates'
+  // DXB-LAX. Running long routes (>5000 km) signals capability and
+  // attracts the high-yield premium traveller; short-haul shuttle
+  // operations don't move the brand needle the same way. This bonus
+  // gives the strategic player a reason to invest in widebodies and
+  // 12+ hour routes even though they're operationally more expensive.
+  //   +0.3 brand pts/Q per active route 5,000-10,000 km
+  //   +0.6 brand pts/Q per active route >10,000 km (ultra-long-haul)
+  // Caps at +6 brand pts/Q total so a player can't farm brand purely
+  // by spam-opening 30 long-haul lossmakers.
+  let longHaulBrandBonus = 0;
+  for (const r of next.routes) {
+    if (r.status !== "active") continue;
+    if (r.isCargo) continue; // cargo brand bonus modeled separately
+    if (r.distanceKm > 10_000) longHaulBrandBonus += 0.6;
+    else if (r.distanceKm > 5_000) longHaulBrandBonus += 0.3;
+  }
+  longHaulBrandBonus = Math.min(6, longHaulBrandBonus);
+  if (longHaulBrandBonus > 0) {
+    notes.push(`Long-haul prestige: +${longHaulBrandBonus.toFixed(1)} brand pts`);
+  }
+  const newBrandPts = Math.max(0, next.brandPts + brandDelta + dissonanceBrandPenalty + longHaulBrandBonus);
   const newOpsPts = Math.max(0, next.opsPts + opsDelta);
   // Loyalty drifts toward 50 slightly, plus slider delta
   const drift = (50 - next.customerLoyaltyPct) * 0.03;
