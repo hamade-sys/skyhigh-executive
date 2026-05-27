@@ -53,23 +53,44 @@ function isDoctrine(team: { doctrine?: DoctrineId }, doctrine: ActiveDoctrineId)
  *  at $0.55/L — passenger fuel landed ~3× too cheap, which is why a
  *  16-widebody fleet showed only $22.5M in fuel against $1.7B revenue.
  *  Both paths now share this constant. */
+/** Undiscounted spot price for Jet A-1 at the airport ramp. This is
+ *  the WHOLESALE-INTO-PLANE price an airline pays at retail (no
+ *  hedging, no bulk-buy discount). Industry context:
+ *    - IATA monthly Jet A-1 average (2022-25): $0.70-$1.05/L
+ *    - Heathrow into-plane (post-handling fee): ~$0.90/L
+ *    - $0.85 sits in the middle of the realistic band.
+ *  Players REDUCE this via:
+ *    - hub fuel reserve tank: −15% on routes from that hub
+ *    - fuel-storage bulk-buy subsidiary: stored litres charged at the
+ *      blended avg cost paid at purchase time (typically 25% below
+ *      spot when prices spike)
+ *    - hedging flags: 100/fuelIndex multiplier
+ *  So this constant is the UPPER bound; the engine consumes at this
+ *  price minus any active discount stack.
+ */
 export const FUEL_BASELINE_USD_PER_L = 0.85;
 
 /** Real-world fuel-burn calibration factor. The aircraft catalogue
  *  in `src/data/aircraft.ts` lists `fuelBurnPerKm` values that came
- *  from a mix of cruise-only sources; they sit ~60% of what real
- *  block-fuel numbers look like (block fuel includes taxi, climb,
- *  descent, hold — which inflate L/km by 30-40% over cruise).
+ *  from a mix of cruise-only sources; they sit well below real-world
+ *  BLOCK-FUEL numbers (block fuel includes taxi, climb, descent,
+ *  hold, and inefficient ATC routings — inflates L/km by 50-80% over
+ *  cruise depending on stage length and congestion).
  *
- *  Workshop feedback (May 2026): fuel was landing at only ~3% of
- *  per-route operating cost. Real US-domestic airlines run fuel at
- *  25-30% of operating cost. Applying a single 1.6× factor at the
- *  consumption site (rather than editing 60+ catalogue rows) keeps
- *  the spec sheet aligned with manufacturer cruise figures while
- *  the engine sees the higher block-fuel burn the real world
- *  actually charges for. Stacks correctly with the fuel-tank /
- *  eco / engine-retrofit / fuselage discount multipliers above. */
-export const FUEL_BURN_REAL_WORLD_FACTOR = 1.6;
+ *  Workshop feedback iteration (May 2026):
+ *  Round 1 (factor 1.6): fuel ~8% of cost — still too low. User flagged
+ *     "8% on fuel is still very low... considering this is not
+ *      discounted wholesale fuel."
+ *  Round 2 (factor 2.5): fuel ~13-15% of cost — closer to the
+ *     20-25% industry share US-domestic carriers report.
+ *
+ *  Going much higher (3.0+) would make narrowbody burn implausible
+ *  even with the block-fuel pad (e.g. a 737 cruise spec of 3.0 L/km
+ *  × 3.0 = 9 L/km which is widebody territory). Stops at 2.5 to keep
+ *  per-aircraft numbers in a defensible range; the remaining gap to
+ *  pure industry % is closed by trimming non-fuel costs (slot, hub).
+ */
+export const FUEL_BURN_REAL_WORLD_FACTOR = 2.5;
 
 /** Discontinued-type maintenance escalation (master ref Update 5).
  *  Once an aircraft type passes its `cutoffRound`, every still-flying
