@@ -418,7 +418,10 @@ export interface GameStore extends GameState {
   }): void;
 
   borrowCapital(amount: number): { ok: boolean; error?: string };
-  repayLoan(loanId: string): { ok: boolean; error?: string };
+  /** Repay a loan. When `amountUsd` is omitted, attempts full
+   *  principal; falls back to "as much cash as you have" if it's not
+   *  enough. Pass an explicit amount for partial pay-down. */
+  repayLoan(loanId: string, amountUsd?: number): { ok: boolean; error?: string };
   refinanceLoan(loanId: string): { ok: boolean; error?: string };
   /** Convert a negative cash position into a fresh term loan at the
    *  current covenant-adjusted rate. No-op if cash >= 0. The new loan
@@ -3411,28 +3414,51 @@ export const useGame = create<GameStore>()(
         return { ok: true };
       },
 
-      repayLoan: (loanId) => {
+      repayLoan: (loanId, amountUsd) => {
         const s = get();
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player team" };
         const loan = player.loans.find((l) => l.id === loanId);
         if (!loan) return { ok: false, error: "Loan not found" };
-        if (player.cashUsd < loan.remainingPrincipal)
-          return { ok: false, error: `Need ${fmtMoneyPlain(loan.remainingPrincipal)} cash` };
+        if (player.cashUsd <= 0) return { ok: false, error: "No cash to repay with" };
+        // PARTIAL REPAY (May 2026 workshop feedback): the old action
+        // required full-principal cash on hand, which left players
+        // with positive but smaller cash positions unable to chip
+        // away at their debt. Real airlines make principal pre-
+        // payments all the time. When the caller passes an explicit
+        // amountUsd we accept it (clamped to cash and to remaining
+        // principal); when omitted, default to the full principal
+        // and fall back to "pay as much as you can" if cash is short.
+        const requested = amountUsd ?? loan.remainingPrincipal;
+        const repayAmount = Math.max(
+          0,
+          Math.min(requested, loan.remainingPrincipal, player.cashUsd),
+        );
+        if (repayAmount <= 0) return { ok: false, error: "Repay amount must be > 0" };
+        const fullyRepaid = repayAmount >= loan.remainingPrincipal - 0.5;
         set({
           teams: s.teams.map((t) => t.id !== player.id ? t : {
             ...t,
-            cashUsd: t.cashUsd - loan.remainingPrincipal,
-            totalDebtUsd: Math.max(0, t.totalDebtUsd - loan.remainingPrincipal),
-            loans: t.loans.filter((l) => l.id !== loanId),
+            cashUsd: t.cashUsd - repayAmount,
+            totalDebtUsd: Math.max(0, t.totalDebtUsd - repayAmount),
+            loans: fullyRepaid
+              ? t.loans.filter((l) => l.id !== loanId)
+              : t.loans.map((l) =>
+                  l.id === loanId
+                    ? { ...l, remainingPrincipal: l.remainingPrincipal - repayAmount }
+                    : l,
+                ),
           }),
         });
         toast.success(
-          `Loan repaid · ${fmtMoneyPlain(loan.remainingPrincipal)}`,
-          `Saved ${loan.ratePct.toFixed(1)}% interest going forward.`,
+          fullyRepaid
+            ? `Loan repaid · ${fmtMoneyPlain(repayAmount)}`
+            : `Partial repay · ${fmtMoneyPlain(repayAmount)}`,
+          fullyRepaid
+            ? `Saved ${loan.ratePct.toFixed(1)}% interest going forward.`
+            : `Remaining principal: ${fmtMoneyPlain(loan.remainingPrincipal - repayAmount)} @ ${loan.ratePct.toFixed(1)}%.`,
         );
-        // Phase B — D2: persist the loan removal.
-        void get().pushStateToServer("player.repaidLoan", { loanId });
+        void get().pushStateToServer("player.repaidLoan", { loanId, amount: repayAmount });
         return { ok: true };
       },
 

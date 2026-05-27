@@ -33,6 +33,18 @@ export function FinancialsPanel() {
   const [borrowAmount, setBorrowAmount] = useState(50_000_000);
   const [error, setError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Partial-repay modal — workshop feedback: the old all-or-nothing
+  // Repay button was disabled the moment cash dropped below the
+  // outstanding principal, even when the player had plenty of cash
+  // to chip away at the loan. Now we open a modal that lets the
+  // player pick any amount up to min(cash, principal).
+  const [repayState, setRepayState] = useState<{
+    loanId: string;
+    loanName: string;
+    remainingPrincipal: number;
+    ratePct: number;
+    amount: number;
+  } | null>(null);
 
   if (!player) return null;
 
@@ -196,7 +208,9 @@ export function FinancialsPanel() {
                 Active facilities · {player.loans.length}
               </div>
               {player.loans.map((loan) => {
-                const canRepay = player.cashUsd >= loan.remainingPrincipal;
+                // Repay enabled whenever the player has ANY cash — they
+                // can always pay down at least some principal.
+                const canRepay = player.cashUsd > 0;
                 const newRateAvailable = effectiveBorrowingRate(player, s.baseInterestRatePct);
                 const refiSavings = loan.ratePct - newRateAvailable;
                 const canRefi = refiSavings >= 0.25 && player.cashUsd >= loan.remainingPrincipal * 0.01;
@@ -240,13 +254,20 @@ export function FinancialsPanel() {
                         size="sm"
                         variant="secondary"
                         disabled={!canRepay}
-                        title={canRepay ? "Pay off in full" : `Need ${fmtMoney(loan.remainingPrincipal - player.cashUsd)} more cash`}
+                        title={canRepay
+                          ? "Repay principal — choose amount in the next step"
+                          : "No cash available to repay"}
                         onClick={() => {
-                          const r = s.repayLoan(loan.id);
-                          if (!r.ok) setError(r.error ?? "Repay failed");
+                          setRepayState({
+                            loanId: loan.id,
+                            loanName: loanDisplayName(loan),
+                            remainingPrincipal: loan.remainingPrincipal,
+                            ratePct: loan.ratePct,
+                            amount: Math.min(player.cashUsd, loan.remainingPrincipal),
+                          });
                         }}
                       >
-                        Repay
+                        Repay…
                       </Button>
                       <Button
                         size="sm"
@@ -440,6 +461,94 @@ export function FinancialsPanel() {
           <Button variant="primary" onClick={confirmBorrow}>Confirm</Button>
         </ModalFooter>
       </Modal>
+
+      {/* Partial-repay modal — lets the player chip away at principal
+          even when they don't have enough cash to clear the full
+          balance. Max defaults to min(cash, principal) and is
+          actionable as long as the player has any cash at all. */}
+      {repayState && (() => {
+        const cashCeiling = Math.max(0, player.cashUsd);
+        const principalCeiling = repayState.remainingPrincipal;
+        const maxRepay = Math.min(cashCeiling, principalCeiling);
+        const amt = Math.max(0, Math.min(repayState.amount, maxRepay));
+        const newPrincipal = Math.max(0, principalCeiling - amt);
+        const interestSaved = amt * (repayState.ratePct / 100) / 4;
+        const fullyRepays = amt >= principalCeiling - 0.5;
+        const setAmt = (n: number) =>
+          setRepayState((prev) => prev ? { ...prev, amount: Math.max(0, Math.min(maxRepay, n)) } : prev);
+        return (
+          <Modal open onClose={() => { setRepayState(null); setError(null); }}>
+            <ModalHeader>
+              <h2 className="font-display text-[1.5rem] text-ink">Repay {repayState.loanName}</h2>
+              <p className="text-ink-muted text-[0.8125rem] mt-1">
+                Principal <span className="tabular font-mono text-ink">{fmtMoney(principalCeiling)}</span> @ <span className="tabular font-mono text-ink">{repayState.ratePct.toFixed(2)}%</span> · Cash on hand <span className="tabular font-mono text-ink">{fmtMoney(cashCeiling)}</span>
+              </p>
+            </ModalHeader>
+            <ModalBody className="space-y-4">
+              <div>
+                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">Repay amount</div>
+                <Input
+                  type="number"
+                  value={amt}
+                  onChange={(e) => setAmt(parseInt(e.target.value, 10) || 0)}
+                />
+                <div className="text-[0.75rem] text-ink-muted mt-1">= {fmtMoney(amt)}</div>
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {([0.25, 0.5, 0.75, 1.0] as const).map((frac) => (
+                    <button
+                      key={frac}
+                      onClick={() => setAmt(Math.round(maxRepay * frac))}
+                      className="px-2 py-1 text-[0.6875rem] rounded-md border border-line bg-surface hover:bg-surface-hover transition-colors"
+                    >
+                      {Math.round(frac * 100)}%
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setAmt(maxRepay)}
+                    className="px-2 py-1 text-[0.6875rem] rounded-md border border-line bg-surface hover:bg-surface-hover transition-colors font-medium"
+                  >
+                    Max ({fmtMoney(maxRepay)})
+                  </button>
+                </div>
+              </div>
+              <div className="text-[0.75rem] text-ink-2 leading-snug space-y-0.5 bg-surface-2 p-2.5 rounded-md">
+                <div className="flex justify-between">
+                  <span>Remaining principal after</span>
+                  <span className="tabular font-mono">{fmtMoney(newPrincipal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Interest saved next Q</span>
+                  <span className="tabular font-mono text-positive">{fmtMoney(interestSaved)}</span>
+                </div>
+                {fullyRepays && (
+                  <div className="text-positive font-medium pt-1">
+                    Pays loan in full — facility closed.
+                  </div>
+                )}
+              </div>
+              {error && <div className="text-negative text-[0.875rem]">{error}</div>}
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="ghost" onClick={() => { setRepayState(null); setError(null); }}>Cancel</Button>
+              <Button
+                variant="primary"
+                disabled={amt <= 0}
+                onClick={() => {
+                  const r = s.repayLoan(repayState.loanId, amt);
+                  if (!r.ok) {
+                    setError(r.error ?? "Repay failed");
+                    return;
+                  }
+                  setRepayState(null);
+                  setError(null);
+                }}
+              >
+                Repay {fmtMoney(amt)}
+              </Button>
+            </ModalFooter>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
