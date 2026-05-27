@@ -438,6 +438,12 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                   // condition decays slightly each quarter, so this is
                   // the optimistic / "if you stay on top of upkeep" floor.
                   const fiveYearNet = entry.revenuePerQuarterUsd * 20 - entry.setupCostUsd;
+                  // Flagship preview: at 2.0× total cost, revenue is
+                  // 2.8× base. Shown as a teaser so the player sees the
+                  // late-game upside before they commit.
+                  const flagshipRevPerQ = entry.revenuePerQuarterUsd * 2.8;
+                  const flagshipTotalCost = entry.setupCostUsd * 2.0;
+                  const flagshipPaybackQ = Math.ceil(flagshipTotalCost / flagshipRevPerQ);
                   const paybackTone =
                     paybackQ <= 8
                       ? "fast"
@@ -479,6 +485,16 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                           )}
                         >
                           {fiveYearNet >= 0 ? "+" : ""}{fmtMoney(fiveYearNet)}
+                        </div>
+                      </div>
+                      <div className="col-span-2 pt-1.5 mt-0.5 border-t border-line/40">
+                        <div className="text-[0.625rem] uppercase tracking-wider text-positive">
+                          Flagship potential
+                        </div>
+                        <div className="text-[0.6875rem] text-ink-2 leading-snug">
+                          Pay {fmtMoney(flagshipTotalCost)} total · earn{" "}
+                          <span className="tabular font-mono text-positive">{fmtMoney(flagshipRevPerQ)}/Q</span>{" "}
+                          · payback {flagshipPaybackQ}Q
                         </div>
                       </div>
                     </div>
