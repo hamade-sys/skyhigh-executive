@@ -865,6 +865,14 @@ export interface GameSession {
   visibility: GameVisibility;
   status: GameStatus;
   boardDecisionsEnabled: boolean;
+  /** Campaign configuration (Brief §1). `"half"` is the default 60R
+   *  campaign starting Q1 2015 (or any of the 8/16/24/40R modes when
+   *  combined with the legacy short-mode flag). `"full"` is the 120R
+   *  campaign starting Q1 2000 — R61 is the same world state as R1
+   *  of the half campaign, so all half-campaign world news, scenarios,
+   *  and aircraft unlocks reuse with a +60 offset. Defaults to "half"
+   *  for back-compat with persisted sessions. */
+  campaignMode?: "half" | "full";
   joinCode: string | null;
   locked: boolean;
   maxTeams: number;
