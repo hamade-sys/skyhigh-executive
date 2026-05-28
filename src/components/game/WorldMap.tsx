@@ -142,6 +142,12 @@ function greatCirclePath(
   const c = 2 * Math.asin(Math.sqrt(Math.min(1, a)));
   if (c === 0) return [[aLat, aLon], [bLat, bLon]];
   const out: [number, number][] = [];
+  // dLon is the SHORT-way delta from a to b (always within ±180°).
+  // Both gcLon and linLon must use this frame, or the blend lands
+  // halfway around the planet.
+  let dLon = bLon - aLon;
+  if (dLon > 180) dLon -= 360;
+  if (dLon < -180) dLon += 360;
   for (let i = 0; i <= steps; i++) {
     const f = i / steps;
     const A = Math.sin((1 - f) * c) / Math.sin(c);
@@ -150,15 +156,20 @@ function greatCirclePath(
     const y = A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
     const z = A * Math.sin(φ1) + B * Math.sin(φ2);
     const gcLat = toDeg(Math.atan2(z, Math.sqrt(x * x + y * y)));
-    const gcLon = toDeg(Math.atan2(y, x));
-    // Rhumb-line interpolation at the same t. We blend longitudes
-    // along the SHORTER of the two directions around the globe so
-    // antipodal routes still take the natural visual path.
-    let dLon = bLon - aLon;
-    if (dLon > 180) dLon -= 360;
-    if (dLon < -180) dLon += 360;
+    let gcLon = toDeg(Math.atan2(y, x));
+    // Rhumb (loxodrome) longitude at the same fraction f. Uses the
+    // SHORT-way dLon so a JFK→Tokyo route flows west across the
+    // Pacific instead of long-way east across the Atlantic.
     const linLat = aLat + (bLat - aLat) * f;
     const linLon = aLon + dLon * f;
+    // CRITICAL: gcLon comes out of atan2 in [-180, 180], but linLon
+    // can be anywhere (e.g. -220 for a JFK→Tokyo path). When the two
+    // differ by ~360° they describe the SAME point on the sphere but
+    // the blend treats them as 360° apart and lands halfway around
+    // the world. Normalize gcLon into the same frame as linLon before
+    // blending — pull it to whichever ±360° copy is closest to linLon.
+    while (gcLon - linLon > 180) gcLon -= 360;
+    while (gcLon - linLon < -180) gcLon += 360;
     out.push([
       gcLat + (linLat - gcLat) * flatness,
       gcLon + (linLon - gcLon) * flatness,
