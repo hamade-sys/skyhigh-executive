@@ -1701,9 +1701,521 @@ export const WORLD_NEWS: NewsItem[] = [
     fuelIndexAtBaseline: 105,
   }),
   n({
-    quarter: 40, id: "FINAL", icon: "✓", impact: "none",
-    headline: "Final investor pitch and MVP awards ceremony commences",
-    detail: "The simulation ends here. All metrics permanent. What an airline you built.",
+    quarter: 40, id: "FINAL-40", icon: "✓", impact: "none",
+    headline: "Q4 2024 closes — 5.1B passengers, simulation at all-time peak",
+    detail: "Aviation industry profit at record. Half-campaign content from R41 onward extends the simulation through 2029. Configure totalRounds=60 to play through.",
+  }),
+
+  // ═══════════════════════════════════════════════════════════════
+  // R41-R60 · Q1 2025 – Q4 2029 · Half-campaign extension (Brief §9)
+  // 60 events across the back half of the 60R half-campaign. Each
+  // round mirrors the Travel Index curve from the brief and surfaces
+  // 2-3 anchor events. World Cup 2026, LA 2028 Olympics, Euro 2028
+  // UK/Ireland, Rugby World Cup 2027 Australia, Expo 2025 Osaka, and
+  // Boom Overture market opening are all canonical events in this
+  // window.
+  // ═══════════════════════════════════════════════════════════════
+
+  // R41 — Q1 2025 — Travel Index 128 — Expo Osaka + SAF mandate + Gulf wealth
+  n({
+    quarter: 41, id: "EXPO-OSAKA", icon: "🏛", impact: "tourism",
+    headline: "Expo 2025 Osaka opens — 161 nations, 28M visitors expected across 184 days",
+    detail: "Japan tourism at all-time peak. KIX and NRT at absolute simulation high. All Japan routes seeing 98%+ occupancy.",
+    travelIndex: 128,
+    modifiers: [
+      { city: "KIX", category: "tourism", pct: 80, rounds: 3 },
+      { city: "NRT", category: "tourism", pct: 50, rounds: 3 },
+    ],
+  }),
+  n({
+    quarter: 41, id: "SAF-MANDATE", icon: "🌱", impact: "fuel",
+    headline: "SAF mandate rises to 10% blend globally — non-compliant carriers face 22% fuel premium",
+    detail: "Green Leader airlines fully exempt. Others face escalating cost burden as carbon pricing tightens.",
+    fuelIndexAtBaseline: 112,
+  }),
+  n({
+    quarter: 41, id: "GULF-WEALTH", icon: "💼", impact: "business",
+    headline: "Gulf sovereign wealth investment reaches $3T deployed — Arabian Peninsula at structural high",
+    detail: "DXB, AUH, RUH business demand permanently elevated as Vision programmes deliver.",
+    modifiers: [
+      { city: "DXB", category: "business", pct: 20, rounds: 4 },
+      { city: "AUH", category: "business", pct: 20, rounds: 4 },
+      { city: "RUH", category: "business", pct: 25, rounds: 4 },
+    ],
+  }),
+
+  // R42 — Q2 2025 — Travel Index 125 — Dubai milestone + OPEC cut + cargo boom
+  n({
+    quarter: 42, id: "DUBAI-#1", icon: "🌟", impact: "tourism",
+    headline: "Dubai named world's most-visited city for third consecutive year — 24M visitors in 2025",
+    detail: "DXB demand permanently elevated again. Tourism infrastructure maxed.",
+    travelIndex: 125,
+    modifiers: [{ city: "DXB", category: "tourism", pct: 15, rounds: 99 }],
+  }),
+  n({
+    quarter: 42, id: "OPEC-CUT", icon: "$", impact: "fuel",
+    headline: "OPEC+ surprise production cut — crude climbs to $88/barrel · Index 118",
+    detail: "Stored fuel from previous rounds now significantly advantaged. Hedged carriers protected.",
+    fuelIndexAtBaseline: 118,
+  }),
+  n({
+    quarter: 42, id: "CARGO-15B", icon: "📦", impact: "cargo",
+    headline: "E-commerce air freight crosses 15B annual packages — dedicated cargo operators at record margins",
+    detail: "Structural cargo demand permanently above 2024 levels. Cargo-doctrine airlines positioned.",
+    modifiers: spread(
+      ["DXB", "HKG", "ICN", "FRA", "ATL", "SEA", "LAX", "JFK"],
+      "cargo", 15, 8,
+    ),
+  }),
+
+  // R43 — Q3 2025 — Travel Index 130 — Peak summer + 797 NMA announce + green cargo
+  n({
+    quarter: 43, id: "PEAK-SUMMER", icon: "🌞", impact: "tourism",
+    headline: "Peak summer 2025 breaks all records — global aviation at 5.5B annual passenger pace",
+    detail: "All Tier 1-2 hub tourism at simulation peak. Premium cabin yields at 5-year high.",
+    travelIndex: 130,
+    modifiers: spread(
+      ["LHR", "CDG", "FRA", "AMS", "JFK", "LAX", "SIN", "HKG", "NRT", "DXB"],
+      "tourism", 12, 1,
+    ),
+  }),
+  n({
+    quarter: 43, id: "797-ANNOUNCE", icon: "✈️", impact: "ops",
+    headline: "Boeing confirms 797 NMA programme — launch customer orders taken · EIS announced",
+    detail: "Available for order from R45. Addresses 757/767 replacement gap. 225 seats, 9,800km range, $95M buy.",
+  }),
+  n({
+    quarter: 43, id: "GREEN-CARGO", icon: "🌿", impact: "cargo",
+    headline: "Carbon-neutral shipping mandatory for 40% of Fortune 500 supplier contracts — green operators earn 18% premium",
+    detail: "Green-certified routes earn revenue premium for green_leader airlines.",
+  }),
+
+  // R44 — Q4 2025 — Travel Index 122 — Carbon pricing + F1 + filler
+  n({
+    quarter: 44, id: "CARBON-LEVY", icon: "💨", impact: "fuel",
+    headline: "EU ETS aviation full rate now $65/tonne CO2 — non-SAF effective cost rising",
+    detail: "Non-SAF index effectively +8% additional from this round. Green airlines unaffected.",
+    travelIndex: 122,
+    fuelIndexAtBaseline: 108,
+  }),
+  n({
+    quarter: 44, id: "F1-2025", icon: "🏎", impact: "tourism",
+    headline: "Formula 1 2025 record calendar — Las Vegas, Miami, Singapore, Abu Dhabi hospitality peaks",
+    detail: "F1 season at record commercial revenue. Host cities seeing premium-cabin yield surge.",
+    modifiers: [
+      { city: "LAS", category: "tourism", pct: 45, rounds: 1 },
+      { city: "SIN", category: "tourism", pct: 40, rounds: 1 },
+      { city: "AUH", category: "tourism", pct: 35, rounds: 1 },
+    ],
+  }),
+  n({
+    quarter: 44, id: "NO-IMPACT-44", icon: "📞", impact: "none",
+    headline: "Sources confirm airline CEO 'quick call' about 2025 strategy lasted 67 minutes — new personal record",
+    detail: "No game impact. The strategic implications remain unclear.",
+  }),
+
+  // R45 — Q1 2026 — Travel Index 120 — UAE-Asia bilateral + 797/A220-500 unlock
+  n({
+    quarter: 45, id: "UAE-ASIA", icon: "🤝", impact: "business",
+    headline: "New UAE-Asia bilateral agreements open 14 new city-pair routes — first-mover advantage",
+    detail: "Teams opening qualifying routes get a permanent slot advantage and early-mover yield premium.",
+    travelIndex: 120,
+    modifiers: [
+      { city: "DXB", category: "business", pct: 15, rounds: 2 },
+      { city: "AUH", category: "business", pct: 12, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 45, id: "797-A220-LIVE", icon: "🏭", impact: "ops",
+    headline: "Boeing 797 NMA and Airbus A220-500 now available for order — both enter commercial market this quarter",
+    detail: "797 NMA: 225 seats, 9,800km, $95M. A220-500: 160 seats, 7,200km, $30M. Both transform medium-haul economics.",
+  }),
+  n({
+    quarter: 45, id: "FUEL-112", icon: "$", impact: "fuel",
+    headline: "Crude stabilises at $82/barrel — fuel index 112",
+    detail: "Stable mid-range pricing. SAF advantage worth $3-6M per quarter for compliant carriers.",
+    fuelIndexAtBaseline: 112,
+  }),
+
+  // R46 — Q2 2026 — Travel Index 135 — World Cup 2026 USA/Canada/Mexico opens
+  n({
+    quarter: 46, id: "WC26-OPENS", icon: "⚽", impact: "tourism",
+    headline: "FIFA World Cup 2026 opens — USA, Canada, Mexico · 48 teams · 104 matches · 16 host cities",
+    detail: "Largest World Cup ever staged. North American routes at absolute peak. S10 winner: 100% load floor.",
+    travelIndex: 135,
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 120, rounds: 2 },
+      { city: "JFK", category: "tourism", pct: 100, rounds: 2 },
+      { city: "MIA", category: "tourism", pct: 110, rounds: 2 },
+      { city: "ORD", category: "tourism", pct: 90, rounds: 2 },
+      { city: "DFW", category: "tourism", pct: 85, rounds: 2 },
+      { city: "YYZ", category: "tourism", pct: 80, rounds: 2 },
+      { city: "MEX", category: "tourism", pct: 75, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 46, id: "WC26-BIZ", icon: "💼", impact: "business",
+    headline: "US corporate confidence at decade high — business travel peaks alongside World Cup",
+    detail: "Premium cabin yields at five-year peak across major US hubs.",
+    modifiers: [
+      { city: "JFK", category: "business", pct: 25, rounds: 2 },
+      { city: "LAX", category: "business", pct: 20, rounds: 2 },
+      { city: "ORD", category: "business", pct: 18, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 46, id: "FUEL-WC26", icon: "$", impact: "fuel",
+    headline: "World Cup travel demand spikes crude to $95/barrel — index 128",
+    detail: "Highest fuel index since R23 Katrina spike. SAF advantage at peak value.",
+    fuelIndexAtBaseline: 128,
+  }),
+
+  // R47 — Q3 2026 — Travel Index 140 — World Cup Final LA + cargo peak
+  n({
+    quarter: 47, id: "WC26-FINAL", icon: "🏆", impact: "tourism",
+    headline: "World Cup Final in Los Angeles — USA wins in extra time · 4.8M attendance · 2.1B TV audience",
+    detail: "Highest Travel Index in the entire simulation. LAX at absolute maximum. S10 winner: 100% load floor.",
+    travelIndex: 140,
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 140, rounds: 1 },
+      { city: "JFK", category: "tourism", pct: 80, rounds: 1 },
+    ],
+  }),
+  n({
+    quarter: 47, id: "CARGO-PEAK", icon: "📦", impact: "cargo",
+    headline: "Holiday cargo pre-positioning begins — 2026 on track for 17B package record",
+    detail: "Air freight fully booked at major hubs. Cargo airlines at record per-tonne yield.",
+    modifiers: spread(
+      ["DXB", "HKG", "ICN", "FRA", "AMS", "ATL", "SEA", "LAX", "JFK"],
+      "cargo", 30, 1,
+    ),
+  }),
+  n({
+    quarter: 47, id: "NO-IMPACT-47", icon: "📋", impact: "none",
+    headline: "FIFA confirms World Cup 2030 will be held across 6 countries on 3 continents simultaneously",
+    detail: "Logistics community declares emergency. No demand impact this round — well beyond simulation end.",
+  }),
+
+  // R48 — Q4 2026 — Travel Index 125 — Post-WC retention + 797 reminder
+  n({
+    quarter: 48, id: "WC26-LEGACY", icon: "🏙", impact: "tourism",
+    headline: "Post-World Cup North America tourism surge — 'We had no idea how big this country was'",
+    detail: "Record visitor retention. LAX and JFK see permanent tourism uplift.",
+    travelIndex: 125,
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 30, rounds: 99 },
+      { city: "JFK", category: "tourism", pct: 20, rounds: 99 },
+    ],
+  }),
+  n({
+    quarter: 48, id: "FUEL-110", icon: "$", impact: "fuel",
+    headline: "World Cup demand subsides — crude settles at $80/barrel · Index 110",
+    detail: "Fuel returning to baseline. Hedged carriers banking unrealized gains.",
+    fuelIndexAtBaseline: 110,
+  }),
+  n({
+    quarter: 48, id: "797-NMA-REMINDER", icon: "✈️", impact: "ops",
+    headline: "Boeing 797 NMA first commercial batch confirmed — EIS 2028 on track",
+    detail: "Teams planning fleet expansion should order now. Orders placed this round arrive next round.",
+  }),
+
+  // R49 — Q1 2027 — Travel Index 115 — IMF slowdown + ATR EVO unlock
+  n({
+    quarter: 49, id: "IMF-SLOWDOWN", icon: "📉", impact: "business",
+    headline: "Global economic slowdown signals — IMF warns of rate-cycle hangover",
+    detail: "Corporate travel caution spreading across major financial hubs.",
+    travelIndex: 115,
+    modifiers: [
+      { city: "JFK", category: "business", pct: -12, rounds: 2 },
+      { city: "LHR", category: "business", pct: -10, rounds: 2 },
+      { city: "HKG", category: "business", pct: -10, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 49, id: "FUEL-BASELINE", icon: "$", impact: "fuel",
+    headline: "Demand softening drops crude to $72/barrel — fuel at baseline",
+    detail: "Index returns to 100. SAF carriers still advantaged through carbon levy.",
+    fuelIndexAtBaseline: 100,
+  }),
+  n({
+    quarter: 49, id: "ATR-EVO-A220F", icon: "🏭", impact: "ops",
+    headline: "ATR EVO and Airbus A220-500F cargo variant available for order this quarter",
+    detail: "ATR EVO: 90 seats, 1,800km, $14M (route restriction ≤1,800km). A220-500F: 32T cargo, 6,500km, $32M.",
+  }),
+
+  // R50 — Q2 2027 — Travel Index 118 — Rugby World Cup Australia pre-event
+  n({
+    quarter: 50, id: "RWC-AUS-BUILD", icon: "🏉", impact: "tourism",
+    headline: "Rugby World Cup 2027 Australia — 20 nations · Largest sporting event ever in Southern Hemisphere",
+    detail: "Australian cities at record demand. Pre-event surge building across the network.",
+    travelIndex: 118,
+    modifiers: [
+      { city: "SYD", category: "tourism", pct: 60, rounds: 2 },
+      { city: "MEL", category: "tourism", pct: 55, rounds: 2 },
+      { city: "BNE", category: "tourism", pct: 65, rounds: 2 },
+      { city: "PER", category: "tourism", pct: 40, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 50, id: "AI-DIVIDE", icon: "🤖", impact: "none",
+    headline: "AI operational divide widens — Digital Gamble reskill teams running 22% lower ops costs vs competitors",
+    detail: "Informational only. CHRO debrief moment for the next workshop session.",
+  }),
+  n({
+    quarter: 50, id: "NO-IMPACT-50", icon: "🍽", impact: "none",
+    headline: "Maqlouba wins world's best dish 2027 — formally nominated for UNESCO cultural heritage status",
+    detail: "Competing dishes reportedly devastated. No game impact.",
+  }),
+
+  // R51 — Q3 2027 — Travel Index 122 — RWC peak + 797F unlock
+  n({
+    quarter: 51, id: "RWC-AUS-PEAK", icon: "🏆", impact: "tourism",
+    headline: "Rugby World Cup 2027 Australia peak — South Africa wins fourth title · 2.1M attendance",
+    detail: "Australian cities at absolute demand peak. Trans-Pacific routes at maximum.",
+    travelIndex: 122,
+    modifiers: [
+      { city: "SYD", category: "tourism", pct: 90, rounds: 2 },
+      { city: "MEL", category: "tourism", pct: 85, rounds: 2 },
+      { city: "BNE", category: "tourism", pct: 95, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 51, id: "SAF-GAP", icon: "🌱", impact: "fuel",
+    headline: "Crude at $75/barrel — SAF-compliant airlines now at effective index 82 vs non-SAF at 104",
+    detail: "Gap is $3M-$8M per quarter for medium-haul carriers. Green doctrine paying back.",
+    fuelIndexAtBaseline: 104,
+  }),
+  n({
+    quarter: 51, id: "797F-LIVE", icon: "📦", impact: "ops",
+    headline: "Boeing 797F cargo variant available for order — 58T payload, 9,200km, $90M",
+    detail: "Fills 767F gap permanently. Cargo doctrine airlines have a new mid-payload option.",
+  }),
+
+  // R52 — Q4 2027 — Travel Index 120 — AFL final + Riyadh milestone + pharma cargo
+  n({
+    quarter: 52, id: "AFL-MEL", icon: "🏈", impact: "tourism",
+    headline: "AFL Grand Final + Rugby World Cup tail combine — Melbourne at all-time demand high",
+    detail: "Melbourne at simulation peak for any Australian city.",
+    travelIndex: 120,
+    modifiers: [{ city: "MEL", category: "tourism", pct: 40, rounds: 1 }],
+  }),
+  n({
+    quarter: 52, id: "RUH-MILESTONE", icon: "💼", impact: "business",
+    headline: "Middle East Vision programmes delivering — RUH airport surpasses CDG in annual passenger volume",
+    detail: "Riyadh confirmed as a top-tier global business hub. Permanent demand uplift.",
+    modifiers: [{ city: "RUH", category: "business", pct: 30, rounds: 99 }],
+  }),
+  n({
+    quarter: 52, id: "PHARMA-CARGO", icon: "💊", impact: "cargo",
+    headline: "Pharmaceutical air freight CAGR sustains 12% for fourth year — specialty routes at 45% premium",
+    detail: "Pharma cargo specialists commanding record per-tonne yields.",
+    modifiers: spread(["FRA", "AMS", "SIN", "DXB", "HKG"], "cargo", 12, 4),
+  }),
+
+  // R53 — Q1 2028 — Travel Index 118 — LA 2028 build + 797 EIS + 6B passengers
+  n({
+    quarter: 53, id: "LA28-BUILD", icon: "🥇", impact: "tourism",
+    headline: "Los Angeles 2028 Olympics — 2.5 years out · Advance bookings breaking all Olympic records",
+    detail: "Trans-Pacific routes filling already. Pre-event surge spans 6 rounds.",
+    travelIndex: 118,
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 35, rounds: 6 },
+      { city: "SFO", category: "tourism", pct: 20, rounds: 4 },
+      { city: "SAN", category: "tourism", pct: 25, rounds: 4 },
+    ],
+  }),
+  n({
+    quarter: 53, id: "797-EIS", icon: "✈️", impact: "ops",
+    headline: "Boeing 797 NMA enters commercial service — first deliveries arriving",
+    detail: "225 seats, 9,800km — transforms medium-haul economics. Teams with R52 orders receive delivery this round.",
+  }),
+  n({
+    quarter: 53, id: "GLOBAL-6B", icon: "🌍", impact: "none",
+    headline: "Global aviation at 6B annual passengers — industry up 30% since 2020 COVID trough",
+    detail: "All records broken. The sustainability question dominates investor calls.",
+  }),
+
+  // R54 — Q2 2028 — Travel Index 125 — Euro 2028 UK/Ireland build + ATR EVO/A220F deliveries
+  n({
+    quarter: 54, id: "EURO28-BUILD", icon: "⚽", impact: "tourism",
+    headline: "UEFA Euro 2028 UK & Ireland — 6 months out · London, Manchester, Dublin, Glasgow sold through August",
+    detail: "England, Wales, Scotland, Ireland co-host. Biggest event in UK/Ireland history.",
+    travelIndex: 125,
+    modifiers: [
+      { city: "LHR", category: "tourism", pct: 50, rounds: 2 },
+      { city: "MAN", category: "tourism", pct: 45, rounds: 2 },
+      { city: "DUB", category: "tourism", pct: 55, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 54, id: "EVO-A220F-EIS", icon: "🛬", impact: "ops",
+    headline: "ATR EVO and Airbus A220-500F now in full service — regional + cargo economics transformed",
+    detail: "Teams with R49 orders now receiving delivery. Regional turboprop refresh and cargo capacity bump.",
+  }),
+  n({
+    quarter: 54, id: "FUEL-118", icon: "$", impact: "fuel",
+    headline: "Olympic and Euro build drives crude to $87/barrel — fuel index 118",
+    detail: "Pre-event demand pressure pushing prices up. SAF airlines preserving margin.",
+    fuelIndexAtBaseline: 118,
+  }),
+
+  // R55 — Q3 2028 — Travel Index 135 — Euro 2028 peak + LA 2028 build
+  n({
+    quarter: 55, id: "EURO28-PEAK", icon: "🏆", impact: "tourism",
+    headline: "UEFA Euro 2028 opens across UK & Ireland — England wins first ever Euros · 2.8M attendance",
+    detail: "Highest-scoring tournament in history. UK/Ireland routes at absolute peak.",
+    travelIndex: 135,
+    modifiers: [
+      { city: "LHR", category: "tourism", pct: 100, rounds: 2 },
+      { city: "MAN", category: "tourism", pct: 95, rounds: 2 },
+      { city: "DUB", category: "tourism", pct: 90, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 55, id: "LA28-18MO", icon: "🥇", impact: "tourism",
+    headline: "LA 2028 Olympics — 18 months out · Trans-Pacific routes at 97%+ occupancy",
+    detail: "California capacity maxed. Slot pressure at LAX, SFO, SAN.",
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 60, rounds: 2 },
+      { city: "SFO", category: "tourism", pct: 40, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 55, id: "FUEL-128", icon: "$", impact: "fuel",
+    headline: "Euro + Olympics build keeps fuel index at 128 — SAF advantage at $5M-$12M per quarter",
+    detail: "Highest sustained fuel pressure of the campaign. Green doctrine fully validated.",
+    fuelIndexAtBaseline: 128,
+  }),
+
+  // R56 — Q4 2028 — Travel Index 128 — LA 2028 12mo + Boom Overture market + holiday cargo
+  n({
+    quarter: 56, id: "LA28-12MO", icon: "🥇", impact: "tourism",
+    headline: "LA 2028 Olympics — 12 months out · US West Coast infrastructure at limit · Emergency LAX slot releases",
+    detail: "LAX expanding capacity. LAS sees overflow demand from saturated LA routes.",
+    travelIndex: 128,
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 50, rounds: 2 },
+      { city: "LAS", category: "tourism", pct: 30, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 56, id: "BOOM-OVERTURE", icon: "🚀", impact: "ops",
+    headline: "Boom Overture supersonic jet enters commercial availability — 65 passengers · Mach 1.7 · 9,000km",
+    detail: "Ultra-premium only. Tier 1 airports only. Routes >5,000km only. $350M buy. First Business class fares ×4 base. Admin can remove from market.",
+  }),
+  n({
+    quarter: 56, id: "CARGO-HOLIDAY-28", icon: "📦", impact: "cargo",
+    headline: "Peak 2028 holiday season — 19B packages globally · Air freight at absolute record",
+    detail: "T1-T2 hub cargo demand spiking. Cargo doctrine airlines at peak quarterly revenue.",
+    modifiers: spread(
+      ["DXB", "HKG", "ICN", "FRA", "AMS", "ATL", "LAX", "JFK"],
+      "cargo", 30, 1,
+    ),
+  }),
+
+  // R57 — Q1 2029 — Travel Index 120 — LA 2028 final approach + 6.5B passengers
+  n({
+    quarter: 57, id: "LA28-6MO", icon: "🥇", impact: "tourism",
+    headline: "LA 2028 Olympics — 6 months out · All LAX-adjacent routes booked · Trans-Pacific at peak",
+    detail: "Transit hubs NRT and ICN also seeing surge from connection traffic.",
+    travelIndex: 120,
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 70, rounds: 2 },
+      { city: "SFO", category: "tourism", pct: 50, rounds: 2 },
+      { city: "SAN", category: "tourism", pct: 60, rounds: 2 },
+      { city: "NRT", category: "tourism", pct: 30, rounds: 2 },
+      { city: "ICN", category: "tourism", pct: 25, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 57, id: "GLOBAL-6.5B", icon: "🌐", impact: "none",
+    headline: "Global aviation at 6.5B annual passengers — all markets above 2019 pre-COVID peak by 35%",
+    detail: "Industry has fully recovered and grown beyond. All metrics permanently elevated.",
+  }),
+  n({
+    quarter: 57, id: "FUEL-112", icon: "$", impact: "fuel",
+    headline: "Crude at $82/barrel — Olympic pre-event demand premium building · Index 112",
+    detail: "Fuel pressure mounting ahead of LA28 opening ceremony.",
+    fuelIndexAtBaseline: 112,
+  }),
+
+  // R58 — Q2 2029 — Travel Index 138 — LA 2028 Olympics opens · simulation peak
+  n({
+    quarter: 58, id: "LA28-OPENS", icon: "🥇", impact: "tourism",
+    headline: "Los Angeles 2028 Olympics opens — 10,800 athletes · 209 nations · Streaming records broken",
+    detail: "Highest Travel Index since R47 World Cup Final. LAX at absolute simulation peak. S11 winner: 100% load floor.",
+    travelIndex: 138,
+    modifiers: [
+      { city: "LAX", category: "tourism", pct: 150, rounds: 2 },
+      { city: "SFO", category: "tourism", pct: 80, rounds: 2 },
+      { city: "SAN", category: "tourism", pct: 90, rounds: 2 },
+      { city: "LAS", category: "tourism", pct: 60, rounds: 2 },
+      { city: "SEA", category: "tourism", pct: 40, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 58, id: "LA28-BIZ", icon: "💼", impact: "business",
+    headline: "Olympic corporate hospitality — $9.1B spent by companies on LA experiences",
+    detail: "Premium cabin yields at simulation record. JFK seeing overflow corporate flow.",
+    modifiers: [
+      { city: "LAX", category: "business", pct: 60, rounds: 2 },
+      { city: "JFK", category: "business", pct: 20, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 58, id: "FUEL-122", icon: "$", impact: "fuel",
+    headline: "Olympic travel demand spikes crude to $90/barrel — fuel index 122",
+    detail: "Highest fuel pressure of 2029. SAF carriers banking large margin gains.",
+    fuelIndexAtBaseline: 122,
+  }),
+
+  // R59 — Q3 2029 — Travel Index 132 — Club World Cup + post-Olympic biz + cargo record
+  n({
+    quarter: 59, id: "CLUB-WC-29", icon: "⚽", impact: "tourism",
+    headline: "FIFA Club World Cup 2029 — 32 clubs · multi-continent host cities · post-Olympics surge layer",
+    detail: "Tier 1 hub cities seeing additional demand layer on top of post-Olympics flow.",
+    travelIndex: 132,
+    modifiers: spread(
+      ["LHR", "JFK", "FRA", "MAD", "MEX", "GRU", "DXB", "NRT"],
+      "tourism", 15, 1,
+    ),
+  }),
+  n({
+    quarter: 59, id: "POST-LA-BIZ", icon: "💼", impact: "business",
+    headline: "Post-Olympics US investment cycle at decade high — business travel at record",
+    detail: "Corporate spend on US deals surging. JFK, LAX, SFO seeing premium-cabin records.",
+    modifiers: [
+      { city: "JFK", category: "business", pct: 20, rounds: 2 },
+      { city: "LAX", category: "business", pct: 18, rounds: 2 },
+      { city: "SFO", category: "business", pct: 15, rounds: 2 },
+    ],
+  }),
+  n({
+    quarter: 59, id: "CARGO-20B", icon: "📦", impact: "cargo",
+    headline: "Air freight volumes at 20B annual packages — cargo now 30% of airline revenue industry-wide",
+    detail: "Cargo specialists at record margins. Structural cargo demand permanently uplifted vs 2025 baseline.",
+    modifiers: spread(
+      ["DXB", "HKG", "ICN", "FRA", "AMS", "ATL", "LAX", "JFK"],
+      "cargo", 20, 99,
+    ),
+  }),
+
+  // R60 — Q4 2029 — Travel Index 128 — Final round
+  n({
+    quarter: 60, id: "FINAL-60", icon: "🏁", impact: "none",
+    headline: "Final round — 2029 closes · Aviation sector unrecognisable from 2015 · All metrics permanent",
+    detail: "Final round. Investor pitch begins. The simulation ends here.",
+    travelIndex: 128,
+  }),
+  n({
+    quarter: 60, id: "BOOM-RECORD", icon: "🚀", impact: "ops",
+    headline: "Boom Overture in limited commercial service — ultra-premium T1↔T1 routes generating record per-seat revenue",
+    detail: "Teams with Boom Overture in fleet on routes >5,000km T1↔T1: revenue premium applied at final scoring.",
+  }),
+  n({
+    quarter: 60, id: "PITCH-CEREMONY", icon: "🎬", impact: "none",
+    headline: "Final investor pitch and MVP awards ceremony commences — the simulation ends here",
+    detail: "What an airline you built. No further demand changes. All decisions are now permanent.",
   }),
 
   // ═══════════════════════════════════════════════════════════════

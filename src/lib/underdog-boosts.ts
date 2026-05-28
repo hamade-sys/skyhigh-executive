@@ -316,11 +316,18 @@ export function applyUnderdogBoost(
       untilQuarter: currentQuarter + 4,
     };
   }
+  if (boost.variant === "gov_tailwind") {
+    next.underdogBoosts!.staffCostWaiverUntilQuarter = currentQuarter + 3;
+    next.underdogBoosts!.taxWaiverUntilQuarter = currentQuarter + 3;
+  }
   if (boost.variant === "home_city_deal") {
     next.underdogBoosts!.businessDemandMultiplier = {
       value: 1.6,
       untilQuarter: currentQuarter + 4,
     };
+  }
+  if (boost.variant === "debt_settlement") {
+    next.underdogBoosts!.mandatoryDomesticRouteUntilQuarter = currentQuarter + 4;
   }
   if (boost.variant === "documentary") {
     next.underdogBoosts!.loadFactorFloor = {
@@ -331,6 +338,35 @@ export function applyUnderdogBoost(
   }
 
   return next;
+}
+
+/** Active this quarter? Used by engine staff/tax calc sites to short-
+ *  circuit cost to zero during the Gov Tailwind 3-quarter window. */
+export function isStaffCostWaived(team: Team, currentQuarter: number): boolean {
+  const q = team.underdogBoosts?.staffCostWaiverUntilQuarter;
+  return typeof q === "number" && currentQuarter <= q;
+}
+
+export function isTaxWaived(team: Team, currentQuarter: number): boolean {
+  const q = team.underdogBoosts?.taxWaiverUntilQuarter;
+  return typeof q === "number" && currentQuarter <= q;
+}
+
+/** Sovereign Rescue mandatory domestic route check. Returns true if
+ *  the condition is active AND the team is in violation — i.e. has
+ *  no same-region (proxy for same-country) route from their hub city
+ *  during the active window. Engine applies a brand penalty + flag
+ *  revocation when this is true. */
+export function violatesMandatoryDomesticRoute(
+  team: Team,
+  currentQuarter: number,
+  hubRegion: string | undefined,
+  activeSameRegionRouteFromHubCount: number,
+): boolean {
+  const q = team.underdogBoosts?.mandatoryDomesticRouteUntilQuarter;
+  if (typeof q !== "number" || currentQuarter > q) return false;
+  if (!hubRegion) return false;
+  return activeSameRegionRouteFromHubCount === 0;
 }
 
 /** Read the currently active load-factor floor for a team, or 0 if

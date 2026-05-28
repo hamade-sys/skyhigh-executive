@@ -596,6 +596,21 @@ export interface Team {
     /** Endgame Brand-Health multiplier (Documentary R40) — applied
      *  at final scoring only. */
     endgameBrandMultiplier?: number;
+    /** Staff cost waiver from Government Tailwind (R20A) — for the
+     *  duration window, quarterlyStaffCost returns 0 instead of the
+     *  computed staff cost. Brief §13: "staff cost waiver package
+     *  announced in parliament this morning". */
+    staffCostWaiverUntilQuarter?: number;
+    /** Corporate tax waiver from Government Tailwind (R20A) — for the
+     *  duration window, tax on profit is suppressed to 0. */
+    taxWaiverUntilQuarter?: number;
+    /** Sovereign Rescue (R30B) mandatory-domestic-route condition.
+     *  Brief: "one domestic route from hub_city must remain
+     *  operational for 4 rounds. If team closes it: brand_value -= 15
+     *  pts and government_champion flag revoked." Engine checks at
+     *  close, applies the penalty + revocation if the team has no
+     *  same-region route from their hub city while this is active. */
+    mandatoryDomesticRouteUntilQuarter?: number;
   };
 
   // Tax loss carry-forward (PRD B5): 5-quarter expiry
