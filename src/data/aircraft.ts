@@ -640,6 +640,83 @@ const AIRCRAFT: AircraftSpec[] = [
     ecoUpgradeUsd: 13_000_000,
     note: "Largest narrowbody in the simulation (230 seats default).",
   },
+
+  // ═══════════════════════════════════════════════════════════════
+  // Campaign Brief §10 — Post-2025 aircraft (half-campaign R45-R56)
+  // ═══════════════════════════════════════════════════════════════
+
+  // R45 (Q1 2026) — 797 NMA and A220-500 unlock
+  {
+    id: "B797", name: "Boeing 797 NMA", family: "passenger",
+    unlockQuarter: 45,
+    seats: { first: 0, business: 28, economy: 197 },
+    rangeKm: 9_800, fuelBurnPerKm: 3.8,
+    buyPriceUsd: 95_000_000, leasePerQuarterUsd: 7_770_000,
+    ecoUpgradeUsd: 9_500_000,
+    note: "Addresses the 757/767 mid-market gap. 225 seats, transpacific-capable.",
+  },
+  {
+    id: "A220-500", name: "Airbus A220-500", family: "passenger",
+    unlockQuarter: 45,
+    seats: { first: 0, business: 16, economy: 144 },
+    rangeKm: 7_200, fuelBurnPerKm: 2.4,
+    buyPriceUsd: 30_000_000, leasePerQuarterUsd: 2_460_000,
+    ecoUpgradeUsd: 3_000_000,
+    note: "Best-in-class narrowbody fuel burn. Stretches the A220 family.",
+  },
+
+  // R51 (Q3 2027) — ATR EVO + A220-500F + 797F unlock
+  {
+    id: "ATR-EVO", name: "ATR EVO", family: "passenger",
+    unlockQuarter: 51,
+    seats: { first: 0, business: 0, economy: 90 },
+    rangeKm: 1_800, fuelBurnPerKm: 1.6,
+    buyPriceUsd: 14_000_000, leasePerQuarterUsd: 1_150_000,
+    ecoUpgradeUsd: 1_400_000,
+    note: "Routes ≤ 1,800 km only. Next-generation hybrid-electric turboprop.",
+  },
+  {
+    id: "A220-500F", name: "Airbus A220-500F", family: "cargo",
+    unlockQuarter: 51,
+    seats: { first: 0, business: 0, economy: 0 },
+    cargoTonnes: 32,
+    rangeKm: 6_500, fuelBurnPerKm: 2.5,
+    buyPriceUsd: 32_000_000, leasePerQuarterUsd: 2_620_000,
+    ecoUpgradeUsd: 3_200_000,
+    note: "Narrowbody freighter for thin cargo lanes.",
+  },
+  {
+    id: "B797F", name: "Boeing 797F", family: "cargo",
+    unlockQuarter: 51,
+    seats: { first: 0, business: 0, economy: 0 },
+    cargoTonnes: 58,
+    rangeKm: 9_200, fuelBurnPerKm: 4.0,
+    buyPriceUsd: 90_000_000, leasePerQuarterUsd: 7_360_000,
+    ecoUpgradeUsd: 9_000_000,
+    note: "Fills the 767F gap. Trans-continental medium freighter.",
+  },
+
+  // R56 (Q4 2028) — Boom Overture supersonic
+  // Per brief Section 10:
+  //   - All 65 seats are Business/First hybrid (no Economy)
+  //   - Round-trip time ~half of conventional → 2× max daily rotations
+  //   - $350M buy. Tier 1 airports only. Routes >5,000 km only.
+  //   - Admin can remove from market per session.
+  // For physics we model the "2× rotations" effect by halving the
+  // fuelBurnPerKm vs what a high-speed jet would normally have at
+  // Mach 1.7 — the rotation doubling absorbs the extra fuel intake
+  // implicitly. The 6.8 L/km is calibrated so the per-flight burn
+  // is roughly equivalent to a B777-200 on the same OD pair (which
+  // is intentional: the premium is in seat-mile yield, not burn).
+  {
+    id: "BoomO", name: "Boom Overture", family: "passenger",
+    unlockQuarter: 56,
+    seats: { first: 0, business: 65, economy: 0 },
+    rangeKm: 9_000, fuelBurnPerKm: 6.8,
+    buyPriceUsd: 350_000_000, leasePerQuarterUsd: 25_000_000,
+    ecoUpgradeUsd: 35_000_000,
+    note: "Supersonic Mach 1.7. Routes >5,000 km only. Premium-cabin only — fare ceiling 2.5× standard. Admin can remove from market per session.",
+  },
 ];
 
 export { AIRCRAFT };

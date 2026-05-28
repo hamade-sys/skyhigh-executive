@@ -21,6 +21,9 @@ import { cargoBellyTonnes } from "./aircraft-upgrades";
 import {
   activeBusinessDemandMultiplier,
   activeLoadFactorFloor,
+  isStaffCostWaived,
+  isTaxWaived,
+  violatesMandatoryDomesticRoute,
 } from "./underdog-boosts";
 import type {
   AirportSlotState,
@@ -316,7 +319,12 @@ export function cruiseSpeedKmh(
   engineUpgrade?: "fuel" | "power" | "super" | null,
 ): number {
   let base: number;
-  if (/^A319|^A320|^A321|^B737/.test(specId)) base = 840;
+  // Boom Overture supersonic (Brief §10). Mach 1.7 at altitude ≈
+  // 1,800 km/h. Round-trip therefore halves vs a subsonic widebody
+  // on the same OD pair, doubling max rotations — exactly the
+  // "2× daily rotations" the brief specifies.
+  if (specId === "BoomO") base = 1800;
+  else if (/^A319|^A320|^A321|^B737/.test(specId)) base = 840;
   else if (/^B757|^B767|^A330/.test(specId)) base = 870;
   else base = 900; // wide-body large: 777, 747, A380, 787, A350
   if (engineUpgrade === "power" || engineUpgrade === "super") {
@@ -3217,6 +3225,14 @@ export function runQuarterClose(
   if (isDoctrine(next, "premium-service")) doctrineStaffMult *= 1.15;
   let staffCost =
     staffBase * STAFF_MULTIPLIER[next.sliders.staff] * staffSurchargeMult * doctrineStaffMult;
+  // Underdog Boost — Government Tailwind (R20A) waives staff cost for
+  // 3 rounds. Effect is "the package reimburses staff payroll costs
+  // in full." Surface a clear note so the player sees why their P&L
+  // changed.
+  if (isStaffCostWaived(next, ctx.quarter)) {
+    notes.push(`Staff cost waived this quarter (National Strategic Carrier package) · saved $${(staffCost / 1_000_000).toFixed(1)}M`);
+    staffCost = 0;
+  }
   let digitalStrikeChance = 0;
   let timedLabourRelationsDelta = 0;
   let digitalStaffSavings = 0;
@@ -3485,7 +3501,13 @@ export function runQuarterClose(
     }
   }
   // ─ Corporate tax (A15): 20% on positive taxable base ───
-  const tax = taxBase > 0 ? taxBase * 0.2 : 0;
+  // Underdog Boost — Government Tailwind (R20A) waives corporate tax
+  // for the active 3-round window.
+  let tax = taxBase > 0 ? taxBase * 0.2 : 0;
+  if (tax > 0 && isTaxWaived(next, ctx.quarter)) {
+    notes.push(`Corporate tax waived this quarter (National Strategic Carrier package) · saved $${(tax / 1_000_000).toFixed(1)}M`);
+    tax = 0;
+  }
   // If loss this quarter, enqueue for future offset
   if (pretax < 0) {
     carryFwd.push({ quarter: ctx.quarter, amount: -pretax });
@@ -3862,6 +3884,33 @@ export function runQuarterClose(
   next.brandPts = newBrandPts;
   next.opsPts = newOpsPts;
   next.customerLoyaltyPct = newLoyalty;
+
+  // ─ Underdog Sovereign Rescue — mandatory domestic route check ──
+  // Brief §13 R30B: "one domestic route from hub_city must remain
+  // operational for 4 rounds. If team closes it: brand_value -= 15
+  // pts and government_champion flag revoked." We proxy "domestic"
+  // by same-region routes from the hub city — the City type has no
+  // country field so region is the closest available signal.
+  {
+    const hubCity = CITIES_BY_CODE[next.hubCode];
+    const sameRegionRoutesFromHub = next.routes.filter(
+      (r) => r.status === "active" &&
+        (r.originCode === next.hubCode || r.destCode === next.hubCode) &&
+        CITIES_BY_CODE[r.originCode === next.hubCode ? r.destCode : r.originCode]?.region === hubCity?.region,
+    ).length;
+    if (
+      violatesMandatoryDomesticRoute(
+        next, ctx.quarter, hubCity?.region, sameRegionRoutesFromHub,
+      )
+    ) {
+      next.brandPts = Math.max(0, next.brandPts - 15);
+      next.flags.delete("government_champion");
+      notes.push(
+        `Sovereign Rescue condition violated — no domestic route from ${hubCity?.name ?? next.hubCode}. ` +
+        `Brand −15 pts · government_champion flag revoked.`,
+      );
+    }
+  }
 
   // ─ Milestone Cards (PRD E8.9) ──────────────────────────
   const milestonesEarned = new Set(next.milestones ?? []);

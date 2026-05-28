@@ -870,6 +870,121 @@ export const SCENARIOS: Scenario[] = [
     ],
     autoSubmitOptionId: "B",
   },
+
+  // ─── Campaign Brief §8 — R41-R60 extension (S19-S22) ───────
+  // Authored at absolute quarters that map to the 60R cohort's R55,
+  // R57, R58, R60 positions. Because scenariosForQuarter() does
+  // proportional rescaling (40-round baseline), we author at the
+  // 40-round-equivalent quarters: 37, 38, 39, 40.
+  //
+  // Brief mapping check:
+  //   S19 wants R55 in a 60R game · ratio 60/40 = 1.5 · 37 × 1.5 = 55.5 → R55/R56 ✓
+  //   S20 wants R57 in a 60R game · 38 × 1.5 = 57 ✓
+  //   S21 wants R58 in a 60R game · 39 × 1.5 = 58.5 → R58/R59 ✓
+  //   S22 wants R60 in a 60R game · 40 × 1.5 = 60 ✓
+  {
+    id: "S19", title: "The AI Pivot", quarter: 37, severity: "HIGH", timeLimitMinutes: 30,
+    teaser: "Generative AI is rewriting ground ops, ticketing, and customer service. Pick a path before competitors do.",
+    context:
+      "Three rival airlines have publicly committed to AI strategies. Your CHRO is asking for direction: full automation slashes ops cost but burns brand among loyalists; hybrid balances both; human-first leans into service trust. The wrong call here defines the airline's reputation for the back third of the campaign.",
+    options: [
+      { id: "A", label: "Full automation",
+        description: "Replace customer-facing roles with AI agents. Massive ops savings, brand hit.",
+        effect: { opsPts: 18, brandPts: -18, loyaltyDelta: -10, setFlags: ["ai_full_automation"] },
+        effectTags: ["Ops +18", "Brand −18"] },
+      { id: "B", label: "Hybrid AI + human",
+        description: "AI handles routine; humans handle exceptions and premium. Balanced economics.",
+        effect: { opsPts: 8, brandPts: 3, loyaltyDelta: 2, setFlags: ["ai_hybrid"] },
+        effectTags: ["Ops +8", "Brand +3"] },
+      { id: "C", label: "Human-first reskill",
+        description: "Invest in staff training. Slower ops gain but a brand moat that's hard to copy.",
+        effect: { cash: -45 * M, opsPts: 4, brandPts: 14, loyaltyDelta: 10, setFlags: ["ai_human_first"] },
+        effectTags: ["−$45M", "Brand +14"] },
+      { id: "D", label: "Defer until 2030",
+        description: "Wait and see. Rivals consolidate AI advantage. You read about it in the trade press.",
+        effect: { opsPts: -6, brandPts: -4, loyaltyDelta: -2 },
+        effectTags: ["Ops −6"] },
+    ],
+    autoSubmitOptionId: "B",
+  },
+  {
+    id: "S20", title: "The Green Bond", quarter: 38, severity: "MEDIUM", timeLimitMinutes: 30,
+    teaser: "A sustainability-linked bond is on offer at 80bps below conventional financing — with strings.",
+    context:
+      "A sovereign-backed sustainability fund will issue a $200M bond against your fleet at 80bps below market — but the coupon ratchets up 150bps if your Scope-1 emissions per RPK rise from current levels for any two consecutive quarters. Conventional financing is available at full rate without strings.",
+    options: [
+      { id: "A", label: "Take the green bond",
+        description: "$200M raised at sub-market rate. Emissions ratchet rises if you backslide.",
+        effect: { cash: 200 * M, brandPts: 12, setFlags: ["green_bond_active"] },
+        effectTags: ["+$200M", "Brand +12"] },
+      { id: "B", label: "Conventional bond",
+        description: "$200M at full rate. No emissions strings attached.",
+        effect: { cash: 200 * M, brandPts: -2 },
+        effectTags: ["+$200M (full rate)"] },
+      { id: "C", label: "Smaller green bond",
+        description: "Raise only $80M at the discount. Less pressure on the ratchet trigger.",
+        effect: { cash: 80 * M, brandPts: 8, setFlags: ["green_bond_active"] },
+        effectTags: ["+$80M", "Brand +8"] },
+      { id: "D", label: "Pass entirely",
+        description: "Preserve flexibility. Take no debt this round.",
+        effect: {}, effectTags: [] },
+    ],
+    autoSubmitOptionId: "D",
+  },
+  {
+    id: "S21", title: "The Alliance Offer", quarter: 39, severity: "HIGH", timeLimitMinutes: 30,
+    teaser: "Your largest rival proposes a code-share alliance covering 80+ city pairs.",
+    context:
+      "The board of your largest network rival is offering a metal-neutral alliance: shared loyalty programmes, joint corporate pricing, code-share across 80+ city pairs. The deal would lock you in for the remaining rounds. Brand benefits, autonomy hits. Negotiating tighter terms preserves more independence but the rival may walk.",
+    options: [
+      { id: "A", label: "Accept the standard alliance",
+        description: "Full code-share + loyalty. Permanent business demand uplift on shared routes.",
+        effect: { brandPts: 10, loyaltyDelta: 6, opsPts: 4, setFlags: ["alliance_member"] },
+        effectTags: ["Brand +10", "Loyalty +6%"] },
+      { id: "B", label: "Negotiate tighter terms",
+        description: "Limit to top-50 city pairs. 60% success — narrower deal. 40% — rival walks, deal off.",
+        effect: { brandPts: 5,
+          deferred: { quarter: 41, probability: 0.6,
+            effect: { brandPts: 6, loyaltyDelta: 4, setFlags: ["alliance_member_lite"] } } },
+        effectTags: ["60% partial alliance"] },
+      { id: "C", label: "Counter-offer to lead",
+        description: "Demand to be the lead carrier. Rival rarely accepts. Brand prestige if it works.",
+        effect: { brandPts: -2,
+          deferred: { quarter: 41, probability: 0.2,
+            effect: { brandPts: 18, loyaltyDelta: 10, setFlags: ["alliance_lead"] } } },
+        effectTags: ["20% chance of lead role"] },
+      { id: "D", label: "Decline — compete instead",
+        description: "Stay independent. Rivalry sharpens for the final rounds.",
+        effect: { brandPts: 4, opsPts: 2, setFlags: ["alliance_refused"] },
+        effectTags: ["Brand +4", "Ops +2"] },
+    ],
+    autoSubmitOptionId: "D",
+  },
+  {
+    id: "S22", title: "The Exit", quarter: 40, severity: "CATASTROPHIC", timeLimitMinutes: 30,
+    teaser: "A sovereign wealth fund has tabled an acquisition offer. The simulation ends this round either way.",
+    context:
+      "A sovereign wealth fund has offered to acquire the airline outright at 1.2× book value, payable in cash on close. Alternatively, the board can take the company public on a major exchange — broader liquidity but compressed valuation. Or hold private and continue compounding. This is the final scoring round.",
+    options: [
+      { id: "A", label: "Accept the buyout",
+        description: "1.2× book value, cash on close. Investor return crystallised, brand identity ends.",
+        effect: { brandPts: -10, setFlags: ["acquired", "exit_taken"] },
+        effectTags: ["Acquisition multiple 1.2×"] },
+      { id: "B", label: "Float on the exchange",
+        description: "IPO at market multiple. Brand boost from public listing.",
+        effect: { brandPts: 18, opsPts: 4, setFlags: ["public_listed", "exit_taken"] },
+        effectTags: ["Brand +18", "Public airline"] },
+      { id: "C", label: "Hold private",
+        description: "Stay private. Compound the legacy you've built. Final scoring uses brand health × 1.05.",
+        effect: { brandPts: 8, loyaltyDelta: 5, setFlags: ["independent_legacy"] },
+        effectTags: ["Brand +8", "Legacy multiplier 1.05×"] },
+      { id: "D", label: "Sell only the cargo arm",
+        description: "Divest cargo for $250M cash. Focus on passenger going forward.",
+        effect: { cash: 250 * M, brandPts: -4, setFlags: ["cargo_divested"] },
+        effectTags: ["+$250M", "Brand −4"] },
+    ],
+    autoSubmitOptionId: "C",
+  },
 ];
 
 export const SCENARIOS_BY_QUARTER: Record<number, Scenario[]> = SCENARIOS.reduce(

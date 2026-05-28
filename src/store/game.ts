@@ -2798,6 +2798,23 @@ export const useGame = create<GameStore>()(
           const effRange = effectiveRangeKm(spec, p.engineUpgrade ?? null);
           if (dist > effRange)
             return { ok: false, error: `${spec.name} cannot reach ${destCode} (${Math.round(dist)} km > ${effRange} km${p.engineUpgrade ? " w/ upgrade" : ""})` };
+          // Boom Overture restrictions (Brief §10): >5,000 km, Tier 1 both endpoints.
+          if (spec.id === "BoomO") {
+            if (dist < 5000) {
+              return {
+                ok: false,
+                error: `Boom Overture only operates routes >5,000 km — this OD is ${Math.round(dist)} km.`,
+              };
+            }
+            const oTier = CITIES_BY_CODE[originCode]?.tier;
+            const dTier = CITIES_BY_CODE[destCode]?.tier;
+            if (oTier !== 1 || dTier !== 1) {
+              return {
+                ok: false,
+                error: `Boom Overture requires Tier 1 airports at both endpoints (this OD is Tier ${oTier} → Tier ${dTier}).`,
+              };
+            }
+          }
         }
         // Engine stores daily; UI works in weekly. The minimum is 1
         // weekly schedule = 1/7 daily ≈ 0.143. Earlier this rejected
@@ -3116,6 +3133,26 @@ export const useGame = create<GameStore>()(
             const effRange = effectiveRangeKm(spec, p.engineUpgrade ?? null);
             if (effRange < route.distanceKm)
               return { ok: false, error: `${spec.name} out of range (${Math.round(route.distanceKm)} km > ${effRange} km)` };
+            // Boom Overture (Brief §10): supersonic, ultra-premium only.
+            // Routes >5,000 km and both endpoints Tier 1 only. Justified
+            // because the in-cabin economics only work for trans-oceanic
+            // city pairs where the time-saving compresses competition.
+            if (spec.id === "BoomO") {
+              if (route.distanceKm < 5000) {
+                return {
+                  ok: false,
+                  error: `Boom Overture only operates routes >5,000 km — this route is ${Math.round(route.distanceKm)} km.`,
+                };
+              }
+              const oTier = CITIES_BY_CODE[route.originCode]?.tier;
+              const dTier = CITIES_BY_CODE[route.destCode]?.tier;
+              if (oTier !== 1 || dTier !== 1) {
+                return {
+                  ok: false,
+                  error: `Boom Overture requires Tier 1 airports at both endpoints (this route is Tier ${oTier} → Tier ${dTier}).`,
+                };
+              }
+            }
             // Must be idle or already on this route
             if (p.routeId && p.routeId !== routeId)
               return { ok: false, error: `${spec.name} already on another route` };
