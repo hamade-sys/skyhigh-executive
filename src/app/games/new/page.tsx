@@ -21,12 +21,24 @@ import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 
 type Visibility = "public" | "private";
 
+/**
+ * Round presets double as the campaign-era selector. Everything from
+ * 8–60 rounds is the "half" campaign (2015 → up to 2029). The 120-round
+ * preset is the "full" campaign — it starts in Q1 2000 and runs the
+ * complete 2000–2029 aviation arc. Selecting a preset sets BOTH the
+ * round count and the campaign mode, so the player never has to reason
+ * about a confusing length × era matrix.
+ */
 const ROUND_PRESETS = [
-  { value: 8,  label: "8 rounds",  sub: "2 years · quick session" },
-  { value: 16, label: "16 rounds", sub: "4 years · half campaign" },
-  { value: 24, label: "24 rounds", sub: "6 years · medium" },
-  { value: 40, label: "40 rounds", sub: "10 years · full decade" },
+  { value: 8,   mode: "half", label: "8 rounds",   sub: "2 years · quick session" },
+  { value: 16,  mode: "half", label: "16 rounds",  sub: "4 years · short" },
+  { value: 24,  mode: "half", label: "24 rounds",  sub: "6 years · medium" },
+  { value: 40,  mode: "half", label: "40 rounds",  sub: "10 years · full decade" },
+  { value: 60,  mode: "half", label: "60 rounds",  sub: "2015–2029 · standard" },
+  { value: 120, mode: "full", label: "120 rounds", sub: "2000–2029 · full campaign" },
 ] as const;
+
+type CampaignMode = "half" | "full";
 
 /** Per-quarter timer presets (seconds). 0 = no timer. */
 const QUARTER_TIMER_PRESETS = [
@@ -68,6 +80,9 @@ function CreateGameForm() {
   const [beGameMaster, setBeGameMaster] = useState(false);
   const [boardDecisionsEnabled, setBoardDecisionsEnabled] = useState(false);
   const [totalRounds, setTotalRounds] = useState(40);
+  // Derived from the selected round preset (see ROUND_PRESETS). "full"
+  // is the 120-round 2000-era campaign; everything else is "half".
+  const [campaignMode, setCampaignMode] = useState<CampaignMode>("half");
   // Just a seat count — human/bot config is done in the pre-game lobby
   const [seatCount, setSeatCount] = useState(2);
   // Per-quarter timer in SECONDS. 0 = no timer (game master closes
@@ -111,6 +126,7 @@ function CreateGameForm() {
           visibility,
           maxTeams: seatCount,
           totalRounds,
+          campaignMode,
           quarterTimerSeconds,
           boardDecisionsEnabled,
           beGameMaster,
@@ -247,17 +263,24 @@ function CreateGameForm() {
             />
           </Field>
 
-          {/* 5. Number of rounds */}
+          {/* 5. Campaign length + era */}
           <Field
-            label="Number of rounds"
-            hint={`${totalRounds} rounds · ${(totalRounds / 4).toFixed(0)} years`}
+            label="Campaign length"
+            hint={
+              campaignMode === "full"
+                ? "120 quarters · 2000–2029"
+                : `${totalRounds} quarters · ${(totalRounds / 4).toFixed(0)} years · from 2015`
+            }
           >
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {ROUND_PRESETS.map((p) => (
                 <button
                   key={p.value}
                   type="button"
-                  onClick={() => setTotalRounds(p.value)}
+                  onClick={() => {
+                    setTotalRounds(p.value);
+                    setCampaignMode(p.mode);
+                  }}
                   className={
                     "rounded-xl border p-3 text-left transition-all " +
                     (totalRounds === p.value
@@ -265,8 +288,15 @@ function CreateGameForm() {
                       : "border-slate-200 bg-white hover:border-slate-300")
                   }
                 >
-                  <div className="text-base font-display font-bold text-slate-900">
-                    {p.value}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base font-display font-bold text-slate-900">
+                      {p.value}
+                    </span>
+                    {p.mode === "full" && (
+                      <span className="inline-flex items-center rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-violet-100">
+                        Full
+                      </span>
+                    )}
                   </div>
                   <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">
                     {p.sub}
@@ -274,6 +304,13 @@ function CreateGameForm() {
                 </button>
               ))}
             </div>
+            {campaignMode === "full" && (
+              <p className="text-xs text-slate-400 mt-2">
+                The full campaign opens in Q1 2000 and runs the complete
+                2000–2029 arc — early-2000s fleets, fuel shocks, and the
+                long product cycle through to today.
+              </p>
+            )}
           </Field>
 
           {/* 5b. Quarter timer — drives auto-advance in self-guided

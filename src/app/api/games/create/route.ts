@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
       maxTeams,
       beGameMaster,
       totalRounds,
+      campaignMode,
       quarterTimerSeconds,
       boardDecisionsEnabled,
       plannedSeats,
@@ -104,8 +105,12 @@ export async function POST(req: NextRequest) {
     if (typeof maxTeams !== "number" || maxTeams < 1 || maxTeams > 12) {
       return NextResponse.json({ error: "Max teams must be 1-12." }, { status: 400 });
     }
-    if (totalRounds !== undefined && (typeof totalRounds !== "number" || totalRounds < 4 || totalRounds > 80)) {
-      return NextResponse.json({ error: "Total rounds must be 4-80." }, { status: 400 });
+    // Cap is 120 to admit the full campaign (120 quarters · 2000–2029).
+    if (totalRounds !== undefined && (typeof totalRounds !== "number" || totalRounds < 4 || totalRounds > 120)) {
+      return NextResponse.json({ error: "Total rounds must be 4-120." }, { status: 400 });
+    }
+    if (campaignMode !== undefined && campaignMode !== "half" && campaignMode !== "full") {
+      return NextResponse.json({ error: "Invalid campaign mode." }, { status: 400 });
     }
     // Quarter timer: 0 means "no timer" (Game Master closes manually).
     // Range cap at 4 hours per quarter to prevent typos that would
@@ -146,6 +151,7 @@ export async function POST(req: NextRequest) {
       gameMasterSessionId,
       beGameMaster: wantGameMaster,
       totalRounds,
+      campaignMode: campaignMode === "full" ? "full" : "half",
       quarterTimerSeconds:
         typeof quarterTimerSeconds === "number" ? quarterTimerSeconds : undefined,
       boardDecisionsEnabled:

@@ -157,8 +157,13 @@ export interface CreateGameArgs {
    *  hand-off scenarios where the creator preassigns the role. */
   gameMasterSessionId?: string;
   /** Total rounds the game runs for. Default 40. The create-game
-   *  form offers 8/16/24/40 presets. */
+   *  form offers 8/16/24/40/60 (half) and 120 (full) presets. */
   totalRounds?: number;
+  /** Campaign era. "half" = 60-quarter 2015→2029 arc (default, also
+   *  covers the shorter 8/16/24/40 sessions). "full" = 120-quarter
+   *  2000→2029 arc. Drives the in-game calendar start year + the
+   *  era-correct macro index tables in the engine. */
+  campaignMode?: "half" | "full";
   /** Per-quarter timer in seconds. 0 = no timer (Game Master closes
    *  manually). Self-guided games auto-advance when this hits 0;
    *  the timer's max product (timerSec * totalRounds) bounds the
@@ -313,6 +318,9 @@ export async function createGame(args: CreateGameArgs): Promise<
       gameMasterSessionId: gmSessionId,
       facilitatorSessionId: gmSessionId,  // legacy alias
       totalRounds,
+      // Campaign era — drives the in-game calendar start year (2000 vs
+      // 2015) and the era-correct macro index tables in the engine.
+      campaignMode: args.campaignMode === "full" ? "full" : "half",
       // Per-quarter timer chosen at create time. 0 = no timer (Game
       // Master closes manually). When set, self-guided games auto-
       // advance when the local tick reaches 0 — that's how a non-

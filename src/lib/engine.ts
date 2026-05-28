@@ -365,13 +365,23 @@ export const BASE_RATE_BY_QUARTER: Record<number, number> = {
 };
 
 /** Effective base rate at a given quarter — schedule lookup with a
- *  fallback chain (exact → previous quarter → 3.5% baseline). */
-export function effectiveBaseRatePct(quarter: number): number {
-  if (quarter in BASE_RATE_BY_QUARTER) return BASE_RATE_BY_QUARTER[quarter];
+ *  fallback chain (exact → previous quarter → 3.5% baseline).
+ *
+ *  In full-campaign mode the back half (R61-R120 = 2015-2029) reuses the
+ *  authored 2015-2029 schedule via a -60 offset, mirroring
+ *  effectiveTravelIndex. The front half (R1-R60 = 2000-2014) has no
+ *  dedicated rate table yet, so it falls through the walk-back to the
+ *  baseline — a safe placeholder until the early-era macro table lands. */
+export function effectiveBaseRatePct(
+  quarter: number,
+  campaignMode: "half" | "full" = "half",
+): number {
+  const q = campaignMode === "full" && quarter > 60 ? quarter - 60 : quarter;
+  if (q in BASE_RATE_BY_QUARTER) return BASE_RATE_BY_QUARTER[q];
   // Walk back to the most recent defined quarter so the chart stays
   // monotonic past the schedule's boundaries.
-  for (let q = quarter - 1; q >= 1; q--) {
-    if (q in BASE_RATE_BY_QUARTER) return BASE_RATE_BY_QUARTER[q];
+  for (let p = q - 1; p >= 1; p--) {
+    if (p in BASE_RATE_BY_QUARTER) return BASE_RATE_BY_QUARTER[p];
   }
   return 3.5;
 }

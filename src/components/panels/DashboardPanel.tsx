@@ -29,6 +29,7 @@ import { TrendingUp, TrendingDown, Plane, Users, BarChart3, Wallet, Fuel } from 
 export function DashboardPanel() {
   const player = useGame(selectPlayer);
   const currentQuarter = useGame((s) => s.currentQuarter);
+  const campaignMode = useGame((s) => s.session?.campaignMode);
   const fuelIndex = useGame((s) => s.fuelIndex);
   const baseInterestRatePct = useGame((s) => s.baseInterestRatePct);
 
@@ -248,7 +249,7 @@ export function DashboardPanel() {
           <SnapCard label="Fuel index" value={fuelIndex.toFixed(0)} sub="100 = baseline" />
           <SnapCard
             label="Travel index"
-            value={effectiveTravelIndex(currentQuarter).toFixed(0)}
+            value={effectiveTravelIndex(currentQuarter, campaignMode).toFixed(0)}
             sub="global demand multiplier"
           />
           <SnapCard label="Base rate" value={`${baseInterestRatePct.toFixed(1)}%`} sub="commercial debt" />

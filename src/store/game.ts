@@ -5589,7 +5589,7 @@ export const useGame = create<GameStore>()(
         // never moved with world events. The schedule covers cheap
         // 2015–17 debt, the 2022–23 hiking cycle, etc., so a heavily
         // leveraged airline genuinely struggles when the cycle turns.
-        const newBaseRate = effectiveBaseRatePct(nextQ);
+        const newBaseRate = effectiveBaseRatePct(nextQ, s.session?.campaignMode);
         const clampedFuel = Math.max(50, Math.min(220, newFuel));
 
         // Persist the closing-quarter snapshot of the three macro
@@ -5602,7 +5602,7 @@ export const useGame = create<GameStore>()(
           {
             quarter: s.currentQuarter,
             fuelIndex: s.fuelIndex,
-            travelIndex: effectiveTravelIndex(s.currentQuarter),
+            travelIndex: effectiveTravelIndex(s.currentQuarter, s.session?.campaignMode),
             baseRatePct: s.baseInterestRatePct,
           },
         ];
