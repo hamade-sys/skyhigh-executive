@@ -227,6 +227,82 @@ export const TRAVEL_INDEX: Record<number, number> = {
   35: 122, 36: 122, // PRD Q18 — Full recovery; Dubai Expo.
   37: 126, 38: 126, // PRD Q19 — New trade corridors.
   39: 130, 40: 130, // PRD Q20 — Peak global aviation era.
+
+  // ─── R41-R60 · Q1 2025 – Q4 2029 · Brief §9 extension ───
+  41: 128, 42: 125, 43: 130, 44: 122, 45: 120,
+  46: 135, 47: 140, 48: 125, 49: 115, 50: 118,
+  51: 122, 52: 120, 53: 118, 54: 125, 55: 135,
+  56: 128, 57: 120, 58: 138, 59: 132, 60: 128,
+};
+
+/**
+ * Full-campaign Travel Index for R1-R60 (Q1 2000 – Q4 2014).
+ * Brief Section 6. Used when `session.campaignMode === "full"`. For
+ * R61-R120 the full campaign reuses the half-campaign TRAVEL_INDEX
+ * values shifted by +60 (so R61 of the full campaign = R1 of the half
+ * campaign).
+ */
+export const TRAVEL_INDEX_FULL_CAMPAIGN_2000: Record<number, number> = {
+  1: 100,   // Q1 2000 — Dot-com peak. Baseline.
+  2: 108,   // Q2 2000 — Sydney build, Euros 2000.
+  3: 104,   // Q3 2000 — Dot-com correction signals.
+  4: 96,    // Q4 2000 — Dot-com crash confirmed.
+  5: 90,    // Q1 2001 — Recession fears.
+  6: 88,    // Q2 2001 — Stagflation signals.
+  7: 58,    // Q3 2001 — 9/11. Demand collapse.
+  8: 65,    // Q4 2001 — Partial recovery.
+  9: 72,    // Q1 2002 — Recovery, Salt Lake City Olympics.
+  10: 95,   // Q2 2002 — World Cup Korea/Japan.
+  11: 100,  // Q3 2002 — Post-WC normal.
+  12: 98,   // Q4 2002 — Iraq war fears.
+  13: 70,   // Q1 2003 — SARS outbreak.
+  14: 75,   // Q2 2003 — SARS recovery.
+  15: 88,   // Q3 2003 — Full SARS recovery, Athens build.
+  16: 95,   // Q4 2003 — EU expansion.
+  17: 100,  // Q1 2004 — Strong recovery.
+  18: 108,  // Q2 2004 — Euro 2004 Portugal.
+  19: 118,  // Q3 2004 — Athens 2004 peak.
+  20: 110,  // Q4 2004 — Post-Olympics normality.
+  21: 108,  // Q1 2005 — Steady growth.
+  22: 112,  // Q2 2005 — M&A supercycle.
+  23: 115,  // Q3 2005 — Katrina fuel spike.
+  24: 118,  // Q4 2005 — Recovery, WC Germany build.
+  25: 120,  // Q1 2006 — Turin Winter Olympics.
+  26: 128,  // Q2 2006 — WC Germany peak.
+  27: 122,  // Q3 2006 — Post-WC normality.
+  28: 118,  // Q4 2006 — Stable boom.
+  29: 115,  // Q1 2007 — Sub-prime signals.
+  30: 118,  // Q2 2007 — Beijing build.
+  31: 122,  // Q3 2007 — Euros 2008 preview.
+  32: 116,  // Q4 2007 — Sub-prime crisis.
+  33: 118,  // Q1 2008 — Beijing 6mo out.
+  34: 128,  // Q2 2008 — Euros 2008 peak.
+  35: 125,  // Q3 2008 — Beijing peak; crisis hits.
+  36: 72,   // Q4 2008 — Lehman.
+  37: 68,   // Q1 2009 — Crisis deepens.
+  38: 72,   // Q2 2009 — Green shoots.
+  39: 80,   // Q3 2009 — Vancouver build.
+  40: 85,   // Q4 2009 — Recovery accelerating.
+  41: 92,   // Q1 2010 — Vancouver Olympics.
+  42: 105,  // Q2 2010 — World Cup South Africa.
+  43: 110,  // Q3 2010 — Post-WC.
+  44: 108,  // Q4 2010 — Stable.
+  45: 100,  // Q1 2011 — Arab Spring + Japan quake.
+  46: 102,  // Q2 2011 — Recovery, London build.
+  47: 105,  // Q3 2011 — London build, Euros 2012 preview.
+  48: 102,  // Q4 2011 — Eurozone stress.
+  49: 108,  // Q1 2012 — London 6mo.
+  50: 118,  // Q2 2012 — London 2012 peak.
+  51: 110,  // Q3 2012 — Post-Olympics UK uplift.
+  52: 106,  // Q4 2012 — Eurozone double-dip looming.
+  53: 88,   // Q1 2013 — Double-dip declared.
+  54: 82,   // Q2 2013 — Trough.
+  55: 88,   // Q3 2013 — Sochi build.
+  56: 90,   // Q4 2013 — Recession ending.
+  57: 95,   // Q1 2014 — Sochi 2014.
+  58: 108,  // Q2 2014 — WC Brazil opens.
+  59: 115,  // Q3 2014 — Post-WC.
+  60: 118,  // Q4 2014 — Stable strong growth, transitions to half-campaign R1.
 };
 
 /** Base commercial-debt interest rate over the 40-quarter campaign,
@@ -271,6 +347,21 @@ export const BASE_RATE_BY_QUARTER: Record<number, number> = {
   35: 10.5, 36: 10.5, // Q3–Q4 2023 — held high
   37: 9.5,  38: 9.5,  // Q1–Q2 2024 — early easing signals
   39: 9.0,  40: 9.0,  // Q3–Q4 2024 — plateau into endgame
+
+  // ─── R41-R60 · Q1 2025 – Q4 2029 — Brief §9 extension ───
+  // Macro narrative: 2025 modest easing as inflation normalises,
+  // mid-cycle slowdown at R49, then steady through the LA 2028
+  // Olympics into 2029 stable expansion.
+  41: 8.5,  42: 8.0,  // 2025 — gradual easing
+  43: 7.5,  44: 7.5,
+  45: 7.0,  46: 6.5,  // 2026 — easing through World Cup
+  47: 6.5,  48: 6.5,
+  49: 7.0,  50: 7.0,  // 2027 — mid-cycle slowdown re-tightens
+  51: 6.5,  52: 6.5,
+  53: 6.0,  54: 6.0,  // 2028 — pre-Olympics monetary support
+  55: 6.0,  56: 6.0,
+  57: 5.5,  58: 5.5,  // 2029 — stable plateau into endgame
+  59: 5.5,  60: 5.5,
 };
 
 /** Effective base rate at a given quarter — schedule lookup with a
@@ -748,15 +839,32 @@ export function classDemandShares(
  *  but is overridden by any news item at that quarter that ships an
  *  explicit `travelIndex` value (e.g. recession dips, Olympics spikes).
  *  Multiple overrides at the same quarter are averaged so a +pulse and
- *  a −pulse on the same round don't unfairly stack. */
-export function effectiveTravelIndex(quarter: number): number {
+ *  a −pulse on the same round don't unfairly stack.
+ *
+ *  Campaign-mode aware (Brief §1): when `campaignMode === "full"` and
+ *  the quarter is R1-R60 (= 2000-2014 era), reads from the 2000-2014
+ *  Travel Index table. R61-R120 of the full campaign maps to R1-R60
+ *  of the half campaign with a -60 offset. */
+export function effectiveTravelIndex(
+  quarter: number,
+  campaignMode: "half" | "full" = "half",
+): number {
   const news = NEWS_BY_QUARTER[quarter] ?? [];
   const overrides = news
     .map((n) => n.travelIndex)
     .filter((v): v is number => typeof v === "number");
-  if (overrides.length === 0) return TRAVEL_INDEX[quarter] ?? 100;
-  const sum = overrides.reduce((a, b) => a + b, 0);
-  return sum / overrides.length;
+  if (overrides.length > 0) {
+    const sum = overrides.reduce((a, b) => a + b, 0);
+    return sum / overrides.length;
+  }
+  if (campaignMode === "full") {
+    if (quarter <= 60) {
+      return TRAVEL_INDEX_FULL_CAMPAIGN_2000[quarter] ?? 100;
+    }
+    // R61-R120 → R1-R60 of half campaign (offset 60).
+    return TRAVEL_INDEX[quarter - 60] ?? 100;
+  }
+  return TRAVEL_INDEX[quarter] ?? 100;
 }
 
 /** Effective fuel index for a given quarter — defaults to whatever the
