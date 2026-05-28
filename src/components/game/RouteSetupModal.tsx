@@ -381,7 +381,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
         tone: (occ < 0.25 ? "neg" : occ < 0.55 ? "warn" : "pos") as "neg" | "warn" | "pos",
       };
     }
-    const demand = routeDemandPerDay(origin!, dest!, s.currentQuarter).total;
+    const demand = routeDemandPerDay(origin!, dest!, s.currentQuarter, s.session?.totalRounds ?? 60).total;
     // Capacity bug fix (matches engine.ts): each daily flight uses ONE
     // plane's seats, not the sum across all planes. dailyFreq is
     // already the total daily flights across the fleet, so capacity is

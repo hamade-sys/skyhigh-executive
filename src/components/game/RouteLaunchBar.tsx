@@ -42,6 +42,7 @@ export function RouteLaunchBar({
 }: RouteLaunchBarProps) {
   const player = useGame(selectPlayer);
   const currentQuarter = useGame((s) => s.currentQuarter);
+  const totalRounds = useGame((s) => s.session?.totalRounds ?? 60);
   if (!player) return null;
   if (!origin && !dest) return null;
 
@@ -82,6 +83,7 @@ export function RouteLaunchBar({
             city={leftCity}
             player={player}
             currentQuarter={currentQuarter}
+            totalRounds={totalRounds}
             otherCity={rightCity}
             role={leftCity === o ? "primary" : "primary"}
           />
@@ -112,6 +114,7 @@ export function RouteLaunchBar({
             city={rightCity}
             player={player}
             currentQuarter={currentQuarter}
+            totalRounds={totalRounds}
             otherCity={leftCity}
             role="secondary"
           />
@@ -153,11 +156,12 @@ export function RouteLaunchBar({
 // ============================================================================
 
 function CityCard({
-  city, player, currentQuarter, otherCity, role,
+  city, player, currentQuarter, totalRounds, otherCity, role,
 }: {
   city: City;
   player: Team;
   currentQuarter: number;
+  totalRounds: number;
   /** When set, surface OD-pair demand instead of single-city demand
    *  on the destination card so the player sees the actual market
    *  size for the chosen route. */
@@ -185,7 +189,7 @@ function CityCard({
   // baseline at the current quarter.
   const demand = (() => {
     if (otherCity) {
-      const od = routeDemandPerDay(city.code, otherCity.code, currentQuarter);
+      const od = routeDemandPerDay(city.code, otherCity.code, currentQuarter, totalRounds);
       return {
         kind: "od" as const,
         total: Math.round(od.total),

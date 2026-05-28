@@ -1070,7 +1070,7 @@ function RouteDetailModal({
       const occ = demand > 0 ? Math.min(1, demand / dailyCapacity) : 0;
       return { kind: "cargo" as const, demand, capacity: dailyCapacity, occupancy: occ };
     }
-    const demand = routeDemandPerDay(route.originCode, route.destCode, s.currentQuarter).total;
+    const demand = routeDemandPerDay(route.originCode, route.destCode, s.currentQuarter, s.session?.totalRounds ?? 60).total;
     // Capacity bug fix (matches engine.ts): each daily flight uses ONE
     // plane's seats, not the sum across planes. dailyFreq is already
     // the total daily flights across the fleet, so capacity is
