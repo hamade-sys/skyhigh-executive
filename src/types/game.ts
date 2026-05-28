@@ -564,6 +564,40 @@ export interface Team {
   // Revolving Credit Facility (A8)
   rcfBalanceUsd: number;
 
+  /** Underdog Boost Events (Campaign Brief §13) — fires at scaled
+   *  round positions (R10/R20/R30/R40 in a 60R cohort) for the
+   *  last-place team by airline value. Each trigger is one-shot per
+   *  round. Effects are a mix of one-time bumps (already applied to
+   *  brandPts/opsPts/loyaltyPct/cash/debt) and duration-based
+   *  modifiers stored here. The world-news headline is shown to ALL
+   *  teams — that pressure to avoid last place is intentional. */
+  underdogBoosts?: {
+    /** Round numbers that have already fired for this team. Once a
+     *  team takes an underdog boost at, say, R20, they cannot take
+     *  another R20 boost even if they fall back to last place at
+     *  R30 (each round's boost is one-shot per team). */
+    receivedAtRounds: number[];
+    /** Load-factor floor — passenger occupancy is clamped UP to this
+     *  value while active (Sneeeko viral moment R10, Documentary R40
+     *  variant). Capacity-bounded: if seats < floor × demand, the
+     *  floor effectively means "fill every seat" not "manufacture
+     *  passengers". */
+    loadFactorFloor?: {
+      value: number;        // 1.0 = full-cabin guarantee; 1.2 = +20% boost
+      untilQuarter: number;
+    };
+    /** Business-demand global multiplier (Anchor Contract R30A) —
+     *  applied inside routeDemandPerDay's business term. Stacks with
+     *  city event modifiers. */
+    businessDemandMultiplier?: {
+      value: number;        // 1.60 for anchor contract
+      untilQuarter: number;
+    };
+    /** Endgame Brand-Health multiplier (Documentary R40) — applied
+     *  at final scoring only. */
+    endgameBrandMultiplier?: number;
+  };
+
   // Tax loss carry-forward (PRD B5): 5-quarter expiry
   taxLossCarryForward: Array<{ quarter: number; amount: number }>;
 

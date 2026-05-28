@@ -18,6 +18,10 @@ import { SUBSIDIARY_BY_TYPE as SUBSIDIARY_CATALOG_BY_TYPE } from "@/data/subsidi
 import { NEWS_BY_QUARTER } from "@/data/world-news";
 import { cityEventImpact, newsItemImpactForCity } from "./city-events";
 import { cargoBellyTonnes } from "./aircraft-upgrades";
+import {
+  activeBusinessDemandMultiplier,
+  activeLoadFactorFloor,
+} from "./underdog-boosts";
 import type {
   AirportSlotState,
   City,
@@ -619,11 +623,35 @@ export function cityEffectiveDemand(
   };
 }
 
-// ─── Route demand (PRD §5.2 + E6 + D5 + A1 events) ──────────
+// ─── Market Maturity Multiplier (Campaign Brief §12) ─────────
+//
+// Prevents early-game route-spam: at R1 only 15% of base demand is
+// "active", scaling linearly to 100% by ~83% through the campaign.
+// Workshop blocker observed May 2026: a player who opens LHR-JFK
+// with 6 widebodies on Q1 prints money because base demand assumes
+// a mature 2025 traveller, not a 2015 (or 2000) one. With maturity
+// at 0.15, two A320s saturate a top-tier route — no benefit from
+// stacking more capacity on a single OD pair.
+//
+// Generalisation note: the brief specifies "/49" (60R) and "/99"
+// (120R). We support 8/16/24/40/60R via totalRounds, so the curve
+// generalises with `plateauRound = max(8, floor(totalRounds × 0.83))`.
+// 60R → R50, 120R → R100 (matches brief), 40R → R33, 24R → R20,
+// 16R → R13, 8R → R7. By the last ~17% of any campaign, demand is
+// fully mature.
+export function marketMaturity(currentQuarter: number, totalRounds: number = 60): number {
+  const plateauRound = Math.max(8, Math.floor(totalRounds * 0.83));
+  if (currentQuarter >= plateauRound) return 1.0;
+  if (currentQuarter <= 1) return 0.15;
+  return Math.min(1.0, 0.15 + ((currentQuarter - 1) / (plateauRound - 1)) * 0.85);
+}
+
+// ─── Route demand (PRD §5.2 + E6 + D5 + A1 events + maturity §12) ──
 export function routeDemandPerDay(
   origin: string,
   dest: string,
   quarter: number,
+  totalRounds: number = 60,
 ): { tourism: number; business: number; total: number; amplifier: number } {
   const a = CITIES_BY_CODE[origin];
   const b = CITIES_BY_CODE[dest];
@@ -658,14 +686,19 @@ export function routeDemandPerDay(
   const businessMultB = Math.max(DEMAND_FLOOR_PASSENGER, 1 + businessEventB);
   const travelIdxFloored = Math.max(TRAVEL_INDEX_FLOOR, travelIdx);
 
+  // Market maturity — applied last, after all event/season/index
+  // modifiers (Campaign Brief §12). Scales 0.15→1.0 over the first
+  // ~83% of the campaign so early rounds can't be spam-saturated.
+  const maturity = marketMaturity(quarter, totalRounds);
+
   const tourism =
     (cityTourismAtQuarter(a, quarter) * tourismMultA +
      cityTourismAtQuarter(b, quarter) * tourismMultB) *
-    amplifier * travelIdxFloored * season.tourism;
+    amplifier * travelIdxFloored * season.tourism * maturity;
   const business =
     (cityBusinessAtQuarter(a, quarter) * businessMultA +
      cityBusinessAtQuarter(b, quarter) * businessMultB) *
-    amplifier * travelIdxFloored * season.business;
+    amplifier * travelIdxFloored * season.business * maturity;
   return { tourism, business, total: tourism + business, amplifier };
 }
 
@@ -1361,6 +1394,7 @@ export function computeRouteEconomics(
   worldCupHostCode?: string | null,
   olympicHostCode?: string | null,
   cargoPool?: CargoPoolContext,
+  totalRounds: number = 60,
 ): RouteEconomics {
   const origin = CITIES_BY_CODE[route.originCode];
   const dest = CITIES_BY_CODE[route.destCode];
@@ -1368,7 +1402,16 @@ export function computeRouteEconomics(
     return blankEconomics(route.distanceKm);
 
   const distanceKm = route.distanceKm || haversineKm(origin, dest);
-  const rawDemand = routeDemandPerDay(route.originCode, route.destCode, quarter);
+  const rawDemandBase = routeDemandPerDay(route.originCode, route.destCode, quarter, totalRounds);
+  // Anchor Contract underdog boost (Campaign Brief §13 R30 standard) —
+  // multiplies the business component of demand for the active team
+  // while the boost window is open. Tourism unaffected.
+  const bizMult = activeBusinessDemandMultiplier(team, quarter);
+  const rawDemand = bizMult === 1.0 ? rawDemandBase : {
+    ...rawDemandBase,
+    business: rawDemandBase.business * bizMult,
+    total: rawDemandBase.tourism + rawDemandBase.business * bizMult,
+  };
   const loyaltyFactor = loyaltyRetentionFactor(team.customerLoyaltyPct);
 
   // PRD §5.4 — competitor pressure on shared markets.
@@ -1477,12 +1520,17 @@ export function computeRouteEconomics(
     // see the legacy "freighter takes all" behavior. `odK` is reused
     // from the competitorPressure block above — same key.
     const freighterPoolShare = cargoPool?.hasBellyOD.has(odK) ? 0.70 : 1.0;
+    // Market maturity (§12) also dampens cargo, but more gently: the
+    // floor for cargo is 35% at R1 (vs 15% for passenger) because
+    // freight tends to track economic activity that already exists.
+    // Same plateauRound as the passenger curve.
+    const cargoMaturity = Math.max(0.35, marketMaturity(quarter, totalRounds));
     const cargoDemandT = Math.max(
       0,
       Math.min(
         cityBusinessAtQuarter(origin, quarter) * cargoMultA,
         cityBusinessAtQuarter(dest, quarter) * cargoMultB,
-      ) * cargoFocusBonus * cargoNetworkBonus * cargoShockBonus * cargoSeasonal * freighterPoolShare,
+      ) * cargoFocusBonus * cargoNetworkBonus * cargoShockBonus * cargoSeasonal * freighterPoolShare * cargoMaturity,
     );
     const dailyTonnes = Math.max(0, Math.min(dailyCapacityT, cargoDemandT));
     const occupancy = dailyCapacityT > 0 ? Math.max(0, Math.min(1.0, dailyTonnes / dailyCapacityT)) : 0;
@@ -1769,6 +1817,17 @@ export function computeRouteEconomics(
     } else {
       liftAllClasses(1.18);
     }
+  }
+
+  // Underdog Boost — load factor floor (Brief §13).
+  //   Sneeeko (1.0)     → seal every seat for 4Q
+  //   Documentary (1.2) → +20% lift on all routes for 3Q
+  // Capacity-bounded: this is "fill the cabin", not "manufacture
+  // passengers". Each class clamps to its own capacity in liftAllClasses.
+  const underdogFloor = activeLoadFactorFloor(team, quarter);
+  if (underdogFloor >= 1.0) {
+    if (underdogFloor === 1.0) liftAllClasses(Infinity);
+    else liftAllClasses(underdogFloor);
   }
 
   const dailyPax = dailyPaxFirst + dailyPaxBus + dailyPaxEcon;
@@ -2755,6 +2814,11 @@ export interface QuarterCloseContext {
    *  loop below — so a self-guided game never gets blindsided by a
    *  decision the player never saw. Defaults to true for back-compat. */
   boardDecisionsEnabled?: boolean;
+  /** Total rounds in this campaign (60 for half, 120 for full, or any
+   *  of 8/16/24/40 for shorter cohorts). Engine threads this through
+   *  to `marketMaturity()` so early-round demand is correctly damped.
+   *  Defaults to 60 for back-compat with persisted saves. */
+  totalRounds?: number;
 }
 
 export function runQuarterClose(
@@ -2894,6 +2958,7 @@ export function runQuarterClose(
       const econ = computeRouteEconomics(
         next, r, ctx.quarter, ctx.fuelIndex, ctx.rivals,
         ctx.worldCupHostCode, ctx.olympicHostCode, cargoPool,
+        ctx.totalRounds,
       );
       const boostedRevenue = econ.quarterlyRevenue * legacyBonus * firstMoverBonus;
       revenue += boostedRevenue;

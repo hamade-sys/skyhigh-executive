@@ -28,6 +28,10 @@ import {
 import { toast } from "./toasts";
 import { fmtQuarter, getTotalRounds, TOTAL_GAME_ROUNDS } from "@/lib/format";
 import {
+  applyUnderdogBoost,
+  detectUnderdogBoost,
+} from "@/lib/underdog-boosts";
+import {
   planBotAircraftOrder,
   planBotRoutes,
   botSlotBidPrice,
@@ -4315,6 +4319,10 @@ export const useGame = create<GameStore>()(
           // Plumb the cohort's board-decisions toggle so the engine
           // skips deferred-event resolution in self-guided games.
           boardDecisionsEnabled: s.session?.boardDecisionsEnabled ?? true,
+          // Campaign-length-aware market maturity (§12). Engine reads
+          // this to dampen early-round demand so a 60R cohort doesn't
+          // see the same fully-mature demand curve as a 16R cohort.
+          totalRounds: s.session?.totalRounds ?? 60,
           // P0 fix: thread the post-early-auction slot pool. Earlier this
           // was `s.airportSlots` (the pre-auction state), so slots
           // awarded in the early auction were invisible here AND to the
@@ -6031,8 +6039,36 @@ export const useGame = create<GameStore>()(
             : t,
         );
 
+        // ─ Underdog Boost Events (Campaign Brief §13) ──────────
+        // Fires at the END of close on the rounds returned by
+        // underdogBoostRounds(totalRounds). The last-place team by
+        // airline value gets a story-driven boost — one-shot per
+        // round, persisted in team.underdogBoosts.receivedAtRounds.
+        // Duration effects (load-factor floor, biz demand mult) take
+        // effect on subsequent quarters' revenue calc. Headline
+        // shows for ALL teams so the underdog-pressure dynamic
+        // works as intended.
+        const underdogBoost = detectUnderdogBoost(
+          teamsWithReadyCleared,
+          s.currentQuarter,
+          totalRounds,
+          computeAirlineValue,
+        );
+        let teamsPostUnderdog = teamsWithReadyCleared;
+        if (underdogBoost) {
+          teamsPostUnderdog = teamsWithReadyCleared.map((t) =>
+            t.id === underdogBoost.teamId
+              ? applyUnderdogBoost(t, underdogBoost, s.currentQuarter)
+              : t,
+          );
+          // Headline shown to everyone — that's the whole point of the
+          // underdog mechanic. A premium accent toast so it reads as
+          // breaking news, not a routine notification.
+          toast.accent(underdogBoost.headline, underdogBoost.detail);
+        }
+
         set({
-          teams: teamsWithReadyCleared,
+          teams: teamsPostUnderdog,
           currentQuarter: nextQ,
           phase: "playing",
           lastCloseResult: null,
