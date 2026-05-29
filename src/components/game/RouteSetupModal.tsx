@@ -29,6 +29,13 @@ export interface RouteSetupModalProps {
   /** Pax vs Cargo preselection from the launch bar. */
   forceCargo?: boolean;
   onClose: () => void;
+  /**
+   * Fired after a route is successfully opened (distinct from `onClose`,
+   * which is the cancel/dismiss path). Lets the canvas keep the origin
+   * selected so the player can immediately pick the next destination and
+   * rapid-fire build a hub's whole network without re-clicking the hub.
+   */
+  onLaunched?: () => void;
 }
 
 /**
@@ -47,7 +54,7 @@ export interface RouteSetupModalProps {
  *   4. Pricing tier is a quick preset that scales all class fares — kept
  *      visible but optional, gated behind aircraft selection.
  */
-export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: RouteSetupModalProps) {
+export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLaunched }: RouteSetupModalProps) {
   const s = useGame();
   const player = selectPlayer(s);
   const openRoute = useGame((g) => g.openRoute);
@@ -506,7 +513,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose }: Rou
       setError(r.error ?? "Unknown error");
       return;
     }
-    onClose();
+    // Success — prefer the keep-building callback so the canvas can hold
+    // the origin and let the player chain another destination. Falls back
+    // to onClose for any caller that doesn't wire onLaunched.
+    if (onLaunched) onLaunched();
+    else onClose();
   }
 
   return (

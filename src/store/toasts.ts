@@ -12,6 +12,23 @@ export interface Toast {
   /** Milliseconds before auto-dismiss. 0 = persistent. */
   duration?: number;
   createdAt: number;
+  /** In-game quarter (1-based) at the moment the toast fired. Captured
+   *  via a registered provider (see `registerToastQuarterProvider`) so
+   *  the Notification Center can date events by the in-game calendar
+   *  (e.g. "Q4 06") and group them by in-game year, instead of using
+   *  the real-world wall clock. Optional so legacy/persisted toasts and
+   *  any push that happens before the provider is registered still work. */
+  quarter?: number;
+}
+
+/** Provider that returns the current in-game quarter. Registered by the
+ *  game UI (NotificationCenter) on mount. Kept as a module-level callback
+ *  rather than a static `useGame` import so the toast store has zero
+ *  dependency on the game store — that keeps the import graph one-way
+ *  (game/UI → toasts) and free of cycles. */
+let quarterProvider: (() => number | undefined) | null = null;
+export function registerToastQuarterProvider(fn: () => number | undefined) {
+  quarterProvider = fn;
 }
 
 interface ToastStore {
@@ -55,6 +72,7 @@ export const useToasts = create<ToastStore>()(
         detail,
         duration,
         createdAt: Date.now(),
+        quarter: quarterProvider?.() ?? undefined,
       };
       set((s) => ({
         toasts: [...s.toasts, toast],

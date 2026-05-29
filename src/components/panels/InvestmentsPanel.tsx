@@ -197,7 +197,25 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
   }, 0);
   const portfolioValue = owned.reduce((sum, s) => sum + s.marketValueUsd, 0);
 
-  // Network cities = hub + secondary hubs + every endpoint of an active route.
+  // Route count per city — how many active (non-closed) routes touch each
+  // city as an endpoint. Drives the per-row "N routes" annotation in the
+  // build city-picker so the player can pick the best-connected city for a
+  // subsidiary at a glance (a lounge / fuel depot pays off where traffic
+  // is densest).
+  const routeCountByCity = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (!player) return counts;
+    for (const r of player.routes) {
+      if (r.status === "closed") continue;
+      counts[r.originCode] = (counts[r.originCode] ?? 0) + 1;
+      counts[r.destCode] = (counts[r.destCode] ?? 0) + 1;
+    }
+    return counts;
+  }, [player]);
+
+  // Network cities = hub + secondary hubs + every endpoint of an active
+  // route. Sorted most-connected-first so the picker leads with the cities
+  // where a subsidiary will see the most traffic.
   const networkCities = useMemo(() => {
     if (!player) return [];
     const set = new Set<string>([player.hubCode, ...player.secondaryHubCodes]);
@@ -207,8 +225,10 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
         set.add(r.destCode);
       }
     }
-    return Array.from(set);
-  }, [player]);
+    return Array.from(set).sort(
+      (a, b) => (routeCountByCity[b] ?? 0) - (routeCountByCity[a] ?? 0),
+    );
+  }, [player, routeCountByCity]);
 
   // Defensive: if the player vanished between renders (e.g. session
   // teardown) bail out without calling more hooks below.
@@ -672,18 +692,31 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                           owns && "bg-surface-2/40",
                         )}
                       >
-                        <span className="flex items-baseline gap-2">
+                        <span className="flex items-baseline gap-2 min-w-0">
                           <span className="font-mono tabular text-ink">{code}</span>
-                          <span className="text-ink-2">{city?.name ?? code}</span>
+                          <span className="text-ink-2 truncate">{city?.name ?? code}</span>
                           {isHub && (
                             <span className="text-[0.5625rem] uppercase tracking-wider text-accent font-semibold">hub</span>
                           )}
                         </span>
-                        {owns ? (
-                          <span className="text-[0.625rem] text-ink-muted italic">already built</span>
-                        ) : (
-                          <ArrowRight size={12} className="text-ink-muted" />
-                        )}
+                        <span className="flex items-center gap-2.5 shrink-0">
+                          {(() => {
+                            const n = routeCountByCity[code] ?? 0;
+                            return (
+                              <span
+                                className="text-[0.625rem] tabular text-ink-muted font-mono"
+                                title={`${n} active route${n === 1 ? "" : "s"} touch ${code}`}
+                              >
+                                {n} {n === 1 ? "route" : "routes"}
+                              </span>
+                            );
+                          })()}
+                          {owns ? (
+                            <span className="text-[0.625rem] text-ink-muted italic">already built</span>
+                          ) : (
+                            <ArrowRight size={12} className="text-ink-muted" />
+                          )}
+                        </span>
                       </button>
                     );
                   })}

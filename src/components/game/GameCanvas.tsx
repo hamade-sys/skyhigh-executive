@@ -501,6 +501,15 @@ function CanvasInner() {
           setDest(null);
           setIsCargo(false);
         }}
+        onLaunched={() => {
+          // Keep the origin (usually the hub) selected so the player can
+          // immediately click the next destination and build the whole
+          // network without re-picking the departure city each time. Only
+          // the destination + cargo intent reset.
+          setLaunchOpen(false);
+          setDest(null);
+          setIsCargo(false);
+        }}
       />
 
       {/* Airport detail popup — opened by double-clicking a city on the map */}

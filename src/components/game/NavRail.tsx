@@ -22,6 +22,7 @@ import { CITIES_BY_CODE } from "@/data/cities";
 import type { NewsItem } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { fmtQuarter } from "@/lib/format";
+import { effectiveTravelIndex } from "@/lib/engine";
 
 export type { PanelId };
 
@@ -87,6 +88,13 @@ export function NavRail() {
   };
   const fuelIndex = useGame((state) => state.fuelIndex);
   const baseInterestRatePct = useGame((state) => state.baseInterestRatePct);
+  const campaignMode = useGame((state) => state.session?.campaignMode);
+  // Global Travel Index (engine PRD E6) — the master passenger-demand
+  // multiplier for the current quarter (100 = baseline). Surfaced to the
+  // player as "Travellers idx" alongside Fuel idx / Base rate so they can
+  // read the macro demand climate at a glance: above 100 = pent-up /
+  // event-driven travel, below 100 = recession / shock suppression.
+  const travelIndex = effectiveTravelIndex(currentQuarter, campaignMode);
 
   const expanded = useUi((s) => s.railExpanded);
   const toggleRail = useUi((s) => s.toggleRail);
@@ -252,6 +260,15 @@ export function NavRail() {
       >
         {expanded ? (
           <>
+            <span>Travellers idx</span>
+            <span
+              className={cn(
+                "text-right",
+                travelIndex >= 100 ? "text-positive" : "text-warning",
+              )}
+            >
+              {Math.round(travelIndex)}
+            </span>
             <span>Fuel idx</span>
             <span className="text-ink text-right">{Math.round(fuelIndex)}</span>
             <span>Base rate</span>
@@ -259,6 +276,12 @@ export function NavRail() {
           </>
         ) : (
           <>
+            <div className="flex flex-col items-center leading-tight">
+              <span className={travelIndex >= 100 ? "text-positive" : "text-warning"}>
+                {Math.round(travelIndex)}
+              </span>
+              <span className="text-[0.5625rem] uppercase tracking-wider">pax</span>
+            </div>
             <div className="flex flex-col items-center leading-tight">
               <span>{Math.round(fuelIndex)}</span>
               <span className="text-[0.5625rem] uppercase tracking-wider">fuel</span>

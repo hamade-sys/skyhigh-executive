@@ -2,9 +2,22 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { Bell, Trash2, X, Info, CheckCircle2, AlertTriangle, CircleX, Sparkles } from "lucide-react";
-import { useToasts, type ToastKind } from "@/store/toasts";
+import { useToasts, registerToastQuarterProvider, type ToastKind } from "@/store/toasts";
+import { useGame, useCampaignStartYear } from "@/store/game";
 import { cn } from "@/lib/cn";
 import { Button, Modal, ModalFooter, ModalHeader } from "@/components/ui";
+
+/** Compact in-game date for a toast, e.g. "Q4 06". `quarter` is 1-based;
+ *  `startYear` is the campaign's calendar start (2000 / 2015). Returns a
+ *  dash for undated toasts (pushed before the quarter provider registered,
+ *  or hydrated from a legacy save). */
+function quarterTag(quarter: number | undefined, startYear: number): string {
+  if (typeof quarter !== "number") return "—";
+  const idx = Math.max(0, quarter - 1);
+  const year = startYear + Math.floor(idx / 4);
+  const quarterOfYear = (idx % 4) + 1;
+  return `Q${quarterOfYear} ${String(year).slice(-2)}`;
+}
 
 const KIND_META: Record<ToastKind, { Icon: typeof Info; tint: string }> = {
   info:     { Icon: Info,          tint: "text-info" },
@@ -32,6 +45,15 @@ export function NotificationCenter() {
   const lastReadAt = useToasts((s) => s.lastReadAt);
   const markAllRead = useToasts((s) => s.markAllRead);
   const clearHistory = useToasts((s) => s.clearHistory);
+  const startYear = useCampaignStartYear();
+
+  // Register a provider so every toast records the in-game quarter at push
+  // time. Real wall-clock timestamps can't be converted back to game time,
+  // so the quarter has to be captured up-front. Reading via getState()
+  // keeps the toast store free of a direct game-store import (one-way graph).
+  useEffect(() => {
+    registerToastQuarterProvider(() => useGame.getState().currentQuarter);
+  }, []);
 
   const unreadCount = useMemo(
     () => history.filter((t) => t.createdAt > lastReadAt).length,
@@ -50,39 +72,33 @@ export function NotificationCenter() {
     }
   }
 
-  // Bucketing depends on "now", which we refresh once per minute while
-  // the panel is open. Pulling Date.now() inline in render or a memo
-  // breaks idempotency — buckets would drift on every re-render. We
-  // intentionally setState inside an effect to (a) snapshot now at
-  // open-time so a stale mount-time value isn't reused hours later,
-  // and (b) tick once per minute so "just now" eventually rolls over.
-  // The effect-set is bounded (only on open transition) so cascading
-  // renders aren't a real concern here.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, [open]);
-
-  // Group by relative bucket (newest first)
+  // Group by in-game calendar year (newest first). Each toast carries the
+  // quarter it fired in; the year is derived from the campaign start year.
+  // Undated toasts (pushed before the provider registered, or hydrated from
+  // a legacy save) fall into a trailing "Undated" bucket.
   const groups = useMemo(() => {
-    const HOUR = 60 * 60 * 1000;
-    const justNow: typeof history = [];
-    const today: typeof history = [];
-    const older: typeof history = [];
-    // Iterate newest first
+    const byYear = new Map<number, typeof history>();
+    const undated: typeof history = [];
+    // Iterate newest first so within each year the latest event leads.
     for (let i = history.length - 1; i >= 0; i--) {
       const t = history[i];
-      const age = now - t.createdAt;
-      if (age < 5 * 60 * 1000) justNow.push(t);
-      else if (age < 12 * HOUR) today.push(t);
-      else older.push(t);
+      if (typeof t.quarter !== "number") {
+        undated.push(t);
+        continue;
+      }
+      const year = startYear + Math.floor((t.quarter - 1) / 4);
+      const bucket = byYear.get(year);
+      if (bucket) bucket.push(t);
+      else byYear.set(year, [t]);
     }
-    return { justNow, today, older };
-  }, [history, now]);
+    const yearGroups = Array.from(byYear.entries())
+      .sort((a, b) => b[0] - a[0]) // newest year first
+      .map(([year, items]) => ({ label: String(year), items }));
+    if (undated.length > 0) {
+      yearGroups.push({ label: "Undated", items: undated });
+    }
+    return yearGroups;
+  }, [history, startYear]);
 
   return (
     <>
@@ -175,15 +191,15 @@ export function NotificationCenter() {
                 </div>
               ) : (
                 <>
-                  {groups.justNow.length > 0 && (
-                    <Group label="Just now" items={groups.justNow} lastReadAt={lastReadAt} />
-                  )}
-                  {groups.today.length > 0 && (
-                    <Group label="Earlier today" items={groups.today} lastReadAt={lastReadAt} />
-                  )}
-                  {groups.older.length > 0 && (
-                    <Group label="Older" items={groups.older} lastReadAt={lastReadAt} />
-                  )}
+                  {groups.map((g) => (
+                    <Group
+                      key={g.label}
+                      label={g.label}
+                      items={g.items}
+                      lastReadAt={lastReadAt}
+                      startYear={startYear}
+                    />
+                  ))}
                 </>
               )}
             </div>
@@ -225,11 +241,12 @@ export function NotificationCenter() {
 }
 
 function Group({
-  label, items, lastReadAt,
+  label, items, lastReadAt, startYear,
 }: {
   label: string;
   items: ReturnType<typeof useToasts.getState>["history"];
   lastReadAt: number;
+  startYear: number;
 }) {
   return (
     <section>
@@ -256,7 +273,7 @@ function Group({
                     {t.title}
                   </span>
                   <span className="text-[0.6875rem] text-ink-muted tabular shrink-0">
-                    {relativeTime(t.createdAt)}
+                    {quarterTag(t.quarter, startYear)}
                   </span>
                 </div>
                 {t.detail && (
@@ -273,11 +290,3 @@ function Group({
   );
 }
 
-function relativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  if (diff < 60_000) return "just now";
-  if (diff < 60 * 60_000) return `${Math.round(diff / 60_000)}m`;
-  if (diff < 24 * 60 * 60_000) return `${Math.round(diff / (60 * 60_000))}h`;
-  const d = new Date(ts);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
