@@ -548,7 +548,14 @@ export function hardBotBlockingBidCodes(
   const codes: string[] = [];
   for (const rv of rivals) {
     if (rv.id === team.id) continue;
-    if (rv.controlledBy !== "human" && rv.botDifficulty !== "medium") continue;
+    // Hard bots only block OTHER BOTS, never the human player. Blocking
+    // bids at the human's own hub produced the "I bid for slots that are
+    // clearly available but still get outbid every quarter" complaint:
+    // a 14-slot bid at 1.6× base would silently beat the player at their
+    // own tier-1 hub even with 200+ slots free. The bot AI should compete
+    // on routes and pricing, not deny the human access to their home base.
+    if (rv.controlledBy === "human") continue;
+    if (rv.botDifficulty !== "medium") continue;
     // Bid at any T1/T2 rival hub we don't already dominate
     const hubCode = rv.hubCode;
     const rvCity = CITIES_BY_CODE[hubCode];

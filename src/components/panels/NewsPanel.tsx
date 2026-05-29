@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { dynamicHostNews, newsForQuarter } from "@/data/world-news";
+import { dynamicAircraftReleaseNews } from "@/lib/aircraft-news";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { cityEventImpact } from "@/lib/city-events";
 import { useGame, selectPlayer, useCampaignStartYear, useTotalRounds } from "@/store/game";
@@ -61,12 +62,13 @@ export function NewsPanel() {
       const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
         (code) => CITIES_BY_CODE[code]?.name,
         airportSlots);
+      const aircraft = dynamicAircraftReleaseNews(q, totalRounds > 60 ? "full" : "half");
       // Scripted news carries its half-campaign round in `.quarter`; tag
       // each item with the live game quarter `q` it actually fires at so
       // the newspaper view sorts, groups and dates them by the in-game
       // calendar (Q1 2016, not Q1 2001) in the full campaign.
       const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
-      out.push(...dynamic, ...scripted);
+      out.push(...dynamic, ...aircraft, ...scripted);
     }
     return out;
   }, [quartersToShow, worldCupHostCode, olympicHostCode, totalRounds, airportSlots]);
@@ -120,8 +122,9 @@ export function NewsPanel() {
           const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
             (code) => CITIES_BY_CODE[code]?.name,
             airportSlots);
+          const aircraft = dynamicAircraftReleaseNews(q, totalRounds > 60 ? "full" : "half");
           const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
-          const items = [...dynamic, ...scripted];
+          const items = [...dynamic, ...aircraft, ...scripted];
           if (items.length === 0) return null;
           return (
             <section key={q}>

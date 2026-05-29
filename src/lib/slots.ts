@@ -166,9 +166,20 @@ export interface ResolvedBid {
 export function resolveSlotAuctions(
   slots: Record<string, AirportSlotState>,
   bidsByAirport: Record<string, BidEntry[]>,
-): { slots: Record<string, AirportSlotState>; awards: ResolvedBid[] } {
+): {
+  slots: Record<string, AirportSlotState>;
+  awards: ResolvedBid[];
+  /** Per-airport "price to beat" — only present for airports that sold
+   *  out (had at least one loser). It is the lowest WINNING price/slot at
+   *  that airport: a loser must bid strictly above this to win next quarter.
+   *  Airports that did NOT sell out are absent (any bid ≥ base wins, so
+   *  there is nothing to "beat"). Surfaced to the player in the loss toast
+   *  and on the pending route's `pendingReason` so they can counter-bid. */
+  clearingPriceByAirport: Record<string, number>;
+} {
   const out = { ...slots };
   const awards: ResolvedBid[] = [];
+  const clearingPriceByAirport: Record<string, number> = {};
   for (const code of Object.keys(bidsByAirport)) {
     const bids = bidsByAirport[code];
     if (!bids || bids.length === 0) continue;
@@ -181,6 +192,10 @@ export function resolveSlotAuctions(
         b.pricePerSlot - a.pricePerSlot ||
         a.quarterSubmitted - b.quarterSubmitted,
     );
+    // Track the lowest winning price + whether anyone lost, so we can
+    // report a "price to beat" only when the airport actually sold out.
+    let lowestWinningPrice = Infinity;
+    let hadLoser = false;
     for (const bid of sorted) {
       if (remaining <= 0) {
         // Loser — record as 0 win so caller can show feedback. NO charge.
@@ -190,10 +205,14 @@ export function resolveSlotAuctions(
           slotsWon: 0,
           weeklyPricePerSlot: 0,
         });
+        hadLoser = true;
         continue;
       }
       const won = Math.min(bid.slots, remaining);
       remaining -= won;
+      if (bid.pricePerSlot < lowestWinningPrice) {
+        lowestWinningPrice = bid.pricePerSlot;
+      }
       awards.push({
         teamId: bid.teamId,
         airportCode: code,
@@ -201,7 +220,10 @@ export function resolveSlotAuctions(
         weeklyPricePerSlot: bid.pricePerSlot,
       });
     }
+    if (hadLoser && lowestWinningPrice !== Infinity) {
+      clearingPriceByAirport[code] = lowestWinningPrice;
+    }
     out[code] = { ...state, available: remaining };
   }
-  return { slots: out, awards };
+  return { slots: out, awards, clearingPriceByAirport };
 }

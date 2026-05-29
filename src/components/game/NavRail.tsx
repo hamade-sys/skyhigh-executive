@@ -18,6 +18,7 @@ import { useGame, selectPlayer, useCampaignStartYear, useTotalRounds } from "@/s
 import { useUi, type PanelId } from "@/store/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { dynamicHostNews, newsForQuarter } from "@/data/world-news";
+import { dynamicAircraftReleaseNews } from "@/lib/aircraft-news";
 import { CITIES_BY_CODE } from "@/data/cities";
 import type { NewsItem } from "@/types/game";
 import { cn } from "@/lib/cn";
@@ -83,8 +84,9 @@ export function NavRail() {
   const itemsForQuarter = (q: number): NewsItem[] => {
     const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
       (code) => CITIES_BY_CODE[code]?.name);
+    const aircraft = dynamicAircraftReleaseNews(q, totalRounds > 60 ? "full" : "half");
     const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
-    return [...dynamic, ...scripted];
+    return [...dynamic, ...aircraft, ...scripted];
   };
   const fuelIndex = useGame((state) => state.fuelIndex);
   const baseInterestRatePct = useGame((state) => state.baseInterestRatePct);

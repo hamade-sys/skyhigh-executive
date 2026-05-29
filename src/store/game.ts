@@ -4342,6 +4342,10 @@ export const useGame = create<GameStore>()(
         const earlyAuction = resolveSlotAuctions(earlySlotsForAuction, earlyBidsByAirport);
         const slotsAfterEarlyAuction = earlyAuction.slots;
         const earlyAwards = earlyAuction.awards;
+        // Per-airport "price to beat" for airports that sold out, so the
+        // player gets told exactly what winning bids cleared at and can
+        // counter-bid above it (instead of a vague "try again").
+        const earlyClearing = earlyAuction.clearingPriceByAirport;
 
         // Apply awards to player + rivals (Model B — recurring fees)
         const applyAwards = (t: Team): Team => {
@@ -4395,10 +4399,26 @@ export const useGame = create<GameStore>()(
             const intendedWeekly = r.dailyFrequency * 7;
             const effectiveWeekly = Math.min(intendedWeekly, availO, availD);
             if (effectiveWeekly < 1) {
+              // If either endpoint sold out this quarter, tell the player
+              // the exact price to beat there so they can counter-bid.
+              const clearO = earlyClearing[r.originCode];
+              const clearD = earlyClearing[r.destCode];
+              const clearingNotes: string[] = [];
+              if (availO < intendedWeekly && clearO != null) {
+                clearingNotes.push(
+                  `outbid at ${r.originCode} (cleared ${fmtMoneyPlain(clearO)}/slot — bid above)`,
+                );
+              }
+              if (availD < intendedWeekly && clearD != null) {
+                clearingNotes.push(
+                  `outbid at ${r.destCode} (cleared ${fmtMoneyPlain(clearD)}/slot — bid above)`,
+                );
+              }
               const reason =
                 `held ${slotsO}@${r.originCode} / ${slotsD}@${r.destCode}, ` +
                 `${usedO}/${usedD} used, ${availO}/${availD} free, ` +
-                `need ${intendedWeekly}/wk`;
+                `need ${intendedWeekly}/wk` +
+                (clearingNotes.length > 0 ? ` — ${clearingNotes.join("; ")}` : "");
               if (surfaceDiagnostics) {
                 earlyStillPending.push(`${r.originCode}→${r.destCode}: ${reason}`);
               }
@@ -4451,9 +4471,21 @@ export const useGame = create<GameStore>()(
         }
         const earlyPlayerLosses = earlyAwards.filter((a) => a.teamId === player.id && a.slotsWon === 0);
         if (earlyPlayerLosses.length > 0) {
+          // Tell the player EXACTLY what to beat per airport, so they can
+          // counter-bid instead of guessing. The clearing price is the
+          // lowest winning bid at that sold-out airport — bidding above it
+          // wins next quarter.
+          const detail = earlyPlayerLosses
+            .map((l) => {
+              const clear = earlyClearing[l.airportCode];
+              return clear != null
+                ? `${l.airportCode}: winning bids cleared at ${fmtMoneyPlain(clear)}/slot — bid above that to win`
+                : `${l.airportCode}: outbid`;
+            })
+            .join(" · ");
           toast.warning(
             `Lost ${earlyPlayerLosses.length} slot bid${earlyPlayerLosses.length > 1 ? "s" : ""}`,
-            "Higher bidders won. Try again next quarter.",
+            detail,
           );
         }
 
@@ -5589,7 +5621,11 @@ export const useGame = create<GameStore>()(
             slotsForAuction[code] = fresh[code];
           }
         }
-        const { slots: slotsAfterAuction, awards } = resolveSlotAuctions(
+        const {
+          slots: slotsAfterAuction,
+          awards,
+          clearingPriceByAirport: lateClearing,
+        } = resolveSlotAuctions(
           slotsForAuction,
           bidsByAirport,
         );
@@ -5632,9 +5668,17 @@ export const useGame = create<GameStore>()(
         }
         const playerLosses = awards.filter((a) => a.teamId === closed.id && a.slotsWon === 0);
         if (playerLosses.length > 0) {
+          const detail = playerLosses
+            .map((l) => {
+              const clear = lateClearing[l.airportCode];
+              return clear != null
+                ? `${l.airportCode}: winning bids cleared at ${fmtMoneyPlain(clear)}/slot — bid above that to win`
+                : `${l.airportCode}: outbid`;
+            })
+            .join(" · ");
           toast.warning(
             `Lost ${playerLosses.length} slot bid${playerLosses.length > 1 ? "s" : ""}`,
-            "Higher bidders won. Try again next quarter.",
+            detail,
           );
         }
 
