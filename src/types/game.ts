@@ -1385,6 +1385,9 @@ export interface AirportApprovalProcess {
   deadlineRound: number;
   /** Deposit escrowed at auction win — forfeit on collapse. */
   depositUsd: number;
+  /** Winning bid that opened this gauntlet. The balance (bid − deposit)
+   *  plus any one-time / premium demand costs is charged on approval. */
+  winningBidUsd: number;
   /** Demands issued by the government for this acquisition. */
   demands: AirportActiveDemand[];
   /** Minimum demands that must be accepted to close (ceil 70%). */

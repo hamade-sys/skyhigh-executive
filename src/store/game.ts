@@ -90,9 +90,28 @@ import {
   isRouteLegalV2,
   teamHubs,
   airportLadder,
+  type AirportLadder,
   aircraftSizeClass,
   checkRouteTierGate,
+  AIRPORT_RESERVE_FLOOR,
+  AIRPORT_APPROVAL,
+  AIRPORT_APPROVAL_DEPOSIT_PCT,
+  AIRPORT_GAP_QUALIFY,
+  AIRPORT_DEFAULT_FEES_BY_LADDER,
+  AIRPORT_OPEX_RATIO_BASELINE,
+  AIRPORT_TIER_SPECS,
+  AIRPORT_DEMAND_DEFS,
+  resolveSealedAuction,
+  minDemandsToAccept,
+  isPrivatizationRound,
+  type SealedBid,
 } from "@/lib/airport-system-v2";
+import {
+  gapFor,
+  selectAirportToPrivatize,
+  generateApprovalDemands,
+  planBotSealedBid,
+} from "@/lib/airport-auction-runtime";
 import {
   LEASE_BUYOUT_RESIDUAL_PCT,
   canLeaseSpec,
@@ -112,8 +131,12 @@ import { pickAirlineNames } from "@/data/airline-names";
 import { fetchWithRetry } from "@/lib/games/fetch-with-retry";
 import { captureEvent } from "@/lib/telemetry";
 import type {
+  AirportActiveDemand,
+  AirportApprovalProcess,
+  AirportAuction,
   AirportBid,
   AirportLease,
+  AirportSealedBid,
   AirportSlotState,
   CabinConfig,
   CargoContract,
@@ -348,6 +371,27 @@ export interface GameStore extends GameState {
    *  escrowed cash to the bidder and notes the resolution reason for
    *  audit. */
   rejectAirportBid(bidId: string, reason?: string): { ok: boolean; error?: string };
+
+  /** V2 ONLY (session.airportSystemV2). Submit a sealed bid in an open
+   *  privatization auction. The bidder's GAP (Government Acceptance
+   *  Probability) is snapshotted and a 10% deposit is escrowed from cash.
+   *  The auction adjudicates at `closesRound`; the winner enters the
+   *  approval gauntlet, losers get their deposit back. Bidders must prove
+   *  funds (full bid affordable) even though only the deposit is held. */
+  submitSealedAirportBid(args: {
+    auctionId: string;
+    amountUsd: number;
+  }): { ok: boolean; error?: string; gap?: number };
+
+  /** V2 ONLY. Accept or decline one government demand in an active
+   *  approval gauntlet. The acquisition closes when the player has
+   *  accepted at least `minToAccept` demands by the deadline round;
+   *  otherwise it collapses and the deposit is forfeited. */
+  respondToAirportDemand(args: {
+    approvalId: string;
+    demandIndex: number;
+    accept: boolean;
+  }): { ok: boolean; error?: string };
 
   /** Facilitator/admin only: set a team's recurring quarterly staff-cost
    *  surcharge. Used to dial in the recurring rate after a team picks
@@ -2348,6 +2392,127 @@ export const useGame = create<GameStore>()(
           `Rejected · ${city?.name ?? bid.airportCode}`,
           `${bidder?.name ?? "Bidder"}'s bid declined. ${fmtMoneyPlain(bid.bidPriceUsd)} refunded${reason ? ` — ${reason}` : ""}.`,
         );
+        return { ok: true };
+      },
+
+      // ─── V2 privatization auction: player sealed bid ──────────────────
+      submitSealedAirportBid: ({ auctionId, amountUsd }) => {
+        const s = get();
+        if (!s.session?.airportSystemV2) {
+          return { ok: false, error: "Privatization auctions are not active in this game." };
+        }
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const auction = (s.airportAuctions ?? []).find((a) => a.id === auctionId);
+        if (!auction) return { ok: false, error: "Auction not found" };
+        if (auction.status !== "open") {
+          return { ok: false, error: "This auction has closed." };
+        }
+        const city = CITIES_BY_CODE[auction.airportCode];
+        if (!city) return { ok: false, error: "Unknown airport" };
+
+        const amount = Math.max(1, Math.round(amountUsd));
+        if (amount < auction.reserveFloorUsd) {
+          return {
+            ok: false,
+            error: `Bid is below the government reserve of ${fmtMoneyPlain(auction.reserveFloorUsd)}.`,
+          };
+        }
+        // Proof of funds: the bidder must be able to cover the FULL bid,
+        // even though only the deposit is held now (the balance is due if
+        // they win and clear approval).
+        if (player.cashUsd < amount) {
+          return {
+            ok: false,
+            error: `You must be able to cover the full ${fmtMoneyPlain(amount)} bid. Available cash: ${fmtMoneyPlain(player.cashUsd)}.`,
+          };
+        }
+        const deposit = Math.round(amount * AIRPORT_APPROVAL_DEPOSIT_PCT);
+
+        const slotState = s.airportSlots?.[auction.airportCode];
+        const gap = gapFor({
+          team: player,
+          airportCode: auction.airportCode,
+          slotState,
+          bidAmountUsd: amount,
+          allSlots: s.airportSlots ?? {},
+        }).gap;
+
+        const ladder = airportLadder(auction.airportCode, slotState?.ladder);
+        const qualifies = gap >= AIRPORT_GAP_QUALIFY[ladder];
+
+        // Replace any prior bid from this team on the same auction (refund
+        // the old deposit first), so re-bidding doesn't stack deposits.
+        const priorBid = auction.bids.find((b) => b.teamId === player.id);
+        const priorDeposit = priorBid
+          ? Math.round(priorBid.amountUsd * AIRPORT_APPROVAL_DEPOSIT_PCT)
+          : 0;
+        const nextBids = auction.bids.filter((b) => b.teamId !== player.id);
+        nextBids.push({
+          teamId: player.id,
+          amountUsd: amount,
+          gap,
+          submittedRound: s.currentQuarter,
+        });
+
+        set({
+          teams: s.teams.map((t) =>
+            t.id === player.id
+              ? { ...t, cashUsd: t.cashUsd + priorDeposit - deposit }
+              : t,
+          ),
+          airportAuctions: (s.airportAuctions ?? []).map((a) =>
+            a.id === auctionId ? { ...a, bids: nextBids } : a,
+          ),
+        });
+
+        const country = countryForCode(auction.airportCode);
+        const govt = country ? `${country}'s Government` : "The Government";
+        toast.accent(
+          `Sealed bid filed · ${city.name} (${auction.airportCode})`,
+          qualifies
+            ? `${fmtMoneyPlain(amount)} bid · ${fmtMoneyPlain(deposit)} deposit held · approval confidence ${Math.round(gap)}%. ${govt} adjudicates at quarter close.`
+            : `${fmtMoneyPlain(amount)} bid filed, but your approval confidence is only ${Math.round(gap)}% (needs ${AIRPORT_GAP_QUALIFY[ladder]}%). Strengthen your balance sheet or accept demands to improve odds — the bid will be rejected as it stands.`,
+        );
+        void get().pushStateToServer("player.submittedSealedAirportBid", {
+          auctionId,
+          airportCode: auction.airportCode,
+          amountUsd: amount,
+          gap,
+        });
+        return { ok: true, gap };
+      },
+
+      // ─── V2 approval gauntlet: respond to a government demand ─────────
+      respondToAirportDemand: ({ approvalId, demandIndex, accept }) => {
+        const s = get();
+        if (!s.session?.airportSystemV2) {
+          return { ok: false, error: "Approval gauntlets are not active in this game." };
+        }
+        const approval = (s.airportApprovals ?? []).find((a) => a.id === approvalId);
+        if (!approval) return { ok: false, error: "Approval process not found" };
+        if (approval.status !== "pending") {
+          return { ok: false, error: `This approval is already ${approval.status}.` };
+        }
+        if (approval.teamId !== s.playerTeamId) {
+          return { ok: false, error: "This acquisition isn't yours to negotiate." };
+        }
+        if (demandIndex < 0 || demandIndex >= approval.demands.length) {
+          return { ok: false, error: "Unknown demand" };
+        }
+        const nextDemands = approval.demands.map((d, i) =>
+          i === demandIndex ? { ...d, accepted: accept } : d,
+        );
+        set({
+          airportApprovals: (s.airportApprovals ?? []).map((a) =>
+            a.id === approvalId ? { ...a, demands: nextDemands } : a,
+          ),
+        });
+        void get().pushStateToServer("player.respondedToAirportDemand", {
+          approvalId,
+          demandIndex,
+          accept,
+        });
         return { ok: true };
       },
 
@@ -6463,12 +6628,362 @@ export const useGame = create<GameStore>()(
           toast.accent(underdogBoost.headline, underdogBoost.detail);
         }
 
+        // ─── Airport System V2 · privatization lifecycle ──────────────
+        // (session.airportSystemV2 only — dormant in V1 games, so the
+        //  advance path below stays byte-identical when the flag is off.)
+        //  Three phases run in order each round-advance:
+        //    1. Advance in-flight approval gauntlets at their deadline
+        //       (approve → grant ownership + charge balance, or collapse
+        //       → forfeit deposit, airport returns to the pool).
+        //    2. Adjudicate auctions whose bidding window has closed
+        //       (money 50% / government-confidence 50%); losers refunded.
+        //    3. Announce a new auction on the privatization schedule and
+        //       collect bot rivals' sealed bids (deposits escrowed).
+        //  Cash/flag movements accumulate into v2Teams; ownership writes
+        //  into v2Slots; the auction/approval lists rebuild into
+        //  v2Auctions/v2Approvals. All four feed the final set() below.
+        let v2Teams = teamsPostUnderdog;
+        let v2Slots = tickedSlots;
+        let v2Auctions: AirportAuction[] = s.airportAuctions ?? [];
+        let v2Approvals: AirportApprovalProcess[] = s.airportApprovals ?? [];
+
+        if (s.session?.airportSystemV2) {
+          const mode = s.session.campaignMode ?? "half";
+          const rng = Math.random;
+          const rid = () => Math.random().toString(36).slice(2, 10);
+
+          // Accumulated cash/flag deltas applied to v2Teams at the end.
+          const cashDelta: Record<string, number> = {};
+          const flagAdds: Record<string, Set<string>> = {};
+          const addCash = (teamId: string, amt: number) => {
+            cashDelta[teamId] = (cashDelta[teamId] ?? 0) + amt;
+          };
+          const addFlag = (teamId: string, flag: string) => {
+            (flagAdds[teamId] ??= new Set<string>()).add(flag);
+          };
+          const projectedCash = (teamId: string) => {
+            const t = v2Teams.find((x) => x.id === teamId);
+            return (t?.cashUsd ?? 0) + (cashDelta[teamId] ?? 0);
+          };
+          const isPlayerTeam = (id: string) => id === s.playerTeamId;
+          const govtName = (code: string) => {
+            const country = countryForCode(code);
+            return country ? `${country}'s Government` : "The Government";
+          };
+
+          // Write ownership of `code` to `teamId` with V2 defaults +
+          // standing obligations from the accepted demands.
+          const grantOwnership = (
+            code: string,
+            teamId: string,
+            ladder: AirportLadder,
+            winningBidUsd: number,
+            accepted: AirportActiveDemand[],
+          ) => {
+            const fees = AIRPORT_DEFAULT_FEES_BY_LADDER[ladder];
+            const ceiling = AIRPORT_TIER_SPECS[ladder].slotCeiling;
+            const prev = v2Slots[code] ?? {
+              available: 0,
+              nextOpening: 0,
+              nextTickQuarter: 5,
+            };
+            const lobbyingExposure = accepted
+              .filter((d) => AIRPORT_DEMAND_DEFS[d.type].shape === "flag")
+              .reduce((sum, d) => sum + d.magnitude, 0);
+            const standing = accepted.filter((d) => {
+              const sh = AIRPORT_DEMAND_DEFS[d.type].shape;
+              return sh === "recurring" || sh === "operational" || sh === "equity";
+            });
+            v2Slots = {
+              ...v2Slots,
+              [code]: {
+                ...prev,
+                ownerTeamId: teamId,
+                acquiredAtQuarter: nextQ,
+                purchaseCostUsd: winningBidUsd,
+                totalCapacity: ceiling,
+                ladder,
+                slotFeeUsd: fees.slotFeeUsd,
+                landingFeeUsd: fees.landingFeeUsd,
+                passengerChargeUsd: fees.passengerChargeUsd,
+                airportOpexRatio: AIRPORT_OPEX_RATIO_BASELINE,
+                retailDevelopmentLevel: 1,
+                activeDemands: standing.length ? standing : undefined,
+                lobbyingExposure: lobbyingExposure || undefined,
+              },
+            };
+          };
+
+          // Immediate cash cost of closing an acquisition: the bid balance
+          // (bid − deposit already escrowed) + one-time + premium demands.
+          const acquisitionCharge = (
+            winningBidUsd: number,
+            depositUsd: number,
+            accepted: AirportActiveDemand[],
+          ) => {
+            let cost = Math.max(0, winningBidUsd - depositUsd);
+            for (const d of accepted) {
+              const sh = AIRPORT_DEMAND_DEFS[d.type].shape;
+              if (sh === "one-time") cost += d.magnitude;
+              else if (sh === "premium") cost += Math.round(d.magnitude * winningBidUsd);
+            }
+            return cost;
+          };
+
+          // ── Phase 1: advance approval gauntlets at their deadline ──────
+          const nextApprovals: AirportApprovalProcess[] = [];
+          // Auctions that just completed/failed via approval resolution —
+          // their status update is applied in the rebuild below.
+          const auctionStatusByCode: Record<string, "completed" | "failed"> = {};
+          for (const appr of v2Approvals) {
+            if (appr.status !== "pending" || appr.deadlineRound > nextQ) {
+              nextApprovals.push(appr);
+              continue;
+            }
+            const ladder = appr.ladder as AirportLadder;
+            const accepted = appr.demands.filter((d) => d.accepted);
+            const charge = acquisitionCharge(appr.winningBidUsd, appr.depositUsd, accepted);
+            const city = CITIES_BY_CODE[appr.airportCode];
+            const cityName = city?.name ?? appr.airportCode;
+            const ownedAlready = !!v2Slots[appr.airportCode]?.ownerTeamId;
+            const canAfford = projectedCash(appr.teamId) >= charge;
+            if (
+              accepted.length >= appr.minToAccept &&
+              canAfford &&
+              !ownedAlready
+            ) {
+              // APPROVED — commit the acquisition.
+              addCash(appr.teamId, -charge);
+              grantOwnership(appr.airportCode, appr.teamId, ladder, appr.winningBidUsd, accepted);
+              if (accepted.some((d) => AIRPORT_DEMAND_DEFS[d.type].shape === "flag")) {
+                addFlag(appr.teamId, `airport_lobbying_${appr.airportCode}`);
+              }
+              auctionStatusByCode[appr.airportCode] = "completed";
+              if (isPlayerTeam(appr.teamId)) {
+                toast.success(
+                  `Acquisition complete · ${cityName} (${appr.airportCode})`,
+                  `${govtName(appr.airportCode)} transferred operating control. ${fmtMoneyPlain(charge)} settled. You now run this airport.`,
+                );
+              }
+            } else {
+              // COLLAPSED — deposit forfeit, airport returns to the pool.
+              auctionStatusByCode[appr.airportCode] = "failed";
+              if (isPlayerTeam(appr.teamId)) {
+                const why =
+                  ownedAlready
+                    ? "the airport was already taken"
+                    : !canAfford
+                      ? "you could not cover the balance due"
+                      : `you accepted only ${accepted.length} of the required ${appr.minToAccept} demands`;
+                toast.warning(
+                  `Acquisition collapsed · ${cityName} (${appr.airportCode})`,
+                  `${govtName(appr.airportCode)} withdrew the concession — ${why}. Your ${fmtMoneyPlain(appr.depositUsd)} deposit was forfeited.`,
+                );
+              }
+            }
+            // Approval is resolved either way — drop from the active list.
+          }
+
+          // ── Phase 2: adjudicate auctions whose window has closed ───────
+          const nextAuctions: AirportAuction[] = [];
+          for (const auc of v2Auctions) {
+            if (auc.status !== "open" || auc.closesRound > nextQ) {
+              // Carry forward, but fold in any status change from Phase 1.
+              const folded = auctionStatusByCode[auc.airportCode];
+              nextAuctions.push(
+                folded && (auc.status === "approval")
+                  ? { ...auc, status: folded }
+                  : auc,
+              );
+              continue;
+            }
+            const ladder = auc.ladder as AirportLadder;
+            const result = resolveSealedAuction(
+              ladder,
+              auc.bids.map((b) => ({ teamId: b.teamId, amountUsd: b.amountUsd, gap: b.gap })),
+            );
+            // Refund every non-winning bidder's escrowed deposit.
+            for (const b of auc.bids) {
+              if (result.winner && b.teamId === result.winner.teamId) continue;
+              addCash(b.teamId, Math.round(b.amountUsd * AIRPORT_APPROVAL_DEPOSIT_PCT));
+            }
+            const city = CITIES_BY_CODE[auc.airportCode];
+            const cityName = city?.name ?? auc.airportCode;
+            if (!result.winner) {
+              nextAuctions.push({ ...auc, status: "failed" });
+              if (auc.bids.some((b) => isPlayerTeam(b.teamId))) {
+                toast.warning(
+                  `Bid unsuccessful · ${cityName} (${auc.airportCode})`,
+                  `No bid cleared ${govtName(auc.airportCode)}'s reserve and approval-confidence bar. Your deposit was refunded.`,
+                );
+              }
+              continue;
+            }
+            const winnerId = result.winner.teamId;
+            const winBid = result.winner.amountUsd;
+            const deposit = Math.round(winBid * AIRPORT_APPROVAL_DEPOSIT_PCT);
+            const band = AIRPORT_APPROVAL[ladder];
+            const deadlineRound = nextQ + band.rounds[1];
+            const demands = generateApprovalDemands({
+              ladder,
+              airportCode: auc.airportCode,
+              openedRound: nextQ,
+              deadlineRound,
+              rng,
+            });
+            if (demands.length === 0) {
+              // No gauntlet (smallest tier can draw zero demands) — close
+              // immediately if the winner can cover the balance.
+              const charge = acquisitionCharge(winBid, deposit, []);
+              if (projectedCash(winnerId) >= charge && !v2Slots[auc.airportCode]?.ownerTeamId) {
+                addCash(winnerId, -charge);
+                grantOwnership(auc.airportCode, winnerId, ladder, winBid, []);
+                nextAuctions.push({
+                  ...auc,
+                  status: "completed",
+                  winnerTeamId: winnerId,
+                  winningBidUsd: winBid,
+                });
+                if (isPlayerTeam(winnerId)) {
+                  toast.success(
+                    `Acquisition complete · ${cityName} (${auc.airportCode})`,
+                    `${govtName(auc.airportCode)} approved the transfer outright. ${fmtMoneyPlain(charge)} settled. You now run this airport.`,
+                  );
+                }
+              } else {
+                // Winner can't pay — refund deposit, auction fails.
+                addCash(winnerId, deposit);
+                nextAuctions.push({ ...auc, status: "failed" });
+                if (isPlayerTeam(winnerId)) {
+                  toast.warning(
+                    `Acquisition lapsed · ${cityName} (${auc.airportCode})`,
+                    `You won the bid but could not cover the balance — deposit refunded, concession returned to ${govtName(auc.airportCode)}.`,
+                  );
+                }
+              }
+              continue;
+            }
+            // Open the approval gauntlet. Bots auto-accept the cheapest path
+            // to clearance (first minToAccept demands); the player negotiates
+            // each demand via respondToAirportDemand during the window.
+            const minToAccept = minDemandsToAccept(demands.length);
+            const winnerIsBot = !isPlayerTeam(winnerId);
+            const seededDemands = winnerIsBot
+              ? demands.map((d, i) => (i < minToAccept ? { ...d, accepted: true } : d))
+              : demands;
+            nextApprovals.push({
+              id: `appr_${rid()}`,
+              airportCode: auc.airportCode,
+              teamId: winnerId,
+              ladder,
+              openedRound: nextQ,
+              deadlineRound,
+              depositUsd: deposit,
+              winningBidUsd: winBid,
+              demands: seededDemands,
+              minToAccept,
+              status: "pending",
+            });
+            nextAuctions.push({
+              ...auc,
+              status: "approval",
+              winnerTeamId: winnerId,
+              winningBidUsd: winBid,
+            });
+            if (isPlayerTeam(winnerId)) {
+              toast.accent(
+                `Bid won · ${cityName} (${auc.airportCode})`,
+                `${govtName(auc.airportCode)} selected your ${fmtMoneyPlain(winBid)} bid. Accept at least ${minToAccept} of ${demands.length} government demands before Q${deadlineRound} to close — open Airport Ownership to negotiate.`,
+              );
+            } else if (auc.bids.some((b) => isPlayerTeam(b.teamId))) {
+              toast.warning(
+                `Outbid · ${cityName} (${auc.airportCode})`,
+                `A rival's offer scored higher on ${govtName(auc.airportCode)}'s money-and-confidence test. Your deposit was refunded.`,
+              );
+            }
+          }
+
+          // ── Phase 3: announce the next privatization auction ───────────
+          if (isPrivatizationRound(nextQ, mode)) {
+            const inFlight = new Set<string>();
+            for (const a of nextAuctions) {
+              if (a.status === "open" || a.status === "approval") inFlight.add(a.airportCode);
+            }
+            for (const a of nextApprovals) {
+              if (a.status === "pending") inFlight.add(a.airportCode);
+            }
+            const code = selectAirportToPrivatize({
+              round: nextQ,
+              campaignMode: mode,
+              allSlots: v2Slots,
+              inFlightCodes: inFlight,
+            });
+            if (code) {
+              const ladder = airportLadder(code, v2Slots[code]?.ladder);
+              const reserveFloorUsd = AIRPORT_RESERVE_FLOOR[ladder];
+              const bids: AirportSealedBid[] = [];
+              // Bot rivals file sealed bids now (deposits escrowed).
+              for (const t of v2Teams) {
+                if (isPlayerTeam(t.id)) continue;
+                const decision = planBotSealedBid({
+                  team: t,
+                  airportCode: code,
+                  slotState: v2Slots[code],
+                  allSlots: v2Slots,
+                  difficulty: t.botDifficulty,
+                  rng,
+                });
+                if (!decision) continue;
+                addCash(t.id, -Math.round(decision.amountUsd * AIRPORT_APPROVAL_DEPOSIT_PCT));
+                bids.push({
+                  teamId: t.id,
+                  amountUsd: decision.amountUsd,
+                  gap: decision.gap,
+                  submittedRound: nextQ,
+                });
+              }
+              nextAuctions.push({
+                id: `auc_${rid()}`,
+                airportCode: code,
+                ladder,
+                announcedRound: nextQ,
+                closesRound: nextQ + 1,
+                reserveFloorUsd,
+                status: "open",
+                bids,
+              });
+              const city = CITIES_BY_CODE[code];
+              toast.accent(
+                `Privatization auction · ${city?.name ?? code} (${code})`,
+                `${govtName(code)} is privatizing this airport (reserve ${fmtMoneyPlain(reserveFloorUsd)}). File a sealed bid in Airport Ownership before next quarter close — money is half the decision, government confidence the other half.`,
+              );
+            }
+          }
+
+          // Apply accumulated cash/flag deltas to the team roster.
+          v2Teams = v2Teams.map((t) => {
+            const dc = cashDelta[t.id] ?? 0;
+            const fa = flagAdds[t.id];
+            if (dc === 0 && !fa) return t;
+            return {
+              ...t,
+              cashUsd: t.cashUsd + dc,
+              flags: fa ? new Set<string>([...t.flags, ...fa]) : t.flags,
+            };
+          });
+          v2Auctions = nextAuctions;
+          v2Approvals = nextApprovals;
+        }
+
         set({
-          teams: teamsPostUnderdog,
+          teams: v2Teams,
           currentQuarter: nextQ,
           phase: "playing",
           lastCloseResult: null,
-          airportSlots: tickedSlots,
+          airportSlots: v2Slots,
+          ...(s.session?.airportSystemV2
+            ? { airportAuctions: v2Auctions, airportApprovals: v2Approvals }
+            : {}),
           // Reset quarter timer for next cycle. Set to null so the
           // QuarterTimerDriver's auto-start effect picks up the
           // session's configured per-quarter duration. Leaves the
