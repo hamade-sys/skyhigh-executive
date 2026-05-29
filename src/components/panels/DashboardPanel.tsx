@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { Sparkline } from "@/components/ui";
-import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear, useTotalRounds } from "@/store/game";
 import { fmtMoney, fmtPct, fmtQuarter } from "@/lib/format";
 import {
   brandRating,
@@ -356,6 +356,7 @@ function ActiveModifiersSection({
   currentQuarter: number;
 }) {
   const startYear = useCampaignStartYear();
+  const totalRounds = useTotalRounds();
   // Collect every city in the player's network.
   const networkCodes = useMemo(() => {
     const s = new Set<string>([player.hubCode, ...player.secondaryHubCodes]);
@@ -379,7 +380,7 @@ function ActiveModifiersSection({
       total: number;
     }[] = [];
     for (const code of networkCodes) {
-      const im = cityEventImpact(code, currentQuarter);
+      const im = cityEventImpact(code, currentQuarter, totalRounds);
       const total = im.tourism + im.business + im.cargo;
       if (total === 0 && im.tourism === 0 && im.business === 0 && im.cargo === 0) continue;
       out.push({
@@ -391,9 +392,12 @@ function ActiveModifiersSection({
       });
     }
     return out.sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
-  }, [networkCodes, currentQuarter]);
+  }, [networkCodes, currentQuarter, totalRounds]);
 
-  const activeNews = useMemo(() => activeNewsAtQuarter(currentQuarter), [currentQuarter]);
+  const activeNews = useMemo(
+    () => activeNewsAtQuarter(currentQuarter, totalRounds),
+    [currentQuarter, totalRounds],
+  );
 
   if (rows.length === 0) {
     return (

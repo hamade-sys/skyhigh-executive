@@ -2316,6 +2316,48 @@ export const NEWS_BY_QUARTER: Record<number, NewsItem[]> = WORLD_NEWS.reduce(
 );
 
 /**
+ * News calendar alignment for the full (120-quarter) campaign.
+ *
+ * WORLD_NEWS is authored against the 2015-start, 60-round timeline:
+ * round 1 = Q1 2015, round 60 = Q4 2029. Its entries narrate *real*
+ * events (Euro 2016, Brexit, aircraft EIS cut-offs) anchored to that
+ * calendar.
+ *
+ * The full campaign runs 120 quarters starting Q1 2000, and its
+ * quarter 61 lands on Q1 2015 — i.e. exactly where the scripted news
+ * begins. So for a full game we shift the news lookup back by 60
+ * quarters: a live quarter 65 ("Q1 2016") reads news round 5, etc.
+ * Quarters 1-60 of a full game (2000-2014) carry no scripted news —
+ * an accepted content gap (the 2000-2014 narrative arc is separate).
+ *
+ * The discriminator is totalRounds > 60: only the 120-round full
+ * campaign exceeds 60 rounds (short games are 8/16/24/40/60). For a
+ * half campaign the conversion is the identity, so existing behaviour
+ * is provably unchanged.
+ */
+export const FULL_CAMPAIGN_NEWS_OFFSET = 60;
+
+/** Convert a live game quarter into the scripted-news round it should
+ *  read. Identity for half campaigns; minus-60 for the full campaign. */
+export function newsRoundForQuarter(quarter: number, totalRounds = 60): number {
+  return totalRounds > 60 ? quarter - FULL_CAMPAIGN_NEWS_OFFSET : quarter;
+}
+
+/** Scripted news firing at a live game quarter, calendar-aligned for
+ *  the full campaign. Returns [] for quarters with no scripted news. */
+export function newsForQuarter(quarter: number, totalRounds = 60): NewsItem[] {
+  return NEWS_BY_QUARTER[newsRoundForQuarter(quarter, totalRounds)] ?? [];
+}
+
+/** Inverse of newsRoundForQuarter: map a scripted-news round (the value
+ *  stored on NewsItem.quarter) back to the live game quarter it should
+ *  display at. Identity for half campaigns; plus-60 for the full
+ *  campaign so a round-5 headline shows under "Q1 2016", not "Q1 2001". */
+export function gameQuarterForNewsRound(newsRound: number, totalRounds = 60): number {
+  return totalRounds > 60 ? newsRound + FULL_CAMPAIGN_NEWS_OFFSET : newsRound;
+}
+
+/**
  * Dynamic host-city + airport-upgrade headlines. World Cup / Olympic
  * host cities are randomised per-game so they can't live in static
  * WORLD_NEWS. Airport upgrades are scheduled but conditional on

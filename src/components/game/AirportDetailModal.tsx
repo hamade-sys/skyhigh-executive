@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { useGame, selectPlayer, selectActiveTeam, useCampaignStartYear } from "@/store/game";
+import { useGame, selectPlayer, selectActiveTeam, useCampaignStartYear, useTotalRounds } from "@/store/game";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
+import { newsRoundForQuarter, gameQuarterForNewsRound } from "@/data/world-news";
 import { cn } from "@/lib/cn";
 import type { City } from "@/types/game";
 import { Crown, MapPin, Building, ShieldAlert, ArrowUp, ArrowDown, Trophy, Newspaper } from "lucide-react";
@@ -883,6 +884,7 @@ function Stat({
  *  for "why is demand spiking here?" */
 function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: number }) {
   const startYear = useCampaignStartYear();
+  const totalRounds = useTotalRounds();
   const worldCupHostCode = useGame((g) => g.worldCupHostCode);
   const olympicHostCode = useGame((g) => g.olympicHostCode);
   const isWorldCupHost = worldCupHostCode === cityCode;
@@ -893,13 +895,17 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
   const wcActiveNow = isWorldCupHost && quarter >= 19 && quarter <= 24;
   const olActiveNow = isOlympicHost && quarter >= 29 && quarter <= 32;
 
-  // News modifiers active at this city right now.
-  const impact = cityEventImpact(cityCode, quarter);
+  // News modifiers active at this city right now. cityEventImpact returns
+  // items whose `quarter` is in scripted-news-round space, so compare the
+  // window against the news-round equivalent of the live game quarter
+  // (identity in the half campaign; -60 in the full campaign).
+  const newsQ = newsRoundForQuarter(quarter, totalRounds);
+  const impact = cityEventImpact(cityCode, quarter, totalRounds);
   const activeNews = impact.items.filter((n) =>
     (n.modifiers ?? []).some(
       (m) => (m.city === cityCode || m.city === "ALL") &&
-             quarter >= n.quarter &&
-             quarter < n.quarter + Math.max(1, m.rounds),
+             newsQ >= n.quarter &&
+             newsQ < n.quarter + Math.max(1, m.rounds),
     ),
   );
 
@@ -958,7 +964,7 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
             <Newspaper size={11} aria-hidden="true" className="shrink-0 mt-0.5" />
             <span className="truncate">{n.headline}</span>
             <span className="text-[0.625rem] tabular text-ink-muted shrink-0">
-              {fmtQuarter(n.quarter, startYear)}
+              {fmtQuarter(gameQuarterForNewsRound(n.quarter, totalRounds), startYear)}
             </span>
           </span>
         ))}
@@ -974,7 +980,11 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
  *  inflection events ("World Cup boost just kicked in" → +50% Q/Q). */
 function CityDemandSection({ city, quarter }: { city: City; quarter: number }) {
   const startYear = useCampaignStartYear();
-  const demand = cityEffectiveDemand(city, quarter);
+  const totalRounds = useTotalRounds();
+  // Full campaign (>60 rounds) shifts news/travel-index lookups back 60
+  // quarters to land on the real calendar year.
+  const campaignMode = totalRounds > 60 ? "full" : "half";
+  const demand = cityEffectiveDemand(city, quarter, campaignMode);
 
   return (
     <section>

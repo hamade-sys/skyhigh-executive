@@ -5534,7 +5534,7 @@ export const useGame = create<GameStore>()(
         // random walk like before. This keeps the structured news as
         // the canonical fuel driver while preserving emergent variance.
         const nextQ = s.currentQuarter + 1;
-        const fuelHint = newsFuelIndexHint(nextQ);
+        const fuelHint = newsFuelIndexHint(nextQ, getTotalRounds(s));
         const randomDrift = (Math.random() - 0.5) * 10;
         const newFuel = fuelHint != null
           ? s.fuelIndex + (fuelHint - s.fuelIndex) * 0.7 + randomDrift
@@ -8688,6 +8688,13 @@ export function selectPlayer(s: GameStore): Team | null {
  *  in-game date label reflects the chosen era. */
 export function useCampaignStartYear(): number {
   return useGame((s) => getCampaignStartYear(s));
+}
+
+/** Configured total round count for the active game (120 for full
+ *  campaigns, 60 by default). Components pass this into news helpers so
+ *  the full-campaign 60-quarter news offset is applied consistently. */
+export function useTotalRounds(): number {
+  return useGame((s) => getTotalRounds(s));
 }
 
 /** "You" — the team the local browser controls. In solo runs this

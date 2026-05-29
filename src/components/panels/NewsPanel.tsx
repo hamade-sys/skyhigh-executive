@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { NEWS_BY_QUARTER, dynamicHostNews } from "@/data/world-news";
+import { dynamicHostNews, newsForQuarter } from "@/data/world-news";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { cityEventImpact } from "@/lib/city-events";
-import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear, useTotalRounds } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { getArticle } from "@/lib/news-articles";
 import { fmtQuarter } from "@/lib/format";
@@ -32,6 +32,7 @@ export function NewsPanel() {
   const airportSlots = useGame((s) => s.airportSlots);
   const player = useGame(selectPlayer);
   const startYear = useCampaignStartYear();
+  const totalRounds = useTotalRounds();
   const [view, setView] = useState<NewsView>("compact");
 
   // Player's current network (hub + secondary hubs + every endpoint of their routes)
@@ -60,10 +61,15 @@ export function NewsPanel() {
       const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
         (code) => CITIES_BY_CODE[code]?.name,
         airportSlots);
-      out.push(...dynamic, ...(NEWS_BY_QUARTER[q] ?? []));
+      // Scripted news carries its half-campaign round in `.quarter`; tag
+      // each item with the live game quarter `q` it actually fires at so
+      // the newspaper view sorts, groups and dates them by the in-game
+      // calendar (Q1 2016, not Q1 2001) in the full campaign.
+      const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
+      out.push(...dynamic, ...scripted);
     }
     return out;
-  }, [quartersToShow, worldCupHostCode, olympicHostCode]);
+  }, [quartersToShow, worldCupHostCode, olympicHostCode, totalRounds, airportSlots]);
 
   return (
     <div className="space-y-4">
@@ -114,7 +120,8 @@ export function NewsPanel() {
           const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
             (code) => CITIES_BY_CODE[code]?.name,
             airportSlots);
-          const items = [...dynamic, ...(NEWS_BY_QUARTER[q] ?? [])];
+          const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
+          const items = [...dynamic, ...scripted];
           if (items.length === 0) return null;
           return (
             <section key={q}>
@@ -131,6 +138,7 @@ export function NewsPanel() {
                     networkCodes={networkCodes}
                     isCurrent={q === currentQuarter}
                     startYear={startYear}
+                    totalRounds={totalRounds}
                   />
                 ))}
               </div>
@@ -354,11 +362,13 @@ function NewsCard({
   networkCodes,
   isCurrent,
   startYear,
+  totalRounds,
 }: {
   item: NewsItem;
   networkCodes: Set<string>;
   isCurrent: boolean;
   startYear: number;
+  totalRounds: number;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -394,7 +404,7 @@ function NewsCard({
       // Legacy fallback: rely on cityEventImpact() detecting the headline
       // (regex / region match) and surface its blended pct.
       for (const code of networkCodes) {
-        const impact = cityEventImpact(code, item.quarter);
+        const impact = cityEventImpact(code, item.quarter, totalRounds);
         if (impact.pct === 0) continue;
         if (!impact.items.some((it) => it.id === item.id)) continue;
         const city = CITIES_BY_CODE[code];
@@ -403,7 +413,7 @@ function NewsCard({
       }
     }
     return out.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
-  }, [item, networkCodes]);
+  }, [item, networkCodes, totalRounds]);
 
   const totalImpact = affectedCities.reduce((s, c) => s + c.pct, 0);
   const hasImpact = affectedCities.length > 0;

@@ -1,5 +1,9 @@
 import { CITIES_BY_CODE } from "@/data/cities";
-import { NEWS_BY_QUARTER, WORLD_NEWS } from "@/data/world-news";
+import {
+  NEWS_BY_QUARTER,
+  WORLD_NEWS,
+  newsRoundForQuarter,
+} from "@/data/world-news";
 import type { NewsCategory, NewsItem, NewsModifier } from "@/types/game";
 
 /**
@@ -70,13 +74,17 @@ export function newsItemImpactForCity(
   news: NewsItem,
   cityCode: string,
   quarter: number,
+  totalRounds = 60,
 ): { pct: number; tourism: number; business: number; cargo: number } | null {
-  if (news.quarter > quarter) return null;
+  // Convert the live game quarter into scripted-news-round space so the
+  // full campaign reads calendar-aligned news (see newsRoundForQuarter).
+  const q = newsRoundForQuarter(quarter, totalRounds);
+  if (news.quarter > q) return null;
   if (!news.modifiers || news.modifiers.length === 0) {
     // Legacy fallback: only emits when the firing quarter matches and
     // the headline mentions the city by code. Used for older headlines
     // that haven't been migrated to structured modifiers yet.
-    if (news.quarter !== quarter) return null;
+    if (news.quarter !== q) return null;
     const text = `${news.headline} ${news.detail}`;
     const codeHit = new RegExp(`\\b${cityCode}\\b`).test(text);
     if (!codeHit) return null;
@@ -89,7 +97,7 @@ export function newsItemImpactForCity(
   let touched = false;
   for (const m of news.modifiers) {
     if (m.city !== cityCode && m.city !== "ALL") continue;
-    if (!modifierActiveAt(news.quarter, m.rounds, quarter)) continue;
+    if (!modifierActiveAt(news.quarter, m.rounds, q)) continue;
     touched = true;
     if (m.category === "tourism") tourism += m.pct;
     else if (m.category === "business") business += m.pct;
@@ -115,11 +123,16 @@ export function newsItemImpactForCity(
 export function cityEventImpact(
   cityCode: string,
   quarter: number,
+  totalRounds = 60,
 ): CityEventImpact {
   const city = CITIES_BY_CODE[cityCode];
   if (!city) {
     return { pct: 0, tourism: 0, business: 0, cargo: 0, items: [] };
   }
+
+  // Convert the live game quarter into scripted-news-round space so the
+  // full campaign reads calendar-aligned news (see newsRoundForQuarter).
+  const q = newsRoundForQuarter(quarter, totalRounds);
 
   let tourism = 0;
   let business = 0;
@@ -128,9 +141,9 @@ export function cityEventImpact(
   const seenItems = new Set<string>();
 
   // Walk every news item from quarter 1 → current. Active windows
-  // starting earlier than `quarter` may still apply.
+  // starting earlier than `q` may still apply.
   for (const news of WORLD_NEWS) {
-    if (news.quarter > quarter) continue;
+    if (news.quarter > q) continue;
     let touched = false;
 
     if (news.modifiers && news.modifiers.length > 0) {
@@ -140,7 +153,7 @@ export function cityEventImpact(
         // headline doesn't have to enumerate every airport. Any other
         // city value is matched exactly.
         if (m.city !== cityCode && m.city !== "ALL") continue;
-        if (!modifierActiveAt(news.quarter, m.rounds, quarter)) continue;
+        if (!modifierActiveAt(news.quarter, m.rounds, q)) continue;
         touched = true;
         applyModifier(m, (delta, cat) => {
           if (cat === "tourism") tourism += delta;
@@ -153,7 +166,7 @@ export function cityEventImpact(
           }
         });
       }
-    } else if (news.quarter === quarter) {
+    } else if (news.quarter === q) {
       // Legacy fallback: only fires for *current* quarter, no rounds.
       // Used for any headline that hasn't been migrated to structured
       // modifiers yet. Detect by city-code mention or region match.
@@ -219,20 +232,23 @@ function legacyNominalForImpact(impact: NewsItem["impact"]): number {
 /** Active news items for the current quarter. Used by the news panel
  *  to highlight "currently in effect" lines (including back-dated ones
  *  whose rounds-window still covers `quarter`). */
-export function activeNewsAtQuarter(quarter: number): NewsItem[] {
+export function activeNewsAtQuarter(quarter: number, totalRounds = 60): NewsItem[] {
+  // Convert the live game quarter into scripted-news-round space so the
+  // full campaign reads calendar-aligned news (see newsRoundForQuarter).
+  const q = newsRoundForQuarter(quarter, totalRounds);
   const out: NewsItem[] = [];
   const seen = new Set<string>();
   for (const news of WORLD_NEWS) {
-    if (news.quarter > quarter) continue;
-    if (news.quarter === quarter) {
+    if (news.quarter > q) continue;
+    if (news.quarter === q) {
       out.push(news);
       seen.add(news.id);
       continue;
     }
-    // Earlier quarter — only include if any modifier window still covers `quarter`.
+    // Earlier quarter — only include if any modifier window still covers `q`.
     if (!news.modifiers) continue;
     const stillActive = news.modifiers.some((m) =>
-      modifierActiveAt(news.quarter, m.rounds, quarter),
+      modifierActiveAt(news.quarter, m.rounds, q),
     );
     if (stillActive && !seen.has(news.id)) {
       out.push(news);

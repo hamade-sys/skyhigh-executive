@@ -317,6 +317,14 @@ export function QuarterCloseModal() {
             {(() => {
               const insurance = result.insuranceProceeds ?? 0;
               const rcfDelta = result.rcfDrawDelta ?? 0;
+              // Depreciation is a NON-CASH charge. It drags net profit
+              // (accrual P&L) but the cash already left when the plane was
+              // bought, so the engine adds it back to the cash delta. We
+              // surface that add-back as its own recon row — otherwise it
+              // leaks silently into the "Financing / other" residual and
+              // players can't see why their cash held up despite a big
+              // depreciation line on the P&L.
+              const depreciation = result.depreciation ?? 0;
               // Net financing impact on cash this quarter from the RCF
               // facility: a draw ADDS cash (positive sign in the recon),
               // a repay REMOVES cash. Note that the RCF interest paid
@@ -324,12 +332,15 @@ export function QuarterCloseModal() {
               // pretax), so we don't double-count by surfacing it as
               // a separate "interest" row.
               const rcfCashImpact = rcfDelta; // sign matches cash effect
-              const explainedDelta = result.netProfit + insurance + rcfCashImpact;
+              const explainedDelta =
+                result.netProfit + depreciation + insurance + rcfCashImpact;
               const residual = cashDelta - explainedDelta;
+              const hasDepreciation = Math.abs(depreciation) > 0.5;
               const hasInsurance = Math.abs(insurance) > 0.5;
               const hasRcf = Math.abs(rcfCashImpact) > 0.5;
               const hasResidual = Math.abs(residual) > 0.5;
-              if (!hasInsurance && !hasRcf && !hasResidual) return null;
+              if (!hasDepreciation && !hasInsurance && !hasRcf && !hasResidual)
+                return null;
               return (
                 <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-1.5 text-[0.75rem]">
                   <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
@@ -340,6 +351,14 @@ export function QuarterCloseModal() {
                     amount={result.netProfit}
                     fmt={fmtMoney}
                   />
+                  {hasDepreciation && (
+                    <ReconRow
+                      label="Depreciation (non-cash, added back)"
+                      amount={depreciation}
+                      fmt={fmtMoney}
+                      hint="Depreciation lowers reported profit but isn't a cash outflow — you paid for the aircraft when you bought it. Added back so it doesn't reduce your cash."
+                    />
+                  )}
                   {hasInsurance && (
                     <ReconRow
                       label="Scrap &amp; hull-insurance payouts"

@@ -14,10 +14,10 @@ import {
   Building2,
   type LucideIcon,
 } from "lucide-react";
-import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear, useTotalRounds } from "@/store/game";
 import { useUi, type PanelId } from "@/store/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
-import { NEWS_BY_QUARTER, dynamicHostNews } from "@/data/world-news";
+import { dynamicHostNews, newsForQuarter } from "@/data/world-news";
 import { CITIES_BY_CODE } from "@/data/cities";
 import type { NewsItem } from "@/types/game";
 import { cn } from "@/lib/cn";
@@ -72,14 +72,18 @@ export function NavRail() {
   const currentQuarter = useGame((state) => state.currentQuarter);
   const worldCupHostCode = useGame((state) => state.worldCupHostCode);
   const olympicHostCode = useGame((state) => state.olympicHostCode);
+  const totalRounds = useTotalRounds();
 
   /** Combine static WORLD_NEWS for a round with the dynamic host-city
    *  announcements (World Cup / Olympics) that depend on the per-game
-   *  randomized host codes. */
+   *  randomized host codes. Scripted items carry their half-campaign
+   *  round in `.quarter`; tag them with the live game quarter `q` so the
+   *  ticker dates them by the in-game calendar in the full campaign. */
   const itemsForQuarter = (q: number): NewsItem[] => {
     const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
       (code) => CITIES_BY_CODE[code]?.name);
-    return [...dynamic, ...(NEWS_BY_QUARTER[q] ?? [])];
+    const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
+    return [...dynamic, ...scripted];
   };
   const fuelIndex = useGame((state) => state.fuelIndex);
   const baseInterestRatePct = useGame((state) => state.baseInterestRatePct);

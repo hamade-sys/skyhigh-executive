@@ -120,7 +120,14 @@ export function AircraftMarketModal({
   secondHandListings, onOrder, onBuySecondHand,
 }: Props) {
   const campaignMode = useGame((s) => s.session?.campaignMode);
+  // Subtle available-cash readout in the header so the player can size
+  // an order without flipping back to the dashboard. Read-only.
+  const availableCash = useGame((s) => selectPlayer(s)?.cashUsd ?? 0);
   const [tab, setTab] = useState<Tab>("boeing");
+  // "Market" (new-build, by manufacturer) is the default mode. It has no
+  // dedicated tab id — it's any manufacturer tab — so we derive the flag
+  // for the mode toggles below.
+  const inMarketMode = tab !== "lease" && tab !== "secondary";
   const [subfamily, setSubfamily] = useState<Subfamily>("passenger");
   /** Quick capacity filter for the passenger sub-tab. Range filters
    *  let the player narrow to "thin-route fleet" / "long-haul wides"
@@ -249,7 +256,36 @@ export function AircraftMarketModal({
               lease and secondary toggles swap the entire list to a
               specialised view. */}
           <div className="shrink-0 flex items-center gap-2 flex-wrap justify-end">
-            {tab !== "secondary" && tab !== "lease" && (
+            {/* Subtle available-cash readout — sizes an order at a glance
+                without flipping back to the dashboard. Read-only. */}
+            <div
+              className="inline-flex items-baseline gap-1.5 rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-[0.75rem]"
+              title="Cash available to spend on aircraft right now"
+            >
+              <span className="uppercase tracking-wider text-ink-muted text-[0.625rem] font-medium">
+                Available
+              </span>
+              <span className="tabular font-mono text-ink font-semibold">
+                {fmtMoney(availableCash)}
+              </span>
+            </div>
+            {/* Mode toggles — Market / Lease / Secondary. "Market" is the
+                default (new-build by manufacturer); surfacing it as its own
+                highlighted toggle makes the active mode unambiguous. */}
+            <button
+              onClick={() => changeTab(inMarketMode ? tab : "boeing")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-[0.75rem] font-medium border transition-colors flex items-center gap-1.5",
+                inMarketMode
+                  ? "border-accent text-accent bg-[var(--accent-soft)]"
+                  : "border-line text-ink-muted hover:bg-surface-hover",
+              )}
+              aria-pressed={inMarketMode}
+              title="New-build orders direct from the manufacturer"
+            >
+              Market
+            </button>
+            {inMarketMode && (
               <button
                 onClick={() => {
                   setCompareMode((on) => !on);

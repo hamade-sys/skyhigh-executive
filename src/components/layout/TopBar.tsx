@@ -996,13 +996,13 @@ function Kpi({
   tone?: "neg" | "warn";
 }) {
   return (
-    <div className="flex flex-col items-start px-4 py-1 min-w-[7.5rem] shrink-0">
-      <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-medium">
+    <div className="flex flex-col items-start px-3 py-1 shrink-0">
+      <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-medium whitespace-nowrap">
         {label}
       </span>
       <span
         className={cn(
-          "tabular font-display text-[1rem] leading-none mt-1",
+          "tabular font-display text-[1rem] leading-none mt-1 whitespace-nowrap",
           tone === "neg"
             ? "text-negative"
             : tone === "warn"

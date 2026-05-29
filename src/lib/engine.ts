@@ -15,7 +15,7 @@ import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { SCENARIOS, type OptionEffect, type ScaledCashEffect, type Scenario } from "@/data/scenarios";
 import { SUBSIDIARY_BY_TYPE as SUBSIDIARY_CATALOG_BY_TYPE } from "@/data/subsidiaries";
-import { NEWS_BY_QUARTER } from "@/data/world-news";
+import { NEWS_BY_QUARTER, newsForQuarter } from "@/data/world-news";
 import { cityEventImpact, newsItemImpactForCity } from "./city-events";
 import { cargoBellyTonnes } from "./aircraft-upgrades";
 import {
@@ -589,10 +589,14 @@ function negativeDemandShockShare(
   destCode: string,
   quarter: number,
   mode: "passenger" | "cargo",
+  totalRounds: number = 60,
 ): number {
-  const travelDrop = Math.max(0, 1 - Math.max(TRAVEL_INDEX_FLOOR, effectiveTravelIndex(quarter) / 100));
-  const originImpact = cityEventImpact(originCode, quarter);
-  const destImpact = cityEventImpact(destCode, quarter);
+  // totalRounds > 60 ⟺ the 120-round full campaign → news/travel-index
+  // lookups shift back 60 quarters to land on their real calendar year.
+  const campaignMode = totalRounds > 60 ? "full" : "half";
+  const travelDrop = Math.max(0, 1 - Math.max(TRAVEL_INDEX_FLOOR, effectiveTravelIndex(quarter, campaignMode) / 100));
+  const originImpact = cityEventImpact(originCode, quarter, totalRounds);
+  const destImpact = cityEventImpact(destCode, quarter, totalRounds);
   const categories =
     mode === "cargo"
       ? [originImpact.cargo, destImpact.cargo]
@@ -614,8 +618,9 @@ function shockAdjustmentMultiplier(
   route: Route,
   quarter: number,
   mode: "passenger" | "cargo",
+  totalRounds: number = 60,
 ): number {
-  const shock = negativeDemandShockShare(route.originCode, route.destCode, quarter, mode);
+  const shock = negativeDemandShockShare(route.originCode, route.destCode, quarter, mode, totalRounds);
   if (shock <= 0) return 1;
 
   let targetDropFactor = 1;
@@ -682,6 +687,7 @@ export function cityBusinessAtQuarter(city: City, quarter: number): number {
 export function cityEffectiveDemand(
   city: City,
   quarter: number,
+  campaignMode: "half" | "full" = "half",
 ): {
   tourism: number;
   business: number;
@@ -691,15 +697,18 @@ export function cityEffectiveDemand(
   businessDeltaPct: number;
   cargoDeltaPct: number;
 } {
+  // Full campaign news/travel-index lookups shift back 60 quarters to
+  // land on the real calendar year (see newsRoundForQuarter).
+  const totalRounds = campaignMode === "full" ? 120 : 60;
   function compute(q: number): { t: number; b: number; c: number } {
     if (q < 1) return { t: 0, b: 0, c: 0 };
     const tourismBase = cityTourismAtQuarter(city, q);
     const businessBase = cityBusinessAtQuarter(city, q);
-    const evt = cityEventImpact(city.code, q);
+    const evt = cityEventImpact(city.code, q, totalRounds);
     const tMult = Math.max(DEMAND_FLOOR_PASSENGER, 1 + evt.tourism / 100);
     const bMult = Math.max(DEMAND_FLOOR_PASSENGER, 1 + evt.business / 100);
     const cMult = Math.max(DEMAND_FLOOR_CARGO, 1 + evt.cargo / 100);
-    const travelIdx = Math.max(TRAVEL_INDEX_FLOOR, effectiveTravelIndex(q) / 100);
+    const travelIdx = Math.max(TRAVEL_INDEX_FLOOR, effectiveTravelIndex(q, campaignMode) / 100);
     const season = seasonalMultiplier(q);
     return {
       t: tourismBase * tMult * travelIdx * season.tourism,
@@ -766,8 +775,11 @@ export function routeDemandPerDay(
   // versa). Each NewsItem in `world-news.ts` carries a structured
   // `modifiers: { city, category, pct, rounds }[]` array — see
   // `cityEventImpact()` for the rounds-window walker.
-  const evA = cityEventImpact(origin, quarter);
-  const evB = cityEventImpact(dest, quarter);
+  // totalRounds > 60 ⟺ the 120-round full campaign → news lookups shift
+  // back 60 quarters to land on their real calendar year.
+  const campaignMode = totalRounds > 60 ? "full" : "half";
+  const evA = cityEventImpact(origin, quarter, totalRounds);
+  const evB = cityEventImpact(dest, quarter, totalRounds);
   const tourismEventA = evA.tourism / 100;
   const tourismEventB = evB.tourism / 100;
   const businessEventA = evA.business / 100;
@@ -775,7 +787,7 @@ export function routeDemandPerDay(
 
   // Global Travel Index master multiplier (PRD E6) — news items can
   // override this via `travelIndex` (e.g. recession/Olympics global pulses).
-  const travelIdx = effectiveTravelIndex(quarter) / 100;
+  const travelIdx = effectiveTravelIndex(quarter, campaignMode) / 100;
   // Seasonal multiplier (PRD D5)
   const season = seasonalMultiplier(quarter);
 
@@ -853,7 +865,12 @@ export function effectiveTravelIndex(
   quarter: number,
   campaignMode: "half" | "full" = "half",
 ): number {
-  const news = NEWS_BY_QUARTER[quarter] ?? [];
+  // Scripted travelIndex overrides are authored on the 2015-start
+  // (R1-R60) timeline. In the full campaign the live quarter sits 60
+  // rounds ahead of that calendar, so the news lookup must shift back
+  // by 60 — otherwise a 2001 quarter would wrongly read 2015-era news.
+  const newsRound = campaignMode === "full" ? quarter - 60 : quarter;
+  const news = NEWS_BY_QUARTER[newsRound] ?? [];
   const overrides = news
     .map((n) => n.travelIndex)
     .filter((v): v is number => typeof v === "number");
@@ -877,8 +894,11 @@ export function effectiveTravelIndex(
  *  shock. The game state is the truth; this helper exposes the news
  *  expectation so dashboards can show "fuel news at quarter N expected
  *  +X% spike" alongside the player's actual current fuel index. */
-export function newsFuelIndexHint(quarter: number): number | null {
-  const news = NEWS_BY_QUARTER[quarter] ?? [];
+export function newsFuelIndexHint(
+  quarter: number,
+  totalRounds = 60,
+): number | null {
+  const news = newsForQuarter(quarter, totalRounds);
   for (const n of news) {
     if (typeof n.fuelIndexAtBaseline === "number") {
       return n.fuelIndexAtBaseline;
@@ -1642,9 +1662,9 @@ export function computeRouteEconomics(
     const cargoNetworkBonus = isDoctrine(team, "cargo-dominance")
       ? 1 + connectedCityDemandBonus(team, route)
       : 1.0;
-    const cargoShockBonus = shockAdjustmentMultiplier(team, route, quarter, "cargo");
-    const cargoEventA = cityEventImpact(route.originCode, quarter).cargo / 100;
-    const cargoEventB = cityEventImpact(route.destCode, quarter).cargo / 100;
+    const cargoShockBonus = shockAdjustmentMultiplier(team, route, quarter, "cargo", totalRounds);
+    const cargoEventA = cityEventImpact(route.originCode, quarter, totalRounds).cargo / 100;
+    const cargoEventB = cityEventImpact(route.destCode, quarter, totalRounds).cargo / 100;
     // Cargo demand floor — see DEMAND_FLOOR_CARGO export at the top
     // of this file. Same logic as passenger but slightly higher
     // (25% vs 15%) because freight is more resilient to shocks.
@@ -1835,7 +1855,7 @@ export function computeRouteEconomics(
     (team.geographicPriority === "middle-east" && (origin.region === "me" || origin.region === "mea") && (dest.region === "me" || dest.region === "mea"));
   if (geoMatch && team.geographicPriority !== "global") onboardingBonus *= 1.08;
 
-  let doctrineDemandBonus = shockAdjustmentMultiplier(team, route, quarter, "passenger");
+  let doctrineDemandBonus = shockAdjustmentMultiplier(team, route, quarter, "passenger", totalRounds);
   if (isDoctrine(team, "budget-expansion")) {
     doctrineDemandBonus *= tierTwoThreeDemandBonus(origin, dest);
   }
@@ -2070,8 +2090,8 @@ export function computeRouteEconomics(
     // Cargo demand at this OD pair (re-using the cargo path's demand
     // formula) — clamps via DEMAND_FLOOR_CARGO so a belly never sees
     // a full zero on a route the engine is otherwise running.
-    const cargoEventA = cityEventImpact(route.originCode, quarter).cargo / 100;
-    const cargoEventB = cityEventImpact(route.destCode, quarter).cargo / 100;
+    const cargoEventA = cityEventImpact(route.originCode, quarter, totalRounds).cargo / 100;
+    const cargoEventB = cityEventImpact(route.destCode, quarter, totalRounds).cargo / 100;
     const bellyMultA = Math.max(DEMAND_FLOOR_CARGO, 1 + cargoEventA);
     const bellyMultB = Math.max(DEMAND_FLOOR_CARGO, 1 + cargoEventB);
     // Belly demand is the parcels/mail share (~30%) of full-cargo
@@ -2090,7 +2110,7 @@ export function computeRouteEconomics(
       cityBusinessAtQuarter(dest, quarter) * bellyMultB,
     ) * 0.30 * bellySeasonal *
       (isDoctrine(team, "cargo-dominance") ? 1 + connectedCityDemandBonus(team, route) : 1) *
-      shockAdjustmentMultiplier(team, route, quarter, "cargo");
+      shockAdjustmentMultiplier(team, route, quarter, "cargo", totalRounds);
     const dailyTonnesUsed = Math.max(0, Math.min(bellyDailyCapacity, cargoDemandT));
     bellyCargoTonnesUsed = dailyTonnesUsed * QUARTER_DAYS;
     // Belly pricing: 80% of dedicated cargo rate (parcels/mail vs full
@@ -3717,8 +3737,8 @@ export function runQuarterClose(
     // give the player a single number. Cargo routes read the cargo
     // dimension; passenger routes average tourism + business (same
     // shape as the upstream routeDemandPerDay blend).
-    const evtA = cityEventImpact(r.originCode, ctx.quarter);
-    const evtB = cityEventImpact(r.destCode, ctx.quarter);
+    const evtA = cityEventImpact(r.originCode, ctx.quarter, ctx.totalRounds ?? 60);
+    const evtB = cityEventImpact(r.destCode, ctx.quarter, ctx.totalRounds ?? 60);
     const eventA = r.isCargo
       ? evtA.cargo / 100
       : ((evtA.tourism + evtA.business) / 2) / 100;
@@ -3748,7 +3768,18 @@ export function runQuarterClose(
   }
 
   // ─ Cash flow + RCF auto-draw (A8) ──────────────────────
-  let newCashUsd = next.cashUsd + netProfit;
+  // Depreciation is a NON-CASH expense. It legitimately drags net
+  // profit (accrual P&L, matching principle) but the cash already
+  // left the business when the aircraft was bought — the store
+  // deducts the full purchase price from cash at buy time. So we add
+  // depreciation back here to recover the real operating cash flow
+  // (indirect method: cash flow = net income + D&A). Without this,
+  // players watched their cash fall by the depreciation amount every
+  // quarter for planes they had ALREADY paid for in full — a
+  // double-count of the capital outflow. Leased aircraft never accrue
+  // depreciation (the map above skips them), so this add-back only
+  // ever reverses the non-cash charge on owned airframes.
+  let newCashUsd = next.cashUsd + netProfit + depreciation;
   let newRcfBalance = next.rcfBalanceUsd;
   // Track the starting RCF balance so we can compute this quarter's
   // draw / repay delta and expose it as a separate line on the
@@ -4199,7 +4230,7 @@ export function runQuarterClose(
     ...next.secondaryHubCodes,
     ...next.routes.flatMap((r) => [r.originCode, r.destCode]),
   ]);
-  const newsThisQuarter = NEWS_BY_QUARTER[ctx.quarter] ?? [];
+  const newsThisQuarter = newsForQuarter(ctx.quarter, ctx.totalRounds ?? 60);
   const OUTLETS = ["Sky News", "Bloomberg", "Reuters", "FT", "The Air Reporter", "AP", "BBC World", "WSJ", "Al Arabiya", "Nikkei Asia"];
   const outletForId = (id: string) => {
     let h = 0;
@@ -4219,7 +4250,7 @@ export function runQuarterClose(
       // delta on the player's network. Per-category split is also
       // surfaced so a cargo-only +50% boost doesn't get averaged into
       // a misleading "+17% blended" chip.
-      const impact = newsItemImpactForCity(n, code, ctx.quarter);
+      const impact = newsItemImpactForCity(n, code, ctx.quarter, ctx.totalRounds ?? 60);
       if (!impact) continue;
       // Skip cities where the news truly has no effect across any
       // category. The blended `pct` averaging means a cargo-only +50%
