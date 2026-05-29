@@ -82,6 +82,13 @@ import {
   type AirportGovernmentUpgrade,
 } from "@/lib/airport-ownership";
 import {
+  maxSecondaryHubs,
+  secondaryHubCost,
+  secondaryHubFleetGate,
+  doctrineBucket,
+  primaryHubMoveCostUsd,
+} from "@/lib/airport-system-v2";
+import {
   LEASE_BUYOUT_RESIDUAL_PCT,
   canLeaseSpec,
   isLeaseExpired,
@@ -596,6 +603,10 @@ export interface GameStore extends GameState {
 
   addSecondaryHub(cityCode: string): { ok: boolean; error?: string };
   removeSecondaryHub(cityCode: string): void;
+  /** V2 (§2.2) — relocate the primary hub to a new city. Charges
+   *  MAX($50M, fleet×$5M), forfeits grandfathered slots at the old hub, and
+   *  triggers a multi-round transition. V2 games only. */
+  relocatePrimaryHub(cityCode: string): { ok: boolean; error?: string };
   claimFlashDeal(count: number): { ok: boolean; error?: string };
 
   /** Admin: clear a submitted decision so the player can re-submit. */
@@ -8640,10 +8651,41 @@ export const useGame = create<GameStore>()(
         if (s.currentQuarter < 3) return { ok: false, error: "Secondary hubs unlock Q3" };
         if (cityCode === player.hubCode) return { ok: false, error: "Already your primary hub" };
         if (player.secondaryHubCodes.includes(cityCode)) return { ok: false, error: "Already a secondary hub" };
-        if (!CITIES_BY_CODE[cityCode]) return { ok: false, error: "Unknown city" };
-        // One-time activation cost: 1× terminal fee as deposit
         const spec = CITIES_BY_CODE[cityCode];
         if (!spec) return { ok: false, error: "Unknown city" };
+
+        // ── V2 hub system (§2.4/§2.5) — doctrine cap + fleet gate + scaling cost.
+        // Gated to games created after the V2 rollout; V1 games keep the flat
+        // tier-based activation cost below, unchanged.
+        if (s.session?.airportSystemV2) {
+          const n = player.secondaryHubCodes.length + 1; // 1-indexed n-th hub
+          const cap = maxSecondaryHubs(player.doctrine);
+          if (n > cap) {
+            const bucket = doctrineBucket(player.doctrine);
+            return {
+              ok: false,
+              error: bucket === "global"
+                ? "Global Network doctrine allows up to 4 secondary hubs."
+                : "Your doctrine allows up to 2 secondary hubs. Budget Expansion lifts this cap.",
+            };
+          }
+          const fleetGate = secondaryHubFleetGate(n);
+          if (player.fleet.length < fleetGate) {
+            return { ok: false, error: `Hub #${n} needs a fleet of ${fleetGate}+ aircraft (you have ${player.fleet.length}).` };
+          }
+          const cost = secondaryHubCost(n);
+          if (player.cashUsd < cost) return { ok: false, error: `Need $${(cost / 1e6).toFixed(0)}M to establish hub #${n}` };
+          set({
+            teams: s.teams.map((t) => t.id === player.id ? {
+              ...t,
+              cashUsd: t.cashUsd - cost,
+              secondaryHubCodes: [...t.secondaryHubCodes, cityCode],
+            } : t),
+          });
+          return { ok: true };
+        }
+
+        // ── V1 path — one-time activation cost: 1× terminal fee as deposit.
         const activationCost =
           spec.tier === 1 ? 30_000_000 :
           spec.tier === 2 ? 22_000_000 :
@@ -8667,6 +8709,49 @@ export const useGame = create<GameStore>()(
             secondaryHubCodes: t.secondaryHubCodes.filter((c) => c !== cityCode),
           } : t),
         });
+      },
+
+      // ── V2 (§2.2) Primary hub relocation ───────────────────────────
+      relocatePrimaryHub: (cityCode) => {
+        const s = get();
+        if (!s.session?.airportSystemV2) {
+          return { ok: false, error: "Hub relocation isn't available in this game." };
+        }
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const dest = CITIES_BY_CODE[cityCode];
+        if (!dest) return { ok: false, error: "Unknown city" };
+        if (cityCode === player.hubCode) return { ok: false, error: "That's already your primary hub" };
+        if (player.secondaryHubCodes.includes(cityCode)) {
+          return { ok: false, error: "Promote it from your secondary hubs instead." };
+        }
+        const cost = primaryHubMoveCostUsd(player.fleet.length);
+        if (player.cashUsd < cost) {
+          return { ok: false, error: `Relocation costs $${(cost / 1e6).toFixed(0)}M (max($50M, fleet×$5M)).` };
+        }
+        const oldHub = player.hubCode;
+        set({
+          teams: s.teams.map((t) => {
+            if (t.id !== player.id) return t;
+            // Forfeit grandfathered slots at the old hub; seed the new hub at base.
+            const nextSlots: Record<string, number> = { ...t.slotsByAirport };
+            delete nextSlots[oldHub];
+            nextSlots[cityCode] = Math.max(nextSlots[cityCode] ?? 0, 50);
+            return {
+              ...t,
+              cashUsd: t.cashUsd - cost,
+              hubCode: cityCode,
+              slotsByAirport: nextSlots,
+              flags: new Set([...Array.from(t.flags), "hub_relocating"]),
+            };
+          }),
+        });
+        toast.warning(
+          `Primary hub moving to ${dest.name}`,
+          `Forfeited grandfathered slots at ${oldHub}. Transition takes a few rounds to stabilise.`,
+        );
+        void get().pushStateToServer("player.relocatePrimaryHub", { from: oldHub, to: cityCode });
+        return { ok: true };
       },
 
       // ── Flash Deal (§6.3, S3) ──────────────────────────────
