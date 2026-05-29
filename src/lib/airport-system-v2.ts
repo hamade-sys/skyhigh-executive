@@ -109,6 +109,123 @@ export const AIRPORT_TIER_SPECS: Record<AirportLadder, AirportTierSpec> = {
 export const AIRPORT_SLOT_PACK_SIZE = 100;
 export const AIRPORT_SLOT_PACK_BUILD_ROUNDS = 2;
 
+// ─── §4.2 Tier gating: aircraft size class & route eligibility ──────────
+
+/** Body-size class derived from an AircraftSpec. The catalogue only labels
+ *  family ("passenger" | "cargo"), so we derive a size class from seats /
+ *  cargo tonnage — the dimension the tier table gates on (T4 regional only,
+ *  T3 adds narrowbody, T2 adds widebody, T1+ all). */
+export type AircraftSizeClass = "regional" | "narrowbody" | "widebody";
+
+/** Seat / tonnage thresholds for the size-class derivation. Calibrated to the
+ *  live catalogue: CRJ/E-jets/Dash/ATR (≤110 seats) → regional; A319/320/321,
+ *  737 family, 757 (≤230) → narrowbody; A330/767/777/747/A380 (>230) →
+ *  widebody. Cargo frames split on payload tonnes. */
+export const AIRCRAFT_REGIONAL_SEAT_MAX = 110;
+export const AIRCRAFT_NARROWBODY_SEAT_MAX = 230;
+export const AIRCRAFT_REGIONAL_CARGO_T_MAX = 25;
+export const AIRCRAFT_NARROWBODY_CARGO_T_MAX = 65;
+
+/** Minimal AircraftSpec shape this module needs (avoids importing the whole
+ *  type and keeps the helper testable with plain objects). */
+export interface AircraftSizeInput {
+  family: "passenger" | "cargo";
+  seats: { first: number; business: number; economy: number };
+  cargoTonnes?: number;
+}
+
+/** Derive the body-size class used for tier gating. */
+export function aircraftSizeClass(spec: AircraftSizeInput): AircraftSizeClass {
+  if (spec.family === "cargo") {
+    const t = spec.cargoTonnes ?? 0;
+    if (t <= AIRCRAFT_REGIONAL_CARGO_T_MAX) return "regional";
+    if (t <= AIRCRAFT_NARROWBODY_CARGO_T_MAX) return "narrowbody";
+    return "widebody";
+  }
+  const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
+  if (seats > AIRCRAFT_NARROWBODY_SEAT_MAX) return "widebody";
+  if (seats <= AIRCRAFT_REGIONAL_SEAT_MAX) return "regional";
+  return "narrowbody";
+}
+
+/** Haul-length thresholds (km) for route eligibility by tier. */
+export const AIRPORT_SHORT_HAUL_KM = 3000;
+export const AIRPORT_MEDIUM_HAUL_KM = 7000;
+
+/** Can an airport at `ladder` physically handle this aircraft size class?
+ *  T4 Local (0): regional/turboprop only. T3 Regional (1): + narrowbody.
+ *  T2 National (2): + (limited) widebody. T1+ (3..5): all. */
+export function aircraftAllowedAtLadder(
+  cls: AircraftSizeClass,
+  ladder: AirportLadder,
+): boolean {
+  if (ladder <= 0) return cls === "regional";
+  if (ladder === 1) return cls === "regional" || cls === "narrowbody";
+  return true; // ladder 2+ accepts widebody and below
+}
+
+/** Can an airport at `ladder` serve a route of this haul length?
+ *  T4 (0): domestic only. T3 (1): domestic + short international.
+ *  T2 (2): up to international medium-haul. T1+ (3..5): full long-haul. */
+export function routeAllowedAtLadder(
+  distanceKm: number,
+  sameCountry: boolean,
+  ladder: AirportLadder,
+): boolean {
+  if (ladder <= 0) return sameCountry;
+  if (ladder === 1) return sameCountry || distanceKm <= AIRPORT_SHORT_HAUL_KM;
+  if (ladder === 2) return sameCountry || distanceKm <= AIRPORT_MEDIUM_HAUL_KM;
+  return true; // ladder 3+ : long-haul allowed
+}
+
+export interface RouteTierGateInput {
+  originLadder: AirportLadder;
+  destLadder: AirportLadder;
+  sizeClass: AircraftSizeClass;
+  distanceKm: number;
+  sameCountry: boolean;
+}
+
+export interface RouteTierGateResult {
+  ok: boolean;
+  reason?: string;
+}
+
+/** Combined endpoint gate: both the origin and destination airport tiers must
+ *  independently admit the aircraft size class AND the route's haul length.
+ *  The binding (lower) endpoint is reported in the failure reason. */
+export function checkRouteTierGate(input: RouteTierGateInput): RouteTierGateResult {
+  const { originLadder, destLadder, sizeClass, distanceKm, sameCountry } = input;
+  const endpoints: Array<{ label: string; ladder: AirportLadder }> = [
+    { label: "origin", ladder: originLadder },
+    { label: "destination", ladder: destLadder },
+  ];
+  for (const { ladder } of endpoints) {
+    if (!aircraftAllowedAtLadder(sizeClass, ladder)) {
+      const need =
+        sizeClass === "widebody" ? "National (T2) or higher" : "Regional (T3) or higher";
+      return {
+        ok: false,
+        reason: `A ${AIRPORT_LADDER_NAME[ladder]} airport can't handle ${sizeClass} aircraft — needs ${need}. Upgrade the airport tier or assign a smaller type.`,
+      };
+    }
+    if (!routeAllowedAtLadder(distanceKm, sameCountry, ladder)) {
+      const haul = sameCountry
+        ? "this route"
+        : distanceKm <= AIRPORT_SHORT_HAUL_KM
+          ? "short international"
+          : distanceKm <= AIRPORT_MEDIUM_HAUL_KM
+            ? "medium-haul international"
+            : "long-haul international";
+      return {
+        ok: false,
+        reason: `A ${AIRPORT_LADDER_NAME[ladder]} airport can't serve ${haul} flights — upgrade the airport tier.`,
+      };
+    }
+  }
+  return { ok: true };
+}
+
 // ─── §5 Background traffic & slot scarcity ──────────────────────────────
 
 /** Baseline share of total slots consumed by simulated non-player

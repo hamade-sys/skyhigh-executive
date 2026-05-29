@@ -27,6 +27,12 @@
 
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import type { AirportSlotState, CityTier } from "@/types/game";
+import {
+  cityTierToLadder,
+  AIRPORT_TIER_SPECS,
+  playerAvailableSlots,
+  backgroundSlotsUsed,
+} from "@/lib/airport-system-v2";
 
 /** Starting slot capacity per tier. */
 export const STARTING_SLOTS_BY_TIER: Record<CityTier, number> = {
@@ -88,16 +94,45 @@ export function nextTickQuarter(currentQuarter: number): number {
   return YEARLY_TICK_QUARTERS.find((q) => q > currentQuarter) ?? 99;
 }
 
-/** Build the initial slot state for every city when a game starts. */
-export function makeInitialAirportSlots(): Record<string, AirportSlotState> {
+/** Build the initial slot state for every city when a game starts.
+ *
+ *  V1 (default): flat per-tier starting pool that grows on yearly ticks.
+ *
+ *  V2 (`opts.v2`, session.airportSystemV2 only): the airport's true size is
+ *  its tier-spec `slotCeiling`; simulated background carriers occupy a large
+ *  ladder-dependent share (see AIRPORT_BACKGROUND_PCT), leaving players a
+ *  contested remainder. We seed `available` to that remainder at game start
+ *  (progress 0), and stamp `ladder` + `totalCapacity` so the downstream
+ *  acquisition/auction/ownership phases have their inputs. Gated: when
+ *  `v2` is false the output is byte-identical to V1. */
+export function makeInitialAirportSlots(
+  opts?: { v2?: boolean },
+): Record<string, AirportSlotState> {
+  const v2 = opts?.v2 ?? false;
   const out: Record<string, AirportSlotState> = {};
   for (const city of CITIES) {
     const tier = city.tier as CityTier;
-    out[city.code] = {
-      available: STARTING_SLOTS_BY_TIER[tier],
-      nextOpening: rollYearlyOpen(tier),
-      nextTickQuarter: 5,
-    };
+    if (v2) {
+      const ladder = cityTierToLadder(tier);
+      const ceiling = AIRPORT_TIER_SPECS[ladder].slotCeiling;
+      out[city.code] = {
+        // Contested remainder after background traffic at game start.
+        available: playerAvailableSlots(ceiling, ladder, 0),
+        // V2 capacity grows via slot-pack purchases (Phase 5), not the
+        // V1 yearly drip — so no pre-announced opening.
+        nextOpening: 0,
+        nextTickQuarter: 5,
+        ladder,
+        totalCapacity: ceiling,
+        backgroundSlotsUsed: backgroundSlotsUsed(ceiling, ladder, 0),
+      };
+    } else {
+      out[city.code] = {
+        available: STARTING_SLOTS_BY_TIER[tier],
+        nextOpening: rollYearlyOpen(tier),
+        nextTickQuarter: 5,
+      };
+    }
   }
   return out;
 }
@@ -110,14 +145,22 @@ export function rollYearlyOpen(tier: CityTier): number {
 }
 
 /** Apply yearly tick if currentQuarter has just hit one of the tick quarters.
- *  Adds the previously-announced nextOpening to available, rolls the next. */
+ *  Adds the previously-announced nextOpening to available, rolls the next.
+ *
+ *  V2 (`opts.v2`): the yearly drip does not apply — V2 capacity grows only
+ *  via owner-funded slot packs (Phase 5). A V2 airport just advances its
+ *  tick marker; `available` and `nextOpening` (0) are left untouched so the
+ *  contested-remainder model stays authoritative. Gated: when `v2` is false
+ *  this is byte-identical to V1. */
 export function applyYearlyTickIfDue(
   slots: Record<string, AirportSlotState>,
   currentQuarter: number,
+  opts?: { v2?: boolean },
 ): { slots: Record<string, AirportSlotState>; ticked: boolean } {
   if (!YEARLY_TICK_QUARTERS.includes(currentQuarter)) {
     return { slots, ticked: false };
   }
+  const v2 = opts?.v2 ?? false;
   const out: Record<string, AirportSlotState> = {};
   for (const code of Object.keys(slots)) {
     const city = CITIES_BY_CODE[code];
@@ -127,6 +170,11 @@ export function applyYearlyTickIfDue(
     }
     const tier = city.tier as CityTier;
     const cur = slots[code];
+    if (v2) {
+      // V2: no yearly drip; just advance the tick marker.
+      out[code] = { ...cur, nextTickQuarter: nextTickQuarter(currentQuarter) };
+      continue;
+    }
     // Preserve ownership / capacity / acquisition fields. Earlier this
     // overwrote the entry with a fresh object literal which silently
     // wiped `ownerTeamId`, `ownerSlotRatePerWeekUsd`, `totalCapacity`,

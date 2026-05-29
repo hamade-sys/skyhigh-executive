@@ -89,6 +89,9 @@ import {
   primaryHubMoveCostUsd,
   isRouteLegalV2,
   teamHubs,
+  airportLadder,
+  aircraftSizeClass,
+  checkRouteTierGate,
 } from "@/lib/airport-system-v2";
 import {
   LEASE_BUYOUT_RESIDUAL_PCT,
@@ -2867,6 +2870,30 @@ export const useGame = create<GameStore>()(
            (r.originCode === destCode && r.destCode === originCode)),
         );
         if (duplicate) {
+          // §4.2 Tier gating (V2 only): newly-added aircraft must clear the
+          // endpoint tiers' size-class limit just like a fresh route. The
+          // route's haul was already legal when first opened, so we only
+          // re-check the aircraft size class here.
+          if (s.session?.airportSystemV2) {
+            const oLadder = airportLadder(duplicate.originCode, s.airportSlots?.[duplicate.originCode]?.ladder);
+            const dLadder = airportLadder(duplicate.destCode, s.airportSlots?.[duplicate.destCode]?.ladder);
+            const sameCtry =
+              countryForCode(duplicate.originCode) !== null &&
+              countryForCode(duplicate.originCode) === countryForCode(duplicate.destCode);
+            for (const id of aircraftIds) {
+              const f = player.fleet.find((plane) => plane.id === id);
+              const spec = f ? AIRCRAFT_BY_ID[f.specId] : undefined;
+              if (!spec) continue;
+              const gate = checkRouteTierGate({
+                originLadder: oLadder,
+                destLadder: dLadder,
+                sizeClass: aircraftSizeClass(spec),
+                distanceKm: duplicate.distanceKm,
+                sameCountry: sameCtry,
+              });
+              if (!gate.ok) return { ok: false, error: gate.reason };
+            }
+          }
           // Same-family merge path. Compute the new combined fleet's
           // max physics-capped weekly frequency and use the LOWER of
           // (intended weekly = current sum) and (physics cap).
@@ -2988,12 +3015,32 @@ export const useGame = create<GameStore>()(
           };
         }
         const dist = distanceBetween(originCode, destCode);
+        // §4.2 Tier gating (V2 only): each endpoint airport's tier caps both
+        // the aircraft size class it can handle and the route haul it can
+        // serve. Computed once per endpoint; checked per assigned aircraft
+        // for its size class. V1 games skip this (no tier eligibility).
+        const v2TierGate = s.session?.airportSystemV2 ?? false;
+        const originLadder = airportLadder(originCode, s.airportSlots?.[originCode]?.ladder);
+        const destLadder = airportLadder(destCode, s.airportSlots?.[destCode]?.ladder);
+        const sameCountry =
+          countryForCode(originCode) !== null &&
+          countryForCode(originCode) === countryForCode(destCode);
         const planes = aircraftIds
           .map((id) => player.fleet.find((f) => f.id === id))
           .filter((p): p is FleetAircraft => !!p);
         for (const p of planes) {
           const spec = AIRCRAFT_BY_ID[p.specId];
           if (!spec) return { ok: false, error: "Spec missing" };
+          if (v2TierGate) {
+            const gate = checkRouteTierGate({
+              originLadder,
+              destLadder,
+              sizeClass: aircraftSizeClass(spec),
+              distanceKm: dist,
+              sameCountry,
+            });
+            if (!gate.ok) return { ok: false, error: gate.reason };
+          }
           // Honour engine retrofit range bonus: fuel/super engines
           // ship a +10% range extension. Earlier this was advertised
           // in the upgrade card but never actually checked here, so
@@ -4493,7 +4540,7 @@ export const useGame = create<GameStore>()(
         }
         // Backstop: seed missing airports from initial pool so bids resolve.
         const earlySlotsForAuction = { ...(s.airportSlots ?? {}) };
-        const earlyFresh = makeInitialAirportSlots();
+        const earlyFresh = makeInitialAirportSlots({ v2: s.session?.airportSystemV2 ?? false });
         for (const code of Object.keys(earlyBidsByAirport)) {
           if (!earlySlotsForAuction[code] && earlyFresh[code]) {
             earlySlotsForAuction[code] = earlyFresh[code];
@@ -5769,7 +5816,7 @@ export const useGame = create<GameStore>()(
         // not `s.airportSlots`. Otherwise capacity awarded in the early
         // auction is still "available" here and gets re-awarded.
         const slotsForAuction = { ...(slotsAfterEarlyAuction ?? {}) };
-        const fresh = makeInitialAirportSlots();
+        const fresh = makeInitialAirportSlots({ v2: s.session?.airportSystemV2 ?? false });
         for (const code of Object.keys(bidsByAirport)) {
           if (!slotsForAuction[code] && fresh[code]) {
             slotsForAuction[code] = fresh[code];
@@ -6255,6 +6302,7 @@ export const useGame = create<GameStore>()(
         const { slots: postYearlyTick, ticked } = applyYearlyTickIfDue(
           s.airportSlots ?? {},
           nextQ,
+          { v2: s.session?.airportSystemV2 ?? false },
         );
         if (ticked) {
           toast.accent(
@@ -6936,7 +6984,7 @@ export const useGame = create<GameStore>()(
           quarterTimerPaused: false,
           secondHandListings: [],
           cargoContracts: [],
-          airportSlots: makeInitialAirportSlots(),
+          airportSlots: makeInitialAirportSlots({ v2: get().session?.airportSystemV2 ?? false }),
           airportBids: [],
           preOrders: [],
           productionCapOverrides: {},
