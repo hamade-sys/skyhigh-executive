@@ -14,7 +14,7 @@ import {
   Building2,
   type LucideIcon,
 } from "lucide-react";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { useUi, type PanelId } from "@/store/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { NEWS_BY_QUARTER, dynamicHostNews } from "@/data/world-news";
@@ -65,6 +65,7 @@ function outletFor(item: NewsItem): string {
 }
 
 export function NavRail() {
+  const startYear = useCampaignStartYear();
   const current = useUi((s) => s.panel);
   const togglePanel = useUi((s) => s.togglePanel);
   const player = useGame(selectPlayer);
@@ -321,7 +322,7 @@ export function NavRail() {
                   key={n.id}
                   type="button"
                   onClick={() => useUi.getState().openPanel("news")}
-                  aria-label={`${outletFor(n)} (${fmtQuarter(n.quarter)}): ${n.headline}. Click to open the news panel.`}
+                  aria-label={`${outletFor(n)} (${fmtQuarter(n.quarter, startYear)}): ${n.headline}. Click to open the news panel.`}
                   className="w-full text-left rounded-md border border-line bg-surface px-2.5 py-2 hover:bg-surface-hover hover:border-primary/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   title="Open World news panel to read full article"
                 >
@@ -332,7 +333,7 @@ export function NavRail() {
                       {outletFor(n)}
                     </span>
                     <span className="text-[0.625rem] tabular text-ink-muted font-mono">
-                      {fmtQuarter(n.quarter)}
+                      {fmtQuarter(n.quarter, startYear)}
                     </span>
                   </div>
                   <h3 className="text-[0.75rem] font-medium text-ink leading-snug">

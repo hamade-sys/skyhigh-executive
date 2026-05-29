@@ -12,7 +12,7 @@ import {
 import { fmtMoney, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import type { AircraftSpec } from "@/types/game";
 
 /**
@@ -521,6 +521,7 @@ function PurchaseOrderBody({
  *  store's `retirementQuarter: deliveryQuarter + 28` invariant) so
  *  in-flight games keep their aircraft on schedule. */
 function DeliveryAndRetirementRow({ quantity }: { quantity: number }) {
+  const startYear = useCampaignStartYear();
   const currentQuarter = useGame((g) => g.currentQuarter);
   const totalRounds = useGame((g) => getTotalRounds(g));
   const deliveryQuarter = currentQuarter + 1;
@@ -536,7 +537,7 @@ function DeliveryAndRetirementRow({ quantity }: { quantity: number }) {
           Delivery
         </span>
         <span className="font-mono tabular text-ink">
-          {fmtQuarter(deliveryQuarter)}
+          {fmtQuarter(deliveryQuarter, startYear)}
           {quantity > 1 ? ` · ${quantity} airframes` : ""}
         </span>
       </div>
@@ -545,12 +546,12 @@ function DeliveryAndRetirementRow({ quantity }: { quantity: number }) {
           Retires
         </span>
         <span className="font-mono tabular text-ink-2">
-          {fmtQuarter(retirementQuarter)} · 28 quarters of operating life
+          {fmtQuarter(retirementQuarter, startYear)} · 28 quarters of operating life
         </span>
       </div>
       {operatingQuartersInThisGame < 28 && (
         <div className="text-[0.6875rem] text-ink-muted leading-snug mt-1.5">
-          This game ends at {fmtQuarter(totalRounds)} — the airframe
+          This game ends at {fmtQuarter(totalRounds, startYear)} — the airframe
           will only operate {operatingQuartersInThisGame} of its 28
           quarters before the campaign closes. Plan ROI accordingly.
         </div>

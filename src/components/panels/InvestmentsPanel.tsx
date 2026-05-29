@@ -15,7 +15,7 @@ import {
   Handshake,
 } from "lucide-react";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { CITIES_BY_CODE } from "@/data/cities";
@@ -153,6 +153,7 @@ function RivalInvestmentsReadOnly({ rival }: { rival: import("@/types/game").Tea
 }
 
 function InvestmentsPanelInner({ playerId }: { playerId: string }) {
+  const startYear = useCampaignStartYear();
   // Re-subscribe to player so this child re-renders when fleet/cash
   // change — but the parent's early-return guarantees player exists
   // by the time this component mounts.
@@ -325,7 +326,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                                 {tierLabel}
                               </span>
                               <span className="text-[0.625rem] text-ink-muted">
-                                acquired {fmtQuarter(sub.acquiredAtQuarter)} · {ageQ}Q held
+                                acquired {fmtQuarter(sub.acquiredAtQuarter, startYear)} · {ageQ}Q held
                               </span>
                               {entry.revenuePerQuarterUsd > 0 && (
                                 isPaidBack ? (
@@ -961,6 +962,7 @@ function SummaryCard({
  *  panel where it can be managed.
  */
 function PortfolioOverview() {
+  const startYear = useCampaignStartYear();
   const player = useGame(selectPlayer);
   const airportSlots = useGame((s) => s.airportSlots);
   const airportBids = useGame((s) => s.airportBids ?? []);
@@ -1103,7 +1105,7 @@ function PortfolioOverview() {
                     <span className="font-mono tabular text-ink text-[0.8125rem]">{b.airportCode}</span>
                     <span className="text-[0.8125rem] text-ink-2 truncate">{city?.name ?? b.airportCode}</span>
                     <span className="text-[0.625rem] uppercase tracking-wider text-warning shrink-0">
-                      submitted {fmtQuarter(b.submittedQuarter)}
+                      submitted {fmtQuarter(b.submittedQuarter, startYear)}
                     </span>
                   </span>
                   <span className="text-[0.75rem] tabular font-mono text-ink shrink-0">

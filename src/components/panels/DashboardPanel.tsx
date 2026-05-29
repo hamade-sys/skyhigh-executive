@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { Sparkline } from "@/components/ui";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { fmtMoney, fmtPct, fmtQuarter } from "@/lib/format";
 import {
   brandRating,
@@ -27,6 +27,7 @@ import { TrendingUp, TrendingDown, Plane, Users, BarChart3, Wallet, Fuel } from 
  *  4. Operations breakdown — fleet by status, route by tier, slots owned
  */
 export function DashboardPanel() {
+  const startYear = useCampaignStartYear();
   const player = useGame(selectPlayer);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const campaignMode = useGame((s) => s.session?.campaignMode);
@@ -93,7 +94,7 @@ export function DashboardPanel() {
       {series.length >= 2 && (
         <section>
           <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
-            Trajectory · {fmtQuarter(1)} → {fmtQuarter(Math.max(1, currentQuarter - 1))}
+            Trajectory · {fmtQuarter(1, startYear)} → {fmtQuarter(Math.max(1, currentQuarter - 1), startYear)}
           </div>
           <div className="rounded-md border border-line bg-surface p-3 space-y-2.5">
             <TrajectoryRow label="Revenue" series={series.map((q) => q.revenue)} color="var(--info)" fmt={fmtMoney} />
@@ -355,6 +356,7 @@ function ActiveModifiersSection({
   player: NonNullable<ReturnType<typeof selectPlayer>>;
   currentQuarter: number;
 }) {
+  const startYear = useCampaignStartYear();
   // Collect every city in the player's network.
   const networkCodes = useMemo(() => {
     const s = new Set<string>([player.hubCode, ...player.secondaryHubCodes]);
@@ -414,7 +416,7 @@ function ActiveModifiersSection({
   return (
     <section>
       <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2 flex items-center gap-2">
-        <span>Active demand modifiers · {fmtQuarter(currentQuarter)}</span>
+        <span>Active demand modifiers · {fmtQuarter(currentQuarter, startYear)}</span>
         <span className="h-px flex-1 bg-line" />
         <span className="tabular text-ink-muted">{rows.length} cit{rows.length === 1 ? "y" : "ies"}</span>
       </div>
@@ -601,13 +603,14 @@ const EMPTY_MARKET_HISTORY: ReadonlyArray<{
  *  quarter close. Hidden until at least 2 closes have happened so
  *  the chart has a meaningful slope. */
 function MarketHistorySection() {
+  const startYear = useCampaignStartYear();
   const history = useGame((s) => s.marketHistory ?? EMPTY_MARKET_HISTORY);
   if (history.length < 2) return null;
   const sorted = [...history].sort((a, b) => a.quarter - b.quarter);
   return (
     <section>
       <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
-        Market vitals · {sorted[0].quarter === sorted[sorted.length - 1].quarter ? "this quarter" : `${fmtQuarter(sorted[0].quarter)} – ${fmtQuarter(sorted[sorted.length - 1].quarter)}`}
+        Market vitals · {sorted[0].quarter === sorted[sorted.length - 1].quarter ? "this quarter" : `${fmtQuarter(sorted[0].quarter, startYear)} – ${fmtQuarter(sorted[sorted.length - 1].quarter, startYear)}`}
       </div>
       <div className="rounded-md border border-line bg-surface p-3 space-y-3">
         <MarketHistoryLine
@@ -646,6 +649,7 @@ function MarketHistoryLine({
   baseline?: number;
   fmt: (n: number) => string;
 }) {
+  const startYear = useCampaignStartYear();
   const w = 280;
   const h = 36;
   const values = series.map((s) => s.v);
@@ -681,7 +685,7 @@ function MarketHistoryLine({
           ))}
         </svg>
         <div className="flex justify-between text-[0.5625rem] text-ink-muted tabular font-mono mt-0.5">
-          {tickIdx.map((i) => (<span key={i}>{fmtQuarter(series[i].q)}</span>))}
+          {tickIdx.map((i) => (<span key={i}>{fmtQuarter(series[i].q, startYear)}</span>))}
         </div>
       </div>
       <span className="tabular font-mono text-[0.8125rem] text-ink shrink-0 w-14 text-right pt-1">{fmt(current)}</span>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Badge, Button } from "@/components/ui";
 import { SCENARIOS, scenariosForQuarter, type OptionEffect, type ScenarioOption } from "@/data/scenarios";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { MapPin } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -50,6 +50,7 @@ export function DecisionsPanel() {
   const s = useGame();
   const player = selectPlayer(s);
   const submit = useGame((g) => g.submitDecision);
+  const startYear = useCampaignStartYear();
   if (!player) return null;
 
   // Self-guided multiplayer disables Board Decisions — the boardroom
@@ -128,7 +129,7 @@ export function DecisionsPanel() {
                             <span className="text-ink truncate">{sc.title}</span>
                           </div>
                           <div className="text-[0.625rem] text-ink-muted mt-0.5">
-                            {fmtQuarter(q)} · {qFromNow}Q from now
+                            {fmtQuarter(q, startYear)} · {qFromNow}Q from now
                           </div>
                         </div>
                       </div>
@@ -146,6 +147,7 @@ export function DecisionsPanel() {
             <ScenarioCard
               key={sc.id}
               scenario={sc}
+              startYear={startYear}
               firingQuarter={s.currentQuarter}
               player={player}
               submittedOptionId={submitted?.optionId ?? null}
@@ -171,7 +173,7 @@ export function DecisionsPanel() {
               return (
                 <div key={`${d.scenarioId}-${d.quarter}`} className="flex items-baseline justify-between text-[0.8125rem] py-1.5 border-b border-line last:border-0">
                   <div className="min-w-0">
-                    <span className="font-mono text-primary mr-1.5 text-[0.75rem]">{fmtQuarter(d.quarter)} · {sc.id}</span>
+                    <span className="font-mono text-primary mr-1.5 text-[0.75rem]">{fmtQuarter(d.quarter, startYear)} · {sc.id}</span>
                     <span className="text-ink truncate">{sc.title}</span>
                   </div>
                   <span className="shrink-0 text-accent font-mono text-[0.75rem] ml-2">
@@ -188,9 +190,10 @@ export function DecisionsPanel() {
 }
 
 function ScenarioCard({
-  scenario, firingQuarter, player, submittedOptionId, onSubmit, flags, cargoFleetCount,
+  scenario, firingQuarter, player, submittedOptionId, onSubmit, flags, cargoFleetCount, startYear,
 }: {
   scenario: (typeof SCENARIOS)[number];
+  startYear: number;
   /** The actual quarter the scenario is firing in for THIS game.
    *  May differ from `scenario.quarter` (the absolute 40-round
    *  authored quarter) — short-format games re-map scenarios to a
@@ -249,7 +252,7 @@ function ScenarioCard({
       <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
         <div className="flex items-baseline gap-2">
           <span className="text-[0.5625rem] uppercase tracking-[0.22em] text-accent font-bold">
-            Boardroom · {fmtQuarter(firingQuarter)}
+            Boardroom · {fmtQuarter(firingQuarter, startYear)}
           </span>
           <span className="font-mono text-[0.625rem] text-ink-muted">{scenario.id}</span>
         </div>
@@ -341,7 +344,7 @@ function ScenarioCard({
                         ? `${Math.round(def.probability * 100)}%`
                         : "Will";
                       const when = typeof def.quarter === "number"
-                        ? fmtQuarter(def.quarter)
+                        ? fmtQuarter(def.quarter, startYear)
                         : typeof def.lagQuarters === "number"
                           ? `+${def.lagQuarters}Q`
                           : "later";
@@ -473,6 +476,7 @@ function financialTagsFor(player: Team, opt: ScenarioOption): string[] {
  * the existing `OptionEffect` schema in src/data/scenarios.ts.
  */
 function ConsequenceCard({ option, player }: { option: ScenarioOption; player: Team }) {
+  const startYear = useCampaignStartYear();
   const e = option.effect;
   const hasImmediate = !!(
     e.cash || e.scaledCash || e.staffSavingsPct || e.refinanceDebt ||
@@ -541,7 +545,7 @@ function ConsequenceCard({ option, player }: { option: ScenarioOption; player: T
           <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-warning font-semibold mb-1">
             <AlertTriangle size={11} /> Deferred consequence
             {typeof deferred.quarter === "number"
-              ? ` · ${fmtQuarter(deferred.quarter)}`
+              ? ` · ${fmtQuarter(deferred.quarter, startYear)}`
               : typeof deferred.lagQuarters === "number"
                 ? ` · in ${deferred.lagQuarters}Q`
                 : ""}

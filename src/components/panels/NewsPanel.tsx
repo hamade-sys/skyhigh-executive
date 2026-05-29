@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { NEWS_BY_QUARTER, dynamicHostNews } from "@/data/world-news";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { cityEventImpact } from "@/lib/city-events";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { getArticle } from "@/lib/news-articles";
 import { fmtQuarter } from "@/lib/format";
@@ -31,6 +31,7 @@ export function NewsPanel() {
   const olympicHostCode = useGame((s) => s.olympicHostCode);
   const airportSlots = useGame((s) => s.airportSlots);
   const player = useGame(selectPlayer);
+  const startYear = useCampaignStartYear();
   const [view, setView] = useState<NewsView>("compact");
 
   // Player's current network (hub + secondary hubs + every endpoint of their routes)
@@ -107,7 +108,7 @@ export function NewsPanel() {
       </header>
 
       {view === "newspaper" ? (
-        <NewspaperView items={allItems} networkCodes={networkCodes} currentQuarter={currentQuarter} />
+        <NewspaperView items={allItems} networkCodes={networkCodes} currentQuarter={currentQuarter} startYear={startYear} />
       ) : (
         quartersToShow.map((q) => {
           const dynamic = dynamicHostNews(q, worldCupHostCode, olympicHostCode,
@@ -118,7 +119,7 @@ export function NewsPanel() {
           return (
             <section key={q}>
               <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2 flex items-center gap-2">
-                <span className="font-mono tabular text-ink">{fmtQuarter(q)}</span>
+                <span className="font-mono tabular text-ink">{fmtQuarter(q, startYear)}</span>
                 <span className="h-px flex-1 bg-line" />
                 <span className="tabular text-ink-muted">{items.length}</span>
               </div>
@@ -129,6 +130,7 @@ export function NewsPanel() {
                     item={item}
                     networkCodes={networkCodes}
                     isCurrent={q === currentQuarter}
+                    startYear={startYear}
                   />
                 ))}
               </div>
@@ -147,11 +149,12 @@ export function NewsPanel() {
  *  `getArticle(item)` which already returns dateline + byline + 2-3
  *  paragraph body for every news id. */
 function NewspaperView({
-  items, networkCodes, currentQuarter,
+  items, networkCodes, currentQuarter, startYear,
 }: {
   items: NewsItem[];
   networkCodes: Set<string>;
   currentQuarter: number;
+  startYear: number;
 }) {
   // Sort by quarter desc — newest first, like a real news feed.
   const sorted = useMemo(
@@ -219,7 +222,7 @@ function NewspaperView({
                   className="sticky top-0 z-10 bg-surface-2/95 backdrop-blur-sm px-3 py-1.5 border-b border-line/60 flex items-center gap-2"
                 >
                   <span className="text-[0.625rem] uppercase tracking-[0.2em] font-semibold text-ink-muted tabular font-mono">
-                    {fmtQuarter(it.quarter)}
+                    {fmtQuarter(it.quarter, startYear)}
                   </span>
                   <span className="h-px flex-1 bg-line/60" />
                 </div>,
@@ -271,7 +274,7 @@ function NewspaperView({
               {article.dateline}
             </span>
             <span>·</span>
-            <span>{fmtQuarter(active.quarter)}</span>
+            <span>{fmtQuarter(active.quarter, startYear)}</span>
             <span>·</span>
             <span className="italic">By {article.byline}</span>
             {active.quarter === currentQuarter && (
@@ -350,10 +353,12 @@ function NewsCard({
   item,
   networkCodes,
   isCurrent,
+  startYear,
 }: {
   item: NewsItem;
   networkCodes: Set<string>;
   isCurrent: boolean;
+  startYear: number;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -473,7 +478,7 @@ function NewsCard({
               {article.dateline}
             </span>
             <span className="text-ink-muted"> · </span>
-            <span>{fmtQuarter(item.quarter)}</span>
+            <span>{fmtQuarter(item.quarter, startYear)}</span>
             <span className="text-ink-muted"> · </span>
             <span className="italic">By {article.byline}</span>
           </div>

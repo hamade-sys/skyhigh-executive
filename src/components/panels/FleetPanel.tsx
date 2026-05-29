@@ -5,7 +5,7 @@ import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/com
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { AircraftMarketModal } from "@/components/game/AircraftMarketModal";
 import { PurchaseOrderModal } from "@/components/game/PurchaseOrderModal";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { toast } from "@/store/toasts";
 import { fmtMoney, fmtPct, fmtAgeYQ, fmtQuarter } from "@/lib/format";
 import { planeImagePath } from "@/lib/aircraft-images";
@@ -1278,6 +1278,7 @@ function PreOrderQueue() {
   const overrides = useGame((s) => s.productionCapOverrides);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const cancelPreOrder = useGame((s) => s.cancelPreOrder);
+  const startYear = useCampaignStartYear();
   // Branded cancel-pre-order confirm replaces the legacy native
   // confirm() — these are real-money irreversible cancellations
   // (half-deposit penalty), so the UX has to feel deliberate.
@@ -1323,7 +1324,7 @@ function PreOrderQueue() {
                 <div className="text-[0.875rem] text-ink font-medium">{spec.name}</div>
                 <div className="text-[0.6875rem] text-ink-muted mt-0.5 tabular font-mono">
                   Position {pos ?? "—"} of {myQueued.length} (cap {cap}/Q) ·
-                  {" "}ETA <span className="text-ink">{fmtQuarter(eta)}</span> ·
+                  {" "}ETA <span className="text-ink">{fmtQuarter(eta, startYear)}</span> ·
                   {" "}{order.acquisitionType === "buy" ? "Buy" : "Lease"}
                 </div>
               </div>
@@ -1408,6 +1409,7 @@ function PreOrderQueue() {
  *  crashed. Collapsed by default. */
 function RetiredHistory() {
   const player = useGame(selectPlayer);
+  const startYear = useCampaignStartYear();
   const [open, setOpen] = useState(false);
   if (!player) return null;
   const history = player.retiredHistory ?? [];
@@ -1475,10 +1477,10 @@ function RetiredHistory() {
                     </div>
                   </td>
                   <td className="px-3 py-1.5 tabular font-mono text-ink-2">
-                    {fmtQuarter(h.acquiredAtQuarter)} – {fmtQuarter(h.exitQuarter)}
+                    {fmtQuarter(h.acquiredAtQuarter, startYear)} – {fmtQuarter(h.exitQuarter, startYear)}
                   </td>
                   <td className="px-3 py-1.5 tabular font-mono text-ink-2">
-                    {fmtQuarter(h.exitQuarter)}
+                    {fmtQuarter(h.exitQuarter, startYear)}
                   </td>
                   <td className={cn("px-3 py-1.5 text-[0.6875rem] font-semibold", reasonTone[h.exitReason])}>
                     {reasonLabel[h.exitReason]}

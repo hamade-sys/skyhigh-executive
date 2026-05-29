@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { useGame, selectPlayer, selectActiveTeam } from "@/store/game";
+import { useGame, selectPlayer, selectActiveTeam, useCampaignStartYear } from "@/store/game";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -882,6 +882,7 @@ function Stat({
  *  via its `modifiers` array. The list is the player's primary signal
  *  for "why is demand spiking here?" */
 function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: number }) {
+  const startYear = useCampaignStartYear();
   const worldCupHostCode = useGame((g) => g.worldCupHostCode);
   const olympicHostCode = useGame((g) => g.olympicHostCode);
   const isWorldCupHost = worldCupHostCode === cityCode;
@@ -957,7 +958,7 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
             <Newspaper size={11} aria-hidden="true" className="shrink-0 mt-0.5" />
             <span className="truncate">{n.headline}</span>
             <span className="text-[0.625rem] tabular text-ink-muted shrink-0">
-              {fmtQuarter(n.quarter)}
+              {fmtQuarter(n.quarter, startYear)}
             </span>
           </span>
         ))}
@@ -972,12 +973,13 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
  *  signed % change vs the prior quarter so they can spot demand
  *  inflection events ("World Cup boost just kicked in" → +50% Q/Q). */
 function CityDemandSection({ city, quarter }: { city: City; quarter: number }) {
+  const startYear = useCampaignStartYear();
   const demand = cityEffectiveDemand(city, quarter);
 
   return (
     <section>
       <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
-        Demand · {fmtQuarter(quarter)}
+        Demand · {fmtQuarter(quarter, startYear)}
       </div>
       <div className="grid grid-cols-3 gap-2">
         <DemandStat label="Tourism" value={demand.tourism} deltaPct={demand.tourismDeltaPct} />

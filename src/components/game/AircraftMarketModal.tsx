@@ -10,7 +10,7 @@ import {
   isAnnouncementOpen,
   isReleased,
 } from "@/lib/pre-orders";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { cn } from "@/lib/cn";
 import { Plane, ChevronDown, ChevronUp, GitCompare, X } from "lucide-react";
 import type { AircraftSpec, SecondHandListing } from "@/types/game";
@@ -536,6 +536,7 @@ function AircraftRow({
   compareSelected: boolean;
   onToggleCompare: () => void;
 }) {
+  const startYear = useCampaignStartYear();
   const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
   const imgSrc = planeImagePath(spec.id);
 
@@ -681,7 +682,7 @@ function AircraftRow({
           )}
           {isPreOrderOnly ? (
             <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
-              Pre-order · unlocks {fmtQuarter(spec.unlockQuarter)}
+              Pre-order · unlocks {fmtQuarter(spec.unlockQuarter, startYear)}
             </span>
           ) : released && (
             <span className={cn(

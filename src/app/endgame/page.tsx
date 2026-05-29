@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, CardBody, Sparkline } from "@/components/ui";
-import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds } from "@/lib/format";
+import { fmtMoney, fmtPct, fmtQuarter, getCampaignStartYear, getTotalRounds } from "@/lib/format";
 import { useGame, selectPlayer, selectActiveTeam } from "@/store/game";
 import { computeAirlineValue, resolveEndgameAwards, brandRating, computeBrandValueBreakdown } from "@/lib/engine";
 import { MILESTONES, MILESTONES_BY_ID } from "@/data/milestones";
@@ -84,6 +84,7 @@ export default function Endgame() {
   const effectiveSession = dbSession ?? s.session;
   // Expose a state-shaped object so helpers like getTotalRounds() work.
   const stateForUtils = { ...s, teams: effectiveTeams, session: effectiveSession };
+  const startYear = getCampaignStartYear(stateForUtils);
 
   const isObserver = s.isObserver;
   const isMultiplayer = !!s.session?.gameId;
@@ -149,7 +150,7 @@ export default function Endgame() {
   const focusCardMult = focusAwards.reduce((m, a) => m * a.airlineValueMult, 1);
   const focusFinalAirlineValue = computeAirlineValue(focusTeam) * focusCardMult;
   const finalRank = ranked.findIndex((t) => t.id === focusTeam.id) + 1;
-  const finalQuarterLabel = fmtQuarter(getTotalRounds(stateForUtils));
+  const finalQuarterLabel = fmtQuarter(getTotalRounds(stateForUtils), startYear);
   const { title, sub } = legacyTitle(focusTeam.brandValue, finalQuarterLabel);
   const totalProfit = focusTeam.financialsByQuarter.reduce((acc, q) => acc + q.netProfit, 0);
   // Backwards-compatible alias for legacy display fragments below
@@ -457,7 +458,7 @@ export default function Endgame() {
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="font-display text-[1.5rem] text-ink">
-                  Cohort analytics · {fmtQuarter(1)} → {fmtQuarter(getTotalRounds(stateForUtils))}
+                  Cohort analytics · {fmtQuarter(1, startYear)} → {fmtQuarter(getTotalRounds(stateForUtils), startYear)}
                 </h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
                   All teams · {ranked.length}
@@ -466,6 +467,7 @@ export default function Endgame() {
               <MultiAirlineAnalytics
                 teams={ranked}
                 totalRounds={getTotalRounds(stateForUtils)}
+                startYear={startYear}
                 defaultMetric="brandValue"
                 highlightTeamIds={[ranked[0]?.id, ranked[1]?.id].filter((id): id is string => !!id)}
               />
@@ -624,7 +626,7 @@ export default function Endgame() {
               <div className="flex items-baseline justify-between mb-3">
                 <h2 className="font-display text-[1.5rem] text-ink">Career arc</h2>
                 <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-                  {fmtQuarter(1)} → {finalQuarterLabel} · brand value trajectory
+                  {fmtQuarter(1, startYear)} → {finalQuarterLabel} · brand value trajectory
                 </span>
               </div>
               {(ranked.length === 2 ? ranked : [focusTeam])
@@ -739,7 +741,7 @@ export default function Endgame() {
                 quarter: cashSeries[bestComeback.to].q,
                 kind: "comeback",
                 title: "Biggest comeback",
-                detail: `Recovered ${fmtMoney(bestComeback.gain)} of cash in ${span}Q (from ${fmtQuarter(cashSeries[bestComeback.from].q)})`,
+                detail: `Recovered ${fmtMoney(bestComeback.gain)} of cash in ${span}Q (from ${fmtQuarter(cashSeries[bestComeback.from].q, startYear)})`,
                 tone: "pos",
               });
             }
@@ -838,7 +840,7 @@ export default function Endgame() {
                     {highlights.map((h, i) => (
                       <div key={`${h.kind}-${h.quarter}-${i}`} className="relative flex items-baseline gap-3">
                         <div className="font-mono tabular text-[0.6875rem] text-ink-muted w-20 text-right shrink-0 pt-1">
-                          {fmtQuarter(h.quarter)}
+                          {fmtQuarter(h.quarter, startYear)}
                         </div>
                         <div
                           className={cn(

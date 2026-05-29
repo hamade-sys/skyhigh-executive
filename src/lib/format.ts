@@ -73,9 +73,28 @@ export function getTotalRounds(state: { session?: { totalRounds?: number } | nul
   return typeof t === "number" && t > 0 ? t : TOTAL_GAME_ROUNDS;
 }
 
-export function fmtQuarter(q: number): string {
+/**
+ * Calendar start year for a game. Full-campaign games begin in 2000
+ * (120 quarters → 2000-2029); every other session begins in 2015
+ * (60 quarters → 2015-2029). Pass the resulting year into fmtQuarter so
+ * the in-game date label reflects the chosen era.
+ */
+export const FULL_CAMPAIGN_START_YEAR = 2000;
+export function getCampaignStartYear(
+  state: { session?: { campaignMode?: "half" | "full" } | null } | null | undefined,
+): number {
+  return state?.session?.campaignMode === "full" ? FULL_CAMPAIGN_START_YEAR : GAME_START_YEAR;
+}
+
+/**
+ * Render a 1-based quarter index as "Q# YYYY". The optional `startYear`
+ * controls the calendar era — defaults to the half-campaign 2015 start;
+ * pass FULL_CAMPAIGN_START_YEAR (2000) for full-campaign games. Derive
+ * it from session via getCampaignStartYear().
+ */
+export function fmtQuarter(q: number, startYear: number = GAME_START_YEAR): string {
   const idx = Math.max(0, q - 1);
-  const year = GAME_START_YEAR + Math.floor(idx / 4);
+  const year = startYear + Math.floor(idx / 4);
   const quarterOfYear = (idx % 4) + 1;
   return `Q${quarterOfYear} ${year}`;
 }

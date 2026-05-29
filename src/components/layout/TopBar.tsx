@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useGame, selectPlayer, selectRivals, selectActiveTeam, selectOtherTeams } from "@/store/game";
+import { useGame, selectPlayer, selectRivals, selectActiveTeam, selectOtherTeams, useCampaignStartYear } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { fmtMoney, fmtQuarter, fmtQuarterShort } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -35,6 +35,7 @@ export function TopBar() {
   const legacyRivals = useGame(useShallow(selectRivals));
   const rivals = activeTeam ? otherTeams : legacyRivals;
   const currentQuarter = useGame((state) => state.currentQuarter);
+  const startYear = useCampaignStartYear();
   const baseInterestRatePct = useGame((s) => s.baseInterestRatePct);
   const joinCode = useGame((s) => s.session?.joinCode ?? null);
   const viewingTeamId = useUi((u) => u.viewingTeamId);
@@ -234,7 +235,7 @@ export function TopBar() {
         <div className="hidden md:flex flex-col items-end leading-tight">
           {/* Larger date label up top, "Round X of 20" beneath. */}
           <span className="font-display text-[1.0625rem] text-ink">
-            {fmtQuarter(currentQuarter)}
+            {fmtQuarter(currentQuarter, startYear)}
           </span>
           <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mt-0.5 tabular">
             {fmtQuarterShort(currentQuarter, totalRounds)}
@@ -343,6 +344,7 @@ function CloseQuarterButton() {
   const hydrateFromServerState = useGame((s) => s.hydrateFromServerState);
   const localSessionId = useGame((s) => s.localSessionId);
   const currentQuarter = useGame((s) => s.currentQuarter);
+  const startYear = useCampaignStartYear();
   // Phase 3: pull totalRounds from session for the scaled scenario
   // lookup below.
   const totalRounds = useGame(getTotalRounds);
@@ -815,7 +817,7 @@ function CloseQuarterButton() {
       <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} className="max-w-xl">
         <ModalHeader>
           <h2 className="font-display text-[1.5rem] text-ink">
-            Close {fmtQuarter(currentQuarter)}?
+            Close {fmtQuarter(currentQuarter, startYear)}?
           </h2>
           <p className="text-ink-muted text-[0.8125rem] mt-1">
             {isMultiplayerSelfGuided

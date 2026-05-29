@@ -153,11 +153,13 @@ const MAX_LEGEND_ROWS = 10;
 export function MultiAirlineAnalytics({
   teams,
   totalRounds,
+  startYear,
   defaultMetric = "brandValue",
   highlightTeamIds,
 }: {
   teams: AnalyticsTeam[];
   totalRounds: number;
+  startYear: number;
   defaultMetric?: MetricKey;
   /** When provided, these teams are always shown at full opacity and
    *  listed first in the legend — useful for emphasising winner/runner-up. */
@@ -354,7 +356,7 @@ export function MultiAirlineAnalytics({
               <text key={q} x={xPos(q)} y={H - padB + 16}
                 textAnchor="middle" fontSize="9" fill="var(--ink-muted)"
                 className="font-mono tabular">
-                {fmtQuarter(q)}
+                {fmtQuarter(q, startYear)}
               </text>
             ))}
 
@@ -436,7 +438,7 @@ export function MultiAirlineAnalytics({
               style={{ minWidth: 160, maxWidth: 240 }}
             >
               <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
-                {fmtQuarter(hoverQuarter)} · {config.label}
+                {fmtQuarter(hoverQuarter, startYear)} · {config.label}
               </div>
               <div className="space-y-0.5">
                 {tooltipRows.map((row) => {

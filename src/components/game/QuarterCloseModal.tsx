@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds } from "@/lib/format";
+import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds, getCampaignStartYear } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
 import { brandRating, computeAirlineValue } from "@/lib/engine";
 import { MILESTONES_BY_ID } from "@/data/milestones";
@@ -24,6 +24,7 @@ const TABS: Array<{ id: Tab; label: string; Icon: typeof TrendingUp }> = [
 
 export function QuarterCloseModal() {
   const s = useGame();
+  const startYear = getCampaignStartYear(s);
   const router = useRouter();
   const player = selectPlayer(s);
   const [tab, setTab] = useState<Tab>("overview");
@@ -145,7 +146,7 @@ export function QuarterCloseModal() {
         <div className="flex items-center justify-between">
           <div>
             <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
-              {fmtQuarter(result.quarter)} · Quarter closed
+              {fmtQuarter(result.quarter, startYear)} · Quarter closed
             </span>
             <h2 className="font-display text-[1.75rem] text-ink leading-tight mt-1">
               {result.netProfit >= 0
@@ -563,7 +564,7 @@ export function QuarterCloseModal() {
                         {n.outlet}
                       </span>
                       <span className="text-[0.625rem] tabular text-ink-muted font-mono">
-                        {fmtQuarter(n.quarter)}
+                        {fmtQuarter(n.quarter, startYear)}
                       </span>
                     </div>
                     <h3 className="text-[0.9375rem] font-medium text-ink leading-snug">

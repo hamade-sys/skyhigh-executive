@@ -26,7 +26,7 @@ import {
   type BidEntry,
 } from "@/lib/slots";
 import { toast } from "./toasts";
-import { fmtQuarter, getTotalRounds, TOTAL_GAME_ROUNDS } from "@/lib/format";
+import { fmtQuarter, getCampaignStartYear, getTotalRounds, TOTAL_GAME_ROUNDS } from "@/lib/format";
 import {
   applyUnderdogBoost,
   detectUnderdogBoost,
@@ -6160,7 +6160,7 @@ export const useGame = create<GameStore>()(
         // (8 / 16 / 24 / 40) so short-format cohorts see the right total.
         toast.accent(
           `Round ${nextQ}/${getTotalRounds(s)}`,
-          fmtQuarter(nextQ),
+          fmtQuarter(nextQ, getCampaignStartYear(s)),
         );
       },
 
@@ -6914,7 +6914,7 @@ export const useGame = create<GameStore>()(
           quarter: s.currentQuarter,
           state: statePayload,
           contextLabel: ctx,
-          quarterLabel: fmtQuarter(s.currentQuarter),
+          quarterLabel: fmtQuarter(s.currentQuarter, getCampaignStartYear(s)),
           teamCount: s.teams.length,
         });
       },
@@ -6993,7 +6993,12 @@ export const useGame = create<GameStore>()(
           } as Partial<Persisted>);
           toast.accent(
             "Snapshot restored",
-            `Game rolled back to ${fmtQuarter((restored as { currentQuarter?: number }).currentQuarter ?? 1)}.`,
+            `Game rolled back to ${fmtQuarter(
+              (restored as { currentQuarter?: number }).currentQuarter ?? 1,
+              getCampaignStartYear(
+                restored as { session?: { campaignMode?: "half" | "full" } | null },
+              ),
+            )}.`,
           );
           return { ok: true };
         } catch (err) {
@@ -8673,6 +8678,13 @@ export function selectPlayer(s: GameStore): Team | null {
   const id = s.isObserver ? (s.activeTeamId ?? null) : s.playerTeamId;
   if (!id) return null;
   return s.teams.find((t) => t.id === id) ?? null;
+}
+
+/** Calendar start year for the active game (2000 for full campaigns,
+ *  2015 otherwise). Components pass the result into fmtQuarter so the
+ *  in-game date label reflects the chosen era. */
+export function useCampaignStartYear(): number {
+  return useGame((s) => getCampaignStartYear(s));
 }
 
 /** "You" — the team the local browser controls. In solo runs this

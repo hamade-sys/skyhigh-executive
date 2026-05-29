@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { useUi } from "@/store/ui";
 import { CITIES } from "@/data/cities";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
@@ -28,6 +28,7 @@ import { Search, Calendar, ChevronRight, ChevronDown, ExternalLink } from "lucid
  * All numbers use thousands separators so $120,000/wk is unambiguous.
  */
 export function SlotMarketPanel() {
+  const startYear = useCampaignStartYear();
   const player = useGame(selectPlayer);
   const teams = useGame((s) => s.teams);
   const airportSlots = useGame((s) => s.airportSlots);
@@ -313,7 +314,7 @@ export function SlotMarketPanel() {
                   {state ? (
                     <>
                       +{state.nextOpening.toLocaleString("en-US")}
-                      <span className="ml-1">{fmtQuarter(state.nextTickQuarter)}</span>
+                      <span className="ml-1">{fmtQuarter(state.nextTickQuarter, startYear)}</span>
                     </>
                   ) : "—"}
                 </div>
@@ -379,6 +380,7 @@ function BidPanel({
   onCancelBid: () => void;
   onRelease: (n: number) => void;
 }) {
+  const startYear = useCampaignStartYear();
   const minPrice = BASE_SLOT_PRICE_BY_TIER[tier];
   const [slotsRequested, setSlotsRequested] = useState<number>(myBid?.slots ?? 5);
   const [pricePerSlot, setPricePerSlot] = useState<number>(myBid?.pricePerSlot ?? minPrice);
@@ -495,7 +497,7 @@ function BidPanel({
         {noSlotsAvailable && (
           <div className="mt-2 text-[0.75rem] text-warning">
             No slots available right now. Next batch opens{" "}
-            {fmtQuarter(useGame.getState().airportSlots?.[airportCode]?.nextTickQuarter ?? 99)}.
+            {fmtQuarter(useGame.getState().airportSlots?.[airportCode]?.nextTickQuarter ?? 99, startYear)}.
           </div>
         )}
       </div>

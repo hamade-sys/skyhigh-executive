@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Badge, Button, Card, CardBody, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { useGame, selectPlayer } from "@/store/game";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { AdminPanel } from "@/components/panels/AdminPanel";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { computeAirlineValue, brandRating, fleetCount } from "@/lib/engine";
@@ -164,6 +164,7 @@ function FacilitatorPageInner() {
 function FacilitatorContent() {
   const s = useGame();
   const player = selectPlayer(s);
+  const startYear = useCampaignStartYear();
   const setActiveTeam = useGame((g) => g.setActiveTeam);
   const gameId = s.session?.gameId ?? null;
 
@@ -187,7 +188,7 @@ function FacilitatorContent() {
           <span className="text-line">·</span>
           <span className="font-display text-xl text-ink">Facilitator</span>
           <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
-            {fmtQuarter(s.currentQuarter)} · {s.teams.length} team{s.teams.length === 1 ? "" : "s"}
+            {fmtQuarter(s.currentQuarter, startYear)} · {s.teams.length} team{s.teams.length === 1 ? "" : "s"}
           </span>
           {/* Cohort readiness counter — visible in any mode where 2+
               humans exist. In self-guided mode the engine auto-fires
@@ -745,6 +746,7 @@ function SavesView({ gameId }: { gameId: string | null }) {
   const deleteQuarterSnapshot = useGame((s) => s.deleteQuarterSnapshot);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const phase = useGame((s) => s.phase);
+  const startYear = useCampaignStartYear();
 
   const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -771,7 +773,7 @@ function SavesView({ gameId }: { gameId: string | null }) {
 
   async function handleManualSave() {
     await saveQuarterSnapshot();
-    toast.accent("Snapshot saved", `Game saved at ${fmtQuarter(currentQuarter)}.`);
+    toast.accent("Snapshot saved", `Game saved at ${fmtQuarter(currentQuarter, startYear)}.`);
     await refresh();
   }
 
@@ -1068,6 +1070,7 @@ function SavesView({ gameId }: { gameId: string | null }) {
  */
 function AirportsView() {
   const teams = useGame((s) => s.teams);
+  const startYear = useCampaignStartYear();
   const airportSlots = useGame((s) => s.airportSlots);
   const airportBids = useGame((s) => s.airportBids ?? []);
   const currentQuarter = useGame((s) => s.currentQuarter);
@@ -1199,7 +1202,7 @@ function AirportsView() {
                       </span>
                     </div>
                     <div className="text-[0.6875rem] text-ink-muted">
-                      Submitted {fmtQuarter(bid.submittedQuarter)} ·{" "}
+                      Submitted {fmtQuarter(bid.submittedQuarter, startYear)} ·{" "}
                       Held {heldQ} quarter{heldQ === 1 ? "" : "s"} ·{" "}
                       {expiresInQ === 0
                         ? "Auto-expires at this quarter close if not decided"
@@ -1342,7 +1345,7 @@ function AirportsView() {
                   </span>
                   {bid.resolvedQuarter && (
                     <span className="ml-auto text-[0.6875rem] text-ink-muted font-mono">
-                      {fmtQuarter(bid.resolvedQuarter)}
+                      {fmtQuarter(bid.resolvedQuarter, startYear)}
                     </span>
                   )}
                 </div>

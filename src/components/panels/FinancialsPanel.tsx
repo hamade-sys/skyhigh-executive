@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Button, Input, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
-import { useGame, selectPlayer } from "@/store/game";
-import { fmtMoney, fmtQuarter } from "@/lib/format";
+import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
+import { fmtMoney, fmtQuarter, getCampaignStartYear } from "@/lib/format";
 import {
   computeAirlineValue,
   effectiveBorrowingRate,
@@ -28,6 +28,7 @@ import { cn } from "@/lib/cn";
  */
 export function FinancialsPanel() {
   const s = useGame();
+  const startYear = getCampaignStartYear(s);
   const player = selectPlayer(s);
   const [borrowOpen, setBorrowOpen] = useState(false);
   const [borrowAmount, setBorrowAmount] = useState(50_000_000);
@@ -127,7 +128,7 @@ export function FinancialsPanel() {
             Balance sheet
           </div>
           <div className="text-[0.6875rem] tabular text-ink-muted">
-            as of <strong className="text-ink">{fmtQuarter(s.currentQuarter)}</strong>
+            as of <strong className="text-ink">{fmtQuarter(s.currentQuarter, startYear)}</strong>
           </div>
         </div>
         <div className="space-y-1.5 text-[0.8125rem]">
@@ -257,7 +258,7 @@ export function FinancialsPanel() {
                           {loanDisplayName(loan)}
                         </div>
                         <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
-                          <span>Originated {fmtQuarter(loan.originQuarter)}</span>
+                          <span>Originated {fmtQuarter(loan.originQuarter, startYear)}</span>
                           {loan.source === "overdraft-refi" && (
                             <span className="text-warning bg-[var(--warning-soft)] px-1 py-0.5 rounded text-[0.5625rem] font-semibold">
                               Overdraft refi
@@ -330,7 +331,7 @@ export function FinancialsPanel() {
           P&amp;L · most recent + projected
         </div>
         <div className="grid md:grid-cols-2 gap-3">
-          {last && <PLCard title={`Closed · ${fmtQuarter(last.quarter)}`} pl={last} />}
+          {last && <PLCard title={`Closed · ${fmtQuarter(last.quarter, startYear)}`} pl={last} />}
           <ProjectedPLCard />
         </div>
       </section>
@@ -379,7 +380,7 @@ export function FinancialsPanel() {
                 <tbody>
                   {player.financialsByQuarter.slice(-6).map((q) => (
                     <tr key={q.quarter} className="border-b border-line last:border-0">
-                      <Td className="font-mono">{fmtQuarter(q.quarter)}</Td>
+                      <Td className="font-mono">{fmtQuarter(q.quarter, startYear)}</Td>
                       <Td className="text-right tabular font-mono">{fmtMoney(q.revenue)}</Td>
                       <Td className={`text-right tabular font-mono ${q.netProfit >= 0 ? "text-positive" : "text-negative"}`}>
                         {fmtMoney(q.netProfit)}
@@ -589,6 +590,7 @@ export function FinancialsPanel() {
  *  card so the two read symmetrically. */
 function ProjectedPLCard() {
   const s = useGame();
+  const startYear = getCampaignStartYear(s);
   const player = selectPlayer(s);
   const projected = useMemo(() => {
     if (!player) return null;
@@ -652,7 +654,7 @@ function ProjectedPLCard() {
     loyalty: projected.newLoyalty,
     brandValue: projected.newBrandValue,
   };
-  return <PLCard title={`Projected · ${fmtQuarter(s.currentQuarter)}`} pl={plRow} projected />;
+  return <PLCard title={`Projected · ${fmtQuarter(s.currentQuarter, startYear)}`} pl={plRow} projected />;
 }
 
 /** A single quarter's P&L laid out as an income statement.
@@ -753,6 +755,7 @@ function PLHistoryTable({
 }: {
   rows: NonNullable<ReturnType<typeof selectPlayer>>["financialsByQuarter"];
 }) {
+  const startYear = useCampaignStartYear();
   if (rows.length === 0) return null;
   const cols = rows.slice().sort((a, b) => a.quarter - b.quarter);
 
@@ -793,7 +796,7 @@ function PLHistoryTable({
           <tr className="bg-surface-2 border-b border-line">
             <Th className="sticky left-0 z-10 bg-surface-2">Line item</Th>
             {cols.map((q) => (
-              <Th key={q.quarter} className="text-right tabular font-mono">{fmtQuarter(q.quarter)}</Th>
+              <Th key={q.quarter} className="text-right tabular font-mono">{fmtQuarter(q.quarter, startYear)}</Th>
             ))}
           </tr>
         </thead>
@@ -880,6 +883,7 @@ function CashflowCard({
     netProfit: number;
   }>;
 }) {
+  const startYear = useCampaignStartYear();
   // Last 4 closed quarters, oldest → newest left to right.
   const visible = rows.slice(-4);
   if (visible.length === 0) return null;
@@ -962,7 +966,7 @@ function CashflowCard({
             <Th className="w-[35%]">Cash flow line</Th>
             {cols.map((c) => (
               <Th key={c.quarter} className="text-right">
-                {fmtQuarter(c.quarter)}
+                {fmtQuarter(c.quarter, startYear)}
               </Th>
             ))}
           </tr>
@@ -1095,6 +1099,7 @@ function TrendRow({
   suffix: string;
   max: number;
 }) {
+  const startYear = useCampaignStartYear();
   if (series.length === 0) return null;
   const w = 220;
   const h = 36;
@@ -1154,7 +1159,7 @@ function TrendRow({
         </svg>
         <div className="flex justify-between text-[0.5625rem] text-ink-muted tabular font-mono mt-0.5 px-0">
           {tickIdx.map((i) => (
-            <span key={i}>{fmtQuarter(series[i].q)}</span>
+            <span key={i}>{fmtQuarter(series[i].q, startYear)}</span>
           ))}
         </div>
       </div>
