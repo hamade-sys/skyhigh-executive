@@ -15,7 +15,7 @@ import {
   airlineColorFor,
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
-import { AlertTriangle, Pause, Play, Plus, X } from "lucide-react";
+import { AlertTriangle, ChevronRight, Pause, Play, Plus, X } from "lucide-react";
 import { RouteSetupModal, BidRow } from "@/components/game/RouteSetupModal";
 import { PanelSubheader } from "@/components/game/PanelSubheader";
 import { toast } from "@/store/toasts";
@@ -732,9 +732,12 @@ function NewRoutePicker({
           <CityField
             label="From"
             code={origin}
-            placeholder="Pick origin"
+            placeholder="Search origin…"
             highlightHub
-            onClick={() => {
+            active={picking === "origin"}
+            search={search}
+            onSearchChange={setSearch}
+            onActivate={() => {
               setPicking("origin");
               setSearch("");
             }}
@@ -744,8 +747,11 @@ function NewRoutePicker({
           <CityField
             label="To"
             code={dest}
-            placeholder="Pick destination"
-            onClick={() => {
+            placeholder="Search destination…"
+            active={picking === "dest"}
+            search={search}
+            onSearchChange={setSearch}
+            onActivate={() => {
               setPicking("dest");
               setSearch("");
             }}
@@ -771,16 +777,16 @@ function NewRoutePicker({
 
         {picking !== null && (
           <div className="rounded-md border border-primary bg-[rgba(20,53,94,0.04)] p-2.5">
+            {/* The search box is now the From/To field itself (play-test
+                ask, May 30: "im writing at the bottom bar to fill one of
+                the two upper ones — just make the upper ones where the
+                text is written"). This panel is purely the results list
+                plus the in-range filter. */}
             <div className="text-[0.6875rem] uppercase tracking-wider text-primary font-semibold mb-1.5">
-              Pick {picking === "origin" ? "origin" : "destination"}
+              {search.trim()
+                ? `Matches for “${search.trim()}”`
+                : `Pick ${picking === "origin" ? "origin" : "destination"}`}
             </div>
-            <Input
-              autoFocus
-              placeholder="Search by code, city, country, or region…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="mb-2 h-9 text-[0.875rem]"
-            />
             {rangeFilterAvailable && (
               <button
                 type="button"
@@ -858,14 +864,21 @@ function NewRoutePicker({
 
 function CityField({
   label, code, placeholder, isOwned, highlightHub,
-  onClick, onClear,
+  active, search, onSearchChange, onActivate, onClear,
 }: {
   label: string;
   code: string | null;
   placeholder: string;
   isOwned: boolean;
   highlightHub?: boolean;
-  onClick: () => void;
+  // The field IS the search box: when active it renders a text input
+  // bound to the shared `search` state, and the results list (rendered
+  // by the parent) reacts to it. When inactive it shows the selected
+  // city or a tap-to-search placeholder.
+  active: boolean;
+  search: string;
+  onSearchChange: (v: string) => void;
+  onActivate: () => void;
   onClear: () => void;
 }) {
   const city = code ? CITIES_BY_CODE[code] : null;
@@ -875,31 +888,41 @@ function CityField({
         {label}
       </div>
       <div className="flex items-center gap-1.5">
-        <button
-          onClick={onClick}
-          className={cn(
-            "flex-1 rounded-md border px-3 py-2 text-left transition-colors",
-            city
-              ? highlightHub && isOwned
-                ? "border-primary bg-[rgba(20,53,94,0.04)]"
-                : "border-line hover:bg-surface-hover"
-              : "border-dashed border-line text-ink-muted hover:bg-surface-hover",
-          )}
-        >
-          {city ? (
-            <>
-              <div className="font-mono font-semibold text-ink text-[0.9375rem] leading-tight">
-                {city.code}
-              </div>
-              <div className="text-[0.6875rem] text-ink-muted truncate">
-                {city.name}
-              </div>
-            </>
-          ) : (
-            <div className="text-[0.875rem] py-1.5">{placeholder}</div>
-          )}
-        </button>
-        {city && (
+        {active ? (
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={placeholder}
+            className="flex-1 min-w-0 rounded-md border border-primary bg-surface px-3 py-2 text-[0.9375rem] text-ink outline-none focus:ring-2 focus:ring-[#00C2CB]/30"
+          />
+        ) : (
+          <button
+            onClick={onActivate}
+            className={cn(
+              "flex-1 rounded-md border px-3 py-2 text-left transition-colors",
+              city
+                ? highlightHub && isOwned
+                  ? "border-primary bg-[rgba(20,53,94,0.04)]"
+                  : "border-line hover:bg-surface-hover"
+                : "border-dashed border-line text-ink-muted hover:bg-surface-hover",
+            )}
+          >
+            {city ? (
+              <>
+                <div className="font-mono font-semibold text-ink text-[0.9375rem] leading-tight">
+                  {city.code}
+                </div>
+                <div className="text-[0.6875rem] text-ink-muted truncate">
+                  {city.name}
+                </div>
+              </>
+            ) : (
+              <div className="text-[0.875rem] py-1.5">{placeholder}</div>
+            )}
+          </button>
+        )}
+        {city && !active && (
           <button
             onClick={onClear}
             aria-label="Clear"
@@ -2677,10 +2700,15 @@ function RouteBreakdown({ route }: { route: Route }) {
   const operatingProfit = totalRevenue - totalCost;
 
   return (
-    <div className="rounded-md border border-line bg-surface-2/30 p-3 space-y-3">
-      <div className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+    // Collapsed by default (play-test ask, May 30: "these financials
+    // should be collapsed and only expanded if prompted"). Native
+    // <details> keeps it keyboard-accessible with zero extra state.
+    <details className="group rounded-md border border-line bg-surface-2/30 [&[open]]:p-3 [&:not([open])]:p-0">
+      <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted hover:text-ink-2">
+        <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" aria-hidden />
         Revenue &amp; cost breakdown
-      </div>
+      </summary>
+      <div className="space-y-3 pt-2">
 
       {/* Revenue block */}
       {revRows.length > 0 && (
@@ -2745,7 +2773,8 @@ function RouteBreakdown({ route }: { route: Route }) {
           when aggregated across every active route.
         </div>
       </div>
-    </div>
+      </div>
+    </details>
   );
 }
 

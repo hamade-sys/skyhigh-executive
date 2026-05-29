@@ -445,18 +445,17 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
   // Red overrides everything except the cargo/yellow base — a losing
   // cargo route still reads as red, not yellow, so triage is obvious.
   const isProblem = !hasAircraft || isLosing;
-  // Route palette (May 26 workshop spec, refined May 28):
-  //   • White         — passenger
-  //   • Mustard       — cargo (strong, readable on satellite imagery —
-  //                     the previous #FFD58A read too faint against the
-  //                     teal hub circles)
+  // Route palette (May 26 workshop spec, refined May 30):
+  //   • White         — passenger AND cargo (same color; play-test ask
+  //                     May 30: "cargo lines should not be dotted they
+  //                     should be straight same color"). Cargo is now
+  //                     distinguished by its flying-plane sprite, not by
+  //                     a separate line color or dash pattern.
   //   • Red           — unserved / losing
   //   • Slow pulse    — competitive (rival flies same OD)
   const baseColor = isProblem
     ? "#DC2626"                       // red-600
-    : route.isCargo
-      ? "#F5A623"                     // mustard
-      : "#FFFFFF";                    // white for passenger
+    : "#FFFFFF";                      // white for passenger + cargo
   const dur = flightDurationMs(route.distanceKm, route.dailyFrequency);
   const phase = phaseFromId(route.id);
   const showSecondPlane = route.dailyFrequency >= 3;
@@ -498,10 +497,9 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
               positions={bandPositions}
               pathOptions={{
                 color: baseColor,
-                weight: route.isCargo ? 0.7 : 0.85,
-                opacity: route.isCargo ? 0.9 : 0.9,
+                weight: 0.85,
+                opacity: 0.9,
                 lineCap: "round",
-                dashArray: route.isCargo ? "2 5" : undefined,
                 className: competitiveClass,
               }}
             />
@@ -1240,25 +1238,17 @@ export function WorldMap({
           <span className="w-1.5 h-1.5 rounded-full bg-ink-muted" />
           <span className="text-ink-2">Cities</span>
         </span>
-        {/* Route line colour key (May 26 workshop spec):
-            • White = passenger
-            • Yellow = cargo (dashed)
+        {/* Route line colour key (May 30 workshop spec):
+            • White = passenger AND cargo (same line; cargo is told apart
+              by its flying-plane sprite, not a separate color/dash)
             • Red = unserved (no plane) or losing money
             • Slow pulse = competitive (rival on same OD) */}
         <span className="flex items-center gap-1.5 border-l border-line pl-3">
           <svg width="20" height="6" aria-hidden>
             <line x1="0" y1="3" x2="20" y2="3" stroke="#FFFFFF" strokeWidth="2" />
           </svg>
-          <span className="text-ink-2" title="Passenger route">
-            Passenger
-          </span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <svg width="20" height="6" aria-hidden>
-            <line x1="0" y1="3" x2="20" y2="3" stroke="#F5A623" strokeWidth="2" strokeDasharray="2 4" />
-          </svg>
-          <span className="text-ink-2" title="Cargo route">
-            Cargo
+          <span className="text-ink-2" title="Passenger and cargo routes">
+            Routes
           </span>
         </span>
         <span className="flex items-center gap-1.5">
