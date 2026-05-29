@@ -13,6 +13,13 @@ import { fmtMoney, fmtQuarter, getTotalRounds } from "@/lib/format";
 import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
 import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
+import {
+  isReleased,
+  effectiveProductionCap,
+  queuedForSpec,
+  PREORDER_DEPOSIT_PCT,
+} from "@/lib/pre-orders";
+import { leaseTermsFor } from "@/lib/lease";
 import type { AircraftSpec } from "@/types/game";
 
 /**
@@ -59,13 +66,18 @@ interface PurchaseOrderArgs {
 interface Props {
   spec: AircraftSpec | null;
   acquisitionType: "buy" | "lease";
-  /** Optional initial values from the AircraftMarketModal expanded card.
-   *  When provided, the modal jumps the player straight to seat-config
-   *  review instead of asking them to re-enter quantity/engine/fuselage. */
+  /** Optional initial values from the AircraftMarketModal expanded card,
+   *  or a cloned owned airframe ("Order another"). When provided, the
+   *  modal jumps straight to seat-config review pre-populated with the
+   *  engine/fuselage pick and (when cloning) the exact cabin layout,
+   *  amenities and cargo belly of the source aircraft. */
   prefill?: {
     quantity?: number;
     engineUpgrade?: "fuel" | "power" | "super" | null;
     fuselageUpgrade?: boolean;
+    customSeats?: { first: number; business: number; economy: number };
+    cabinAmenities?: CabinAmenities;
+    cargoBelly?: CargoBellyTier;
   };
   onConfirm: (args: PurchaseOrderArgs) => void;
   onClose: () => void;
@@ -110,13 +122,25 @@ function PurchaseOrderBody({
   // pick by accident.
   const engine: EngineKind = prefill?.engineUpgrade ?? "none";
   const fuselage = prefill?.fuselageUpgrade ?? false;
-  const [firstPct, setFirstPct] = useState(defaultRatios.first);
-  const [businessPct, setBusinessPct] = useState(defaultRatios.business);
+  // When cloning an owned airframe, derive the cabin-mix sliders from
+  // its custom seat counts (relative to the spec's max equivalents)
+  // so "Order another" reproduces the exact layout. Otherwise fall
+  // back to the spec's default ratios.
+  const prefillRatios = useMemo(() => {
+    const cs = prefill?.customSeats;
+    if (!isPassenger || !cs || defaultEquivalents === 0) return null;
+    return {
+      first: Math.round((cs.first * 3 / defaultEquivalents) * 100),
+      business: Math.round((cs.business * 2 / defaultEquivalents) * 100),
+    };
+  }, [prefill?.customSeats, isPassenger, defaultEquivalents]);
+  const [firstPct, setFirstPct] = useState(prefillRatios?.first ?? defaultRatios.first);
+  const [businessPct, setBusinessPct] = useState(prefillRatios?.business ?? defaultRatios.business);
   // New at PurchaseOrderModal: cabin amenities (passenger only) +
   // cargo belly tier (passenger only). Each is a per-airframe
-  // commitment captured at order time.
-  const [amenities, setAmenities] = useState<CabinAmenities>({});
-  const [cargoBelly, setCargoBelly] = useState<CargoBellyTier>("none");
+  // commitment captured at order time. Pre-populated when cloning.
+  const [amenities, setAmenities] = useState<CabinAmenities>(prefill?.cabinAmenities ?? {});
+  const [cargoBelly, setCargoBelly] = useState<CargoBellyTier>(prefill?.cargoBelly ?? "none");
   // Economy is the remainder so it always balances.
   const economyPct = Math.max(0, 100 - firstPct - businessPct);
 
@@ -160,6 +184,40 @@ function PurchaseOrderBody({
     acquisitionType === "buy" ? spec.buyPriceUsd : spec.leasePerQuarterUsd;
   const perPlaneCost = basePrice + upgradeCostPerPlane;
   const totalCost = perPlaneCost * quantity;
+
+  // Cash actually demanded NOW mirrors the store's orderAircraft logic.
+  // Units that ship this quarter pay full price; units that go to the
+  // pre-order queue pay only a 20% deposit now (balance at delivery).
+  // The old gate charged full price × quantity against today's cash,
+  // which wrongly blocked large pre-orders the player could easily
+  // afford on deposits alone.
+  const currentQuarter = useGame((g) => g.currentQuarter);
+  const preOrders = useGame((g) => g.preOrders);
+  const productionCapOverrides = useGame((g) => g.productionCapOverrides);
+  const campaignMode = useGame((g) => g.session?.campaignMode);
+
+  // For buy the per-plane "due at order" sticker is full price; for
+  // lease it's the deposit. Upgrades are always paid in full at order.
+  const leaseTerms = acquisitionType === "lease" ? leaseTermsFor(spec) : null;
+  const orderUnitCost =
+    acquisitionType === "buy"
+      ? spec.buyPriceUsd + upgradeCostPerPlane
+      : (leaseTerms?.depositUsd ?? 0) + upgradeCostPerPlane;
+
+  const released = isReleased(spec, currentQuarter, campaignMode);
+  const cap = effectiveProductionCap(spec, productionCapOverrides);
+  const deliveredThisRound = preOrders.filter(
+    (o) => o.specId === spec.id && o.deliveredAtQuarter === currentQuarter,
+  ).length;
+  const queueAhead = queuedForSpec(preOrders, spec.id).length;
+  let instantQty = 0;
+  if (released && queueAhead === 0) {
+    instantQty = Math.min(quantity, Math.max(0, cap - deliveredThisRound));
+  }
+  const queuedQty = quantity - instantQty;
+  const depositPerPlane = orderUnitCost * PREORDER_DEPOSIT_PCT;
+  // Amount the order debits from cash on hand right now.
+  const cashDueNow = instantQty * orderUnitCost + queuedQty * depositPerPlane;
 
   function handleOrder() {
     onConfirm({
@@ -491,7 +549,21 @@ function PurchaseOrderBody({
               {fmtMoney(totalCost)}
             </span>
           </div>
-          <CashAffordabilityRow totalCost={totalCost} />
+          {queuedQty > 0 && (
+            <div className="flex items-baseline justify-between text-[0.75rem] mt-1.5">
+              <span className="uppercase tracking-wider text-[0.625rem] text-ink-muted">
+                Due now
+              </span>
+              <span className="tabular font-mono text-ink-2">
+                {fmtMoney(cashDueNow)}
+                <span className="ml-2 text-[0.6875rem] text-ink-muted">
+                  {instantQty > 0 ? `${instantQty} now + ` : ""}
+                  {queuedQty} × 20% deposit
+                </span>
+              </span>
+            </div>
+          )}
+          <CashAffordabilityRow totalCost={cashDueNow} />
           <DeliveryAndRetirementRow quantity={quantity} />
         </div>
       </ModalBody>
@@ -499,7 +571,7 @@ function PurchaseOrderBody({
       <ModalFooter>
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
         <CashAwareOrderButton
-          totalCost={totalCost}
+          totalCost={cashDueNow}
           quantity={quantity}
           onOrder={handleOrder}
         />
