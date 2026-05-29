@@ -126,6 +126,7 @@ import {
   selectAirportToPrivatize,
   generateApprovalDemands,
   planBotSealedBid,
+  assessAirportRegulatory,
 } from "@/lib/airport-auction-runtime";
 import {
   LEASE_BUYOUT_RESIDUAL_PCT,
@@ -2845,6 +2846,15 @@ export const useGame = create<GameStore>()(
         const slotState = s.airportSlots?.[airportCode];
         if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
           return { ok: false, error: "You don't own this airport" };
+        }
+        // §9: a price-discrimination finding forces equal pricing for several
+        // rounds — reject any self-discount change until the lock expires.
+        if ((slotState.regulatedUntilRound ?? 0) > s.currentQuarter) {
+          const remaining = (slotState.regulatedUntilRound ?? 0) - s.currentQuarter;
+          return {
+            ok: false,
+            error: `Equal pricing enforced by the regulator for ${remaining} more quarter${remaining === 1 ? "" : "s"} after a price-discrimination finding.`,
+          };
         }
         const clamped = Math.max(0, Math.min(AIRPORT_OWNER_SELF_DISCOUNT_MAX, pct));
         set({
@@ -7042,11 +7052,15 @@ export const useGame = create<GameStore>()(
           // Accumulated cash/flag deltas applied to v2Teams at the end.
           const cashDelta: Record<string, number> = {};
           const flagAdds: Record<string, Set<string>> = {};
+          const brandDelta: Record<string, number> = {};
           const addCash = (teamId: string, amt: number) => {
             cashDelta[teamId] = (cashDelta[teamId] ?? 0) + amt;
           };
           const addFlag = (teamId: string, flag: string) => {
             (flagAdds[teamId] ??= new Set<string>()).add(flag);
+          };
+          const addBrand = (teamId: string, amt: number) => {
+            brandDelta[teamId] = (brandDelta[teamId] ?? 0) + amt;
           };
           const projectedCash = (teamId: string) => {
             const t = v2Teams.find((x) => x.id === teamId);
@@ -7379,15 +7393,44 @@ export const useGame = create<GameStore>()(
             }
           }
 
-          // Apply accumulated cash/flag deltas to the team roster.
+          // ── Phase 4: regulatory enforcement (§9) ───────────────────────
+          // Each owned airport faces three independent reviews: price
+          // discrimination (fine + forced equal pricing + escalating to
+          // partial divestment), use-it-or-lose-it slot reclamation, and a
+          // latent lobbying-scandal tail risk. The pure helper returns a slot
+          // patch + side-effects; the store applies cash/brand and narrates.
+          for (const [code, slot] of Object.entries(v2Slots)) {
+            if (!slot.ownerTeamId) continue;
+            const outcome = assessAirportRegulatory({
+              teams: v2Teams,
+              airportCode: code,
+              slotState: slot,
+              round: nextQ,
+              cityName: CITIES_BY_CODE[code]?.name ?? code,
+              rng,
+            });
+            const hasPatch = Object.keys(outcome.slotPatch).length > 0;
+            if (hasPatch) {
+              v2Slots = { ...v2Slots, [code]: { ...slot, ...outcome.slotPatch } };
+            }
+            if (outcome.fineUsd > 0) addCash(slot.ownerTeamId, -outcome.fineUsd);
+            if (outcome.brandHit > 0) addBrand(slot.ownerTeamId, -outcome.brandHit);
+            if (isPlayerTeam(slot.ownerTeamId)) {
+              for (const n of outcome.notices) toast.warning(n.title, n.body);
+            }
+          }
+
+          // Apply accumulated cash/flag/brand deltas to the team roster.
           v2Teams = v2Teams.map((t) => {
             const dc = cashDelta[t.id] ?? 0;
             const fa = flagAdds[t.id];
-            if (dc === 0 && !fa) return t;
+            const bd = brandDelta[t.id] ?? 0;
+            if (dc === 0 && !fa && bd === 0) return t;
             return {
               ...t,
               cashUsd: t.cashUsd + dc,
               flags: fa ? new Set<string>([...t.flags, ...fa]) : t.flags,
+              brandValue: bd !== 0 ? Math.max(0, Math.min(100, t.brandValue + bd)) : t.brandValue,
             };
           });
           v2Auctions = nextAuctions;

@@ -38,6 +38,9 @@ import {
   AIRPORT_OPEX_RATIO_BASELINE,
   AIRPORT_NON_AERO_YIELD_PER_PAX,
   AIRPORT_QUARTER_WEEKS,
+  AIRPORT_PRICE_DISCRIMINATION_LIMIT,
+  AIRPORT_USE_IT_OR_LOSE_IT_ROUNDS,
+  AIRPORT_REGULATORY_FINE_PCT,
   demandCostMultiplier,
   privatizationCycleIndex,
   computeAirportRevenue,
@@ -501,4 +504,177 @@ export function computeOwnedAirportRevenue(args: {
     fuelFarmMarginUsdPerL,
     fuelLitresBurned,
   });
+}
+
+// ─── §9 Regulatory enforcement ──────────────────────────────────────────────
+//
+// Run once per owned airport at quarter close. Pure: takes the live state and
+// an `rng`, returns the slot patch + side-effects (cash fine, brand hit,
+// reclaimed slots) for the store to apply and narrate. Three independent
+// mechanisms (an airport can trip more than one in a round):
+//
+//  1. Price discrimination — self-vs-rival fee gap beyond the 15% legal edge
+//     triggers a review: a fine (% of airport revenue) + forced equal pricing
+//     for N rounds; the third strike forces partial divestment.
+//  2. Use-it-or-lose-it — slots held but flown by no owner route for 4
+//     consecutive rounds are reclaimed to the public pool.
+//  3. Lobbying scandal — a latent corruption flag (set when the lobbying
+//     demand was accepted) can surface as a world-news event: brand hit + fine.
+
+/** How many rounds equal pricing is enforced after a discrimination finding. */
+export const AIRPORT_FORCED_EQUAL_PRICING_ROUNDS = 4;
+/** Strike count at which the regulator forces partial divestment. */
+export const AIRPORT_REGULATORY_DIVEST_STRIKE = 3;
+/** Fraction of capacity reclaimed on a forced partial divestment. */
+export const AIRPORT_DIVEST_CAPACITY_FRACTION = 0.25;
+/** Per-round probability a standing lobbying-exposure flag erupts into a
+ *  corruption scandal. Low — it is a latent tail risk, not a recurring tax. */
+export const AIRPORT_LOBBYING_SCANDAL_CHANCE = 0.08;
+/** Brand-value hit (0..100 scale) from a lobbying corruption scandal. */
+export const AIRPORT_LOBBYING_SCANDAL_BRAND_HIT = 6;
+
+export interface RegulatoryOutcome {
+  /** Fields to merge onto the airport's slot state. */
+  slotPatch: Partial<AirportSlotState>;
+  /** USD fine charged to the owner (≥0). */
+  fineUsd: number;
+  /** Brand-value points to subtract from the owner (≥0). */
+  brandHit: number;
+  /** Slots returned to the public pool (use-it-or-lose-it / divestment). */
+  reclaimedSlots: number;
+  /** True when this round forced a partial divestment. */
+  divested: boolean;
+  /** Player-facing notices (only surfaced when the owner is the player). */
+  notices: Array<{ kind: "discrimination" | "use-it-or-lose-it" | "scandal"; title: string; body: string }>;
+}
+
+/** Does the owner actually fly through this airport this round? Drives the
+ *  use-it-or-lose-it counter — an owner that hoards slots to wall out rivals
+ *  but flies nothing loses the block. */
+function ownerUsesAirport(team: Team | undefined, airportCode: string): boolean {
+  if (!team) return false;
+  if (team.hubCode === airportCode) return true;
+  if ((team.secondaryHubCodes ?? []).includes(airportCode)) return true;
+  for (const r of team.routes ?? []) {
+    if (r.status !== "active") continue;
+    if (r.originCode === airportCode || r.destCode === airportCode) return true;
+  }
+  return false;
+}
+
+export function assessAirportRegulatory(args: {
+  teams: Team[];
+  airportCode: string;
+  slotState: AirportSlotState;
+  round: number;
+  cityName: string;
+  rng?: () => number;
+}): RegulatoryOutcome {
+  const { teams, airportCode, slotState, round, cityName } = args;
+  const rng = args.rng ?? Math.random;
+  const out: RegulatoryOutcome = {
+    slotPatch: {},
+    fineUsd: 0,
+    brandHit: 0,
+    reclaimedSlots: 0,
+    divested: false,
+    notices: [],
+  };
+  const ownerTeamId = slotState.ownerTeamId;
+  if (!ownerTeamId) return out;
+  const owner = teams.find((t) => t.id === ownerTeamId);
+
+  // Airport quarterly revenue — basis for fines.
+  const breakdown = computeOwnedAirportRevenue({ teams, airportCode, slotState });
+  const airportRevenue = Math.max(0, breakdown?.net ?? 0);
+
+  // ── 1. Price discrimination ────────────────────────────────────────────
+  // The owner bills itself `selfDiscountPct` below the rival rate. The store
+  // clamps player input to the 15% legal edge, but a bot (or a stale save)
+  // can exceed it — and that is exactly what the regulator polices.
+  const gap = slotState.ownerSelfDiscountPct ?? 0;
+  if (gap > AIRPORT_PRICE_DISCRIMINATION_LIMIT) {
+    const strikes = (slotState.regulatoryStrikes ?? 0) + 1;
+    const fine = Math.round(airportRevenue * AIRPORT_REGULATORY_FINE_PCT);
+    out.fineUsd += fine;
+    out.slotPatch.regulatoryStrikes = strikes;
+    // Forced equal pricing — strip the discount and lock it out for N rounds.
+    out.slotPatch.ownerSelfDiscountPct = 0;
+    out.slotPatch.regulatedUntilRound = round + AIRPORT_FORCED_EQUAL_PRICING_ROUNDS;
+    if (strikes >= AIRPORT_REGULATORY_DIVEST_STRIKE) {
+      // Repeat offender → forced partial divestment: a slice of capacity is
+      // reclaimed to the public pool and the offence counter resets.
+      const cap = slotState.totalCapacity ?? 0;
+      const reclaimed = Math.round(cap * AIRPORT_DIVEST_CAPACITY_FRACTION);
+      if (reclaimed > 0) {
+        out.reclaimedSlots += reclaimed;
+        out.slotPatch.totalCapacity = Math.max(0, cap - reclaimed);
+        out.slotPatch.available = (slotState.available ?? 0) + reclaimed;
+      }
+      out.slotPatch.regulatoryStrikes = 0;
+      out.divested = true;
+      out.notices.push({
+        kind: "discrimination",
+        title: `Forced divestment · ${cityName}`,
+        body: `Repeat self-dealing at ${airportCode}. The regulator fined you ${fmtUsdShort(fine)}, reclaimed ${reclaimed} slots to the public pool, and locked equal pricing for ${AIRPORT_FORCED_EQUAL_PRICING_ROUNDS} quarters.`,
+      });
+    } else {
+      out.notices.push({
+        kind: "discrimination",
+        title: `Regulatory review · ${cityName}`,
+        body: `Your self-discount at ${airportCode} exceeded the 15% legal edge. Fine ${fmtUsdShort(fine)}; equal pricing enforced for ${AIRPORT_FORCED_EQUAL_PRICING_ROUNDS} quarters (strike ${strikes} of ${AIRPORT_REGULATORY_DIVEST_STRIKE}).`,
+      });
+    }
+  }
+
+  // ── 2. Use-it-or-lose-it ────────────────────────────────────────────────
+  if (ownerUsesAirport(owner, airportCode)) {
+    if ((slotState.unusedSlotRoundCount ?? 0) !== 0) out.slotPatch.unusedSlotRoundCount = 0;
+  } else {
+    const count = (slotState.unusedSlotRoundCount ?? 0) + 1;
+    if (count >= AIRPORT_USE_IT_OR_LOSE_IT_ROUNDS && (slotState.reservedSlotPct ?? 0) > 0) {
+      // Reclaim the idle reservation back to the public pool.
+      const cap = out.slotPatch.totalCapacity ?? slotState.totalCapacity ?? 0;
+      const reclaimed = Math.round(cap * (slotState.reservedSlotPct ?? 0));
+      out.slotPatch.reservedSlotPct = 0;
+      out.slotPatch.unusedSlotRoundCount = 0;
+      if (reclaimed > 0) {
+        out.reclaimedSlots += reclaimed;
+        const avail = out.slotPatch.available ?? slotState.available ?? 0;
+        out.slotPatch.available = avail + reclaimed;
+      }
+      out.notices.push({
+        kind: "use-it-or-lose-it",
+        title: `Slots reclaimed · ${cityName}`,
+        body: `Your reserved block at ${airportCode} sat unused for ${AIRPORT_USE_IT_OR_LOSE_IT_ROUNDS} quarters. The regulator returned ${reclaimed} slots to the public pool.`,
+      });
+    } else {
+      out.slotPatch.unusedSlotRoundCount = count;
+    }
+  }
+
+  // ── 3. Lobbying scandal ─────────────────────────────────────────────────
+  if ((slotState.lobbyingExposure ?? 0) > 0 && rng() < AIRPORT_LOBBYING_SCANDAL_CHANCE) {
+    const fine = Math.round(airportRevenue * AIRPORT_REGULATORY_FINE_PCT);
+    out.fineUsd += fine;
+    out.brandHit += AIRPORT_LOBBYING_SCANDAL_BRAND_HIT;
+    // The flag is spent once the scandal breaks — a one-time latent risk.
+    out.slotPatch.lobbyingExposure = undefined;
+    out.notices.push({
+      kind: "scandal",
+      title: `Corruption scandal · ${cityName}`,
+      body: `The lobbying that smoothed your ${airportCode} acquisition surfaced in the press. Brand −${AIRPORT_LOBBYING_SCANDAL_BRAND_HIT} and a ${fmtUsdShort(fine)} fine.`,
+    });
+  }
+
+  return out;
+}
+
+/** Compact USD formatter for regulatory notices (e.g. "$12.4M"). */
+function fmtUsdShort(usd: number): string {
+  const abs = Math.abs(usd);
+  if (abs >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `$${(usd / 1_000).toFixed(0)}K`;
+  return `$${Math.round(usd)}`;
 }

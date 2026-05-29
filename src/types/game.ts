@@ -1458,6 +1458,13 @@ export interface AirportSlotState {
   /** Consecutive rounds the owner's slot block here has gone unused
    *  (use-it-or-lose-it reclamation counter). */
   unusedSlotRoundCount?: number;
+  /** §9 regulatory review: round through which the owner is forced into
+   *  equal (no self-discount) pricing after a price-discrimination finding.
+   *  Owner pricing levers reject self-discounts until this round passes. */
+  regulatedUntilRound?: number;
+  /** §9 repeat-offender counter — each price-discrimination finding bumps
+   *  this; the third triggers forced partial divestment. */
+  regulatoryStrikes?: number;
   /** Background (simulated) slots consumed this round — cached for the UI
    *  scarcity meter; recomputed each close from backgroundSlotsUsed(). */
   backgroundSlotsUsed?: number;
