@@ -49,7 +49,7 @@ import {
   loadSnapshot as snapLoad,
   deleteSnapshot as snapDelete,
 } from "@/lib/snapshots";
-import { FUEL_BASELINE_USD_PER_L, effectiveBaseRatePct, effectiveRangeKm, effectiveTravelIndex, newsFuelIndexHint } from "@/lib/engine";
+import { FUEL_BASELINE_USD_PER_L, effectiveBaseRatePct, effectiveRangeKm, effectiveTravelIndex, effectiveUnlockQuarter, newsFuelIndexHint } from "@/lib/engine";
 import {
   totalUpgradeCostPerPlaneUsd,
   amenityCostUsd,
@@ -1370,12 +1370,15 @@ export const useGame = create<GameStore>()(
         const spec = AIRCRAFT_BY_ID[specId];
         if (!spec) return { ok: false, error: "Unknown aircraft" };
         // Pre-orders open at unlockQuarter − 2 (announcement window per
-        // master ref Section 1E). Before that the order is rejected.
-        if (!isAnnouncementOpen(spec, s.currentQuarter)) {
-          const announceQ = spec.unlockQuarter - 2;
+        // master ref Section 1E). Before that the order is rejected. In the
+        // full campaign the unlock is clamped to the airframe's real EIS era.
+        const cmode = s.session?.campaignMode;
+        const specUnlock = effectiveUnlockQuarter(spec, cmode);
+        if (!isAnnouncementOpen(spec, s.currentQuarter, cmode)) {
+          const announceQ = specUnlock - 2;
           return {
             ok: false,
-            error: `Pre-orders open Q${announceQ} (announcement) · unlocks Q${spec.unlockQuarter}`,
+            error: `Pre-orders open ${fmtQuarter(announceQ, getCampaignStartYear(s))} (announcement) · unlocks ${fmtQuarter(specUnlock, getCampaignStartYear(s))}`,
           };
         }
         const player = s.teams.find((t) => t.id === s.playerTeamId);
@@ -1422,7 +1425,7 @@ export const useGame = create<GameStore>()(
         // 50% fleet-ratio cap. Both gate lease orders only — buy is
         // unconstrained.
         if (acquisitionType === "lease") {
-          if (!canLeaseSpec(spec, AIRCRAFT, s.currentQuarter)) {
+          if (!canLeaseSpec(spec, AIRCRAFT, s.currentQuarter, cmode)) {
             return {
               ok: false,
               error: `${spec.name} is not currently leasable. Lease is restricted to the top 7 passenger and top 3 cargo airframes by production stock.`,
@@ -1454,7 +1457,7 @@ export const useGame = create<GameStore>()(
         // - Pre-release: ALL units queue (they wait for unlock).
         // - Always: orders beyond the round's headroom go to the FIFO queue
         //   and pay 20% deposit upfront, balance at delivery.
-        const released = isReleased(spec, s.currentQuarter);
+        const released = isReleased(spec, s.currentQuarter, cmode);
         const cap = effectiveProductionCap(spec, s.productionCapOverrides);
         // How many of this spec have already been delivered in the current
         // round (either via instant orders or batch deliveries).
@@ -1563,12 +1566,12 @@ export const useGame = create<GameStore>()(
           );
         } else {
           // Pure queue. Tell the player what they'll wait for.
-          const earliestRound = Math.max(s.currentQuarter + 1, spec.unlockQuarter);
+          const earliestRound = Math.max(s.currentQuarter + 1, specUnlock);
           toast.accent(
             `${queuedQty}× ${spec.name} pre-ordered`,
             released
               ? `Queued behind ${queueAhead}; deposit ${fmtMoneyPlain(queuedQty * depositPerPlane)}; balance at delivery.`
-              : `Holds your slot until unlock Q${spec.unlockQuarter}; deposit ${fmtMoneyPlain(queuedQty * depositPerPlane)}.`,
+              : `Holds your slot until unlock ${fmtQuarter(specUnlock, getCampaignStartYear(s))}; deposit ${fmtMoneyPlain(queuedQty * depositPerPlane)}.`,
           );
           // earliestRound used by the toast subtitle below (silence linter).
           void earliestRound;
@@ -4770,12 +4773,12 @@ export const useGame = create<GameStore>()(
             }
 
             // ── Aircraft order ─────────────────────────────────────
-            const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter, getTotalRounds(s));
+            const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter, getTotalRounds(s), s.session?.campaignMode);
             if (order) {
               const spec = AIRCRAFT_BY_ID[order.specId];
               if (spec) {
                 let acquisitionType = order.acquisitionType;
-                if (acquisitionType === "lease" && !canLeaseSpec(spec, AIRCRAFT, s.currentQuarter)) {
+                if (acquisitionType === "lease" && !canLeaseSpec(spec, AIRCRAFT, s.currentQuarter, s.session?.campaignMode)) {
                   acquisitionType = "buy";
                 }
                 const leaseTerms = leaseTermsFor(spec);
@@ -5554,7 +5557,7 @@ export const useGame = create<GameStore>()(
           if (!spec) continue;
           // Only deliver from queue once spec has reached unlock — earlier
           // means the announcement window is open but production hasn't.
-          if (s.currentQuarter < spec.unlockQuarter) continue;
+          if (s.currentQuarter < effectiveUnlockQuarter(spec, s.session?.campaignMode)) continue;
           const cap = effectiveProductionCap(spec, s.productionCapOverrides);
           // Subtract anything already delivered this round (i.e. instant
           // walk-up orders fulfilled inline via orderAircraft).

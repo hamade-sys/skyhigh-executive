@@ -37,7 +37,7 @@
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { canLeaseSpec, leaseTermsFor } from "@/lib/lease";
-import { distanceBetween, maxRouteDailyFrequency, baseFareForDistance } from "@/lib/engine";
+import { distanceBetween, maxRouteDailyFrequency, baseFareForDistance, effectiveUnlockQuarter } from "@/lib/engine";
 import { BASE_SLOT_PRICE_BY_TIER } from "@/lib/slots";
 import type { Team, FleetAircraft, PricingTier, Route } from "@/types/game";
 
@@ -433,13 +433,19 @@ export function planBotAircraftOrder(
   difficulty: BotDifficulty,
   currentQuarter: number,
   totalRounds = 20,
+  campaignMode: "half" | "full" = "half",
 ): { specId: string; quantity: number; acquisitionType: "buy" | "lease" } | null {
   const profile = PROFILES[difficulty];
   const phase = gamePhase(currentQuarter, totalRounds);
   const targetQty = ORDER_QTY[difficulty][phase];
   if (targetQty === 0) return null;
 
-  const availableSpecs = AIRCRAFT.filter(a => a.unlockQuarter <= currentQuarter);
+  // Era-gating: in the full campaign bots can't order an airframe before its
+  // real entry-into-service. In the half campaign effectiveUnlockQuarter just
+  // returns spec.unlockQuarter, so this is a no-op there.
+  const availableSpecs = AIRCRAFT.filter(
+    a => effectiveUnlockQuarter(a, campaignMode) <= currentQuarter,
+  );
   if (availableSpecs.length === 0) return null;
 
   const fleetCount = team.fleet.filter(f => f.status !== "retired").length;
@@ -465,7 +471,7 @@ export function planBotAircraftOrder(
       if (wantsWide !== isWide && fleetCount > 0) return false;
     }
     const canBuy   = team.cashUsd >= spec.buyPriceUsd * profile.orderAircraftCashRatio;
-    const canLease = canLeaseSpec(spec, AIRCRAFT, currentQuarter)
+    const canLease = canLeaseSpec(spec, AIRCRAFT, currentQuarter, campaignMode)
       && team.cashUsd >= leaseTermsFor(spec).depositUsd;
     return canBuy || canLease;
   });

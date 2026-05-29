@@ -29,7 +29,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "A319", name: "Airbus A319", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1996,
     seats: { first: 0, business: 12, economy: 110 },
     rangeKm: 6_950, fuelBurnPerKm: 2.7,
     buyPriceUsd: 80_000_000, leasePerQuarterUsd: 6_000_000,
@@ -38,7 +38,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A320", name: "Airbus A320", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1988,
     seats: { first: 0, business: 12, economy: 138 },
     rangeKm: 6_100, fuelBurnPerKm: 3.0,
     buyPriceUsd: 90_000_000, leasePerQuarterUsd: 6_750_000,
@@ -47,7 +47,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A321", name: "Airbus A321", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1994,
     seats: { first: 0, business: 16, economy: 184 },
     rangeKm: 5_950, fuelBurnPerKm: 3.2,
     buyPriceUsd: 105_000_000, leasePerQuarterUsd: 7_875_000,
@@ -56,7 +56,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A330-200", name: "Airbus A330-200", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1998,
     seats: { first: 0, business: 36, economy: 217 },
     rangeKm: 13_450, fuelBurnPerKm: 6.5,
     buyPriceUsd: 210_000_000, leasePerQuarterUsd: 15_750_000,
@@ -65,7 +65,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A330-300", name: "Airbus A330-300", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1994,
     seats: { first: 0, business: 36, economy: 263 },
     rangeKm: 11_750, fuelBurnPerKm: 6.8,
     buyPriceUsd: 230_000_000, leasePerQuarterUsd: 17_250_000,
@@ -74,7 +74,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-300", name: "Boeing 737-300", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1984,
     seats: { first: 0, business: 0, economy: 128 },
     rangeKm: 4_400, fuelBurnPerKm: 2.9,
     buyPriceUsd: 55_000_000, leasePerQuarterUsd: 4_125_000,
@@ -83,7 +83,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-400", name: "Boeing 737-400", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1988,
     seats: { first: 0, business: 0, economy: 146 },
     rangeKm: 5_000, fuelBurnPerKm: 3.0,
     buyPriceUsd: 65_000_000, leasePerQuarterUsd: 4_875_000,
@@ -92,7 +92,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-500", name: "Boeing 737-500", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1990,
     seats: { first: 0, business: 0, economy: 122 },
     rangeKm: 5_200, fuelBurnPerKm: 2.8,
     buyPriceUsd: 55_000_000, leasePerQuarterUsd: 4_125_000,
@@ -101,7 +101,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-600", name: "Boeing 737-600", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1998,
     seats: { first: 0, business: 0, economy: 110 },
     rangeKm: 5_648, fuelBurnPerKm: 3.0,
     buyPriceUsd: 65_000_000, leasePerQuarterUsd: 4_875_000,
@@ -110,7 +110,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-700", name: "Boeing 737-700", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1997,
     seats: { first: 0, business: 12, economy: 126 },
     rangeKm: 6_200, fuelBurnPerKm: 2.9,
     buyPriceUsd: 80_000_000, leasePerQuarterUsd: 6_000_000,
@@ -119,7 +119,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-800", name: "Boeing 737-800", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1998,
     seats: { first: 0, business: 16, economy: 160 },
     rangeKm: 5_800, fuelBurnPerKm: 3.2,
     buyPriceUsd: 90_000_000, leasePerQuarterUsd: 6_750_000,
@@ -128,7 +128,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-900", name: "Boeing 737-900", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2001,
     seats: { first: 0, business: 24, economy: 165 },
     rangeKm: 6_082, fuelBurnPerKm: 3.4,
     buyPriceUsd: 100_000_000, leasePerQuarterUsd: 7_500_000,
@@ -137,7 +137,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B747-400", name: "Boeing 747-400", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1989,
     seats: { first: 12, business: 60, economy: 344 },
     rangeKm: 13_450, fuelBurnPerKm: 13.5,
     buyPriceUsd: 240_000_000, leasePerQuarterUsd: 18_000_000,
@@ -146,7 +146,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B757-200", name: "Boeing 757-200", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1983,
     seats: { first: 0, business: 16, economy: 184 },
     rangeKm: 7_250, fuelBurnPerKm: 3.6,
     buyPriceUsd: 90_000_000, leasePerQuarterUsd: 6_750_000,
@@ -155,7 +155,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B767-300ER", name: "Boeing 767-300ER", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1988,
     seats: { first: 6, business: 36, economy: 224 },
     rangeKm: 11_070, fuelBurnPerKm: 5.5,
     buyPriceUsd: 175_000_000, leasePerQuarterUsd: 13_125_000,
@@ -164,7 +164,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B777-200", name: "Boeing 777-200", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1995,
     seats: { first: 8, business: 40, economy: 257 },
     rangeKm: 9_700, fuelBurnPerKm: 7.5,
     buyPriceUsd: 195_000_000, leasePerQuarterUsd: 14_625_000,
@@ -173,7 +173,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B777-200ER", name: "Boeing 777-200ER", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1997,
     seats: { first: 8, business: 42, economy: 251 },
     rangeKm: 13_080, fuelBurnPerKm: 8.0,
     buyPriceUsd: 220_000_000, leasePerQuarterUsd: 16_500_000,
@@ -182,7 +182,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B777-200LR", name: "Boeing 777-200LR", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2006,
     seats: { first: 8, business: 40, economy: 269 },
     rangeKm: 15_843, fuelBurnPerKm: 8.5,
     buyPriceUsd: 250_000_000, leasePerQuarterUsd: 18_750_000,
@@ -191,7 +191,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "CRJ-700", name: "Bombardier CRJ-700", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2001,
     seats: { first: 0, business: 0, economy: 70 },
     rangeKm: 3_780, fuelBurnPerKm: 2.2,
     buyPriceUsd: 40_000_000, leasePerQuarterUsd: 3_000_000,
@@ -200,7 +200,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "CRJ-900", name: "Bombardier CRJ-900", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2003,
     seats: { first: 0, business: 0, economy: 90 },
     rangeKm: 2_956, fuelBurnPerKm: 2.6,
     buyPriceUsd: 45_000_000, leasePerQuarterUsd: 3_375_000,
@@ -209,7 +209,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "Dash-8-400", name: "Bombardier Dash 8 Q400", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2000,
     seats: { first: 0, business: 0, economy: 78 },
     rangeKm: 2_040, fuelBurnPerKm: 1.9,
     buyPriceUsd: 35_000_000, leasePerQuarterUsd: 2_625_000,
@@ -217,7 +217,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "E170", name: "Embraer E170", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2004,
     seats: { first: 0, business: 0, economy: 70 },
     rangeKm: 3_734, fuelBurnPerKm: 2.0,
     buyPriceUsd: 35_000_000, leasePerQuarterUsd: 2_625_000,
@@ -226,7 +226,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "E175", name: "Embraer E175", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2005,
     seats: { first: 0, business: 0, economy: 80 },
     rangeKm: 3_735, fuelBurnPerKm: 2.1,
     buyPriceUsd: 42_000_000, leasePerQuarterUsd: 3_150_000,
@@ -234,7 +234,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "E195", name: "Embraer E195", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2006,
     seats: { first: 0, business: 0, economy: 118 },
     rangeKm: 4_260, fuelBurnPerKm: 2.2,
     buyPriceUsd: 50_000_000, leasePerQuarterUsd: 3_750_000,
@@ -243,7 +243,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "ATR-72-500", name: "ATR 72-500", family: "passenger",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1997,
     seats: { first: 0, business: 0, economy: 70 },
     rangeKm: 1_528, fuelBurnPerKm: 2.0,
     buyPriceUsd: 25_000_000, leasePerQuarterUsd: 1_875_000,
@@ -256,7 +256,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "B737-300F", name: "Boeing 737-300F", family: "cargo",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1998,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 18,
     rangeKm: 4_200, fuelBurnPerKm: 2.9,
@@ -266,7 +266,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B757-200F", name: "Boeing 757-200F", family: "cargo",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1987,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 39,
     rangeKm: 5_834, fuelBurnPerKm: 3.6,
@@ -276,7 +276,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B767-300F", name: "Boeing 767-300F", family: "cargo",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1995,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 52,
     rangeKm: 6_025, fuelBurnPerKm: 4.6,
@@ -285,7 +285,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B747-400F", name: "Boeing 747-400F", family: "cargo",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1993,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 113,
     rangeKm: 8_240, fuelBurnPerKm: 13.5,
@@ -295,7 +295,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B777F", name: "Boeing 777F", family: "cargo",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2009,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 103,
     rangeKm: 9_200, fuelBurnPerKm: 9.0,
@@ -304,7 +304,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A300-600F", name: "Airbus A300-600F", family: "cargo",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 1986,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 52,
     rangeKm: 4_450, fuelBurnPerKm: 6.8,
@@ -314,7 +314,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A330-200F", name: "Airbus A330-200F", family: "cargo",
-    unlockQuarter: 1,
+    unlockQuarter: 1, eisYear: 2010,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 70,
     rangeKm: 7_400, fuelBurnPerKm: 7.5,
@@ -327,7 +327,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "B777-300ER", name: "Boeing 777-300ER", family: "passenger",
-    unlockQuarter: 5,
+    unlockQuarter: 5, eisYear: 2004,
     seats: { first: 0, business: 42, economy: 354 },
     rangeKm: 13_650, fuelBurnPerKm: 7.8,
     buyPriceUsd: 275_000_000, leasePerQuarterUsd: 20_625_000,
@@ -336,7 +336,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "E190", name: "Embraer E190", family: "passenger",
-    unlockQuarter: 5,
+    unlockQuarter: 5, eisYear: 2005,
     seats: { first: 0, business: 0, economy: 100 },
     rangeKm: 4_537, fuelBurnPerKm: 2.2,
     buyPriceUsd: 45_000_000, leasePerQuarterUsd: 3_375_000,
@@ -349,7 +349,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "A380-800", name: "Airbus A380-800", family: "passenger",
-    unlockQuarter: 9,
+    unlockQuarter: 9, eisYear: 2007,
     seats: { first: 14, business: 76, economy: 470 },
     rangeKm: 14_800, fuelBurnPerKm: 14.5,
     buyPriceUsd: 430_000_000, leasePerQuarterUsd: 32_250_000,
@@ -358,7 +358,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A380F", name: "Airbus A380F", family: "cargo",
-    unlockQuarter: 9,
+    unlockQuarter: 9, eisYear: 2010,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 150,
     rangeKm: 10_400, fuelBurnPerKm: 15.0,
@@ -373,7 +373,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "B787-8", name: "Boeing 787-8 Dreamliner", family: "passenger",
-    unlockQuarter: 12,
+    unlockQuarter: 12, eisYear: 2011,
     seats: { first: 0, business: 32, economy: 210 },
     rangeKm: 13_620, fuelBurnPerKm: 5.5,
     buyPriceUsd: 225_000_000, leasePerQuarterUsd: 16_875_000,
@@ -381,7 +381,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "ATR-72-600", name: "ATR 72-600", family: "passenger",
-    unlockQuarter: 12,
+    unlockQuarter: 12, eisYear: 2011,
     seats: { first: 0, business: 0, economy: 70 },
     rangeKm: 1_528, fuelBurnPerKm: 1.8,
     buyPriceUsd: 30_000_000, leasePerQuarterUsd: 2_250_000,
@@ -389,7 +389,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A330-300P2F", name: "Airbus A330-300 P2F", family: "cargo",
-    unlockQuarter: 12,
+    unlockQuarter: 12, eisYear: 2018,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 61,
     rangeKm: 7_200, fuelBurnPerKm: 7.8,
@@ -402,7 +402,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "B747-8", name: "Boeing 747-8 Intercontinental", family: "passenger",
-    unlockQuarter: 16,
+    unlockQuarter: 16, eisYear: 2012,
     seats: { first: 8, business: 92, economy: 365 },
     rangeKm: 14_320, fuelBurnPerKm: 13.0,
     buyPriceUsd: 370_000_000, leasePerQuarterUsd: 27_750_000,
@@ -411,7 +411,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "E190-E2", name: "Embraer E190-E2", family: "passenger",
-    unlockQuarter: 16,
+    unlockQuarter: 16, eisYear: 2018,
     seats: { first: 0, business: 0, economy: 104 },
     rangeKm: 4_800, fuelBurnPerKm: 1.9,
     buyPriceUsd: 65_000_000, leasePerQuarterUsd: 4_875_000,
@@ -419,7 +419,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B747-8F", name: "Boeing 747-8F", family: "cargo",
-    unlockQuarter: 16,
+    unlockQuarter: 16, eisYear: 2011,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 134,
     rangeKm: 8_130, fuelBurnPerKm: 14.2,
@@ -429,7 +429,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-800BCF", name: "Boeing 737-800BCF", family: "cargo",
-    unlockQuarter: 16,
+    unlockQuarter: 16, eisYear: 2018,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 23,
     rangeKm: 5_765, fuelBurnPerKm: 3.4,
@@ -442,7 +442,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "B787-9", name: "Boeing 787-9 Dreamliner", family: "passenger",
-    unlockQuarter: 20,
+    unlockQuarter: 20, eisYear: 2014,
     seats: { first: 0, business: 48, economy: 248 },
     rangeKm: 14_140, fuelBurnPerKm: 5.3,
     buyPriceUsd: 260_000_000, leasePerQuarterUsd: 19_500_000,
@@ -450,7 +450,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A350-900", name: "Airbus A350-900", family: "passenger",
-    unlockQuarter: 20,
+    unlockQuarter: 20, eisYear: 2015,
     seats: { first: 0, business: 48, economy: 267 },
     rangeKm: 15_000, fuelBurnPerKm: 5.5,
     buyPriceUsd: 275_000_000, leasePerQuarterUsd: 20_625_000,
@@ -462,7 +462,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "A220-300", name: "Airbus A220-300", family: "passenger",
-    unlockQuarter: 21,
+    unlockQuarter: 21, eisYear: 2016,
     seats: { first: 0, business: 0, economy: 135 },
     rangeKm: 6_300, fuelBurnPerKm: 2.3,
     buyPriceUsd: 80_000_000, leasePerQuarterUsd: 6_000_000,
@@ -470,7 +470,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A319neo", name: "Airbus A319neo", family: "passenger",
-    unlockQuarter: 21,
+    unlockQuarter: 21, eisYear: 2019,
     seats: { first: 0, business: 12, economy: 110 },
     rangeKm: 6_950, fuelBurnPerKm: 2.4,
     buyPriceUsd: 90_000_000, leasePerQuarterUsd: 6_750_000,
@@ -478,7 +478,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A320neo", name: "Airbus A320neo", family: "passenger",
-    unlockQuarter: 21,
+    unlockQuarter: 21, eisYear: 2016,
     seats: { first: 0, business: 12, economy: 138 },
     rangeKm: 6_500, fuelBurnPerKm: 2.6,
     buyPriceUsd: 105_000_000, leasePerQuarterUsd: 7_875_000,
@@ -486,7 +486,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A321neo", name: "Airbus A321neo", family: "passenger",
-    unlockQuarter: 21,
+    unlockQuarter: 21, eisYear: 2017,
     seats: { first: 0, business: 16, economy: 184 },
     rangeKm: 7_400, fuelBurnPerKm: 2.7,
     buyPriceUsd: 125_000_000, leasePerQuarterUsd: 9_375_000,
@@ -494,7 +494,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-MAX-8", name: "Boeing 737 MAX 8", family: "passenger",
-    unlockQuarter: 21,
+    unlockQuarter: 21, eisYear: 2017,
     seats: { first: 0, business: 16, economy: 162 },
     rangeKm: 6_570, fuelBurnPerKm: 2.6,
     buyPriceUsd: 110_000_000, leasePerQuarterUsd: 8_250_000,
@@ -502,7 +502,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B737-MAX-9", name: "Boeing 737 MAX 9", family: "passenger",
-    unlockQuarter: 21,
+    unlockQuarter: 21, eisYear: 2018,
     seats: { first: 0, business: 24, economy: 169 },
     rangeKm: 6_110, fuelBurnPerKm: 2.9,
     buyPriceUsd: 120_000_000, leasePerQuarterUsd: 9_000_000,
@@ -514,7 +514,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "A350-1000", name: "Airbus A350-1000", family: "passenger",
-    unlockQuarter: 25,
+    unlockQuarter: 25, eisYear: 2018,
     seats: { first: 0, business: 54, economy: 315 },
     rangeKm: 16_100, fuelBurnPerKm: 6.0,
     buyPriceUsd: 325_000_000, leasePerQuarterUsd: 24_375_000,
@@ -522,7 +522,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A330-900neo", name: "Airbus A330-900neo", family: "passenger",
-    unlockQuarter: 25,
+    unlockQuarter: 25, eisYear: 2018,
     seats: { first: 0, business: 36, economy: 251 },
     rangeKm: 13_300, fuelBurnPerKm: 3.0,
     buyPriceUsd: 260_000_000, leasePerQuarterUsd: 19_500_000,
@@ -530,7 +530,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B787-10", name: "Boeing 787-10 Dreamliner", family: "passenger",
-    unlockQuarter: 25,
+    unlockQuarter: 25, eisYear: 2018,
     seats: { first: 0, business: 44, economy: 279 },
     rangeKm: 11_910, fuelBurnPerKm: 3.6,
     buyPriceUsd: 295_000_000, leasePerQuarterUsd: 22_125_000,
@@ -538,7 +538,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "E195-E2", name: "Embraer E195-E2", family: "passenger",
-    unlockQuarter: 25,
+    unlockQuarter: 25, eisYear: 2019,
     seats: { first: 0, business: 0, economy: 146 },
     rangeKm: 4_815, fuelBurnPerKm: 2.0,
     buyPriceUsd: 75_000_000, leasePerQuarterUsd: 5_625_000,
@@ -546,7 +546,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "E175-E2", name: "Embraer E175-E2", family: "passenger",
-    unlockQuarter: 25,
+    unlockQuarter: 25, eisYear: 2021,
     seats: { first: 0, business: 0, economy: 80 },
     rangeKm: 3_735, fuelBurnPerKm: 1.9,
     buyPriceUsd: 55_000_000, leasePerQuarterUsd: 4_125_000,
@@ -556,7 +556,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A321P2F", name: "Airbus A321 P2F", family: "cargo",
-    unlockQuarter: 25,
+    unlockQuarter: 25, eisYear: 2020,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 28,
     rangeKm: 5_950, fuelBurnPerKm: 3.9,
@@ -569,7 +569,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "A321XLR", name: "Airbus A321XLR", family: "passenger",
-    unlockQuarter: 28,
+    unlockQuarter: 28, eisYear: 2024,
     seats: { first: 0, business: 16, economy: 184 },
     rangeKm: 8_700, fuelBurnPerKm: 2.7,
     buyPriceUsd: 140_000_000, leasePerQuarterUsd: 10_500_000,
@@ -577,7 +577,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B777X-9", name: "Boeing 777X-9", family: "passenger",
-    unlockQuarter: 28,
+    unlockQuarter: 28, eisYear: 2025,
     seats: { first: 8, business: 64, economy: 354 },
     rangeKm: 13_500, fuelBurnPerKm: 4.5,
     buyPriceUsd: 375_000_000, leasePerQuarterUsd: 28_125_000,
@@ -585,7 +585,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "C919", name: "COMAC C919", family: "passenger",
-    unlockQuarter: 28,
+    unlockQuarter: 28, eisYear: 2023,
     seats: { first: 0, business: 8, economy: 150 },
     rangeKm: 5_555, fuelBurnPerKm: 2.8,
     buyPriceUsd: 90_000_000, leasePerQuarterUsd: 6_750_000,
@@ -597,7 +597,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "B777-8F", name: "Boeing 777-8F", family: "cargo",
-    unlockQuarter: 29,
+    unlockQuarter: 29, eisYear: 2028,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 118,
     rangeKm: 8_165, fuelBurnPerKm: 8.1,
@@ -610,7 +610,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "B777X-8", name: "Boeing 777X-8", family: "passenger",
-    unlockQuarter: 32,
+    unlockQuarter: 32, eisYear: 2027,
     seats: { first: 8, business: 52, economy: 335 },
     rangeKm: 16_090, fuelBurnPerKm: 4.3,
     buyPriceUsd: 360_000_000, leasePerQuarterUsd: 27_000_000,
@@ -619,7 +619,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "ATR-72-600F", name: "ATR 72-600F", family: "cargo",
-    unlockQuarter: 32,
+    unlockQuarter: 32, eisYear: 2022,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 8,
     rangeKm: 1_528, fuelBurnPerKm: 1.8,
@@ -633,7 +633,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "B737-MAX-10", name: "Boeing 737 MAX 10", family: "passenger",
-    unlockQuarter: 34,
+    unlockQuarter: 34, eisYear: 2025,
     seats: { first: 0, business: 24, economy: 206 },
     rangeKm: 6_110, fuelBurnPerKm: 2.9,
     buyPriceUsd: 130_000_000, leasePerQuarterUsd: 9_750_000,
@@ -648,7 +648,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // R45 (Q1 2026) — 797 NMA and A220-500 unlock
   {
     id: "B797", name: "Boeing 797 NMA", family: "passenger",
-    unlockQuarter: 45,
+    unlockQuarter: 45, eisYear: 2026,
     seats: { first: 0, business: 28, economy: 197 },
     rangeKm: 9_800, fuelBurnPerKm: 3.8,
     buyPriceUsd: 95_000_000, leasePerQuarterUsd: 7_770_000,
@@ -657,7 +657,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A220-500", name: "Airbus A220-500", family: "passenger",
-    unlockQuarter: 45,
+    unlockQuarter: 45, eisYear: 2026,
     seats: { first: 0, business: 16, economy: 144 },
     rangeKm: 7_200, fuelBurnPerKm: 2.4,
     buyPriceUsd: 30_000_000, leasePerQuarterUsd: 2_460_000,
@@ -668,7 +668,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // R51 (Q3 2027) — ATR EVO + A220-500F + 797F unlock
   {
     id: "ATR-EVO", name: "ATR EVO", family: "passenger",
-    unlockQuarter: 51,
+    unlockQuarter: 51, eisYear: 2027,
     seats: { first: 0, business: 0, economy: 90 },
     rangeKm: 1_800, fuelBurnPerKm: 1.6,
     buyPriceUsd: 14_000_000, leasePerQuarterUsd: 1_150_000,
@@ -677,7 +677,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "A220-500F", name: "Airbus A220-500F", family: "cargo",
-    unlockQuarter: 51,
+    unlockQuarter: 51, eisYear: 2027,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 32,
     rangeKm: 6_500, fuelBurnPerKm: 2.5,
@@ -687,7 +687,7 @@ const AIRCRAFT: AircraftSpec[] = [
   },
   {
     id: "B797F", name: "Boeing 797F", family: "cargo",
-    unlockQuarter: 51,
+    unlockQuarter: 51, eisYear: 2027,
     seats: { first: 0, business: 0, economy: 0 },
     cargoTonnes: 58,
     rangeKm: 9_200, fuelBurnPerKm: 4.0,
@@ -710,7 +710,7 @@ const AIRCRAFT: AircraftSpec[] = [
   // is intentional: the premium is in seat-mile yield, not burn).
   {
     id: "BoomO", name: "Boom Overture", family: "passenger",
-    unlockQuarter: 56,
+    unlockQuarter: 56, eisYear: 2028,
     seats: { first: 0, business: 65, economy: 0 },
     rangeKm: 9_000, fuelBurnPerKm: 6.8,
     buyPriceUsd: 350_000_000, leasePerQuarterUsd: 25_000_000,

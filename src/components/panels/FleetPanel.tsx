@@ -11,7 +11,7 @@ import { fmtMoney, fmtPct, fmtAgeYQ, fmtQuarter } from "@/lib/format";
 import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
 import { Plane, AlertTriangle, Clock, X } from "lucide-react";
-import { discontinuedMaintenanceBracket } from "@/lib/engine";
+import { discontinuedMaintenanceBracket, effectiveUnlockQuarter } from "@/lib/engine";
 import {
   effectiveProductionCap,
   estimatedDeliveryQuarter,
@@ -173,7 +173,7 @@ export function FleetPanel() {
 
   if (!player) return null;
 
-  const available = AIRCRAFT.filter((a) => a.unlockQuarter <= s.currentQuarter)
+  const available = AIRCRAFT.filter((a) => effectiveUnlockQuarter(a, s.session?.campaignMode) <= s.currentQuarter)
     .filter((a) => {
       if (!marketQuery) return true;
       const q = marketQuery.toLowerCase();
@@ -1278,6 +1278,7 @@ function PreOrderQueue() {
   const overrides = useGame((s) => s.productionCapOverrides);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const cancelPreOrder = useGame((s) => s.cancelPreOrder);
+  const campaignMode = useGame((s) => s.session?.campaignMode);
   const startYear = useCampaignStartYear();
   // Branded cancel-pre-order confirm replaces the legacy native
   // confirm() — these are real-money irreversible cancellations
@@ -1314,7 +1315,7 @@ function PreOrderQueue() {
           const spec = AIRCRAFT_BY_ID[order.specId];
           if (!spec) return null;
           const pos = queuePosition(preOrders, order.id);
-          const eta = estimatedDeliveryQuarter(order, spec, preOrders, currentQuarter, overrides);
+          const eta = estimatedDeliveryQuarter(order, spec, preOrders, currentQuarter, overrides, campaignMode);
           const cap = effectiveProductionCap(spec, overrides);
           // Refund / penalty math lives in the cancel-confirm modal —
           // we don't surface them on the row itself anymore.

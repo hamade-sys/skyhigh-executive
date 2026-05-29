@@ -11,6 +11,7 @@ import {
   isReleased,
 } from "@/lib/pre-orders";
 import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
+import { effectiveUnlockQuarter } from "@/lib/engine";
 import { cn } from "@/lib/cn";
 import { Plane, ChevronDown, ChevronUp, GitCompare, X } from "lucide-react";
 import type { AircraftSpec, SecondHandListing } from "@/types/game";
@@ -118,6 +119,7 @@ export function AircraftMarketModal({
   open, onClose, currentQuarter, marketQuery, setMarketQuery,
   secondHandListings, onOrder, onBuySecondHand,
 }: Props) {
+  const campaignMode = useGame((s) => s.session?.campaignMode);
   const [tab, setTab] = useState<Tab>("boeing");
   const [subfamily, setSubfamily] = useState<Subfamily>("passenger");
   /** Quick capacity filter for the passenger sub-tab. Range filters
@@ -173,7 +175,7 @@ export function AircraftMarketModal({
     for (const a of AIRCRAFT) {
       // Pre-orders open 2 quarters before unlock (announcement window).
       // Hide specs that haven't even been announced yet.
-      const announcedAt = a.unlockQuarter - 2;
+      const announcedAt = effectiveUnlockQuarter(a, campaignMode) - 2;
       if (announcedAt > currentQuarter) continue;
       // Discontinuation filter (Update 4): once cutoffRound is reached
       // the spec disappears from the New-Build market. Existing fleet
@@ -194,7 +196,7 @@ export function AircraftMarketModal({
       });
     }
     return out;
-  }, [currentQuarter]);
+  }, [currentQuarter, campaignMode]);
 
   /** Manufacturer tabs always render in the same order. Hide brands
    *  that have ZERO aircraft unlocked yet (e.g. COMAC pre-R40), but
@@ -537,6 +539,8 @@ function AircraftRow({
   onToggleCompare: () => void;
 }) {
   const startYear = useCampaignStartYear();
+  const campaignMode = useGame((s) => s.session?.campaignMode);
+  const specUnlock = effectiveUnlockQuarter(spec, campaignMode);
   const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
   const imgSrc = planeImagePath(spec.id);
 
@@ -547,8 +551,8 @@ function AircraftRow({
   const preOrders = useGame((s) => s.preOrders);
   const overrides = useGame((s) => s.productionCapOverrides);
   const cap = effectiveProductionCap(spec, overrides);
-  const released = isReleased(spec, currentQuarter);
-  const announcementOpen = isAnnouncementOpen(spec, currentQuarter);
+  const released = isReleased(spec, currentQuarter, campaignMode);
+  const announcementOpen = isAnnouncementOpen(spec, currentQuarter, campaignMode);
   // Queue depth across all teams for this spec.
   const queuedThisSpec = preOrders.filter(
     (o) => o.specId === spec.id && o.status === "queued",
@@ -682,7 +686,7 @@ function AircraftRow({
           )}
           {isPreOrderOnly ? (
             <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
-              Pre-order · unlocks {fmtQuarter(spec.unlockQuarter, startYear)}
+              Pre-order · unlocks {fmtQuarter(specUnlock, startYear)}
             </span>
           ) : released && (
             <span className={cn(
@@ -1062,10 +1066,11 @@ function LeaseMarket({
   onOrder: (specId: string, prefill?: OrderPrefill) => void;
 }) {
   const player = useGame(selectPlayer);
+  const campaignMode = useGame((s) => s.session?.campaignMode);
   if (!player) return null;
 
   // Resolve the leasable-spec sets at this quarter.
-  const eligible = leaseEligibleSpecIds(AIRCRAFT, currentQuarter);
+  const eligible = leaseEligibleSpecIds(AIRCRAFT, currentQuarter, campaignMode);
   const passengerSpecs = AIRCRAFT
     .filter((s) => eligible.passenger.has(s.id))
     .sort((a, b) => a.buyPriceUsd - b.buyPriceUsd);

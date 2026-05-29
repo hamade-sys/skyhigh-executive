@@ -27,6 +27,13 @@ export interface AircraftSpec {
   name: string;                  // e.g. "Airbus A320neo"
   family: AircraftFamily;
   unlockQuarter: number;         // 1 for starters, 5 for A380, etc.
+  /** Real-world entry-into-service year. Only consulted in the FULL
+   *  campaign (starts 2000): an airframe can't be ordered before the
+   *  quarter matching its EIS year, regardless of `unlockQuarter`. In the
+   *  HALF campaign (starts 2015) this is ignored — every spec here had
+   *  already entered service by 2015. Undefined = available from the
+   *  campaign's first quarter (subject only to `unlockQuarter`). */
+  eisYear?: number;
   seats: { first: number; business: number; economy: number }; // default config
   cargoTonnes?: number;          // for cargo family
   rangeKm: number;

@@ -1,4 +1,5 @@
 import type { AircraftSpec, PreOrder } from "@/types/game";
+import { effectiveUnlockQuarter } from "./engine";
 
 /** How many rounds before unlock pre-orders are allowed.
  *  Master-ref doc Section 1E: "Announcement at R-2". */
@@ -50,15 +51,26 @@ export function effectiveProductionCap(
 /** Pre-order announcement window opens at `unlockQuarter - 2` and runs
  *  forever after that — the queue stays open even past unlock so late
  *  buyers can join the production line behind earlier teams. */
-export function isAnnouncementOpen(spec: AircraftSpec, currentQuarter: number): boolean {
-  return currentQuarter >= spec.unlockQuarter - PREORDER_ANNOUNCEMENT_LEAD_ROUNDS;
+export function isAnnouncementOpen(
+  spec: AircraftSpec,
+  currentQuarter: number,
+  campaignMode: "half" | "full" = "half",
+): boolean {
+  return (
+    currentQuarter >=
+    effectiveUnlockQuarter(spec, campaignMode) - PREORDER_ANNOUNCEMENT_LEAD_ROUNDS
+  );
 }
 
 /** True once the spec is fully released and pre-orders are eligible
  *  for delivery batches (queue may still be open before this — pre-
  *  orders during the announcement window simply wait for unlock). */
-export function isReleased(spec: AircraftSpec, currentQuarter: number): boolean {
-  return currentQuarter >= spec.unlockQuarter;
+export function isReleased(
+  spec: AircraftSpec,
+  currentQuarter: number,
+  campaignMode: "half" | "full" = "half",
+): boolean {
+  return currentQuarter >= effectiveUnlockQuarter(spec, campaignMode);
 }
 
 /** All queued pre-orders for a spec, FIFO sorted (older orders first;
@@ -93,12 +105,14 @@ export function estimatedDeliveryQuarter(
   orders: PreOrder[],
   currentQuarter: number,
   overrides: Record<string, number>,
+  campaignMode: "half" | "full" = "half",
 ): number {
   const cap = effectiveProductionCap(spec, overrides);
   const pos = queuePosition(orders, order.id) ?? 1;
-  // Earliest possible delivery round = unlockQuarter (announcements open
-  // ahead of unlock so pre-unlock orders all wait).
-  const startRound = Math.max(currentQuarter + 1, spec.unlockQuarter);
+  // Earliest possible delivery round = effective unlock quarter (announcements
+  // open ahead of unlock so pre-unlock orders all wait). In the full campaign
+  // the unlock is clamped to the airframe's real entry-into-service era.
+  const startRound = Math.max(currentQuarter + 1, effectiveUnlockQuarter(spec, campaignMode));
   // pos=1 → delivers startRound; pos=cap → delivers startRound; pos=cap+1 → startRound+1; etc.
   const offset = Math.max(0, Math.floor((pos - 1) / cap));
   return startRound + offset;

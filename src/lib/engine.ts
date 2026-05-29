@@ -893,6 +893,29 @@ export function newsFuelIndexHint(quarter: number): number | null {
   return null;
 }
 
+/** The quarter an airframe actually becomes orderable for a given campaign.
+ *
+ *  Every `unlockQuarter` in the catalogue was calibrated against the HALF
+ *  campaign timeline (round N → calendar year 2015 + floor((N-1)/4)). In the
+ *  FULL campaign (starts 2000) that same round maps to a much earlier year,
+ *  so an unmodified `unlockQuarter` would let players order, say, an A350 in
+ *  2005 — years before it existed. To prevent that, full-campaign games clamp
+ *  the unlock to the quarter matching the airframe's real entry-into-service
+ *  year: `(eisYear - 2000) * 4 + 1`. The later of the two bounds wins, so a
+ *  spec whose half-campaign unlock is already past its EIS quarter keeps its
+ *  designed pacing. Half campaigns ignore `eisYear` entirely (every spec had
+ *  entered service by 2015). */
+export function effectiveUnlockQuarter(
+  spec: { unlockQuarter: number; eisYear?: number },
+  campaignMode: "half" | "full" = "half",
+): number {
+  if (campaignMode === "full" && typeof spec.eisYear === "number") {
+    const eisQuarter = (spec.eisYear - 2000) * 4 + 1;
+    return Math.max(spec.unlockQuarter, eisQuarter);
+  }
+  return spec.unlockQuarter;
+}
+
 // ─── Pricing multipliers (PRD §5.5 + §17) ──────────────────
 export const PRICE_TIER: Record<PricingTier, number> = {
   // PRD-correct tier multipliers per user spec.

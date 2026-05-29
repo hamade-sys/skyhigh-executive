@@ -1,4 +1,5 @@
 import type { AircraftSpec, FleetAircraft, Team } from "@/types/game";
+import { effectiveUnlockQuarter } from "@/lib/engine";
 
 /**
  * Lease economics (Option C — user-confirmed).
@@ -92,9 +93,10 @@ export function leaseTermsFor(spec: AircraftSpec): LeaseTerms {
 export function leaseEligibleSpecIds(
   specs: AircraftSpec[],
   currentQuarter: number,
+  campaignMode: "half" | "full" = "half",
 ): { passenger: Set<string>; cargo: Set<string> } {
   function available(s: AircraftSpec): boolean {
-    if (s.unlockQuarter > currentQuarter) return false;
+    if (effectiveUnlockQuarter(s, campaignMode) > currentQuarter) return false;
     if (typeof s.cutoffRound === "number" && currentQuarter > s.cutoffRound) return false;
     return true;
   }
@@ -143,8 +145,9 @@ export function canLeaseSpec(
   spec: AircraftSpec,
   specs: AircraftSpec[],
   currentQuarter: number,
+  campaignMode: "half" | "full" = "half",
 ): boolean {
-  const { passenger, cargo } = leaseEligibleSpecIds(specs, currentQuarter);
+  const { passenger, cargo } = leaseEligibleSpecIds(specs, currentQuarter, campaignMode);
   return spec.family === "passenger" ? passenger.has(spec.id)
        : spec.family === "cargo"     ? cargo.has(spec.id)
        : false;
