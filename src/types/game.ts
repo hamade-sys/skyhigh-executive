@@ -790,7 +790,7 @@ export type GamePhase =
  *
  *    - "facilitated"  — A facilitator owns the run. They control the
  *      quarter timer, advance/recover the session, review teams, and
- *      Board Decisions are enabled (S1–S18 boardroom scenarios that
+ *      Board Decisions are enabled (S1–S22 boardroom scenarios that
  *      need a human in the loop to discuss + decide). Default for
  *      classroom and workshop deployments.
  *    - "self_guided" — No facilitator. Players drive their own quarter
@@ -829,7 +829,7 @@ export type GameStatus = "lobby" | "playing" | "ended";
  *    - `gameId`     — Stable identifier the database row keys on. UUID
  *      generated at create time; never changes for the life of the run.
  *    - `name`       — Human-readable game label shown in /lobby and the
- *      facilitator console (e.g. "ERTH Cohort 12 — Spring '26").
+ *      facilitator console (e.g. "Leadership Cohort 12 — Spring '26").
  *    - `mode`       — facilitated vs self-guided. Drives what surfaces
  *      are visible (Board Decisions, facilitator console, live sims).
  *    - `visibility` — public lists in /lobby, private hides (join-by-code

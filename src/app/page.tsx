@@ -683,9 +683,9 @@ const INDUSTRY_FEATURES: Record<IndustrySlug, FeatureBlock> = {
     status: "live",
     cards: [
       { Icon: Plane, accent: "cyan", title: "Fleet & cabin design",
-        description: "Buy or lease across 40+ aircraft families. Custom cabin layouts. Engine upgrades, eco retrofits, fuselage coatings. Aircraft retire on schedule." },
+        description: "Buy or lease across 70 aircraft types. Custom cabin layouts. Engine upgrades, eco retrofits, fuselage coatings. Aircraft retire on schedule." },
       { Icon: MapPin, accent: "violet", title: "Network & slot auctions",
-        description: "Open routes across 380+ cities. Bid against rivals at scarce airports. Per-class fares, frequency caps tied to physics-real schedules." },
+        description: "Open routes across 110 cities. Bid against rivals at scarce airports. Per-class fares, frequency caps tied to physics-real schedules." },
       { Icon: Wallet, accent: "emerald", title: "Finance & debt",
         description: "Term loans, revolving credit, lease residuals. Fuel hedging. Dividend recap. Tax-loss carry-forward. Watch cash like a CFO." },
       { Icon: Users, accent: "amber", title: "People & ops sliders",

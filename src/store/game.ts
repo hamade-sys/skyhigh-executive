@@ -26,7 +26,7 @@ import {
   type BidEntry,
 } from "@/lib/slots";
 import { toast } from "./toasts";
-import { fmtQuarter, getCampaignStartYear, getTotalRounds, TOTAL_GAME_ROUNDS } from "@/lib/format";
+import { fmtQuarter, getCampaignStartYear, getTotalRounds } from "@/lib/format";
 import {
   applyUnderdogBoost,
   detectUnderdogBoost,

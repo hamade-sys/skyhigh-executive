@@ -133,9 +133,8 @@ export function DashboardPanel() {
             </table>
           </div>
           <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
-            Year breakpoints every 4 rounds (R1 / R5 / R9 / R13 / R17 / R21
-            / R25 / R29 / R33 / R37 = calendar 2015–2024). YTD aggregates
-            the current 4-round cycle. All-time covers R1 through last close.
+            Each calendar year spans 4 quarters. YTD aggregates the current
+            4-quarter cycle; all-time covers Q1 through the last close.
           </div>
         </section>
       )}

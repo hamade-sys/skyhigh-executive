@@ -368,10 +368,10 @@ function CanvasInner() {
             Demo seeds a sample airline so you can explore mechanics without setup.
           </div>
           <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4 text-left max-w-2xl mx-auto">
-            <PreGameStat label="Rounds" value="40" sub="2015 → 2024 calendar" />
-            <PreGameStat label="Cities" value="380+" sub="Tier 1 hubs to T4 outposts" />
-            <PreGameStat label="Aircraft" value="40+" sub="Airbus, Boeing, Embraer, ATR, COMAC, Bombardier" />
-            <PreGameStat label="Scenarios" value="18" sub="Board-level decisions" />
+            <PreGameStat label="Quarters" value="60 / 120" sub="Half or full campaign" />
+            <PreGameStat label="Cities" value="110" sub="Tier 1 hubs to T4 outposts" />
+            <PreGameStat label="Aircraft" value="70" sub="Airbus, Boeing, Embraer, ATR, COMAC, Bombardier" />
+            <PreGameStat label="Scenarios" value="22" sub="Board-level decisions" />
           </div>
           <div className="mt-8 text-left max-w-2xl mx-auto rounded-md border border-line bg-surface-2/40 p-4">
             <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
