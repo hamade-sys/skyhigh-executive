@@ -714,6 +714,37 @@ export const AIRPORT_NON_AERO_YIELD_PER_PAX = 6;
 export const AIRPORT_OWNER_RESERVE_PCT_MAX = 0.40;
 export const AIRPORT_OWNER_SELF_DISCOUNT_MAX = 0.15;
 
+/** Use-it-or-lose-it: owned slots left unused this many consecutive rounds
+ *  are reclaimed by the regulator (§7.4 / §9). Enforcement lands in the
+ *  regulatory phase; the round counter is tracked at quarter close. */
+export const AIRPORT_USE_IT_OR_LOSE_IT_ROUNDS_DEFAULT = 4;
+
+/** §7.4 Slot allocation — the owner reserves a fraction of the airport's
+ *  available player slots, allocated to itself first each round. This is the
+ *  primary *defensive* value of owning your hub (guaranteed access as scarcity
+ *  intensifies), not a revenue play. Returns the integer slot count the owner
+ *  holds off the open market. */
+export function reservedSlotsForOwner(
+  availablePlayerSlots: number,
+  reservedSlotPct: number | null | undefined,
+): number {
+  const pct = Math.max(0, Math.min(AIRPORT_OWNER_RESERVE_PCT_MAX, reservedSlotPct ?? 0));
+  return Math.floor(Math.max(0, availablePlayerSlots) * pct);
+}
+
+/** Slots a non-owner airline can lease/bid for after the owner's reservation
+ *  is taken off the top (§7.4 step 2+3). The owner itself can still draw from
+ *  the full available pool — its reservation is for its own use. */
+export function leasableSlotsForNonOwner(
+  availablePlayerSlots: number,
+  reservedSlotPct: number | null | undefined,
+): number {
+  return Math.max(
+    0,
+    Math.max(0, availablePlayerSlots) - reservedSlotsForOwner(availablePlayerSlots, reservedSlotPct),
+  );
+}
+
 // ─── §7.1 Default government fee schedule (public airports) ─────────────
 // Per-quarter fees an unowned (publicly run) airport charges. Owners may
 // reprice within elasticity bounds; these are the starting / fallback rates.
@@ -750,6 +781,126 @@ export function feeRetention(
   // Players are fully elastic, background only partially.
   const elasticity = kind === "player" ? 1.0 : 0.35;
   return Math.max(0.1, 1 - overage * elasticity);
+}
+
+// ─── §7.1 Airport revenue computation ──────────────────────────────────
+// Pure model: aggregate quarterly traffic (player + background) at an owned
+// airport → aeronautical (slot / landing / passenger) + non-aeronautical
+// (retail) revenue, net of opex and ongoing demand obligations. The engine
+// aggregates the traffic; this stays a pure function for unit-testing.
+
+/** Weeks billed per quarter (matches the route-economics QUARTER model). */
+export const AIRPORT_QUARTER_WEEKS = 13;
+
+/** One traffic segment (a route-touching slice) at an airport per quarter. */
+export interface AirportTrafficSegment {
+  /** Weekly schedule slots occupied at this airport endpoint. */
+  slotsUsed: number;
+  /** Aircraft movements (landings) this quarter. */
+  movements: number;
+  /** Departing passengers this quarter (drives the per-pax charge). */
+  departingPax: number;
+  /** Total passenger throughput this quarter (drives non-aero yield). */
+  throughputPax: number;
+}
+
+export interface AirportTraffic {
+  /** All player airlines' traffic at the airport (the OWNER included). */
+  player: AirportTrafficSegment;
+  /** Simulated background-carrier traffic. */
+  background: AirportTrafficSegment;
+  /** The owner's OWN slice of `player` (self-discount applies only here). */
+  ownerSlotsUsed: number;
+}
+
+export interface AirportRevenueParams {
+  /** Owner's posted fee schedule (what rivals are charged). */
+  fees: AirportFeeSchedule;
+  /** Market reference fees (default ladder schedule) for elasticity. */
+  marketFees: AirportFeeSchedule;
+  /** Retail development level, 0.5..1.5 — compounds with all throughput. */
+  retailLevel: number;
+  /** Specialization non-aero modifier (1.0 if none / not built yet). */
+  specializationModifier: number;
+  /** Operating-cost ratio, 0.30..0.45. */
+  opexRatio: number;
+  /** Ongoing recurring + operational demand obligations this quarter, USD. */
+  ongoingDemandCostsUsd: number;
+  /** Owner self slot-fee discount, 0..0.15 (regulator-capped). */
+  selfDiscountPct: number;
+}
+
+export interface AirportRevenueBreakdown {
+  slotRevenue: number;
+  landingRevenue: number;
+  paxChargeRevenue: number;
+  nonAeroRevenue: number;
+  gross: number;
+  opex: number;
+  ongoingDemandCostsUsd: number;
+  net: number;
+}
+
+/** §7.1 + §7.2 + §7.3 — quarterly airport revenue for the owner. Fee
+ *  elasticity routes traffic away above market rate (players fully elastic,
+ *  background partially); the owner's own slots bill at the discounted rate. */
+export function computeAirportRevenue(
+  traffic: AirportTraffic,
+  p: AirportRevenueParams,
+): AirportRevenueBreakdown {
+  const { player, background, ownerSlotsUsed } = traffic;
+
+  // Elasticity retention multipliers per fee lever / traffic kind.
+  const slotRetP = feeRetention(p.fees.slotFeeUsd, p.marketFees.slotFeeUsd, "player");
+  const slotRetB = feeRetention(p.fees.slotFeeUsd, p.marketFees.slotFeeUsd, "background");
+  const landRetP = feeRetention(p.fees.landingFeeUsd, p.marketFees.landingFeeUsd, "player");
+  const landRetB = feeRetention(p.fees.landingFeeUsd, p.marketFees.landingFeeUsd, "background");
+  const paxRetP = feeRetention(p.fees.passengerChargeUsd, p.marketFees.passengerChargeUsd, "player");
+  const paxRetB = feeRetention(p.fees.passengerChargeUsd, p.marketFees.passengerChargeUsd, "background");
+
+  // Slot revenue: owner's own slots bill at the self-discounted rate (and
+  // never route away); rival player slots + background bill at full rate
+  // after elasticity.
+  const ownSlots = Math.max(0, Math.min(ownerSlotsUsed, player.slotsUsed));
+  const rivalSlots = Math.max(0, player.slotsUsed - ownSlots);
+  const selfDiscount = Math.max(0, Math.min(AIRPORT_OWNER_SELF_DISCOUNT_MAX, p.selfDiscountPct));
+  const slotRevenue =
+    ownSlots * p.fees.slotFeeUsd * (1 - selfDiscount) +
+    rivalSlots * p.fees.slotFeeUsd * slotRetP +
+    background.slotsUsed * p.fees.slotFeeUsd * slotRetB;
+
+  const landingRevenue =
+    player.movements * p.fees.landingFeeUsd * landRetP +
+    background.movements * p.fees.landingFeeUsd * landRetB;
+
+  const paxChargeRevenue =
+    player.departingPax * p.fees.passengerChargeUsd * paxRetP +
+    background.departingPax * p.fees.passengerChargeUsd * paxRetB;
+
+  // Non-aero: every passenger (player + background) × yield × retail × spec.
+  const totalThroughput = player.throughputPax + background.throughputPax;
+  const retail = Math.max(AIRPORT_RETAIL_MIN, Math.min(AIRPORT_RETAIL_MAX, p.retailLevel));
+  const nonAeroRevenue =
+    totalThroughput *
+    AIRPORT_NON_AERO_YIELD_PER_PAX *
+    retail *
+    Math.max(0, p.specializationModifier);
+
+  const gross = slotRevenue + landingRevenue + paxChargeRevenue + nonAeroRevenue;
+  const opexRatio = Math.max(AIRPORT_OPEX_RATIO_FLOOR, Math.min(AIRPORT_OPEX_RATIO_BASELINE, p.opexRatio));
+  const opex = gross * opexRatio;
+  const net = gross - opex - Math.max(0, p.ongoingDemandCostsUsd);
+
+  return {
+    slotRevenue,
+    landingRevenue,
+    paxChargeRevenue,
+    nonAeroRevenue,
+    gross,
+    opex,
+    ongoingDemandCostsUsd: Math.max(0, p.ongoingDemandCostsUsd),
+    net,
+  };
 }
 
 // ─── §9 Regulatory limiters ─────────────────────────────────────────────

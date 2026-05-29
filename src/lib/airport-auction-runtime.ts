@@ -33,10 +33,19 @@ import {
   AIRPORT_GAP_QUALIFY,
   AIRPORT_APPROVAL,
   AIRPORT_DEMAND_DEFS,
+  AIRPORT_SPECIALIZATIONS,
+  AIRPORT_DEFAULT_FEES_BY_LADDER,
+  AIRPORT_OPEX_RATIO_BASELINE,
+  AIRPORT_NON_AERO_YIELD_PER_PAX,
+  AIRPORT_QUARTER_WEEKS,
   demandCostMultiplier,
   privatizationCycleIndex,
+  computeAirportRevenue,
+  type AirportTraffic,
+  type AirportRevenueBreakdown,
+  type AirportFeeSchedule,
 } from "@/lib/airport-system-v2";
-import { computeBrandValue, computeNetEquityUsd } from "@/lib/engine";
+import { computeBrandValue, computeNetEquityUsd, QUARTER_DAYS } from "@/lib/engine";
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
@@ -300,4 +309,141 @@ export function planBotSealedBid(args: {
   if (gap + tolerance < AIRPORT_GAP_QUALIFY[ladder]) return null;
 
   return { amountUsd, gap };
+}
+
+// ─── §7.1 Owner revenue (engine-side aggregation) ───────────────────────
+
+/** Sum a route's quarterly passenger throughput from the per-class daily
+ *  pax fields (each is per-flight daily; quarter = × QUARTER_DAYS × freq). */
+function routeQuarterlyPax(r: {
+  quarterlyFirstPax?: number;
+  quarterlyBusPax?: number;
+  quarterlyEconPax?: number;
+  dailyFrequency: number;
+}): number {
+  const perFlightDaily =
+    (r.quarterlyFirstPax ?? 0) + (r.quarterlyBusPax ?? 0) + (r.quarterlyEconPax ?? 0);
+  return perFlightDaily * QUARTER_DAYS * Math.max(0, r.dailyFrequency);
+}
+
+/** Aggregate one quarter of traffic at `airportCode` across every team's
+ *  active routes plus the airport's simulated background carriers. Movements
+ *  are landings (one per daily frequency per day, both endpoints); departing
+ *  pax is half a route's throughput (the half originating here); non-aero
+ *  throughput counts every passenger that touches the airport once.
+ *
+ *  Slot usage comes from each team's `airportLeases[code].slots`; the owner's
+ *  own lease is tracked separately so the self-discount lands only on it. */
+export function aggregateAirportTraffic(args: {
+  teams: Team[];
+  airportCode: string;
+  slotState: AirportSlotState;
+  ownerTeamId: string;
+}): AirportTraffic {
+  const { teams, airportCode, slotState, ownerTeamId } = args;
+  const player = { slotsUsed: 0, movements: 0, departingPax: 0, throughputPax: 0 };
+  let ownerSlotsUsed = 0;
+
+  for (const t of teams) {
+    const lease = t.airportLeases?.[airportCode];
+    if (lease && lease.slots > 0) {
+      player.slotsUsed += lease.slots;
+      if (t.id === ownerTeamId) ownerSlotsUsed += lease.slots;
+    }
+    for (const r of t.routes ?? []) {
+      if (r.status !== "active") continue;
+      if (r.originCode !== airportCode && r.destCode !== airportCode) continue;
+      // Movements: one landing per daily frequency per day at this endpoint.
+      player.movements += Math.max(0, r.dailyFrequency) * QUARTER_DAYS;
+      if (!r.isCargo) {
+        const qPax = routeQuarterlyPax(r);
+        player.departingPax += qPax / 2;
+        player.throughputPax += qPax;
+      }
+    }
+  }
+
+  // Background traffic — derive plausible movements / pax from the airport's
+  // background-occupied slots (each ≈ one weekly schedule; ~150 pax/flight at
+  // typical load). Keeps non-aero meaningful even at a freshly-bought airport.
+  const bgSlots = slotState.backgroundSlotsUsed ?? 0;
+  const bgFlightsPerQuarter = bgSlots * AIRPORT_QUARTER_WEEKS;
+  const BG_PAX_PER_FLIGHT = 150;
+  const background = {
+    slotsUsed: bgSlots,
+    movements: bgFlightsPerQuarter,
+    departingPax: bgFlightsPerQuarter * BG_PAX_PER_FLIGHT,
+    throughputPax: bgFlightsPerQuarter * BG_PAX_PER_FLIGHT * 2,
+  };
+
+  return { player, background, ownerSlotsUsed };
+}
+
+/** Per-quarter ongoing demand obligations (recurring + operational + equity
+ *  dividends approximated as a small revenue share) for an owned airport. */
+function ongoingDemandCostsUsd(
+  slotState: AirportSlotState,
+  grossEstimateUsd: number,
+): number {
+  let cost = 0;
+  for (const d of slotState.activeDemands ?? []) {
+    if (!d.accepted) continue;
+    const def = AIRPORT_DEMAND_DEFS[d.type];
+    if (!def) continue;
+    if (def.shape === "recurring") {
+      cost += d.magnitude; // already a per-quarter USD figure
+    } else if (def.shape === "equity") {
+      // Government equity draws proportional dividends from gross.
+      cost += grossEstimateUsd * d.magnitude;
+    }
+    // one-time / premium were charged at acquisition; operational / flag are
+    // non-cash here (they constrain operations / set lobbying exposure).
+  }
+  return cost;
+}
+
+/** Full owner-revenue computation for one owned airport this quarter. Pure
+ *  glue over `computeAirportRevenue`: pulls the owner's posted fees (falling
+ *  back to the ladder default), retail level, specialization modifier, opex
+ *  ratio and self-discount off the slot state, aggregates traffic, and
+ *  returns the breakdown. Returns null if the airport isn't owner-held. */
+export function computeOwnedAirportRevenue(args: {
+  teams: Team[];
+  airportCode: string;
+  slotState: AirportSlotState;
+}): AirportRevenueBreakdown | null {
+  const { teams, airportCode, slotState } = args;
+  const ownerTeamId = slotState.ownerTeamId;
+  if (!ownerTeamId) return null;
+
+  const ladder: AirportLadder = airportLadder(airportCode, slotState.ladder);
+  const marketFees = AIRPORT_DEFAULT_FEES_BY_LADDER[ladder];
+  const fees: AirportFeeSchedule = {
+    slotFeeUsd: slotState.slotFeeUsd ?? marketFees.slotFeeUsd,
+    landingFeeUsd: slotState.landingFeeUsd ?? marketFees.landingFeeUsd,
+    passengerChargeUsd: slotState.passengerChargeUsd ?? marketFees.passengerChargeUsd,
+  };
+
+  const traffic = aggregateAirportTraffic({ teams, airportCode, slotState, ownerTeamId });
+
+  const specModifier = slotState.specialization
+    ? AIRPORT_SPECIALIZATIONS[slotState.specialization]?.nonAeroModifier ?? 1
+    : 1;
+
+  // Rough gross estimate for the equity-dividend demand (avoids a circular
+  // dependency: equity draws a share of gross, so estimate gross sans demand
+  // costs first, then feed it in).
+  const grossEstimate =
+    (traffic.player.throughputPax + traffic.background.throughputPax) *
+    AIRPORT_NON_AERO_YIELD_PER_PAX;
+
+  return computeAirportRevenue(traffic, {
+    fees,
+    marketFees,
+    retailLevel: slotState.retailDevelopmentLevel ?? 1,
+    specializationModifier: specModifier,
+    opexRatio: slotState.airportOpexRatio ?? AIRPORT_OPEX_RATIO_BASELINE,
+    ongoingDemandCostsUsd: ongoingDemandCostsUsd(slotState, grossEstimate),
+    selfDiscountPct: slotState.ownerSelfDiscountPct ?? 0,
+  });
 }

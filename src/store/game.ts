@@ -99,6 +99,15 @@ import {
   AIRPORT_GAP_QUALIFY,
   AIRPORT_DEFAULT_FEES_BY_LADDER,
   AIRPORT_OPEX_RATIO_BASELINE,
+  AIRPORT_OPEX_RATIO_FLOOR,
+  AIRPORT_OPEX_EFFICIENCY_INVESTMENT_COST,
+  AIRPORT_OPEX_EFFICIENCY_REDUCTION,
+  AIRPORT_RETAIL_MIN,
+  AIRPORT_RETAIL_MAX,
+  AIRPORT_RETAIL_INVESTMENT_COST,
+  AIRPORT_RETAIL_INVESTMENT_STEP,
+  AIRPORT_OWNER_RESERVE_PCT_MAX,
+  AIRPORT_OWNER_SELF_DISCOUNT_MAX,
   AIRPORT_TIER_SPECS,
   AIRPORT_DEMAND_DEFS,
   resolveSealedAuction,
@@ -424,6 +433,50 @@ export interface GameStore extends GameState {
    *  per-tier expansion fee from cash; capacity rises by 200 (capped
    *  at tier max). New slots become available for lease. */
   expandAirportCapacity(airportCode: string): { ok: boolean; error?: string };
+
+  // ─── Airport System V2 · §7.2 owner pricing controls ──────────────
+  // These actions only have effect in V2-enabled games (the V2 owner
+  // economic levers live on AirportSlotState and are read by the engine's
+  // V2 revenue branch). In V1 games the UI surfaces never expose them.
+
+  /** Owner-only (V2): set any of the three aeronautical fee levers — slot
+   *  fee / landing fee / passenger charge. Each is charged to every airline
+   *  using the airport including the owner. Raise for more revenue per unit,
+   *  but rivals route away past the market sweet spot (fee elasticity). */
+  setAirportFees(args: {
+    airportCode: string;
+    slotFeeUsd?: number;
+    landingFeeUsd?: number;
+    passengerChargeUsd?: number;
+  }): { ok: boolean; error?: string };
+
+  /** Owner-only (V2): commercial investment — raises retail_development_level
+   *  by one step (0.2), capped at 1.5. Highest-ROI lever: compounds with every
+   *  passenger including rivals' and background traffic. */
+  investAirportRetail(airportCode: string): { ok: boolean; error?: string };
+
+  /** Owner-only (V2): operational-efficiency investment — lowers the airport
+   *  opex ratio by one step, floored at 0.30. One-time per step; improves
+   *  margin on all airport revenue. */
+  investAirportOpexEfficiency(
+    airportCode: string,
+  ): { ok: boolean; error?: string };
+
+  /** Owner-only (V2): reserve up to 40% of available player slots for own use,
+   *  allocated first each round (§7.4). The primary defensive value of owning
+   *  your hub — guarantees slot access as scarcity intensifies. */
+  setAirportReservedSlotPct(args: {
+    airportCode: string;
+    pct: number;
+  }): { ok: boolean; error?: string };
+
+  /** Owner-only (V2): self slot-fee discount — charge own flights up to 15%
+   *  below the rate charged to rivals (§7.3, regulator-capped per §9). A modest
+   *  cost edge, never a raw economic auto-win. */
+  setAirportSelfDiscount(args: {
+    airportCode: string;
+    pct: number;
+  }): { ok: boolean; error?: string };
 
   addEcoUpgrade(aircraftId: string): { ok: boolean; error?: string };
 
@@ -2610,6 +2663,167 @@ export const useGame = create<GameStore>()(
           `+${addedSlots} slots at ${city.name}`,
           `${fmtMoneyPlain(cost)} expansion. Capacity now ${newCap}/${max}.`,
         );
+        return { ok: true };
+      },
+
+      // ─── Airport System V2 · §7.2 owner pricing controls ──────────────
+
+      setAirportFees: ({ airportCode, slotFeeUsd, landingFeeUsd, passengerChargeUsd }) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
+          return { ok: false, error: "You don't own this airport" };
+        }
+        // Fall back to the publicly-run government schedule for this airport's
+        // ladder rung when a lever hasn't been set yet.
+        const ladder = airportLadder(airportCode, slotState.ladder);
+        const def = AIRPORT_DEFAULT_FEES_BY_LADDER[ladder];
+        const next: AirportSlotState = {
+          ...slotState,
+          slotFeeUsd:
+            slotFeeUsd !== undefined
+              ? Math.max(0, Math.round(slotFeeUsd))
+              : slotState.slotFeeUsd ?? def.slotFeeUsd,
+          landingFeeUsd:
+            landingFeeUsd !== undefined
+              ? Math.max(0, Math.round(landingFeeUsd))
+              : slotState.landingFeeUsd ?? def.landingFeeUsd,
+          passengerChargeUsd:
+            passengerChargeUsd !== undefined
+              ? Math.max(0, Math.round(passengerChargeUsd * 100) / 100)
+              : slotState.passengerChargeUsd ?? def.passengerChargeUsd,
+        };
+        set({ airportSlots: { ...s.airportSlots, [airportCode]: next } });
+        const city = CITIES_BY_CODE[airportCode];
+        toast.accent(
+          `Fees updated · ${city?.name ?? airportCode}`,
+          `Slot ${fmtMoneyPlain(next.slotFeeUsd ?? 0)}/q · Landing ${fmtMoneyPlain(next.landingFeeUsd ?? 0)} · Pax $${(next.passengerChargeUsd ?? 0).toFixed(2)}. Effective next quarter.`,
+        );
+        void get().pushStateToServer("player.setAirportFees", { airportCode });
+        return { ok: true };
+      },
+
+      investAirportRetail: (airportCode) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
+          return { ok: false, error: "You don't own this airport" };
+        }
+        const current = slotState.retailDevelopmentLevel ?? AIRPORT_RETAIL_MIN;
+        if (current >= AIRPORT_RETAIL_MAX) {
+          return { ok: false, error: "Retail already world-class (1.5×)" };
+        }
+        if (player.cashUsd < AIRPORT_RETAIL_INVESTMENT_COST) {
+          return { ok: false, error: `Need ${fmtMoneyPlain(AIRPORT_RETAIL_INVESTMENT_COST)} cash` };
+        }
+        const nextLevel = Math.min(
+          AIRPORT_RETAIL_MAX,
+          Math.round((current + AIRPORT_RETAIL_INVESTMENT_STEP) * 100) / 100,
+        );
+        set({
+          teams: s.teams.map((t) =>
+            t.id === player.id ? { ...t, cashUsd: t.cashUsd - AIRPORT_RETAIL_INVESTMENT_COST } : t,
+          ),
+          airportSlots: {
+            ...s.airportSlots,
+            [airportCode]: { ...slotState, retailDevelopmentLevel: nextLevel },
+          },
+        });
+        const city = CITIES_BY_CODE[airportCode];
+        toast.success(
+          `Retail developed · ${city?.name ?? airportCode}`,
+          `${fmtMoneyPlain(AIRPORT_RETAIL_INVESTMENT_COST)} invested. Non-aero yield now ${nextLevel.toFixed(1)}× (compounds across all traffic).`,
+        );
+        void get().pushStateToServer("player.investAirportRetail", { airportCode });
+        return { ok: true };
+      },
+
+      investAirportOpexEfficiency: (airportCode) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
+          return { ok: false, error: "You don't own this airport" };
+        }
+        const current = slotState.airportOpexRatio ?? AIRPORT_OPEX_RATIO_BASELINE;
+        if (current <= AIRPORT_OPEX_RATIO_FLOOR) {
+          return { ok: false, error: "Opex already at the efficiency floor (30%)" };
+        }
+        if (player.cashUsd < AIRPORT_OPEX_EFFICIENCY_INVESTMENT_COST) {
+          return { ok: false, error: `Need ${fmtMoneyPlain(AIRPORT_OPEX_EFFICIENCY_INVESTMENT_COST)} cash` };
+        }
+        const nextRatio = Math.max(
+          AIRPORT_OPEX_RATIO_FLOOR,
+          Math.round((current - AIRPORT_OPEX_EFFICIENCY_REDUCTION) * 1000) / 1000,
+        );
+        set({
+          teams: s.teams.map((t) =>
+            t.id === player.id ? { ...t, cashUsd: t.cashUsd - AIRPORT_OPEX_EFFICIENCY_INVESTMENT_COST } : t,
+          ),
+          airportSlots: {
+            ...s.airportSlots,
+            [airportCode]: { ...slotState, airportOpexRatio: nextRatio },
+          },
+        });
+        const city = CITIES_BY_CODE[airportCode];
+        toast.success(
+          `Efficiency upgrade · ${city?.name ?? airportCode}`,
+          `${fmtMoneyPlain(AIRPORT_OPEX_EFFICIENCY_INVESTMENT_COST)} invested. Opex ratio now ${(nextRatio * 100).toFixed(0)}%.`,
+        );
+        void get().pushStateToServer("player.investAirportOpexEfficiency", { airportCode });
+        return { ok: true };
+      },
+
+      setAirportReservedSlotPct: ({ airportCode, pct }) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
+          return { ok: false, error: "You don't own this airport" };
+        }
+        const clamped = Math.max(0, Math.min(AIRPORT_OWNER_RESERVE_PCT_MAX, pct));
+        set({
+          airportSlots: {
+            ...s.airportSlots,
+            [airportCode]: { ...slotState, reservedSlotPct: clamped },
+          },
+        });
+        const city = CITIES_BY_CODE[airportCode];
+        toast.accent(
+          `Slot reservation · ${city?.name ?? airportCode}`,
+          `${(clamped * 100).toFixed(0)}% of player slots reserved for your own use, allocated first.`,
+        );
+        void get().pushStateToServer("player.setAirportReservedSlotPct", { airportCode });
+        return { ok: true };
+      },
+
+      setAirportSelfDiscount: ({ airportCode, pct }) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const slotState = s.airportSlots?.[airportCode];
+        if (!slotState?.ownerTeamId || slotState.ownerTeamId !== player.id) {
+          return { ok: false, error: "You don't own this airport" };
+        }
+        const clamped = Math.max(0, Math.min(AIRPORT_OWNER_SELF_DISCOUNT_MAX, pct));
+        set({
+          airportSlots: {
+            ...s.airportSlots,
+            [airportCode]: { ...slotState, ownerSelfDiscountPct: clamped },
+          },
+        });
+        const city = CITIES_BY_CODE[airportCode];
+        toast.accent(
+          `Self-discount · ${city?.name ?? airportCode}`,
+          `Your own flights billed ${(clamped * 100).toFixed(0)}% below the rival slot rate (regulator-capped at 15%).`,
+        );
+        void get().pushStateToServer("player.setAirportSelfDiscount", { airportCode });
         return { ok: true };
       },
 

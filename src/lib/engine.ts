@@ -48,6 +48,7 @@ import {
   teamHubs,
   segmentGetsConnectingMultiplier,
 } from "@/lib/airport-system-v2";
+import { computeOwnedAirportRevenue } from "@/lib/airport-auction-runtime";
 
 const M = 1_000_000;
 
@@ -3427,6 +3428,23 @@ export function runQuarterClose(
   if (ctx.airportSlots) {
     for (const [code, slotState] of Object.entries(ctx.airportSlots)) {
       if (slotState.ownerTeamId !== next.id) continue;
+      if (ctx.airportSystemV2) {
+        // ─ V2 ownership economics (§7.1) — multi-engine revenue:
+        // aeronautical (slot / landing / pax) + non-aero (retail), net of
+        // opex and ongoing demand obligations, aggregated across every
+        // airline's traffic plus background carriers. The owner's own slots
+        // bill at the self-discounted rate (handled inside the helper).
+        const breakdown = computeOwnedAirportRevenue({
+          teams: ctx.allTeams ?? [next],
+          airportCode: code,
+          slotState,
+        });
+        if (breakdown) {
+          airportRevenueUsd += breakdown.net;
+          revenue += breakdown.net;
+        }
+        continue;
+      }
       const grossRevenue = (ctx.allTeams ?? []).reduce((sum, t) => {
         const lease = t.airportLeases?.[code];
         if (!lease || lease.slots === 0) return sum;
