@@ -1138,6 +1138,12 @@ export interface Subsidiary {
    *    flagship → 2.4× rev, 1.7× ops bonus  (+100% extra paid total)
    *  Adds a quarterly "expand existing vs build new" decision. */
   tier?: "basic" | "premium" | "flagship";
+  /** For training-academy subsidiaries only: which workforce discipline
+   *  the academy trains. The ops bonus is global (not city-tied), so the
+   *  build picker asks for a category rather than a city. Uniqueness is
+   *  enforced per-category so an airline can run all three academies.
+   *  `cityCode` for academies defaults to the hub for display only. */
+  academyCategory?: "pilots" | "cabin-crew" | "maintenance-crew";
 }
 
 /** Subsidiary tier multipliers. Single source of truth used by the

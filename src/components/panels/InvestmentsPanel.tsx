@@ -13,6 +13,8 @@ import {
   ArrowRight,
   TrendingUp,
   Handshake,
+  Plane,
+  Users,
 } from "lucide-react";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
@@ -658,15 +660,77 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
         {buildOpen && (() => {
           const entry = SUBSIDIARY_BY_TYPE[buildOpen.type];
           if (!entry) return null;
+          const isAcademy = buildOpen.type === "training-academy";
+          // The academy's ops bonus is global, so it's chosen by workforce
+          // discipline rather than by city (play-test ask, May 2026).
+          const ACADEMY_CATEGORIES: Array<{
+            key: NonNullable<Subsidiary["academyCategory"]>;
+            label: string;
+            blurb: string;
+            Icon: typeof Plane;
+          }> = [
+            { key: "pilots", label: "Pilots", blurb: "Flight-deck crew training — fewer delays, steadier ops.", Icon: Plane },
+            { key: "cabin-crew", label: "Cabin Crew", blurb: "Cabin service standards — lifts onboard experience.", Icon: Users },
+            { key: "maintenance-crew", label: "Maintenance Crew", blurb: "In-house engineers — keeps the fleet reliable.", Icon: Wrench },
+          ];
           return (
             <>
               <ModalHeader>
                 <h2 className="font-display text-[1.5rem] text-ink">Build {entry.name}</h2>
                 <p className="text-ink-muted text-[0.8125rem] mt-1">
-                  Pick a city in your network. {entry.pitch}
+                  {isAcademy
+                    ? <>Pick a workforce category to train. {entry.pitch}</>
+                    : <>Pick a city in your network. {entry.pitch}</>}
                 </p>
               </ModalHeader>
               <ModalBody className="space-y-3">
+                {isAcademy ? (
+                  <>
+                    <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                      Pick a category (3)
+                    </div>
+                    <div className="rounded-md border border-line divide-y divide-line/40">
+                      {ACADEMY_CATEGORIES.map(({ key, label, blurb, Icon }) => {
+                        const owns = (player.subsidiaries ?? []).some(
+                          (sub) => sub.type === "training-academy" && sub.academyCategory === key,
+                        );
+                        const tooPoor = player.cashUsd < entry.setupCostUsd;
+                        return (
+                          <button
+                            key={key}
+                            onClick={async () => {
+                              const r = buildSubsidiary({
+                                type: "training-academy",
+                                cityCode: player.hubCode,
+                                academyCategory: key,
+                              });
+                              if (!r.ok) { setError(r.error ?? "Build failed"); return; }
+                              setBuildOpen(null);
+                              setError(null);
+                            }}
+                            disabled={owns || tooPoor}
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-hover disabled:opacity-50",
+                              owns && "bg-surface-2/40",
+                            )}
+                          >
+                            <Icon size={18} className="text-accent shrink-0" />
+                            <span className="flex flex-col min-w-0 flex-1">
+                              <span className="text-[0.875rem] text-ink font-medium">{label}</span>
+                              <span className="text-[0.6875rem] text-ink-muted truncate">{blurb}</span>
+                            </span>
+                            {owns ? (
+                              <span className="text-[0.625rem] text-ink-muted italic shrink-0">already built</span>
+                            ) : (
+                              <ArrowRight size={12} className="text-ink-muted shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                <>
                 <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
                   Pick a city ({networkCities.length})
                 </div>
@@ -721,6 +785,8 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                     );
                   })}
                 </div>
+                </>
+                )}
                 {error && <div className="text-negative text-[0.875rem]">{error}</div>}
               </ModalBody>
               <ModalFooter>

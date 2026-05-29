@@ -454,18 +454,20 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
         return (
           <Fragment key={lonOffset}>
             {/* Soft glow underlayer — slightly wider than the main
-                stroke so the line reads as a luminescent ribbon. */}
+                stroke so the line reads as a luminescent ribbon.
+                Kept deliberately thin (play-test ask, May 2026:
+                "routes should be thinner, they are very bulky"). */}
             <Polyline
               positions={bandPositions}
               pathOptions={{
-                color: baseColor, weight: 3, opacity: 0.12, lineCap: "round", interactive: false,
+                color: baseColor, weight: 1.8, opacity: 0.1, lineCap: "round", interactive: false,
               }}
             />
             {isNew && (
               <Polyline
                 positions={bandPositions}
                 pathOptions={{
-                  color: "#FFB94D", weight: 4.5, opacity: 0.32,
+                  color: "#FFB94D", weight: 2.6, opacity: 0.3,
                   lineCap: "round", interactive: false,
                 }}
               />
@@ -474,8 +476,8 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
               positions={bandPositions}
               pathOptions={{
                 color: baseColor,
-                weight: route.isCargo ? 1.1 : 1.3,
-                opacity: route.isCargo ? 0.95 : 0.95,
+                weight: route.isCargo ? 0.7 : 0.85,
+                opacity: route.isCargo ? 0.9 : 0.9,
                 lineCap: "round",
                 dashArray: route.isCargo ? "2 5" : undefined,
                 className: competitiveClass,
