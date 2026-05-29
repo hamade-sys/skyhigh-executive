@@ -75,6 +75,7 @@ import {
   AIRPORT_EXPANSION_SLOTS,
   AIRPORT_MAX_CAPACITY_BY_TIER,
   AIRPORT_UPGRADES_BY_QUARTER,
+  adjudicateAirportBid,
   airportAskingPriceUsd,
   applyGovernmentUpgrade,
   applyOwnerSlotRate,
@@ -117,6 +118,7 @@ import type {
   SecondHandListing,
   SliderLevel,
   Sliders,
+  Subsidiary,
   Team,
 } from "@/types/game";
 import {
@@ -260,6 +262,9 @@ export interface GameStore extends GameState {
   buildSubsidiary(args: {
     type: import("@/types/game").SubsidiaryType;
     cityCode: string;
+    /** training-academy only: the workforce discipline this academy
+     *  trains. Ignored for city-tied subsidiary types. */
+    academyCategory?: import("@/types/game").Subsidiary["academyCategory"];
   }): { ok: boolean; error?: string };
 
   /** Sell an owned subsidiary back to the market. Returns 95% of its
@@ -1643,7 +1648,7 @@ export const useGame = create<GameStore>()(
         return { delivered: toDeliver.length };
       },
 
-      buildSubsidiary: ({ type, cityCode }) => {
+      buildSubsidiary: ({ type, cityCode, academyCategory }) => {
         const s = get();
         const player = s.teams.find((t) => t.id === s.playerTeamId);
         if (!player) return { ok: false, error: "No player team" };
@@ -1655,23 +1660,53 @@ export const useGame = create<GameStore>()(
             error: `Need ${fmtMoneyPlain(entry.setupCostUsd)} cash to build`,
           };
         }
-        // Cap one of each type per city so a player can't stack ten
-        // hotels at DXB. Different cities are fine.
-        const dup = (player.subsidiaries ?? []).some(
-          (sub) => sub.type === type && sub.cityCode === cityCode,
-        );
-        if (dup) {
-          return { ok: false, error: `${entry.name} already exists at ${cityCode}` };
+
+        // The training academy's "+2 ops points" bonus is global, not
+        // city-tied, so it's picked by workforce category (Pilots / Cabin
+        // Crew / Maintenance Crew) rather than by city. We still stamp a
+        // cityCode (the hub) for display, but uniqueness is per-category.
+        const isAcademy = type === "training-academy";
+        const ACADEMY_LABEL: Record<NonNullable<Subsidiary["academyCategory"]>, string> = {
+          "pilots": "Pilots",
+          "cabin-crew": "Cabin Crew",
+          "maintenance-crew": "Maintenance Crew",
+        };
+        if (isAcademy && !academyCategory) {
+          return { ok: false, error: "Pick a workforce category for the academy" };
+        }
+        const effectiveCity = isAcademy ? player.hubCode : cityCode;
+
+        if (isAcademy) {
+          // One academy per workforce discipline — three total possible.
+          const dupAcademy = (player.subsidiaries ?? []).some(
+            (sub) => sub.type === type && sub.academyCategory === academyCategory,
+          );
+          if (dupAcademy) {
+            return {
+              ok: false,
+              error: `${ACADEMY_LABEL[academyCategory!]} academy already exists`,
+            };
+          }
+        } else {
+          // Cap one of each city-tied type per city so a player can't stack
+          // ten hotels at DXB. Different cities are fine.
+          const dup = (player.subsidiaries ?? []).some(
+            (sub) => sub.type === type && sub.cityCode === cityCode,
+          );
+          if (dup) {
+            return { ok: false, error: `${entry.name} already exists at ${cityCode}` };
+          }
         }
 
         const newSub = {
           id: mkId("sub"),
           type,
-          cityCode,
+          cityCode: effectiveCity,
           acquiredAtQuarter: s.currentQuarter,
           purchaseCostUsd: entry.setupCostUsd,
           marketValueUsd: entry.setupCostUsd,
           conditionPct: 1.0,
+          ...(isAcademy ? { academyCategory } : {}),
         };
 
         // Mirror the matching subsidiary types into hubInvestments so
@@ -1695,7 +1730,9 @@ export const useGame = create<GameStore>()(
           }),
         });
         toast.success(
-          `${entry.name} built at ${cityCode}`,
+          isAcademy
+            ? `${ACADEMY_LABEL[academyCategory!]} Academy opened`
+            : `${entry.name} built at ${effectiveCity}`,
           `${fmtMoneyPlain(entry.setupCostUsd)} setup. ` +
             (entry.revenuePerQuarterUsd > 0
               ? `Earns ${fmtMoneyPlain(entry.revenuePerQuarterUsd)}/Q.`
@@ -2025,9 +2062,15 @@ export const useGame = create<GameStore>()(
           ),
           airportBids: [...(s.airportBids ?? []), newBid],
         });
+        // Mode-aware copy: facilitated games wait on a human GM; self-
+        // guided games are adjudicated by the airport authority (engine)
+        // at the next quarter close.
+        const selfGuided = s.session?.mode === "self_guided";
         toast.accent(
           `Bid submitted · ${city.name} (${airportCode})`,
-          `${fmtMoneyPlain(price)} held in escrow. Awaiting facilitator approval (auto-rejects after 2 quarters).`,
+          selfGuided
+            ? `${fmtMoneyPlain(price)} held in escrow. The airport authority reviews your bid at the next quarter close.`
+            : `${fmtMoneyPlain(price)} held in escrow. Awaiting facilitator approval (auto-rejects after 2 quarters).`,
         );
         return { ok: true, bidId };
       },
@@ -3900,6 +3943,73 @@ export const useGame = create<GameStore>()(
             const refreshed = get().teams.find((t) => t.id === s.playerTeamId);
             if (refreshed) Object.assign(player, refreshed);
           }
+        }
+
+        // Self-guided airport-bid adjudication (May 2026 play-test ask).
+        // In a game with no facilitator there is no human to approve or
+        // reject airport bids — so the engine plays the airport authority.
+        // One quarter after a bid is submitted (giving it a beat of
+        // "review time"), `adjudicateAirportBid` weighs the bid premium,
+        // the bidder's brand standing, their market positioning, and a
+        // possible rival bidding war, then routes to the existing
+        // approve/reject actions. This runs BEFORE the 2-quarter expiry
+        // fallback below, so in self-guided games bids never silently
+        // expire — they always get a verdict.
+        if (get().session?.mode === "self_guided") {
+          const sNow = get();
+          const ripeBids = (sNow.airportBids ?? []).filter(
+            (b) =>
+              b.status === "pending" &&
+              sNow.currentQuarter - b.submittedQuarter >= 1,
+          );
+          for (const b of ripeBids) {
+            const bidder = get().teams.find((t) => t.id === b.bidderTeamId);
+            if (!bidder) continue;
+            const slotState = get().airportSlots?.[b.airportCode];
+            // If the airport got bought out from under this bid (another
+            // owner committed first), the approve action will reject it;
+            // we still adjudicate so the escrow resolves cleanly.
+            const askingPrice = airportAskingPriceUsd(b.airportCode, slotState, get().teams);
+            const verdict = adjudicateAirportBid({
+              airportCode: b.airportCode,
+              quarter: b.submittedQuarter,
+              bidAmountUsd: b.bidPriceUsd,
+              askingPriceUsd: askingPrice,
+              brandRating0to100: computeBrandValue(bidder),
+              airlineValueUsd: computeAirlineValue(bidder),
+            });
+            const city = CITIES_BY_CODE[b.airportCode];
+            const isPlayer = b.bidderTeamId === sNow.playerTeamId;
+            if (verdict.approved) {
+              const r = get().approveAirportBid(b.id);
+              if (r.ok && isPlayer) {
+                toast.success(
+                  `Airport acquired · ${city?.name ?? b.airportCode}`,
+                  verdict.reason,
+                );
+              } else if (!r.ok && isPlayer) {
+                // Approval failed (e.g. owned in the interim) — reject to
+                // refund the escrow so the player isn't out the cash.
+                get().rejectAirportBid(b.id, "Airport no longer available");
+                toast.warning(
+                  `Bid refunded · ${city?.name ?? b.airportCode}`,
+                  `The concession was no longer available — ${fmtMoneyPlain(b.bidPriceUsd)} refunded.`,
+                );
+              }
+            } else {
+              get().rejectAirportBid(b.id, verdict.reason);
+              if (isPlayer) {
+                toast.warning(
+                  `Bid declined · ${city?.name ?? b.airportCode}`,
+                  verdict.reason,
+                );
+              }
+            }
+          }
+          // Re-pull player after any cash commit/refund so the rest of
+          // the close run uses the fresh cash position.
+          const refreshed = get().teams.find((t) => t.id === s.playerTeamId);
+          if (refreshed) Object.assign(player, refreshed);
         }
 
         // Auto-expire pending airport bids that have sat for 2+ quarters

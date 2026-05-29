@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds, getCampaignStartYear } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
-import { brandRating, computeAirlineValue } from "@/lib/engine";
+import { brandRating, computeAirlineValue, effectiveTravelIndex } from "@/lib/engine";
 import { MILESTONES_BY_ID } from "@/data/milestones";
 import { TrendingUp, TrendingDown, Newspaper, Plane, Award, Users, FileBarChart, NotebookPen } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -271,8 +271,21 @@ export function QuarterCloseModal() {
               const prev = hist.length > 1 ? hist[hist.length - 2].index : null;
               const fuelDelta = prev != null ? cur - prev : null;
               const baseRate = s.baseInterestRatePct;
+              // Travellers index — the per-quarter passenger-demand
+              // multiplier (100 = baseline). Deterministic by quarter, so
+              // the prior-Q delta is computed straight from the quarter
+              // numbers — no history slice needed. >100 = travel boom,
+              // <100 = recession/shock. Play-test ask (May 2026):
+              // "Travellers index is a very important metric to show here
+              // with fuel and interest."
+              const campaignMode = s.session?.campaignMode ?? "half";
+              const travCur = Math.round(effectiveTravelIndex(s.currentQuarter, campaignMode));
+              const travPrev = s.currentQuarter > 1
+                ? Math.round(effectiveTravelIndex(s.currentQuarter - 1, campaignMode))
+                : null;
+              const travDelta = travPrev != null ? travCur - travPrev : null;
               return (
-                <div className="rounded-md border border-line bg-surface-2/40 p-3 grid grid-cols-2 gap-3 text-[0.75rem]">
+                <div className="rounded-md border border-line bg-surface-2/40 p-3 grid grid-cols-3 gap-3 text-[0.75rem]">
                   <div>
                     <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
                       Fuel index
@@ -289,6 +302,25 @@ export function QuarterCloseModal() {
                     <div className="text-[0.625rem] text-ink-muted mt-0.5">
                       {cur > 110 ? "Above baseline — bad for unhedged" :
                        cur < 90 ? "Below baseline — bulk-buy window" :
+                       "Around baseline (100)"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                      Travellers index
+                    </div>
+                    <div className="font-display text-[1.125rem] tabular text-ink mt-0.5">
+                      {travCur}
+                      {travDelta != null && travDelta !== 0 && (
+                        <span className={`ml-1.5 text-[0.75rem] tabular font-mono ${travDelta > 0 ? "text-positive" : "text-negative"}`}>
+                          {travDelta > 0 ? "↑" : "↓"}
+                          {Math.abs(travDelta)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                      {travCur > 110 ? "Travel boom — demand tailwind" :
+                       travCur < 90 ? "Soft demand — fill seats carefully" :
                        "Around baseline (100)"}
                     </div>
                   </div>
