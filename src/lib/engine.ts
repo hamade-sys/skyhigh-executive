@@ -44,6 +44,10 @@ import {
   SUBSIDIARY_TIER_OPS_MULT,
   SUBSIDIARY_DEMAND_BONUS_PER_ENDPOINT,
 } from "@/types/game";
+import {
+  teamHubs,
+  segmentGetsConnectingMultiplier,
+} from "@/lib/airport-system-v2";
 
 const M = 1_000_000;
 
@@ -1710,6 +1714,10 @@ export function computeRouteEconomics(
    *  Precomputed once per quarter-close in runQuarterClose against actual
    *  network burn. UI preview callers pass nothing → no discount (0). */
   cityFuelDiscount?: Record<string, number>,
+  /** Airport System V2 gate (§3): when true, the hub-and-spoke connecting
+   *  multiplier applies to any non-Budget doctrine but ONLY on segments that
+   *  touch a hub. Defaults false → legacy V1 doctrine-specific behavior. */
+  airportSystemV2: boolean = false,
 ): RouteEconomics {
   const origin = CITIES_BY_CODE[route.originCode];
   const dest = CITIES_BY_CODE[route.destCode];
@@ -1717,6 +1725,21 @@ export function computeRouteEconomics(
     return blankEconomics(route.distanceKm);
 
   const distanceKm = route.distanceKm || haversineKm(origin, dest);
+
+  // §3 V2 hub-and-spoke connecting eligibility — true only when the V2 gate
+  // is on, the doctrine is non-Budget, and this segment touches a hub. Used
+  // below to gate the connecting demand-aggregation bonus on both the
+  // passenger and cargo paths. V1 games leave this false and keep the legacy
+  // doctrine-specific behavior unchanged.
+  const v2Connecting =
+    airportSystemV2 &&
+    segmentGetsConnectingMultiplier(
+      team.doctrine,
+      teamHubs(team.hubCode, team.secondaryHubCodes ?? []),
+      route.originCode,
+      route.destCode,
+    );
+
   const rawDemandBase = routeDemandPerDay(route.originCode, route.destCode, quarter, totalRounds);
   // Anchor Contract underdog boost (Campaign Brief §13 R30 standard) —
   // multiplies the business component of demand for the active team
@@ -1819,7 +1842,12 @@ export function computeRouteEconomics(
     // multiplied by per-city cargo-category event modifiers from the
     // structured news feed (e-commerce booms, port closures, etc.).
     const cargoFocusBonus = team.marketFocus === "cargo" ? 1.15 : 1.0;
-    const cargoNetworkBonus = isDoctrine(team, "cargo-dominance")
+    // V2: cargo network bonus applies on hub-touching segments for any
+    //  non-Budget doctrine (v2Connecting). V1: cargo-dominance only.
+    const applyCargoNetwork = airportSystemV2
+      ? v2Connecting
+      : isDoctrine(team, "cargo-dominance");
+    const cargoNetworkBonus = applyCargoNetwork
       ? 1 + connectedCityDemandBonus(team, route)
       : 1.0;
     const cargoShockBonus = shockAdjustmentMultiplier(team, route, quarter, "cargo", totalRounds);
@@ -2015,8 +2043,16 @@ export function computeRouteEconomics(
   if (isDoctrine(team, "budget-expansion")) {
     doctrineDemandBonus *= tierTwoThreeDemandBonus(origin, dest);
   }
-  if (isDoctrine(team, "global-network")) {
+  // Hub-and-spoke connecting demand aggregation.
+  //  V1: global-network only (legacy).
+  //  V2: any non-Budget doctrine, but ONLY on hub-touching segments (v2Connecting).
+  const applyConnectingPax = airportSystemV2
+    ? v2Connecting
+    : isDoctrine(team, "global-network");
+  if (applyConnectingPax) {
     doctrineDemandBonus *= 1 + connectedCityDemandBonus(team, route);
+  }
+  if (isDoctrine(team, "global-network")) {
     const premiumCabinShare = totalSeatsPerFlight > 0
       ? (seatsPerFlight.first + seatsPerFlight.bus) / totalSeatsPerFlight
       : 0;
@@ -2265,7 +2301,9 @@ export function computeRouteEconomics(
       cityBusinessAtQuarter(origin, quarter) * bellyMultA,
       cityBusinessAtQuarter(dest, quarter) * bellyMultB,
     ) * 0.30 * bellySeasonal *
-      (isDoctrine(team, "cargo-dominance") ? 1 + connectedCityDemandBonus(team, route) : 1) *
+      ((airportSystemV2 ? v2Connecting : isDoctrine(team, "cargo-dominance"))
+        ? 1 + connectedCityDemandBonus(team, route)
+        : 1) *
       shockAdjustmentMultiplier(team, route, quarter, "cargo", totalRounds);
     const dailyTonnesUsed = Math.max(0, Math.min(bellyDailyCapacity, cargoDemandT));
     bellyCargoTonnesUsed = dailyTonnesUsed * QUARTER_DAYS;
@@ -3132,6 +3170,11 @@ export interface QuarterCloseContext {
    *  to `marketMaturity()` so early-round demand is correctly damped.
    *  Defaults to 60 for back-compat with persisted saves. */
   totalRounds?: number;
+  /** Airport System V2 gate (§0). When true, route economics applies the
+   *  V2 hub-and-spoke connecting multiplier (hub-touching segments only,
+   *  never Budget). V1 games / persisted saves leave this undefined →
+   *  legacy doctrine-specific connecting behavior. */
+  airportSystemV2?: boolean;
 }
 
 export function runQuarterClose(
@@ -3279,7 +3322,7 @@ export function runQuarterClose(
       const econ = computeRouteEconomics(
         next, r, ctx.quarter, ctx.fuelIndex, ctx.rivals,
         ctx.worldCupHostCode, ctx.olympicHostCode, cargoPool,
-        ctx.totalRounds, cityFuelDiscountMap,
+        ctx.totalRounds, cityFuelDiscountMap, ctx.airportSystemV2 ?? false,
       );
       const boostedRevenue = econ.quarterlyRevenue * legacyBonus * firstMoverBonus;
       revenue += boostedRevenue;

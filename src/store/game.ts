@@ -87,6 +87,8 @@ import {
   secondaryHubFleetGate,
   doctrineBucket,
   primaryHubMoveCostUsd,
+  isRouteLegalV2,
+  teamHubs,
 } from "@/lib/airport-system-v2";
 import {
   LEASE_BUYOUT_RESIDUAL_PCT,
@@ -2818,6 +2820,32 @@ export const useGame = create<GameStore>()(
             destCode = rawOrigin;
           }
         }
+        // §3.1 Network topology (V2 only): every served city must sit
+        // within 2 legs of a hub. A direct pair is legal if an endpoint is
+        // a hub, or an endpoint is already a non-stop hub neighbour (so the
+        // outer leg is 2 hops from the hub). Standalone spoke-to-spoke is
+        // rejected. V1 games skip this entirely (point-to-point allowed).
+        if (s.session?.airportSystemV2) {
+          const directHubNeighbors = new Set<string>();
+          for (const r of player.routes) {
+            if (r.status === "closed") continue;
+            if (hubs.has(r.originCode)) directHubNeighbors.add(r.destCode);
+            if (hubs.has(r.destCode)) directHubNeighbors.add(r.originCode);
+          }
+          const legal = isRouteLegalV2(
+            teamHubs(player.hubCode, player.secondaryHubCodes ?? []),
+            directHubNeighbors,
+            originCode,
+            destCode,
+          );
+          if (!legal) {
+            return {
+              ok: false,
+              error:
+                "Route too far from your network. Every city must be within 2 flight legs of a hub — open a hub leg to one of these cities first, or add a secondary hub.",
+            };
+          }
+        }
         // Duplicate-route detection.
         //
         // Cargo and passenger between the same OD pair are DIFFERENT
@@ -4637,6 +4665,11 @@ export const useGame = create<GameStore>()(
           // this to dampen early-round demand so a 60R cohort doesn't
           // see the same fully-mature demand curve as a 16R cohort.
           totalRounds: s.session?.totalRounds ?? 60,
+          // Airport System V2 gate (§0) — when set, the engine applies
+          // the hub-and-spoke connecting multiplier (any non-Budget
+          // doctrine, hub-touching segments only) instead of the legacy
+          // doctrine-specific behavior. New-games-only per the rollout.
+          airportSystemV2: s.session?.airportSystemV2 ?? false,
           // P0 fix: thread the post-early-auction slot pool. Earlier this
           // was `s.airportSlots` (the pre-auction state), so slots
           // awarded in the early auction were invisible here AND to the
@@ -5523,6 +5556,9 @@ export const useGame = create<GameStore>()(
               s.worldCupHostCode ?? null,
               s.olympicHostCode ?? null,
               cargoPool,
+              s.session?.totalRounds ?? 60,
+              undefined,
+              s.session?.airportSystemV2 ?? false,
             );
             realRouteRevenue += econ.quarterlyRevenue;
             realRouteFuel += econ.quarterlyFuelCost;
