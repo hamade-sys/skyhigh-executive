@@ -2000,6 +2000,10 @@ function CompetitorsTable({
       const matchingRoute = rv.routes.find(
         (r) =>
           r.status === "active" &&
+          // Same mode only — a cargo freighter doesn't compete with a
+          // passenger lane (and vice-versa); they serve different
+          // demand pools.
+          !!r.isCargo === !!route.isCargo &&
           ((r.originCode === route.originCode && r.destCode === route.destCode) ||
             (r.originCode === route.destCode && r.destCode === route.originCode)),
       );

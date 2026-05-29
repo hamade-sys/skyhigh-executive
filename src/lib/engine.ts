@@ -1600,8 +1600,16 @@ export function computeRouteEconomics(
       const rvAttractiveness =
         (rv.brandPts / 100) * 0.5 + (rv.customerLoyaltyPct / 100) * 0.5;
       const rvHubs = new Set([rv.hubCode, ...(rv.secondaryHubCodes ?? [])]);
+      // Only same-mode rival routes compete for the same demand pool:
+      // a dedicated freighter does not split a passenger lane's pax
+      // demand, and vice-versa. Belly cargo on passenger frames is
+      // accounted for separately via the cargo-pool 70/30 split, so
+      // the OD/endpoint signals here stay strictly passenger-vs-
+      // passenger and cargo-vs-cargo.
       const rvActiveRoutes = rv.routes.filter(
-        (r) => r.status === "active" || r.status === "pending",
+        (r) =>
+          (r.status === "active" || r.status === "pending") &&
+          !!r.isCargo === !!route.isCargo,
       );
       // Direct OD overlap — the strongest signal. A rival flying our
       // exact LHR↔DXB lane splits the OD demand pool with us.
@@ -3125,8 +3133,18 @@ export function runQuarterClose(
       );
       const boostedRevenue = econ.quarterlyRevenue * legacyBonus * firstMoverBonus;
       revenue += boostedRevenue;
-      if (r.isCargo) cargoRevenue += boostedRevenue;
-      else passengerRevenue += boostedRevenue;
+      // Cargo P&L line should reflect ALL cargo earnings — dedicated
+      // freighters AND the belly cargo carried on passenger frames.
+      // Previously belly revenue was silently folded into the
+      // passenger line, so a player flying belly cargo saw $0 Cargo
+      // on the Financials P&L despite earning it. Split it out here.
+      if (r.isCargo) {
+        cargoRevenue += boostedRevenue;
+      } else {
+        const boostedBelly = (econ.bellyCargoRevenue ?? 0) * legacyBonus * firstMoverBonus;
+        cargoRevenue += boostedBelly;
+        passengerRevenue += boostedRevenue - boostedBelly;
+      }
       fuelCost += econ.quarterlyFuelCost;
       slotCost += econ.quarterlySlotCost;
       totalPassengers += econ.dailyPax * QUARTER_DAYS;

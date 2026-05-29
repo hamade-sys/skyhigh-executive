@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
-import { AircraftMarketModal } from "@/components/game/AircraftMarketModal";
+import { AircraftMarketModal, type OrderPrefill } from "@/components/game/AircraftMarketModal";
 import { PurchaseOrderModal } from "@/components/game/PurchaseOrderModal";
 import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { toast } from "@/store/toasts";
@@ -88,11 +88,7 @@ export function FleetPanel() {
   const [ordering, setOrdering] = useState<{
     specId: string;
     type: "buy" | "lease";
-    prefill?: {
-      quantity?: number;
-      engineUpgrade?: "fuel" | "power" | "super" | null;
-      fuselageUpgrade?: boolean;
-    };
+    prefill?: OrderPrefill;
   } | null>(null);
   /** Listing-for-sale modal — bounds:
    *    min = 20% of book value (fire-sale floor — clears fast)
@@ -862,6 +858,33 @@ export function FleetPanel() {
                         Lifecycle decisions
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <button
+                          onClick={() => {
+                            setExpandedSpecId(null);
+                            // Clone this exact airframe's config into a
+                            // fresh buy order so "Order another" reproduces
+                            // the same cabin layout / amenities / belly
+                            // rather than opening a blank card.
+                            setOrdering({
+                              specId: expanded.id,
+                              type: "buy",
+                              prefill: {
+                                quantity: 1,
+                                engineUpgrade: f.engineUpgrade ?? null,
+                                fuselageUpgrade: !!f.fuselageUpgrade,
+                                customSeats: f.customSeats,
+                                cabinAmenities: f.cabinAmenities,
+                                cargoBelly: f.cargoBelly,
+                              },
+                            });
+                          }}
+                          className="rounded-lg border border-accent/40 bg-accent/5 hover:bg-accent/10 text-left px-3 py-2.5 transition-colors"
+                        >
+                          <div className="text-[0.8125rem] font-semibold text-ink">Order another</div>
+                          <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                            Same config · buy {fmtMoney(expanded.buyPriceUsd)}
+                          </div>
+                        </button>
                         {f.acquisitionType === "buy" && f.status === "active" && (
                           <button
                             onClick={() => setRetrofitState({

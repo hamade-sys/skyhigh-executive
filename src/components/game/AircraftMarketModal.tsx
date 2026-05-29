@@ -14,7 +14,7 @@ import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { effectiveUnlockQuarter } from "@/lib/engine";
 import { cn } from "@/lib/cn";
 import { Plane, ChevronDown, ChevronUp, GitCompare, X } from "lucide-react";
-import type { AircraftSpec, SecondHandListing } from "@/types/game";
+import type { AircraftSpec, SecondHandListing, CabinAmenities, CargoBellyTier } from "@/types/game";
 import { AircraftCompareModal } from "@/components/game/AircraftCompareModal";
 import {
   leaseEligibleSpecIds,
@@ -28,11 +28,17 @@ import {
 
 type EngineKind = "none" | "fuel" | "power" | "super";
 
-/** Optional initial values passed to the next-screen PurchaseOrderModal. */
+/** Optional initial values passed to the next-screen PurchaseOrderModal.
+ *  When cloning an owned airframe ("Order another"), the full custom
+ *  config is carried through so the order screen opens pre-populated
+ *  with the exact same cabin layout, amenities and cargo belly. */
 export interface OrderPrefill {
   quantity?: number;
   engineUpgrade?: "fuel" | "power" | "super" | null;
   fuselageUpgrade?: boolean;
+  customSeats?: { first: number; business: number; economy: number };
+  cabinAmenities?: CabinAmenities;
+  cargoBelly?: CargoBellyTier;
 }
 
 interface Props {
