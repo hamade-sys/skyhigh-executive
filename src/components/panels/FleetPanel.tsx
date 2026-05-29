@@ -1564,6 +1564,11 @@ function AgingFleetModal({
   const s = useGame();
   const player = selectPlayer(s);
   const retrofitLifespan = useGame((g) => g.retrofitLifespan);
+  // Which aging airframe the player is sourcing a replacement for. Opening
+  // the chooser is what the "Replace →" button now does (P3) — it no longer
+  // jumps straight to the buy market.
+  const [replaceState, setReplaceState] =
+    useState<import("@/types/game").FleetAircraft | null>(null);
 
   if (!player) return null;
 
@@ -1577,6 +1582,7 @@ function AgingFleetModal({
     .sort((a, b) => a.retirementQuarter - b.retirementQuarter);
 
   return (
+    <>
     <Modal open={open} onClose={onClose} className="w-[min(720px,calc(100vw-2rem))]">
       <ModalHeader>
         <div className="flex items-baseline gap-2 mb-1">
@@ -1618,7 +1624,7 @@ function AgingFleetModal({
                   const r = retrofitLifespan(f.id);
                   if (!r.ok) toast.negative("Retrofit failed", r.error ?? "");
                 }}
-                onReplace={() => onReplaceWithSameSpec(f.specId)}
+                onReplace={() => setReplaceState(f)}
               />
             ))}
           </div>
@@ -1629,6 +1635,19 @@ function AgingFleetModal({
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </ModalFooter>
     </Modal>
+
+    {/* P3 — replacement-source chooser. The player picks how to replace
+        the aging airframe: swap in an idle owned plane, earmark a queued
+        pre-order, or buy a fresh one from the market. */}
+    <ReplaceChooserModal
+      aging={replaceState}
+      onClose={() => setReplaceState(null)}
+      onBuyNew={(specId) => {
+        setReplaceState(null);
+        onReplaceWithSameSpec(specId);
+      }}
+    />
+    </>
   );
 }
 
@@ -1707,12 +1726,239 @@ function AgingFleetRow({
           size="sm"
           variant="secondary"
           onClick={onReplace}
-          title={`Open the market filtered to ${spec.name}`}
+          title="Choose a replacement: idle plane, pre-order, or buy new"
           className="whitespace-nowrap"
         >
           Replace →
         </Button>
       </div>
     </div>
+  );
+}
+
+/** P3 — replacement-source chooser. Given an aging airframe, lets the
+ *  player replace it three ways:
+ *    1. Swap in an idle plane they already own (instant — takes over the
+ *       aging plane's route this quarter, aging plane goes idle).
+ *    2. Earmark a queued pre-order (on delivery the new plane takes over
+ *       the route; aging plane goes idle then).
+ *    3. Buy a fresh one from the market (existing behaviour).
+ *  The old airframe is never auto-sold — it's parked idle so the player
+ *  decides when to broker/salvage it. */
+function ReplaceChooserModal({
+  aging, onClose, onBuyNew,
+}: {
+  aging: import("@/types/game").FleetAircraft | null;
+  onClose: () => void;
+  onBuyNew: (specId: string) => void;
+}) {
+  const player = useGame(selectPlayer);
+  const preOrders = useGame((s) => s.preOrders);
+  const currentQuarter = useGame((s) => s.currentQuarter);
+  const overrides = useGame((s) => s.productionCapOverrides);
+  const campaignMode = useGame((s) => s.session?.campaignMode);
+  const startYear = useCampaignStartYear();
+  const replaceFromInventory = useGame((s) => s.replaceFromInventory);
+  const earmarkOnOrderReplacement = useGame((s) => s.earmarkOnOrderReplacement);
+
+  if (!aging || !player) return null;
+  const agingSpec = AIRCRAFT_BY_ID[aging.specId];
+  if (!agingSpec) return null;
+
+  const route = aging.routeId
+    ? player.routes.find((r) => r.id === aging.routeId)
+    : undefined;
+
+  // Idle owned aircraft (ready to fly, not on a route, not the aging plane
+  // itself). Same-model first so the obvious like-for-like swap is on top.
+  const idleInventory = player.fleet
+    .filter(
+      (f) =>
+        f.id !== aging.id &&
+        f.status === "active" &&
+        f.routeId == null,
+    )
+    .sort((a, b) => {
+      const sameA = a.specId === aging.specId ? 0 : 1;
+      const sameB = b.specId === aging.specId ? 0 : 1;
+      return sameA - sameB;
+    });
+
+  // Queued pre-orders the player owns, same-model first.
+  const queuedOrders = preOrders
+    .filter((o) => o.teamId === player.id && o.status === "queued")
+    .sort((a, b) => {
+      const sameA = a.specId === aging.specId ? 0 : 1;
+      const sameB = b.specId === aging.specId ? 0 : 1;
+      return sameA - sameB;
+    });
+
+  const sameModel = (specId: string) =>
+    specId === aging.specId ? (
+      <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
+        Same model
+      </span>
+    ) : null;
+
+  return (
+    <Modal open onClose={onClose} className="w-[min(680px,calc(100vw-2rem))]">
+      <ModalHeader>
+        <div className="flex items-baseline gap-2 mb-1">
+          <Badge tone="warning">Replace</Badge>
+          {route && route.status !== "closed" && (
+            <span className="font-mono text-[0.6875rem] text-accent">
+              {route.originCode} → {route.destCode}
+            </span>
+          )}
+        </div>
+        <h2 className="font-display text-[1.5rem] text-ink leading-tight">
+          Replace {agingSpec.name}
+        </h2>
+        <p className="text-[0.8125rem] text-ink-muted mt-1 leading-snug">
+          {route
+            ? "Pick how you'll cover this route. The aging airframe is parked idle once a replacement is in place — sell it from the fleet list when you're ready."
+            : "This airframe isn't on a route. Buy a fresh one, or sell it directly from the fleet list."}
+        </p>
+      </ModalHeader>
+
+      <ModalBody className="space-y-5 max-h-[60vh] overflow-auto">
+        {/* ── 1 · From your inventory ─────────────────────────────── */}
+        <section>
+          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+            From your inventory
+          </h3>
+          {!route ? (
+            <p className="text-[0.8125rem] text-ink-muted">
+              Only available for an airframe currently flying a route.
+            </p>
+          ) : idleInventory.length === 0 ? (
+            <p className="text-[0.8125rem] text-ink-muted">
+              No idle aircraft. Planes flying other routes can&apos;t be pulled in here.
+            </p>
+          ) : (
+            <div className="rounded-md border border-line divide-y divide-line/60 overflow-hidden">
+              {idleInventory.map((f) => {
+                const sp = AIRCRAFT_BY_ID[f.specId];
+                if (!sp) return null;
+                return (
+                  <div key={f.id} className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="text-[0.875rem] font-medium text-ink">{sp.name}</span>
+                        <span className="font-mono text-[0.6875rem] text-ink-muted">#{f.id.slice(-4).toUpperCase()}</span>
+                        {sameModel(f.specId)}
+                      </div>
+                      <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                        Age <span className="tabular font-mono text-ink-2">{currentQuarter - f.purchaseQuarter}Q</span>
+                        {" · "}idle
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      className="whitespace-nowrap"
+                      onClick={() => {
+                        const r = replaceFromInventory(aging.id, f.id);
+                        if (!r.ok) toast.negative("Couldn't swap", r.error ?? "");
+                        else onClose();
+                      }}
+                    >
+                      Swap in
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* ── 2 · From planes on order ────────────────────────────── */}
+        <section>
+          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+            From planes on order
+          </h3>
+          {!route ? (
+            <p className="text-[0.8125rem] text-ink-muted">
+              Only available for an airframe currently flying a route.
+            </p>
+          ) : queuedOrders.length === 0 ? (
+            <p className="text-[0.8125rem] text-ink-muted">
+              No pre-orders in the queue.
+            </p>
+          ) : (
+            <div className="rounded-md border border-line divide-y divide-line/60 overflow-hidden">
+              {queuedOrders.map((o) => {
+                const sp = AIRCRAFT_BY_ID[o.specId];
+                if (!sp) return null;
+                const eta = estimatedDeliveryQuarter(o, sp, preOrders, currentQuarter, overrides, campaignMode);
+                const earmarkedHere = o.replaceAircraftId === aging.id;
+                const earmarkedElse = !!o.replaceAircraftId && o.replaceAircraftId !== aging.id;
+                return (
+                  <div key={o.id} className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="text-[0.875rem] font-medium text-ink">{sp.name}</span>
+                        {sameModel(o.specId)}
+                        {earmarkedHere && (
+                          <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
+                            Earmarked
+                          </span>
+                        )}
+                        {earmarkedElse && (
+                          <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-ink-muted bg-surface-2 px-1.5 py-0.5 rounded">
+                            Earmarked elsewhere
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[0.6875rem] text-ink-muted mt-0.5 tabular font-mono">
+                        ETA <span className="text-ink">{fmtQuarter(eta, startYear)}</span>
+                        {" · "}{o.acquisitionType === "buy" ? "Buy" : "Lease"}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={earmarkedHere ? "ghost" : "secondary"}
+                      disabled={earmarkedHere}
+                      className="whitespace-nowrap"
+                      onClick={() => {
+                        const r = earmarkOnOrderReplacement(o.id, aging.id);
+                        if (!r.ok) toast.negative("Couldn't earmark", r.error ?? "");
+                        else onClose();
+                      }}
+                    >
+                      {earmarkedHere ? "Earmarked" : "Earmark"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* ── 3 · Buy a fresh one ─────────────────────────────────── */}
+        <section>
+          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+            Buy a fresh one
+          </h3>
+          <div className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2.5">
+            <p className="text-[0.8125rem] text-ink-muted">
+              Open the market filtered to {agingSpec.name} (or pick any other model).
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="whitespace-nowrap"
+              onClick={() => onBuyNew(aging.specId)}
+            >
+              Open market →
+            </Button>
+          </div>
+        </section>
+      </ModalBody>
+
+      <ModalFooter>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+      </ModalFooter>
+    </Modal>
   );
 }

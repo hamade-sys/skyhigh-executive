@@ -1294,6 +1294,11 @@ export interface PreOrder {
   deliveredAtQuarter?: number;
   /** Fleet instance id created on delivery (so the order can link back). */
   deliveredAircraftId?: string;
+  /** P3 — replacement earmark. If set, this order was placed (or tagged)
+   *  to replace a specific aging airframe. On delivery the new plane takes
+   *  over that airframe's route immediately (arrives active, no service
+   *  gap) and the old airframe is moved to idle so the player can sell it. */
+  replaceAircraftId?: string;
 }
 
 // ════════════════════════════════════════════════════════════════════

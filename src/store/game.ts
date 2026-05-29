@@ -805,6 +805,14 @@ export interface GameStore extends GameState {
   /** Scrap an owned aircraft for salvage — half the broker quote. The
    *  airframe leaves the game entirely (never reaches the market). */
   salvageAircraft(aircraftId: string): { ok: boolean; error?: string; proceeds?: number };
+  /** P3 — replace an aging airframe with an idle owned airframe. The
+   *  replacement immediately takes over the aging plane's route; the aging
+   *  plane is moved to idle so the player can sell it. */
+  replaceFromInventory(agingId: string, replacementId: string): { ok: boolean; error?: string };
+  /** P3 — earmark a queued pre-order to replace an aging airframe. When the
+   *  order delivers, the new plane takes over the aging plane's route and
+   *  the aging plane is moved to idle. */
+  earmarkOnOrderReplacement(orderId: string, agingId: string): { ok: boolean; error?: string };
   /** Buy from the second-hand market. */
   buySecondHand(listingId: string): { ok: boolean; error?: string };
   /** Admin: inject a new listing from the system. */
@@ -1043,6 +1051,9 @@ function deliverPreOrders(
   const planesByTeam = new Map<string, FleetAircraft[]>();
   const balanceByTeam = new Map<string, number>();
   const deliveredById = new Map<string, string>(); // orderId → fleet ac id
+  // P3 replacement earmarks for this batch — { teamId, oldId (airframe being
+  // replaced), newId (delivered airframe) }. Applied in the teamUpdates pass.
+  const replacements: { teamId: string; oldId: string; newId: string }[] = [];
 
   for (const order of toDeliver) {
     const spec = AIRCRAFT_BY_ID[order.specId];
@@ -1093,16 +1104,50 @@ function deliverPreOrders(
       order.teamId,
       (balanceByTeam.get(order.teamId) ?? 0) + balance,
     );
+    if (order.replaceAircraftId) {
+      replacements.push({ teamId: order.teamId, oldId: order.replaceAircraftId, newId: acId });
+    }
   }
 
   const teamUpdates = teams.map((t) => {
     const planes = planesByTeam.get(t.id);
     if (!planes) return t;
     const debit = balanceByTeam.get(t.id) ?? 0;
+
+    // P3 — apply replacement earmarks for this team. For each one, the
+    // delivered airframe takes over the route the old airframe was flying
+    // (arriving ACTIVE so there's no service gap), and the old airframe is
+    // moved to idle (routeId null) so the player can sell it on. Guarded
+    // entirely behind replaceAircraftId — normal orders are untouched.
+    const teamReplacements = replacements.filter((r) => r.teamId === t.id);
+    let newPlanes = planes;
+    let existingFleet = t.fleet;
+    let routes = t.routes;
+    for (const { oldId, newId } of teamReplacements) {
+      const oldPlane = existingFleet.find((f) => f.id === oldId);
+      const oldRouteId = oldPlane?.routeId ?? null;
+      if (!oldPlane || !oldRouteId) continue; // already gone / not on a route
+      // Delivered plane → active, assigned to the old plane's route.
+      newPlanes = newPlanes.map((p) =>
+        p.id === newId ? { ...p, status: "active" as const, routeId: oldRouteId } : p,
+      );
+      // Old plane → idle (off the route, still owned).
+      existingFleet = existingFleet.map((f) =>
+        f.id === oldId ? { ...f, status: "active" as const, routeId: null } : f,
+      );
+      // Route membership: drop the old airframe, add the new one.
+      routes = routes.map((r) =>
+        r.id === oldRouteId
+          ? { ...r, aircraftIds: [...r.aircraftIds.filter((id) => id !== oldId), newId] }
+          : r,
+      );
+    }
+
     return {
       ...t,
       cashUsd: t.cashUsd - debit,
-      fleet: [...t.fleet, ...planes],
+      fleet: [...existingFleet, ...newPlanes],
+      routes,
     };
   });
 
@@ -9509,6 +9554,77 @@ export const useGame = create<GameStore>()(
         );
         void get().pushStateToServer("player.salvagedAircraft", { aircraftId, proceeds });
         return { ok: true, proceeds };
+      },
+
+      replaceFromInventory: (agingId, replacementId) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player" };
+        const aging = player.fleet.find((f) => f.id === agingId);
+        if (!aging) return { ok: false, error: "Aging aircraft not found" };
+        const repl = player.fleet.find((f) => f.id === replacementId);
+        if (!repl) return { ok: false, error: "Replacement not found" };
+        if (repl.id === aging.id) return { ok: false, error: "Pick a different aircraft" };
+        // The replacement must be idle (not already flying a route) and ready
+        // to fly — not still being delivered.
+        if (repl.routeId) return { ok: false, error: "That aircraft is already on a route" };
+        if (repl.status !== "active") return { ok: false, error: "That aircraft isn't ready to fly yet" };
+        const routeId = aging.routeId ?? null;
+        if (!routeId) return { ok: false, error: "The aging aircraft isn't on a route — sell it directly instead." };
+        const route = player.routes.find((r) => r.id === routeId);
+
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            fleet: t.fleet.map((f) => {
+              if (f.id === aging.id) return { ...f, status: "active" as const, routeId: null };
+              if (f.id === repl.id) return { ...f, status: "active" as const, routeId };
+              return f;
+            }),
+            routes: t.routes.map((r) =>
+              r.id !== routeId ? r : {
+                ...r,
+                aircraftIds: [...r.aircraftIds.filter((id) => id !== aging.id), repl.id],
+              },
+            ),
+          }),
+        });
+        const replSpec = AIRCRAFT_BY_ID[repl.specId]?.name ?? repl.specId;
+        toast.success(
+          `Swapped in ${replSpec}`,
+          route
+            ? `Now flying ${route.originCode} → ${route.destCode}. The old airframe is idle — sell it from the fleet list.`
+            : `The old airframe is idle — sell it from the fleet list.`,
+        );
+        void get().pushStateToServer("player.replacedFromInventory", { agingId, replacementId, routeId });
+        return { ok: true };
+      },
+
+      earmarkOnOrderReplacement: (orderId, agingId) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player" };
+        const order = s.preOrders.find((o) => o.id === orderId);
+        if (!order) return { ok: false, error: "Order not found" };
+        if (order.teamId !== player.id) return { ok: false, error: "Not your order" };
+        if (order.status !== "queued") return { ok: false, error: "That order has already been delivered" };
+        const aging = player.fleet.find((f) => f.id === agingId);
+        if (!aging) return { ok: false, error: "Aging aircraft not found" };
+        if (!aging.routeId) return { ok: false, error: "The aging aircraft isn't on a route — sell it directly instead." };
+
+        set({
+          preOrders: s.preOrders.map((o) =>
+            o.id === orderId ? { ...o, replaceAircraftId: agingId } : o,
+          ),
+        });
+        const orderSpec = AIRCRAFT_BY_ID[order.specId]?.name ?? order.specId;
+        const agingSpec = AIRCRAFT_BY_ID[aging.specId]?.name ?? aging.specId;
+        toast.info(
+          `Replacement earmarked`,
+          `When your ${orderSpec} is delivered it will take over the ${agingSpec}'s route. The old airframe then goes idle so you can sell it.`,
+        );
+        void get().pushStateToServer("player.earmarkedReplacement", { orderId, agingId });
+        return { ok: true };
       },
 
       buySecondHand: (listingId) => {
