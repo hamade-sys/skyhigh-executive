@@ -674,7 +674,7 @@ export const SCENARIOS: Scenario[] = [
       "Your head of revenue, ops, and digital all received offers from a competitor. Counter-offers burn cash; doing nothing burns two quarters of productivity.",
     options: [
       { id: "A", label: "Full Counter Offer",
-        description: "Match every package and lock the team in. The cost depends on what the rival bid — the facilitator will set the figure based on what each retained executive's package ended up at.",
+        description: "Match every package and lock the team in. The cost depends on what the rival bid — the final figure is confirmed once each retained executive's counter-package is settled.",
         // No cash hit at submission. Picking this option flags the
         // team as "awaiting facilitator-set counter cost" — the
         // admin then enters a USD amount in the AdminPanel and

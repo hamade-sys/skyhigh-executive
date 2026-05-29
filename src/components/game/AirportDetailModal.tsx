@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer, selectActiveTeam, useCampaignStartYear, useTotalRounds } from "@/store/game";
-import { CITIES_BY_CODE } from "@/data/cities";
+import { CITIES_BY_CODE, countryForCode } from "@/data/cities";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { newsRoundForQuarter, gameQuarterForNewsRound } from "@/data/world-news";
 import { cn } from "@/lib/cn";
@@ -334,6 +334,15 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   if (!player) return null;
   const city = CITIES_BY_CODE[cityCode];
   if (!city) return null;
+  // Real-world regulator framing: the host country's government (acting
+  // as its civil aviation authority) is the body that approves or
+  // rejects an airport-concession bid. Derived from the airport's
+  // country so the copy reads "Japan's government", "the UAE's
+  // government", etc. Falls back to a generic authority when the
+  // country isn't mapped.
+  const country = countryForCode(cityCode);
+  const govPossessive = country ? `${country}'s government` : "the national aviation authority";
+  const govPossessiveCap = country ? `${country}'s Government` : "The National Aviation Authority";
   const tier = city.tier as 1 | 2 | 3 | 4;
   const askingPrice = airportAskingPriceUsd(cityCode, slotState, teams);
   const qRevenue = airportQuarterlySlotRevenueUsd(cityCode, teams);
@@ -766,9 +775,9 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
               </span>
             </div>
             <div className="text-ink-2 mt-1 leading-relaxed">
-              {fmtMoney(myPendingBid.bidPriceUsd)} held in escrow. The
-              facilitator will approve or reject before the 2-quarter
-              window expires (auto-refund if no decision).
+              {fmtMoney(myPendingBid.bidPriceUsd)} held in escrow.{" "}
+              {govPossessiveCap} will approve or reject before the
+              2-quarter window expires (auto-refund if no decision).
             </div>
           </div>
         ) : otherPendingBids.length > 0 ? (
@@ -777,7 +786,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
               {otherPendingBids.length} other bid{otherPendingBids.length === 1 ? "" : "s"} in review
             </div>
             <div className="text-ink-muted mt-0.5 text-[0.6875rem]">
-              You can still submit your own bid — the facilitator picks
+              You can still submit your own bid — {govPossessive} picks
               one to approve and refunds the rest.
             </div>
           </div>
@@ -797,9 +806,9 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
         )}
 
         <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
-          Tier {tier} airport. Acquiring requires facilitator (regulator)
-          approval — your bid amount is held in escrow for up to 2 quarters
-          while the facilitator reviews. If approved, ownership transfers
+          Tier {tier} airport. Acquiring requires {govPossessive} approval
+          — your bid amount is held in escrow for up to 2 quarters while
+          the aviation authority reviews. If approved, ownership transfers
           and you collect every airline&apos;s slot fees as Subsidiary
           revenue (30% opex). If rejected or expired, your cash is
           refunded in full.
@@ -813,8 +822,8 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           Submit bid for {city.name} airport?
         </h2>
         <p className="text-ink-muted text-[0.8125rem] mt-1">
-          Your bid amount is held in escrow immediately. The facilitator
-          (acting as regulator) reviews and either approves the transfer
+          Your bid amount is held in escrow immediately. {govPossessiveCap}{" "}
+          (the aviation regulator) reviews and either approves the transfer
           of operating control or rejects the bid. If 2 quarters pass
           without a decision, the bid auto-expires and your cash is
           refunded in full. No fees on rejection.

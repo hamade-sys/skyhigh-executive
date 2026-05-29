@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
-import { CITIES, CITIES_BY_CODE } from "@/data/cities";
+import { CITIES, CITIES_BY_CODE, countryForCode } from "@/data/cities";
 import { SCENARIOS, SCENARIOS_BY_QUARTER, scenariosForQuarter } from "@/data/scenarios";
 import {
   applyOptionEffect,
@@ -2138,7 +2138,7 @@ export const useGame = create<GameStore>()(
         if (existingPending) {
           return {
             ok: false,
-            error: "You already have a pending bid on this airport. Wait for the facilitator to approve or reject it.",
+            error: "You already have a pending bid on this airport. Wait for the aviation authority to approve or reject it.",
           };
         }
 
@@ -2170,15 +2170,16 @@ export const useGame = create<GameStore>()(
           ),
           airportBids: [...(s.airportBids ?? []), newBid],
         });
-        // Mode-aware copy: facilitated games wait on a human GM; self-
-        // guided games are adjudicated by the airport authority (engine)
-        // at the next quarter close.
-        const selfGuided = s.session?.mode === "self_guided";
+        // The country's national aviation authority reviews the bid at
+        // the next quarter close (all game modes) — there's no human in
+        // the loop, the regulator is in-world.
+        const country = countryForCode(airportCode);
+        const authority = country
+          ? `${country}'s aviation authority`
+          : "the national aviation authority";
         toast.accent(
           `Bid submitted · ${city.name} (${airportCode})`,
-          selfGuided
-            ? `${fmtMoneyPlain(price)} held in escrow. The airport authority reviews your bid at the next quarter close.`
-            : `${fmtMoneyPlain(price)} held in escrow. Awaiting facilitator approval (auto-rejects after 2 quarters).`,
+          `${fmtMoneyPlain(price)} held in escrow. ${authority.charAt(0).toUpperCase() + authority.slice(1)} reviews your bid at the next quarter close (auto-refund if undecided after 2 quarters).`,
         );
         return { ok: true, bidId };
       },
@@ -4053,17 +4054,18 @@ export const useGame = create<GameStore>()(
           }
         }
 
-        // Self-guided airport-bid adjudication (May 2026 play-test ask).
-        // In a game with no facilitator there is no human to approve or
-        // reject airport bids — so the engine plays the airport authority.
-        // One quarter after a bid is submitted (giving it a beat of
-        // "review time"), `adjudicateAirportBid` weighs the bid premium,
-        // the bidder's brand standing, their market positioning, and a
-        // possible rival bidding war, then routes to the existing
-        // approve/reject actions. This runs BEFORE the 2-quarter expiry
-        // fallback below, so in self-guided games bids never silently
-        // expire — they always get a verdict.
-        if (get().session?.mode === "self_guided") {
+        // Government airport-authority adjudication (May 2026 fix).
+        // The country's national aviation authority is the regulator that
+        // approves or rejects every airport-concession bid — this is the
+        // in-world body players bid to, NOT a human operator. One quarter
+        // after a bid is submitted (giving it a beat of "review time"),
+        // `adjudicateAirportBid` weighs the bid premium, the bidder's
+        // brand standing, their market positioning, and a possible rival
+        // bidding war, then routes to the existing approve/reject actions.
+        // This runs in ALL game modes so players can actually bid, win,
+        // own, and manage airports — bids always get a verdict and never
+        // silently rot to the 2-quarter expiry fallback below.
+        {
           const sNow = get();
           const ripeBids = (sNow.airportBids ?? []).filter(
             (b) =>
@@ -4121,8 +4123,9 @@ export const useGame = create<GameStore>()(
         }
 
         // Auto-expire pending airport bids that have sat for 2+ quarters
-        // without a facilitator decision. Real-world airport-acquisition
-        // approvals usually run on a regulatory clock; here we treat
+        // without a verdict — a defensive fallback now that the aviation
+        // authority adjudicates every bid above. Real-world airport
+        // concession approvals run on a regulatory clock; here we treat
         // 2 quarters as the regulatory window. Expired bids refund the
         // escrowed cash to the bidder team and are stamped with a
         // resolutionNote so the audit trail shows why.
@@ -4163,7 +4166,7 @@ export const useGame = create<GameStore>()(
               if (b.bidderTeamId === sNow.playerTeamId) {
                 toast.warning(
                   `Bid expired · ${city?.name ?? b.airportCode}`,
-                  `${fmtMoneyPlain(b.bidPriceUsd)} refunded — facilitator didn't decide within the 2-quarter window.`,
+                  `${fmtMoneyPlain(b.bidPriceUsd)} refunded — the aviation authority didn't rule within the 2-quarter window.`,
                 );
               }
             }

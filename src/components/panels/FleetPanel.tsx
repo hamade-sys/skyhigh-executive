@@ -455,7 +455,7 @@ export function FleetPanel() {
                     <div className="min-w-0">
                       <div className="font-medium text-ink">{spec.name}</div>
                       <div className="text-[0.6875rem] text-ink-muted font-mono">
-                        Seller: {l.sellerTeamId === "admin" ? "Facilitator" : l.sellerTeamId.slice(-6)}
+                        Seller: {l.sellerTeamId === "admin" ? "Broker" : l.sellerTeamId.slice(-6)}
                         {l.ecoUpgrade && " · Eco"} · {remainingLifespan}Q left
                       </div>
                     </div>
