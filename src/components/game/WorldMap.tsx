@@ -950,20 +950,24 @@ export function WorldMap({
           const isSelected = c.code === selectedOriginCode;
           const flights = flightsByCity[c.code] ?? 0;
 
-          // Visual sizing — bumped so dots pop against the satellite imagery
+          // Visual sizing — bumped so dots pop against the satellite imagery.
+          // Only the player's hubs and secondary hubs get an enlarged radius.
+          // Plain network cities (ones the player merely routes to) keep their
+          // normal tier-based size — routing to a city should change its COLOUR
+          // (handled below via fillColor), not inflate the dot. Workshop note
+          // May 29: enlarging every served city made the map read as cluttered
+          // and implied a city's importance grew just because it was on a route.
           const radius = isHub
             ? 11
             : isSecondaryHub
               ? 9
-              : inNetwork
-                ? 7.5
-                : c.tier === 1
-                  ? 6
-                  : c.tier === 2
-                    ? 4.5
-                    : c.tier === 3
-                      ? 3.5
-                      : 3;
+              : c.tier === 1
+                ? 6
+                : c.tier === 2
+                  ? 4.5
+                  : c.tier === 3
+                    ? 3.5
+                    : 3;
 
           // Cool warm-white for unconnected cities so they're clearly visible
           // on top of the satellite imagery without competing with the team

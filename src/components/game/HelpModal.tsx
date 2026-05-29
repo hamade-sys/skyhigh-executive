@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Plane, Map, Hexagon, Info, Keyboard, BookOpen, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -74,13 +75,25 @@ export function HelpModal({ open, onClose }: Props) {
   }, [open]);
 
   if (!open) return null;
+  if (typeof document === "undefined") return null;
 
-  return (
+  // Portal to <body>. This panel USED to render inside the TopBar
+  // `<header>` (a fixed, z-[60] element). A fixed/z-indexed ancestor
+  // creates a stacking context, so the panel's own z-[80] only ordered
+  // it WITHIN the header — the whole header subtree painted at z-60
+  // relative to the document, BEHIND the map legend (z-400) and the
+  // GameCanvas overlays (z-600/700). That's why the panel looked
+  // "glitchy" on open: canvas chrome bled on top of it. Bumping the
+  // panel's z-index never helped because it was capped by the header's
+  // context. Portaling to <body> escapes that context entirely so the
+  // z-[900] below is evaluated at the document root, above all canvas
+  // chrome (native <dialog> modals still sit above us via the top layer).
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-label="ICAN Simulations cheat sheet"
-      className="fixed inset-0 z-[80] flex"
+      className="fixed inset-0 z-[900] flex"
     >
       {/* Scrim — click anywhere outside the panel to close. */}
       <button
@@ -169,7 +182,8 @@ export function HelpModal({ open, onClose }: Props) {
           </button>
         </footer>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

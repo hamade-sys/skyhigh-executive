@@ -31,6 +31,7 @@ import {
   useCallback,
   type KeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { X, Send, MessageCircle, Megaphone, Trash2, Loader2 } from "lucide-react";
 import { useGame } from "@/store/game";
 import {
@@ -267,13 +268,20 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
 
   if (!open) return null;
   if (!sessionGameId) return null;
+  if (typeof document === "undefined") return null;
 
-  return (
+  // Portal to <body>. Identical fix to HelpModal: this panel previously
+  // rendered inside the TopBar `<header>` (fixed, z-[60]), which creates
+  // a stacking context that capped the panel's z-[80] — the map legend
+  // (z-400) and GameCanvas overlays (z-600/700) painted on top, so chat
+  // looked "glitchy" when opened. Portaling to <body> lifts it out of the
+  // header's context so z-[900] is honoured at the document root.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-label="In-game chat"
-      className="fixed inset-0 z-[80] flex"
+      className="fixed inset-0 z-[900] flex"
     >
       {/* Scrim — click to close */}
       <button
@@ -408,7 +416,8 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
           )}
         </footer>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

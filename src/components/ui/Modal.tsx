@@ -166,7 +166,15 @@ export function Modal({
     document
       .querySelectorAll<HTMLDialogElement>("dialog[open]")
       .forEach((d) => {
-        if (d !== dlg) {
+        // CRITICAL: skip `stack` dialogs (inline confirms layered on a
+        // parent). This sweep runs on EVERY render of an open non-stack
+        // modal — and a parent that subscribes to the whole store
+        // re-renders on every store tick (heartbeat poll, countdown).
+        // Without this guard, the parent's per-render sweep was nuking
+        // its OWN nested confirm dialog (e.g. "Submit bid · $1B") the
+        // instant a store tick fired, which the user saw as the confirm
+        // flashing open then snapping "back to the same page".
+        if (d !== dlg && d.dataset.modalStack !== "true") {
           try { d.close(); } catch { /* already closed — fine */ }
         }
       });
@@ -176,6 +184,9 @@ export function Modal({
     <dialog
       ref={dialogRef}
       aria-label={ariaLabel}
+      // Lets the per-render mutual-exclusion sweep above identify inline
+      // confirms layered on a parent so it never auto-closes them.
+      data-modal-stack={stack ? "true" : undefined}
       // IMPORTANT: do NOT put `flex`, `grid`, or any other display class
       // directly on <dialog>. Tailwind display utilities override the
       // browser's built-in `display:none` for closed dialogs, which makes
