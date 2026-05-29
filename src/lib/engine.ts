@@ -178,16 +178,10 @@ export function discontinuedMaintenanceBracket(
 
 // ─── Global Travel Index (PRD E6) — master demand multiplier ──
 /**
- * Per-round macro demand multiplier across the 40-round game.
- *
- * Each PRD §6.2 game-year value applies to TWO consecutive rounds —
- * round (2N-1) is the scenario quarter at the original PRD-Q index N,
- * round (2N) is the breather quarter sharing that game-year.
- *
- *   Old PRD Q1=100  → Rounds 1-2 = 100
- *   Old PRD Q2=103  → Rounds 3-4 = 103
- *   ...
- *   Old PRD Q20=130 → Rounds 39-40 = 130
+ * Per-quarter macro demand multiplier. TRAVEL_INDEX covers the 60-quarter
+ * half campaign (Q1 2015 – Q4 2029); the full campaign uses
+ * TRAVEL_INDEX_FULL_CAMPAIGN_2000 for R1-R60 (2000-2014) and reuses this
+ * table shifted +60 for R61-R120 (2015-2029).
  */
 /** Per-city event multiplier floor used by the passenger demand path.
  *  Even the worst stacked news shocks leave demand at 15% of baseline.
@@ -305,7 +299,7 @@ export const TRAVEL_INDEX_FULL_CAMPAIGN_2000: Record<number, number> = {
   60: 118,  // Q4 2014 — Stable strong growth, transitions to half-campaign R1.
 };
 
-/** Base commercial-debt interest rate over the 40-quarter campaign,
+/** Base commercial-debt interest rate over the 60-quarter half campaign,
  *  aligned with the same world-events arc that drives TRAVEL_INDEX.
  *  Earlier the rate was hardcoded at 3.5% and never moved — players
  *  flagged it as broken. The schedule below mirrors a realistic 2015–

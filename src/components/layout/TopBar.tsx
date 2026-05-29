@@ -772,7 +772,7 @@ function CloseQuarterButton() {
                     {quarterCloseRequest.byTeamName} ended their quarter
                   </p>
                   <p className="text-ink-muted text-[0.75rem] mt-0.5">
-                    Round closes automatically — or close now to jump in.
+                    Quarter closes automatically — or close now to jump in.
                   </p>
                 </div>
 

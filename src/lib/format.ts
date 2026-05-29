@@ -44,18 +44,20 @@ export function fmtDelta(n: number, decimals = 1): string {
 /**
  * In-game calendar.
  *
- * Game runs 40 rounds covering 10 calendar years (2015 → end of 2024).
- * Each round = 1 real calendar quarter. Round 1 = Q1 2015,
- * Round 4 = Q4 2015, Round 40 = Q4 2024.
+ * Each round = 1 real calendar quarter. Two campaign lengths exist:
+ *   · Half campaign — 60 quarters, Q1 2015 → Q4 2029 (the default).
+ *   · Full campaign — 120 quarters, Q1 2000 → Q4 2029.
  *
- * Aircraft release timeline is INDEPENDENTLY compressed: aircraft EIS
- * year E in the real world maps to game round via a 2:1 compression
- * anchored at real-2000 = game-Q1-2015. This lets the player experience
- * the 2000–2026 aviation product cycle (A380 EIS 2007 → ~round 13,
- * 787-9 EIS 2014 → ~round 29) within the 10 calendar years of game time.
- * See gameQuarterFromYear below.
+ * Aircraft availability is gated directly on real EIS year via
+ * effectiveUnlockQuarter (see engine) — the calendar runs in real
+ * time now, so there is no year-compression mapping. The legacy
+ * 40-round / 2:1-compression model was removed.
+ *
+ * TOTAL_GAME_ROUNDS is only a fallback default for legacy saves that
+ * pre-date the configurable session.totalRounds field. Live code reads
+ * the count via getTotalRounds(state).
  */
-export const TOTAL_GAME_ROUNDS = 40;
+export const TOTAL_GAME_ROUNDS = 60;
 const GAME_START_YEAR = 2015;
 
 /**
@@ -121,26 +123,4 @@ export function fmtAgeYQ(quarters: number): string {
   if (years === 0) return `${remQ}Q`;
   if (remQ === 0) return `${years}Y`;
   return `${years}Y ${remQ}Q`;
-}
-
-/**
- * Convert a real-world EIS year (e.g. 2007 for the A380) to the GAME
- * round at which the aircraft becomes available.
- *
- * Mapping: 2:1 compression. Real year 2000 = Round 1 (Q1 2015).
- * Real year 2002 = Round 5 (Q1 2016). Real year 2026 = Round 53,
- * which is clamped back to 40 (last game round) — late aircraft
- * unlock right at the end of the simulation.
- *
- * Implementation:
- *   yearsFrom2000 = year - 2000
- *   gameYearsFromStart = yearsFrom2000 / 2     (compression)
- *   round = floor(gameYearsFromStart) * 4 + 1
- */
-export function gameQuarterFromYear(year: number): number {
-  if (year <= 2000) return 1;
-  const yearsFromAnchor = year - 2000;
-  const gameYearsFromStart = yearsFromAnchor / 2;
-  const round = Math.floor(gameYearsFromStart) * 4 + 1;
-  return Math.max(1, Math.min(TOTAL_GAME_ROUNDS, round));
 }

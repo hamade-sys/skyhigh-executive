@@ -21,24 +21,35 @@ import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 
 type Visibility = "public" | "private";
 
-/**
- * Round presets double as the campaign-era selector. Everything from
- * 8–60 rounds is the "half" campaign (2015 → up to 2029). The 120-round
- * preset is the "full" campaign — it starts in Q1 2000 and runs the
- * complete 2000–2029 aviation arc. Selecting a preset sets BOTH the
- * round count and the campaign mode, so the player never has to reason
- * about a confusing length × era matrix.
- */
-const ROUND_PRESETS = [
-  { value: 8,   mode: "half", label: "8 rounds",   sub: "2 years · quick session" },
-  { value: 16,  mode: "half", label: "16 rounds",  sub: "4 years · short" },
-  { value: 24,  mode: "half", label: "24 rounds",  sub: "6 years · medium" },
-  { value: 40,  mode: "half", label: "40 rounds",  sub: "10 years · full decade" },
-  { value: 60,  mode: "half", label: "60 rounds",  sub: "2015–2029 · standard" },
-  { value: 120, mode: "full", label: "120 rounds", sub: "2000–2029 · full campaign" },
-] as const;
-
 type CampaignMode = "half" | "full";
+
+/**
+ * Two campaign eras, nothing more. "Half" is the modern arc: 60
+ * quarters from Q1 2015. "Full" is the complete arc: 120 quarters from
+ * Q1 2000. Both run to the end of the simulation calendar. Selecting an
+ * option sets BOTH the round count and the campaign mode together so
+ * there's no length × era matrix to reason about.
+ */
+const CAMPAIGN_OPTIONS = [
+  {
+    mode: "half" as const,
+    rounds: 60,
+    title: "Half campaign",
+    years: "2015 – 2030",
+    sub: "60 quarters · 15 years",
+    description:
+      "The modern arc. Contemporary fleets and the post-2015 market — the standard workshop length.",
+  },
+  {
+    mode: "full" as const,
+    rounds: 120,
+    title: "Full campaign",
+    years: "2000 – 2030",
+    sub: "120 quarters · 30 years",
+    description:
+      "The complete arc. Early-2000s fleets, the fuel shocks, and the long product cycle through to today.",
+  },
+] as const;
 
 /** Per-quarter timer presets (seconds). 0 = no timer. */
 const QUARTER_TIMER_PRESETS = [
@@ -79,9 +90,9 @@ function CreateGameForm() {
   const [visibility, setVisibility] = useState<Visibility>("public");
   const [beGameMaster, setBeGameMaster] = useState(false);
   const [boardDecisionsEnabled, setBoardDecisionsEnabled] = useState(false);
-  const [totalRounds, setTotalRounds] = useState(40);
-  // Derived from the selected round preset (see ROUND_PRESETS). "full"
-  // is the 120-round 2000-era campaign; everything else is "half".
+  // Defaults to the half campaign (60 quarters from 2015). The full
+  // campaign (120 from 2000) is the only other option — see CAMPAIGN_OPTIONS.
+  const [totalRounds, setTotalRounds] = useState(60);
   const [campaignMode, setCampaignMode] = useState<CampaignMode>("half");
   // Just a seat count — human/bot config is done in the pre-game lobby
   const [seatCount, setSeatCount] = useState(2);
@@ -202,7 +213,7 @@ function CreateGameForm() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="ERTH Cohort 12 — Spring '26"
+              placeholder="Leadership Cohort 12 — Spring '26"
               maxLength={80}
               className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:border-cyan-400"
             />
@@ -258,59 +269,54 @@ function CreateGameForm() {
               onClick={() => setBoardDecisionsEnabled((v) => !v)}
               icon={<CheckSquare className="w-5 h-5" />}
               title={boardDecisionsEnabled ? "Enabled" : "Disabled"}
-              description="The 18 boardroom scenarios (cyber breach, fuel hedging, government deals…). Best with a Game Master to facilitate; can run without."
+              description="The boardroom scenarios (cyber breach, fuel hedging, government deals…). Best with a Game Master to facilitate; can run without."
               accent="emerald"
             />
           </Field>
 
-          {/* 5. Campaign length + era */}
-          <Field
-            label="Campaign length"
-            hint={
-              campaignMode === "full"
-                ? "120 quarters · 2000–2029"
-                : `${totalRounds} quarters · ${(totalRounds / 4).toFixed(0)} years · from 2015`
-            }
-          >
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              {ROUND_PRESETS.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => {
-                    setTotalRounds(p.value);
-                    setCampaignMode(p.mode);
-                  }}
-                  className={
-                    "rounded-xl border p-3 text-left transition-all " +
-                    (totalRounds === p.value
-                      ? "border-slate-900 bg-white ring-2 ring-slate-900/10"
-                      : "border-slate-200 bg-white hover:border-slate-300")
-                  }
-                >
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-base font-display font-bold text-slate-900">
-                      {p.value}
-                    </span>
-                    {p.mode === "full" && (
-                      <span className="inline-flex items-center rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-violet-100">
-                        Full
+          {/* 5. Campaign era — two choices, nothing more */}
+          <Field label="Campaign">
+            <div className="grid sm:grid-cols-2 gap-3">
+              {CAMPAIGN_OPTIONS.map((c) => {
+                const active = campaignMode === c.mode;
+                return (
+                  <button
+                    key={c.mode}
+                    type="button"
+                    onClick={() => {
+                      setCampaignMode(c.mode);
+                      setTotalRounds(c.rounds);
+                    }}
+                    className={
+                      "text-left rounded-xl border p-4 transition-all " +
+                      (active
+                        ? "border-slate-900 bg-white ring-2 ring-slate-900/10"
+                        : "border-slate-200 bg-white hover:border-slate-300")
+                    }
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-sm font-semibold text-slate-900">
+                        {c.title}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">
-                    {p.sub}
-                  </div>
-                </button>
-              ))}
+                      {c.mode === "full" && (
+                        <span className="inline-flex items-center rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-violet-100">
+                          Full
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-display text-2xl font-bold text-slate-900 tracking-tight tabular">
+                      {c.years}
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">
+                      {c.sub}
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed mt-2">
+                      {c.description}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
-            {campaignMode === "full" && (
-              <p className="text-xs text-slate-400 mt-2">
-                The full campaign opens in Q1 2000 and runs the complete
-                2000–2029 arc — early-2000s fleets, fuel shocks, and the
-                long product cycle through to today.
-              </p>
-            )}
           </Field>
 
           {/* 5b. Quarter timer — drives auto-advance in self-guided
