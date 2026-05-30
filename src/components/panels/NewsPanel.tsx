@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { dynamicHostNews, newsForQuarter } from "@/data/world-news";
 import { dynamicAircraftReleaseNews } from "@/lib/aircraft-news";
+import { dynamicOrderNews } from "@/lib/order-news";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { cityEventImpact } from "@/lib/city-events";
 import { useGame, selectPlayer, useCampaignStartYear, useTotalRounds } from "@/store/game";
@@ -34,6 +35,9 @@ export function NewsPanel() {
   const player = useGame(selectPlayer);
   const startYear = useCampaignStartYear();
   const totalRounds = useTotalRounds();
+  const preOrders = useGame((s) => s.preOrders);
+  const teams = useGame((s) => s.teams);
+  const productionCapOverrides = useGame((s) => s.productionCapOverrides);
   const [view, setView] = useState<NewsView>("compact");
 
   // Player's current network (hub + secondary hubs + every endpoint of their routes)
@@ -68,10 +72,19 @@ export function NewsPanel() {
       // the newspaper view sorts, groups and dates them by the in-game
       // calendar (Q1 2016, not Q1 2001) in the full campaign.
       const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
-      out.push(...dynamic, ...aircraft, ...scripted);
+      // Player-driven trade press: ≥$2B fleet orders signed this quarter.
+      const orders = dynamicOrderNews(
+        preOrders, currentQuarter,
+        (id) => teams.find((t) => t.id === id)?.name,
+        productionCapOverrides,
+        totalRounds > 60 ? "full" : "half",
+        startYear,
+      ).filter((it) => it.quarter === q);
+      out.push(...dynamic, ...aircraft, ...scripted, ...orders);
     }
     return out;
-  }, [quartersToShow, worldCupHostCode, olympicHostCode, totalRounds, airportSlots]);
+  }, [quartersToShow, worldCupHostCode, olympicHostCode, totalRounds, airportSlots,
+      preOrders, teams, productionCapOverrides, currentQuarter, startYear]);
 
   return (
     <div className="space-y-4">
@@ -124,7 +137,14 @@ export function NewsPanel() {
             airportSlots);
           const aircraft = dynamicAircraftReleaseNews(q, totalRounds > 60 ? "full" : "half");
           const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
-          const items = [...dynamic, ...aircraft, ...scripted];
+          const orders = dynamicOrderNews(
+            preOrders, currentQuarter,
+            (id) => teams.find((t) => t.id === id)?.name,
+            productionCapOverrides,
+            totalRounds > 60 ? "full" : "half",
+            startYear,
+          ).filter((it) => it.quarter === q);
+          const items = [...dynamic, ...aircraft, ...scripted, ...orders];
           if (items.length === 0) return null;
           return (
             <section key={q}>

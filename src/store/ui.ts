@@ -11,6 +11,7 @@ export type PanelId =
   | "routes"
   | "ops"
   | "investments"    // subsidiaries (hotel/limo/lounge/MRO/fuel/catering/training)
+  | "intel"          // market intel: production queue + competitor fleets
   | "decisions"
   | "news"
   | "leaderboard"

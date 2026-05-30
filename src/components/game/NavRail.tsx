@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Newspaper,
   Building2,
+  Telescope,
   type LucideIcon,
 } from "lucide-react";
 import { useGame, selectPlayer, useCampaignStartYear, useTotalRounds } from "@/store/game";
@@ -19,6 +20,7 @@ import { useUi, type PanelId } from "@/store/ui";
 import { SCENARIOS_BY_QUARTER } from "@/data/scenarios";
 import { dynamicHostNews, newsForQuarter } from "@/data/world-news";
 import { dynamicAircraftReleaseNews } from "@/lib/aircraft-news";
+import { dynamicOrderNews } from "@/lib/order-news";
 import { CITIES_BY_CODE } from "@/data/cities";
 import type { NewsItem } from "@/types/game";
 import { cn } from "@/lib/cn";
@@ -36,6 +38,7 @@ const NAV: Array<{ id: PanelId; label: string; Icon: LucideIcon }> = [
   { id: "routes",      label: "Routes",      Icon: RouteIcon },
   { id: "ops",         label: "Ops form",    Icon: SlidersHorizontal },
   { id: "investments", label: "Investments", Icon: Building2 },
+  { id: "intel",       label: "Market intel", Icon: Telescope },
   { id: "decisions",   label: "Decisions",   Icon: Hexagon },
   { id: "slots",       label: "Slot market", Icon: Gavel },
 ];
@@ -75,6 +78,9 @@ export function NavRail() {
   const worldCupHostCode = useGame((state) => state.worldCupHostCode);
   const olympicHostCode = useGame((state) => state.olympicHostCode);
   const totalRounds = useTotalRounds();
+  const preOrders = useGame((state) => state.preOrders);
+  const teams = useGame((state) => state.teams);
+  const productionCapOverrides = useGame((state) => state.productionCapOverrides);
 
   /** Combine static WORLD_NEWS for a round with the dynamic host-city
    *  announcements (World Cup / Olympics) that depend on the per-game
@@ -86,7 +92,15 @@ export function NavRail() {
       (code) => CITIES_BY_CODE[code]?.name);
     const aircraft = dynamicAircraftReleaseNews(q, totalRounds > 60 ? "full" : "half");
     const scripted = newsForQuarter(q, totalRounds).map((it) => ({ ...it, quarter: q }));
-    return [...dynamic, ...aircraft, ...scripted];
+    // Player-driven trade press: ≥$2B fleet orders signed in quarter q.
+    const orders = dynamicOrderNews(
+      preOrders, currentQuarter,
+      (id) => teams.find((t) => t.id === id)?.name,
+      productionCapOverrides,
+      totalRounds > 60 ? "full" : "half",
+      startYear,
+    ).filter((it) => it.quarter === q);
+    return [...dynamic, ...aircraft, ...scripted, ...orders];
   };
   const fuelIndex = useGame((state) => state.fuelIndex);
   const baseInterestRatePct = useGame((state) => state.baseInterestRatePct);
