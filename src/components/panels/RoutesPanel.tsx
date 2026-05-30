@@ -1457,6 +1457,24 @@ function RouteDetailModal({
     return spec && spec.seats.first > 0;
   });
 
+  // Selecting a pricing tier must DO something visible: snap every
+  // per-class fare slider to that tier's multiple of the class base.
+  // Previously the tier buttons only called setTier(), so clicking
+  // "Ultra" highlighted the button but left Economy/Business/First
+  // sliders frozen at their saved values — the "clicked ultra, the
+  // sliders didn't move" bug. Mirrors applyTier() in RouteSetupModal.
+  // Cargo routes are exempt: their single rate slider already reads
+  // the tier multiplier live (effective = cargoRate ?? tierBaseRate),
+  // so setTier alone moves it.
+  const applyTier = (t: PricingTier) => {
+    setTier(t);
+    if (route.isCargo) return;
+    const mult = t === "budget" ? 0.5 : t === "premium" ? 1.5 : t === "ultra" ? 2.0 : 1.0;
+    setEconFare(Math.round(econRange.base * mult));
+    if (hasBus) setBusFare(Math.round(busRange.base * mult));
+    if (hasFirst) setFirstFare(Math.round(firstRange.base * mult));
+  };
+
   // Show every active aircraft that is either: idle, on THIS route, or
   // has a stale routeId pointing to a deleted/closed route (treated as idle).
   const idleOrOnRoute = player.fleet.filter((f) => {
@@ -2182,7 +2200,7 @@ function RouteDetailModal({
               return (
                 <button
                   key={t}
-                  onClick={() => setTier(t)}
+                  onClick={() => applyTier(t)}
                   className={cn(
                     "rounded-md border px-3 py-2 capitalize transition-colors flex flex-col items-center gap-0.5",
                     tier === t
