@@ -1042,8 +1042,21 @@ export interface GameState {
    *  bid via `submitAirportBid`; cash is escrowed immediately and the
    *  bid sits here as `pending` until the facilitator approves or
    *  rejects (or 2 quarters pass and it auto-expires). Approved bids
-   *  transfer ownership; rejected/expired bids refund the held cash. */
+   *  transfer ownership; rejected/expired bids refund the held cash.
+   *
+   *  LEGACY: the live acquisition path is now `airportConcessionAuctions`
+   *  (real ascending auctions). This field is kept for backward-compat so
+   *  old saves with pending AirportBid rows still resolve/refund cleanly,
+   *  and the host approve/reject tools keep working. No new rows are
+   *  created here by the player flow. */
   airportBids?: AirportBid[];
+
+  /** Live + historical ascending concession auctions. Opening a bid on an
+   *  unowned airport creates one of these; raises and bot counter-bids
+   *  mutate it at quarter close; when the window closes the high bidder
+   *  takes ownership. This is the live source of truth for airport
+   *  acquisition (replaces the phantom-rival `airportBids` adjudication). */
+  airportConcessionAuctions?: ConcessionAuction[];
 
   /** V2 ONLY (session.airportSystemV2). Active + historical privatization
    *  auctions the government has announced. Bidding, adjudication, and
@@ -1507,6 +1520,57 @@ export interface AirportBid {
   /** Optional facilitator-supplied reason on reject. Stored for audit
    *  and surfaced in the player's notification. */
   resolutionNote?: string;
+}
+
+/** A single bid event inside a concession auction — either the opening
+ *  bid that started the auction, or a later raise by the same or a rival
+ *  team. The full history is kept so the UI can show the bidding war. */
+export interface ConcessionBidEvent {
+  /** Team that placed this bid. */
+  teamId: string;
+  /** Amount bid (USD). Each event must beat the prior high bid. */
+  amountUsd: number;
+  /** Quarter the bid was placed. */
+  quarter: number;
+  /** "open" = the bid that created the auction; "raise" = a later bid. */
+  kind: "open" | "raise";
+}
+
+/** A live ascending concession auction for one airport. Opening a bid
+ *  starts a VISIBLE auction: real bot rivals (with cash + appetite) can
+ *  counter at quarter close, the standing high bidder's cash is escrowed,
+ *  and any team can RAISE over the open window. When the window closes,
+ *  the highest real bidder WINS and actually takes ownership of the
+ *  airport (it stops showing as public). This replaces the old phantom-
+ *  rival adjudication where nobody ever became the owner. */
+export interface ConcessionAuction {
+  /** Stable id, "cauc_<random>". */
+  id: string;
+  /** IATA code of the airport being auctioned. */
+  airportCode: string;
+  /** Quarter the auction opened. */
+  openedQuarter: number;
+  /** Quarter the auction closes and the high bidder wins. Extended by an
+   *  anti-snipe rule when a late bid lands, bounded by a hard cap. */
+  closesQuarter: number;
+  /** Reserve / floor price — the asking price at the moment of opening.
+   *  The opening bid must meet this. */
+  reserveUsd: number;
+  /** Team currently holding the high bid (cash escrowed from this team). */
+  highBidTeamId: string;
+  /** The standing high bid amount (USD). */
+  highBidUsd: number;
+  /** Lifecycle. `open` = still accepting raises. `won` = window closed,
+   *  ownership transferred to the high bidder, escrow committed.
+   *  `passed` = closed with no valid owner (defensive; shouldn't happen
+   *  because the opener is always a valid high bidder). */
+  status: "open" | "won" | "passed";
+  /** Full bid history (open + every raise), oldest first. */
+  history: ConcessionBidEvent[];
+  /** Winning team once resolved. */
+  winnerTeamId?: string;
+  /** Quarter the auction resolved. */
+  resolvedQuarter?: number;
 }
 
 /** A single team's slot lease at one airport (PRD update — Model B

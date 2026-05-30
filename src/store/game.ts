@@ -76,7 +76,10 @@ import {
   AIRPORT_EXPANSION_SLOTS,
   AIRPORT_MAX_CAPACITY_BY_TIER,
   AIRPORT_UPGRADES_BY_QUARTER,
-  adjudicateAirportBid,
+  AIRPORT_AUCTION_WINDOW_QUARTERS,
+  AIRPORT_AUCTION_HARD_CAP_QUARTERS,
+  AIRPORT_MIN_RAISE_MULT,
+  planConcessionRaise,
   airportAskingPriceUsd,
   applyGovernmentUpgrade,
   applyOwnerSlotRate,
@@ -153,6 +156,7 @@ import type {
   AirportAuction,
   AirportBid,
   AirportLease,
+  ConcessionAuction,
   AirportPendingUpgrade,
   AirportSealedBid,
   AirportSlotState,
@@ -1037,6 +1041,7 @@ function buildPushStateJson(
     cargoContracts: s.cargoContracts,
     airportSlots: s.airportSlots,
     airportBids: s.airportBids,
+    airportConcessionAuctions: s.airportConcessionAuctions,
     worldCupHostCode: s.worldCupHostCode,
     olympicHostCode: s.olympicHostCode,
     sessionCode: s.sessionCode,
@@ -1331,6 +1336,7 @@ export const useGame = create<GameStore>()(
       cargoContracts: [],
       airportSlots: {},
       airportBids: [],
+      airportConcessionAuctions: [],
       worldCupHostCode: null,
       olympicHostCode: null,
       // Legacy session fields — kept synced with the new `session` block
@@ -1585,6 +1591,7 @@ export const useGame = create<GameStore>()(
           lastCloseResult: null,
           airportSlots: makeInitialAirportSlots(),
           airportBids: [],
+          airportConcessionAuctions: [],
           worldCupHostCode,
           olympicHostCode,
           // Always reset multiplayer residue when starting a fresh solo
@@ -2364,61 +2371,108 @@ export const useGame = create<GameStore>()(
         const city = CITIES_BY_CODE[airportCode];
         if (!city) return { ok: false, error: "Unknown airport" };
 
-        // Block double-bidding: a team can have at most one pending bid
-        // per airport at a time.
-        const existingPending = (s.airportBids ?? []).find(
-          (b) =>
-            b.status === "pending" &&
-            b.airportCode === airportCode &&
-            b.bidderTeamId === player.id,
+        const auctions = s.airportConcessionAuctions ?? [];
+        const liveAuction = auctions.find(
+          (a) => a.airportCode === airportCode && a.status === "open",
         );
-        if (existingPending) {
+
+        // ── Path A: no live auction → OPEN one ──────────────────────────
+        if (!liveAuction) {
+          const askingPrice = airportAskingPriceUsd(airportCode, slotState, s.teams);
+          const price = Math.max(askingPrice, Math.round(bidPriceUsd ?? askingPrice));
+          if (player.cashUsd < price) {
+            return {
+              ok: false,
+              error: `Need ${fmtMoneyPlain(price)} cash to open the bidding (held in escrow while the auction runs)`,
+            };
+          }
+          const id = `cauc_${Math.random().toString(36).slice(2, 10)}`;
+          const newAuction: ConcessionAuction = {
+            id,
+            airportCode,
+            openedQuarter: s.currentQuarter,
+            closesQuarter: s.currentQuarter + AIRPORT_AUCTION_WINDOW_QUARTERS,
+            reserveUsd: askingPrice,
+            highBidTeamId: player.id,
+            highBidUsd: price,
+            status: "open",
+            history: [
+              { teamId: player.id, amountUsd: price, quarter: s.currentQuarter, kind: "open" },
+            ],
+          };
+          set({
+            // Escrow the opening bid immediately.
+            teams: s.teams.map((t) =>
+              t.id === player.id ? { ...t, cashUsd: t.cashUsd - price } : t,
+            ),
+            airportConcessionAuctions: [...auctions, newAuction],
+          });
+          toast.accent(
+            `Auction opened · ${city.name} (${airportCode})`,
+            `Your ${fmtMoneyPlain(price)} opening bid is the high bid and is held in escrow. Rival carriers can counter over the next ${AIRPORT_AUCTION_WINDOW_QUARTERS} quarters — watch the airport and raise if out-bid. Highest bidder when the window closes owns the airport.`,
+          );
+          return { ok: true, bidId: id };
+        }
+
+        // ── Path B: live auction exists ─────────────────────────────────
+        // Already leading → nothing to do (can't bid against yourself).
+        if (liveAuction.highBidTeamId === player.id) {
           return {
             ok: false,
-            error: "You already have a pending bid on this airport. Wait for the aviation authority to approve or reject it.",
+            error: "You already hold the high bid on this airport. Wait for a rival to counter before raising.",
           };
         }
 
-        const askingPrice = airportAskingPriceUsd(airportCode, slotState, s.teams);
-        const price = Math.max(1, Math.round(bidPriceUsd ?? askingPrice));
+        // RAISE — must beat the standing high bid by the min-raise margin.
+        const minRaise = Math.ceil(liveAuction.highBidUsd * AIRPORT_MIN_RAISE_MULT);
+        const price = Math.max(minRaise, Math.round(bidPriceUsd ?? minRaise));
+        if (price < minRaise) {
+          return {
+            ok: false,
+            error: `Your raise must be at least ${fmtMoneyPlain(minRaise)} (5% over the current high bid of ${fmtMoneyPlain(liveAuction.highBidUsd)}).`,
+          };
+        }
         if (player.cashUsd < price) {
           return {
             ok: false,
-            error: `Need ${fmtMoneyPlain(price)} cash to bid (will be held in escrow)`,
+            error: `Need ${fmtMoneyPlain(price)} cash to raise (held in escrow while the auction runs)`,
           };
         }
-
-        const bidId = `abid_${Math.random().toString(36).slice(2, 10)}`;
-        const newBid: AirportBid = {
-          id: bidId,
-          airportCode,
-          bidderTeamId: player.id,
-          bidPriceUsd: price,
-          status: "pending",
-          submittedQuarter: s.currentQuarter,
-        };
-
-        set({
-          // Cash is escrowed immediately — deducted from bidder, held
-          // by the bid record until approved (committed) or rejected
-          // (refunded).
-          teams: s.teams.map((t) =>
-            t.id === player.id ? { ...t, cashUsd: t.cashUsd - price } : t,
-          ),
-          airportBids: [...(s.airportBids ?? []), newBid],
-        });
-        // The country's national aviation authority reviews the bid at
-        // the next quarter close (all game modes) — there's no human in
-        // the loop, the regulator is in-world.
-        const country = countryForCode(airportCode);
-        const authority = country
-          ? `${country}'s aviation authority`
-          : "the national aviation authority";
-        toast.accent(
-          `Bid submitted · ${city.name} (${airportCode})`,
-          `${fmtMoneyPlain(price)} held in escrow. ${authority.charAt(0).toUpperCase() + authority.slice(1)} reviews your bid at the next quarter close (auto-refund if undecided after 2 quarters).`,
+        const priorLeaderId = liveAuction.highBidTeamId;
+        const priorLeaderBid = liveAuction.highBidUsd;
+        // Anti-snipe: a late raise nudges the close out, bounded by the
+        // hard cap measured from the quarter the auction opened.
+        const newCloses = Math.min(
+          liveAuction.openedQuarter + AIRPORT_AUCTION_HARD_CAP_QUARTERS,
+          Math.max(liveAuction.closesQuarter, s.currentQuarter + 1),
         );
-        return { ok: true, bidId };
+        set({
+          teams: s.teams.map((t) => {
+            if (t.id === player.id) return { ...t, cashUsd: t.cashUsd - price };
+            // Refund the prior leader's escrow — they're no longer holding.
+            if (t.id === priorLeaderId) return { ...t, cashUsd: t.cashUsd + priorLeaderBid };
+            return t;
+          }),
+          airportConcessionAuctions: auctions.map((a) =>
+            a.id === liveAuction.id
+              ? {
+                  ...a,
+                  highBidTeamId: player.id,
+                  highBidUsd: price,
+                  closesQuarter: newCloses,
+                  history: [
+                    ...a.history,
+                    { teamId: player.id, amountUsd: price, quarter: s.currentQuarter, kind: "raise" as const },
+                  ],
+                }
+              : a,
+          ),
+        });
+        toast.accent(
+          `Raised to ${fmtMoneyPlain(price)} · ${city.name} (${airportCode})`,
+          `You're back in the lead. ${fmtMoneyPlain(price)} is held in escrow. The auction closes ${newCloses === s.currentQuarter + 1 ? "next quarter" : `in ${newCloses - s.currentQuarter} quarters`} unless out-bid again.`,
+        );
+        return { ok: true, bidId: liveAuction.id };
       },
 
       approveAirportBid: (bidId) => {
@@ -4726,6 +4780,7 @@ export const useGame = create<GameStore>()(
             teams: teamsSnap,
             airportSlots: { ...(sb.airportSlots ?? {}) },
             airportBids: [...(sb.airportBids ?? [])],
+            airportConcessionAuctions: [...(sb.airportConcessionAuctions ?? [])],
             preOrders: [...(sb.preOrders ?? [])],
             secondHandListings: [...(sb.secondHandListings ?? [])],
             cargoContracts: [...(sb.cargoContracts ?? [])],
@@ -4879,70 +4934,156 @@ export const useGame = create<GameStore>()(
           }
         }
 
-        // Government airport-authority adjudication (May 2026 fix).
-        // The country's national aviation authority is the regulator that
-        // approves or rejects every airport-concession bid — this is the
-        // in-world body players bid to, NOT a human operator. One quarter
-        // after a bid is submitted (giving it a beat of "review time"),
-        // `adjudicateAirportBid` weighs the bid premium, the bidder's
-        // brand standing, their market positioning, and a possible rival
-        // bidding war, then routes to the existing approve/reject actions.
-        // This runs in ALL game modes so players can actually bid, win,
-        // own, and manage airports — bids always get a verdict and never
-        // silently rot to the 2-quarter expiry fallback below.
+        // Ascending concession auctions (May 2026 redesign).
+        // Each open airport auction gets two things at quarter close, in
+        // order: (1) a chance for a real bot rival to COUNTER the standing
+        // high bid (refunding the prior leader and escrowing the new one),
+        // then (2) if the close window has been reached, the standing high
+        // bidder WINS and actually takes ownership of the airport — it
+        // stops showing public. No phantom rivals: whoever holds the high
+        // bid is a real team whose cash is really escrowed, and the winner
+        // really becomes the owner. This runs in ALL game modes.
         {
-          const sNow = get();
-          const ripeBids = (sNow.airportBids ?? []).filter(
-            (b) =>
-              b.status === "pending" &&
-              sNow.currentQuarter - b.submittedQuarter >= 1,
-          );
-          for (const b of ripeBids) {
-            const bidder = get().teams.find((t) => t.id === b.bidderTeamId);
-            if (!bidder) continue;
-            const slotState = get().airportSlots?.[b.airportCode];
-            // If the airport got bought out from under this bid (another
-            // owner committed first), the approve action will reject it;
-            // we still adjudicate so the escrow resolves cleanly.
-            const askingPrice = airportAskingPriceUsd(b.airportCode, slotState, get().teams);
-            const verdict = adjudicateAirportBid({
-              airportCode: b.airportCode,
-              quarter: b.submittedQuarter,
-              bidAmountUsd: b.bidPriceUsd,
-              askingPriceUsd: askingPrice,
-              brandRating0to100: computeBrandValue(bidder),
-              airlineValueUsd: computeAirlineValue(bidder),
-            });
-            const city = CITIES_BY_CODE[b.airportCode];
-            const isPlayer = b.bidderTeamId === sNow.playerTeamId;
-            if (verdict.approved) {
-              const r = get().approveAirportBid(b.id);
-              if (r.ok && isPlayer) {
-                toast.success(
-                  `Airport acquired · ${city?.name ?? b.airportCode}`,
-                  verdict.reason,
-                );
-              } else if (!r.ok && isPlayer) {
-                // Approval failed (e.g. owned in the interim) — reject to
-                // refund the escrow so the player isn't out the cash.
-                get().rejectAirportBid(b.id, "Airport no longer available");
+          for (const liveAuction of (get().airportConcessionAuctions ?? []).filter(
+            (a) => a.status === "open",
+          )) {
+            const sNow = get();
+            const city = CITIES_BY_CODE[liveAuction.airportCode];
+            // Defensive: if the airport got owned by some other path, close
+            // the auction out and refund the standing high bidder.
+            const ownedAlready = sNow.airportSlots?.[liveAuction.airportCode]?.ownerTeamId;
+            if (ownedAlready) {
+              set({
+                teams: sNow.teams.map((t) =>
+                  t.id === liveAuction.highBidTeamId
+                    ? { ...t, cashUsd: t.cashUsd + liveAuction.highBidUsd }
+                    : t,
+                ),
+                airportConcessionAuctions: (sNow.airportConcessionAuctions ?? []).map((a) =>
+                  a.id === liveAuction.id
+                    ? { ...a, status: "passed" as const, resolvedQuarter: sNow.currentQuarter }
+                    : a,
+                ),
+              });
+              if (liveAuction.highBidTeamId === sNow.playerTeamId) {
                 toast.warning(
-                  `Bid refunded · ${city?.name ?? b.airportCode}`,
-                  `The concession was no longer available — ${fmtMoneyPlain(b.bidPriceUsd)} refunded.`,
+                  `Auction void · ${city?.name ?? liveAuction.airportCode}`,
+                  `${city?.name ?? liveAuction.airportCode} was acquired through another route — your ${fmtMoneyPlain(liveAuction.highBidUsd)} escrow has been refunded.`,
                 );
               }
-            } else {
-              get().rejectAirportBid(b.id, verdict.reason);
-              if (isPlayer) {
+              continue;
+            }
+
+            // (1) Bot rival counter-bid. Build the candidate pool from every
+            //     non-player, non-current-leader team that can field a bid.
+            const candidates = sNow.teams
+              .filter((t) => t.id !== sNow.playerTeamId && t.id !== liveAuction.highBidTeamId)
+              .map((t) => ({
+                id: t.id,
+                cashUsd: t.cashUsd,
+                brand: computeBrandValue(t),
+                value: computeAirlineValue(t),
+              }));
+            const raise = planConcessionRaise({
+              airportCode: liveAuction.airportCode,
+              quarter: sNow.currentQuarter,
+              reserveUsd: liveAuction.reserveUsd,
+              highBidUsd: liveAuction.highBidUsd,
+              highBidTeamId: liveAuction.highBidTeamId,
+              candidates,
+            });
+            if (raise) {
+              const priorLeaderId = liveAuction.highBidTeamId;
+              const priorLeaderBid = liveAuction.highBidUsd;
+              const wasPlayerLeading = priorLeaderId === sNow.playerTeamId;
+              const rivalTeam = sNow.teams.find((t) => t.id === raise.teamId);
+              set({
+                teams: sNow.teams.map((t) => {
+                  if (t.id === raise.teamId) return { ...t, cashUsd: t.cashUsd - raise.amountUsd };
+                  if (t.id === priorLeaderId) return { ...t, cashUsd: t.cashUsd + priorLeaderBid };
+                  return t;
+                }),
+                airportConcessionAuctions: (sNow.airportConcessionAuctions ?? []).map((a) =>
+                  a.id === liveAuction.id
+                    ? {
+                        ...a,
+                        highBidTeamId: raise.teamId,
+                        highBidUsd: raise.amountUsd,
+                        history: [
+                          ...a.history,
+                          { teamId: raise.teamId, amountUsd: raise.amountUsd, quarter: sNow.currentQuarter, kind: "raise" as const },
+                        ],
+                      }
+                    : a,
+                ),
+              });
+              if (wasPlayerLeading) {
                 toast.warning(
-                  `Bid declined · ${city?.name ?? b.airportCode}`,
-                  verdict.reason,
+                  `Out-bid · ${city?.name ?? liveAuction.airportCode}`,
+                  `${rivalTeam?.name ?? "A rival carrier"} raised to ${fmtMoneyPlain(raise.amountUsd)} for the ${city?.name ?? liveAuction.airportCode} concession — your ${fmtMoneyPlain(priorLeaderBid)} escrow has been refunded. Bid again higher to stay in the auction before it closes.`,
                 );
               }
             }
+
+            // (2) Resolve at close. Re-read the auction — a bot may have
+            //     just raised this same quarter (still the same close
+            //     window). Award only when the window has elapsed.
+            const sAfter = get();
+            const cur = (sAfter.airportConcessionAuctions ?? []).find((a) => a.id === liveAuction.id);
+            if (!cur || cur.status !== "open") continue;
+            if (sAfter.currentQuarter < cur.closesQuarter) continue;
+
+            // Window reached → the standing high bidder wins. Cash is
+            // already escrowed, so award is a pure ownership transfer.
+            const tier = (city?.tier ?? 4) as 1 | 2 | 3 | 4;
+            const slotState = sAfter.airportSlots?.[cur.airportCode];
+            const totalSlots = sAfter.teams.reduce(
+              (sum, t) => sum + (t.airportLeases?.[cur.airportCode]?.slots ?? 0),
+              0,
+            );
+            const totalWeekly = sAfter.teams.reduce(
+              (sum, t) => sum + (t.airportLeases?.[cur.airportCode]?.totalWeeklyCost ?? 0),
+              0,
+            );
+            const avgRate = totalSlots > 0
+              ? totalWeekly / totalSlots
+              : BASE_SLOT_PRICE_BY_TIER[tier] ?? 35_000;
+            const newSlotState: AirportSlotState = {
+              ...(slotState ?? { available: 0, nextOpening: 0, nextTickQuarter: 5 }),
+              ownerTeamId: cur.highBidTeamId,
+              ownerSlotRatePerWeekUsd: Math.round(avgRate),
+              totalCapacity: AIRPORT_DEFAULT_CAPACITY_BY_TIER[tier] ?? 140,
+              acquiredAtQuarter: sAfter.currentQuarter,
+              purchaseCostUsd: cur.highBidUsd,
+            };
+            const winner = sAfter.teams.find((t) => t.id === cur.highBidTeamId);
+            set({
+              airportSlots: { ...sAfter.airportSlots, [cur.airportCode]: newSlotState },
+              airportConcessionAuctions: (sAfter.airportConcessionAuctions ?? []).map((a) =>
+                a.id === cur.id
+                  ? {
+                      ...a,
+                      status: "won" as const,
+                      winnerTeamId: cur.highBidTeamId,
+                      resolvedQuarter: sAfter.currentQuarter,
+                    }
+                  : a,
+              ),
+            });
+            if (cur.highBidTeamId === sAfter.playerTeamId) {
+              toast.success(
+                `Airport acquired · ${city?.name ?? cur.airportCode}`,
+                `You won the ${city?.name ?? cur.airportCode} concession with a ${fmtMoneyPlain(cur.highBidUsd)} high bid. You now own the airport — slot fees flow to you from next quarter, and it's no longer open for bidding.`,
+              );
+            } else {
+              toast.info(
+                `Concession awarded · ${city?.name ?? cur.airportCode}`,
+                `${winner?.name ?? "A rival carrier"} won the ${city?.name ?? cur.airportCode} airport with ${fmtMoneyPlain(cur.highBidUsd)}. It's no longer open for bidding; your slots and flights there are unaffected.`,
+              );
+            }
           }
-          // Re-pull player after any cash commit/refund so the rest of
-          // the close run uses the fresh cash position.
+          // Re-pull player after any escrow movement so the rest of the
+          // close run uses the fresh cash position.
           const refreshed = get().teams.find((t) => t.id === s.playerTeamId);
           if (refreshed) Object.assign(player, refreshed);
         }
@@ -6885,6 +7026,7 @@ export const useGame = create<GameStore>()(
               teams: _snapshot.teams,
               airportSlots: _snapshot.airportSlots,
               airportBids: _snapshot.airportBids,
+              airportConcessionAuctions: _snapshot.airportConcessionAuctions,
               preOrders: _snapshot.preOrders,
               secondHandListings: _snapshot.secondHandListings,
               cargoContracts: _snapshot.cargoContracts,
@@ -8042,6 +8184,7 @@ export const useGame = create<GameStore>()(
           cargoContracts: [],
           airportSlots: {},
           airportBids: [],
+          airportConcessionAuctions: [],
           sessionCode: null,
           sessionLocked: false,
           sessionSlots: [],
@@ -8146,6 +8289,7 @@ export const useGame = create<GameStore>()(
           cargoContracts: [],
           airportSlots: makeInitialAirportSlots({ v2: get().session?.airportSystemV2 ?? false }),
           airportBids: [],
+          airportConcessionAuctions: [],
           preOrders: [],
           productionCapOverrides: {},
           quarterCloseRequest: null,
@@ -8415,6 +8559,7 @@ export const useGame = create<GameStore>()(
           cargoContracts: s.cargoContracts,
           airportSlots: s.airportSlots,
           airportBids: s.airportBids,
+          airportConcessionAuctions: s.airportConcessionAuctions,
           worldCupHostCode: s.worldCupHostCode,
           olympicHostCode: s.olympicHostCode,
           sessionCode: s.sessionCode,
@@ -10427,6 +10572,7 @@ if (typeof setTimeout !== "undefined") {
     "teams",
     "airportSlots",
     "airportBids",
+    "airportConcessionAuctions",
     "preOrders",
     "secondHandListings",
     "cargoContracts",

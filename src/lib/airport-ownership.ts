@@ -105,36 +105,38 @@ export function airportAskingPriceUsd(
 }
 
 /* ────────────────────────────────────────────────────────────────
- *  Self-guided bid adjudication (May 2026 play-test ask).
+ *  Ascending concession auctions (May 2026 redesign).
  *
- *  In a facilitated workshop a human GM approves/rejects airport bids.
- *  In a *self_guided* game (solo / auto mode) there is no GM, so bids
- *  used to escrow the player's cash and then silently auto-expire two
- *  quarters later — making it impossible to ever buy an airport.
+ *  The old `adjudicateAirportBid` ran a phantom rival that could
+ *  "out-bid" the player but never actually became the owner — so the
+ *  airport stayed public and there was no way to raise. That whole
+ *  model is gone. Acquiring an airport now runs a VISIBLE ascending
+ *  auction:
  *
- *  `adjudicateAirportBid` lets the engine play the role of the airport
- *  authority. It weighs:
- *    • Bid premium  — how the offer compares to the authority's asking
- *                     valuation. Lowballs get declined outright.
- *    • Brand standing — a credible flag carrier is a more acceptable
- *                       concession-holder than an unknown.
- *    • Market positioning — a large, valuable airline reads as a safe
- *                       pair of hands even if brand is still building.
- *    • Rival bidding war — prestigious (tier-1/2) gateways attract a
- *                       competing carrier whose counter-offer the player
- *                       must beat, or lose the concession.
+ *    1. Opening a bid creates a `ConcessionAuction` with a 2-quarter
+ *       window. The opener's cash is escrowed and they are the standing
+ *       high bidder.
+ *    2. At each quarter close, real bot rivals (with cash + appetite)
+ *       may counter via `planConcessionRaise`. A counter refunds the
+ *       prior leader and escrows the new one.
+ *    3. The player can RAISE over the window (anti-snipe extends the
+ *       close, bounded by a hard cap).
+ *    4. When the window closes, the standing high bidder WINS and takes
+ *       ownership — the airport stops showing public.
  *
  *  Deterministic: the same airport + quarter always produces the same
  *  rival behaviour, so a replayed close can't be gamed by re-rolling.
  * ──────────────────────────────────────────────────────────────── */
 
-export interface AirportBidAdjudication {
-  approved: boolean;
-  /** The rival carrier's counter-offer, if a bidding war broke out. */
-  rivalOfferUsd: number | null;
-  /** Human-readable rationale for the toast + notification. */
-  reason: string;
-}
+/** Default auction window — how many quarters an opened auction stays
+ *  open before the standing high bidder wins. */
+export const AIRPORT_AUCTION_WINDOW_QUARTERS = 2;
+/** Hard cap on how long an auction can run even with anti-snipe
+ *  extensions, measured from the quarter it opened. */
+export const AIRPORT_AUCTION_HARD_CAP_QUARTERS = 5;
+/** Minimum raise multiple over the standing high bid for a new bid to
+ *  be valid (5% — keeps the war meaningful, blocks $1 nudges). */
+export const AIRPORT_MIN_RAISE_MULT = 1.05;
 
 /** Tiny deterministic PRNG (mulberry32) seeded from a string hash so
  *  rival behaviour is reproducible per airport+quarter. */
@@ -153,85 +155,53 @@ function seededRandom(seed: string): () => number {
   };
 }
 
-/** Compact USD formatter for adjudication reason strings (kept local to
- *  avoid a dependency on the format module from this pure helper). */
-function compactUsd(n: number): string {
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `$${Math.round(n / 1_000_000)}M`;
-  return `$${Math.round(n).toLocaleString("en-AE")}`;
-}
-
-export function adjudicateAirportBid(opts: {
+/** Decide whether a bot rival counters the standing high bid in a live
+ *  concession auction this quarter, and if so, by how much and who.
+ *
+ *  Deterministic per airport+quarter. Returns `null` when no rival is
+ *  willing or able to raise (the auction simply ticks toward close).
+ *  When it returns a bid, the caller refunds the prior leader, escrows
+ *  the named team for `amountUsd`, and records a "raise" history event.
+ *
+ *  Appetite falls as the high bid climbs over the reserve — rivals chase
+ *  marquee gateways hard at first but won't overpay into the stratosphere.
+ *  Only a team that can actually afford the target raise (and clears a
+ *  credibility bar on prestige assets) is eligible. */
+export function planConcessionRaise(opts: {
   airportCode: string;
   quarter: number;
-  bidAmountUsd: number;
-  askingPriceUsd: number;
-  /** Bidder brand rating, 0–100. */
-  brandRating0to100: number;
-  /** Bidder total airline value (market positioning). */
-  airlineValueUsd: number;
-}): AirportBidAdjudication {
-  const { airportCode, quarter, bidAmountUsd, askingPriceUsd } = opts;
-  const rng = seededRandom(`${airportCode}:${quarter}`);
-  const tier = (CITIES_BY_CODE[airportCode]?.tier ?? 4) as 1 | 2 | 3 | 4;
-  const premium = askingPriceUsd > 0 ? bidAmountUsd / askingPriceUsd : 1;
+  reserveUsd: number;
+  highBidUsd: number;
+  highBidTeamId: string;
+  /** Candidate bot teams (exclude the human and the current leader
+   *  upstream, or rely on the highBidTeamId filter here). */
+  candidates: { id: string; cashUsd: number; brand: number; value: number }[];
+}): { teamId: string; amountUsd: number } | null {
+  const rng = seededRandom(`${opts.airportCode}:${opts.quarter}:concession`);
+  const tier = (CITIES_BY_CODE[opts.airportCode]?.tier ?? 4) as 1 | 2 | 3 | 4;
+  // How far over the reserve the standing bid already sits (1 = at reserve).
+  const overReserve = opts.reserveUsd > 0 ? opts.highBidUsd / opts.reserveUsd : 1;
+  const baseAppetite = tier === 1 ? 0.55 : tier === 2 ? 0.4 : tier === 3 ? 0.22 : 0.1;
+  // Appetite decays the further the bid has run past the reserve.
+  const appetite = Math.max(0, baseAppetite * Math.max(0, 1 - (overReserve - 1) * 1.1));
+  if (rng() >= appetite) return null;
 
-  // 1) Lowball guard — the authority won't sell below ~97% of its
-  //    valuation no matter who's asking.
-  if (premium < 0.97) {
-    return {
-      approved: false,
-      rivalOfferUsd: null,
-      reason: `Your offer of ${compactUsd(bidAmountUsd)} came in below the airport authority's valuation of ${compactUsd(askingPriceUsd)}. They declined to sell.`,
-    };
-  }
+  // Target raise — a healthy bump scaled by tier prestige.
+  const bump = 1.06 + rng() * (tier === 1 ? 0.16 : tier === 2 ? 0.12 : 0.08);
+  const target = Math.round(opts.highBidUsd * bump);
 
-  // 2) Bidding war — prestigious gateways attract a rival carrier.
-  //    Base odds rise with tier; lowish premiums invite competition,
-  //    a strong over-bid scares rivals off.
-  const baseWarProb = tier === 1 ? 0.55 : tier === 2 ? 0.4 : tier === 3 ? 0.25 : 0.12;
-  const warProb = Math.max(
-    0,
-    Math.min(0.9, baseWarProb + (premium < 1.1 ? 0.2 : premium > 1.35 ? -0.2 : 0)),
-  );
-  let rivalOfferUsd: number | null = null;
-  if (rng() < warProb) {
-    // Rival aggression scales with how marquee the asset is.
-    const rivalPremium = 1.05 + rng() * (tier === 1 ? 0.45 : tier === 2 ? 0.35 : 0.22);
-    rivalOfferUsd = Math.round(askingPriceUsd * rivalPremium);
-    if (bidAmountUsd < rivalOfferUsd) {
-      return {
-        approved: false,
-        rivalOfferUsd,
-        reason: `A rival carrier out-bid you with ${compactUsd(rivalOfferUsd)} for the ${airportCode} airport concession. The authority awarded ownership to them — your escrow has been refunded in full. Your slots and flights at ${airportCode} are unaffected; this was a bid to OWN the airport, not to operate there. You can bid again higher next quarter.`,
-      };
-    }
-  }
+  const able = opts.candidates
+    .filter((c) => c.id !== opts.highBidTeamId && c.cashUsd >= target)
+    // Credibility bar on prestige assets — a serious operator only.
+    // Tier 3/4 are less picky and accept anyone who can pay.
+    .filter((c) => c.brand >= 25 || c.value >= 1_000_000_000 || tier >= 3)
+    .sort((a, b) => b.cashUsd - a.cashUsd);
+  if (able.length === 0) return null;
 
-  // 3) Credibility — even after clearing the money bar, the authority
-  //    wants a serious operator. A respectable brand, a heavyweight
-  //    airline, or a decisive over-bid each clears the bar on its own.
-  const brandOk = opts.brandRating0to100 >= 35;
-  const positioningOk = opts.airlineValueUsd >= 2_000_000_000;
-  const strongPremium = premium >= 1.15;
-  if (brandOk || positioningOk || strongPremium) {
-    const beat = rivalOfferUsd != null
-      ? ` You beat a rival bid of ${compactUsd(rivalOfferUsd)}.`
-      : "";
-    return {
-      approved: true,
-      rivalOfferUsd,
-      reason: `The airport authority accepted your ${compactUsd(bidAmountUsd)} offer for ${airportCode}.${beat}`,
-    };
-  }
-
-  // 4) Weak brand, modest airline, at-asking offer — the authority
-  //    hesitates. Player can re-bid higher or build brand first.
-  return {
-    approved: false,
-    rivalOfferUsd,
-    reason: `The airport authority wasn't convinced your airline has the standing to run ${airportCode}. Strengthen your brand or raise your offer — your escrow has been refunded.`,
-  };
+  // Pick among the top few cash-rich contenders for a little variety.
+  const pickFrom = able.slice(0, Math.min(3, able.length));
+  const chosen = pickFrom[Math.floor(rng() * pickFrom.length)];
+  return { teamId: chosen.id, amountUsd: target };
 }
 
 /** Quarterly slot revenue the airport's owner collects this round —

@@ -1065,10 +1065,10 @@ function SummaryCard({
  *  panel where it can be managed.
  */
 function PortfolioOverview() {
-  const startYear = useCampaignStartYear();
   const player = useGame(selectPlayer);
   const airportSlots = useGame((s) => s.airportSlots);
-  const airportBids = useGame((s) => s.airportBids ?? []);
+  const concessionAuctions = useGame((s) => s.airportConcessionAuctions ?? []);
+  const currentQuarter = useGame((s) => s.currentQuarter);
   const setAirportDetailCode = useUi((u) => u.setAirportDetailCode);
   const openPanel = useUi((u) => u.openPanel);
 
@@ -1079,11 +1079,22 @@ function PortfolioOverview() {
     .filter(([, st]) => st.ownerTeamId === player.id)
     .map(([code, st]) => ({ code, state: st }));
 
-  // Pending airport bids submitted by this team, awaiting facilitator
-  // approval. Cash is escrowed; surface so the player knows what's tied up.
-  const myPendingBids = airportBids.filter(
-    (b) => b.bidderTeamId === player.id && b.status === "pending",
-  );
+  // Live concession auctions this team is participating in (has bid at
+  // some point and the auction is still open). Split into the ones where
+  // the player currently holds the high bid (cash escrowed) and the ones
+  // where a rival has out-bid them (cash already refunded — they need to
+  // raise to stay in).
+  const myAuctions = concessionAuctions
+    .filter(
+      (a) => a.status === "open" && a.history.some((h) => h.teamId === player.id),
+    )
+    .map((a) => ({
+      auction: a,
+      leading: a.highBidTeamId === player.id,
+      closesIn: a.closesQuarter - currentQuarter,
+    }));
+  const leadingAuctions = myAuctions.filter((m) => m.leading);
+  const outbidAuctions = myAuctions.filter((m) => !m.leading);
 
   // Slot leases — every airport where the player holds at least one slot.
   const slotLeases = Object.entries(player.airportLeases ?? {})
@@ -1104,13 +1115,15 @@ function PortfolioOverview() {
   // Aggregate counts for the summary header — one number per asset
   // class, plus a portfolio mark-to-market total where computable.
   const totalSlotsHeld = slotLeases.reduce((s, x) => s + x.lease.slots, 0);
-  const escrowedBidsUsd = myPendingBids.reduce((s, b) => s + b.bidPriceUsd, 0);
+  // Only the standing high bidder's cash is escrowed in an ascending
+  // auction — sum the leading bids.
+  const escrowedBidsUsd = leadingAuctions.reduce((s, m) => s + m.auction.highBidUsd, 0);
 
   // If the player has nothing in this panel yet (sub-Q5 fresh game)
   // skip rendering rather than showing five "0" cards.
   if (
     ownedAirports.length === 0 &&
-    myPendingBids.length === 0 &&
+    myAuctions.length === 0 &&
     slotLeases.length === 0 &&
     hubInvCount === 0 &&
     subCount === 0
@@ -1132,12 +1145,18 @@ function PortfolioOverview() {
           ctaLabel={ownedAirports.length > 0 ? "Open first" : undefined}
         />
         <PortfolioCount
-          label="Pending bids"
-          value={myPendingBids.length}
-          sub={myPendingBids.length === 0 ? "No bids in review" : `${fmtMoney(escrowedBidsUsd)} in escrow`}
-          onClick={myPendingBids.length > 0 ? () => setAirportDetailCode(myPendingBids[0].airportCode) : undefined}
-          ctaLabel={myPendingBids.length > 0 ? "Open first" : undefined}
-          tone={myPendingBids.length > 0 ? "warn" : "default"}
+          label="Live auctions"
+          value={myAuctions.length}
+          sub={
+            myAuctions.length === 0
+              ? "No active bids"
+              : outbidAuctions.length > 0
+                ? `${outbidAuctions.length} out-bid · raise to stay in`
+                : `${fmtMoney(escrowedBidsUsd)} leading in escrow`
+          }
+          onClick={myAuctions.length > 0 ? () => setAirportDetailCode(myAuctions[0].auction.airportCode) : undefined}
+          ctaLabel={myAuctions.length > 0 ? "Open first" : undefined}
+          tone={outbidAuctions.length > 0 ? "warn" : "default"}
         />
         <PortfolioCount
           label="Slot leases"
@@ -1188,31 +1207,43 @@ function PortfolioOverview() {
         </div>
       )}
 
-      {/* Pending bids detail list */}
-      {myPendingBids.length > 0 && (
+      {/* Live concession auctions detail list */}
+      {myAuctions.length > 0 && (
         <div className="mt-3">
           <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
-            Pending airport bids · cash held in escrow
+            Live concession auctions · you have bid
           </div>
           <div className="space-y-1.5">
-            {myPendingBids.map((b) => {
-              const city = CITIES_BY_CODE[b.airportCode];
+            {myAuctions.map(({ auction: a, leading, closesIn }) => {
+              const city = CITIES_BY_CODE[a.airportCode];
+              const closesLabel =
+                closesIn <= 0 ? "closes this Q" : closesIn === 1 ? "closes next Q" : `closes in ${closesIn}Q`;
               return (
                 <button
-                  key={b.id}
+                  key={a.id}
                   type="button"
-                  onClick={() => setAirportDetailCode(b.airportCode)}
-                  className="w-full flex items-center justify-between rounded-md border border-warning/40 bg-[var(--warning-soft)]/30 px-3 py-2 hover:bg-[var(--warning-soft)]/50 text-left transition-colors"
+                  onClick={() => setAirportDetailCode(a.airportCode)}
+                  className={cn(
+                    "w-full flex items-center justify-between rounded-md border px-3 py-2 text-left transition-colors",
+                    leading
+                      ? "border-accent/40 bg-[var(--accent-soft)]/30 hover:bg-[var(--accent-soft)]/50"
+                      : "border-warning/40 bg-[var(--warning-soft)]/30 hover:bg-[var(--warning-soft)]/50",
+                  )}
                 >
                   <span className="flex items-baseline gap-2 min-w-0">
-                    <span className="font-mono tabular text-ink text-[0.8125rem]">{b.airportCode}</span>
-                    <span className="text-[0.8125rem] text-ink-2 truncate">{city?.name ?? b.airportCode}</span>
-                    <span className="text-[0.625rem] uppercase tracking-wider text-warning shrink-0">
-                      submitted {fmtQuarter(b.submittedQuarter, startYear)}
+                    <span className="font-mono tabular text-ink text-[0.8125rem]">{a.airportCode}</span>
+                    <span className="text-[0.8125rem] text-ink-2 truncate">{city?.name ?? a.airportCode}</span>
+                    <span
+                      className={cn(
+                        "text-[0.625rem] uppercase tracking-wider shrink-0",
+                        leading ? "text-accent" : "text-warning",
+                      )}
+                    >
+                      {leading ? "you lead" : "out-bid"} · {closesLabel}
                     </span>
                   </span>
                   <span className="text-[0.75rem] tabular font-mono text-ink shrink-0">
-                    {fmtMoney(b.bidPriceUsd)}
+                    {fmtMoney(a.highBidUsd)}
                   </span>
                 </button>
               );

@@ -8,6 +8,7 @@ import { useGame, selectPlayer, useCampaignStartYear } from "@/store/game";
 import { AdminPanel } from "@/components/panels/AdminPanel";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { computeAirlineValue, brandRating, fleetCount } from "@/lib/engine";
+import { AIRPORT_AUCTION_WINDOW_QUARTERS } from "@/lib/airport-ownership";
 import { cn } from "@/lib/cn";
 import { ArrowLeft, Plane, Users, Settings2, Trophy, Key, Mic, Save, Download, Upload, RotateCcw, Trash2, Lock, Unlock, Building, Check, X, Loader2, AlertCircle } from "lucide-react";
 import { CITIES } from "@/data/cities";
@@ -1073,6 +1074,7 @@ function AirportsView() {
   const startYear = useCampaignStartYear();
   const airportSlots = useGame((s) => s.airportSlots);
   const airportBids = useGame((s) => s.airportBids ?? []);
+  const concessionAuctions = useGame((s) => s.airportConcessionAuctions ?? []);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const approveAirportBid = useGame((s) => s.approveAirportBid);
   const rejectAirportBid = useGame((s) => s.rejectAirportBid);
@@ -1086,6 +1088,13 @@ function AirportsView() {
     .filter((b) => b.status !== "pending")
     .sort((a, b) => (b.resolvedQuarter ?? 0) - (a.resolvedQuarter ?? 0))
     .slice(0, 6);
+
+  // Live ascending auctions — the current player-facing flow. These resolve
+  // automatically at quarter close (no regulator decision needed); this is a
+  // read-only monitor so the host can narrate the bidding war in the room.
+  const liveAuctions = concessionAuctions
+    .filter((a) => a.status === "open")
+    .sort((a, b) => a.closesQuarter - b.closesQuarter);
 
   // Airport list — every airport that's either currently owned, has a
   // pending bid, or has any historical activity. Skips empty Tier-1/2
@@ -1131,14 +1140,83 @@ function AirportsView() {
   return (
     <div className="space-y-6 max-w-4xl">
       <header>
-        <h1 className="font-display text-[1.75rem] text-ink mb-1">Airports · regulator</h1>
+        <h1 className="font-display text-[1.75rem] text-ink mb-1">Airports · concessions</h1>
         <p className="text-ink-2 text-[0.9375rem] leading-relaxed">
-          Player teams can bid to acquire airports outright. As facilitator
-          you act as the regulator — approve a bid to transfer operating
-          control, or reject it (escrowed cash refunds in full). Bids that
-          sit pending for 2 quarters auto-expire and refund.
+          Airports go to the highest bidder in a live ascending auction.
+          When a team opens the bidding, a {AIRPORT_AUCTION_WINDOW_QUARTERS}-quarter
+          window starts; rival airlines can counter and teams can raise. At
+          window close the standing high bidder wins and takes operating
+          control automatically — no decision needed from you. This page is a
+          read-only monitor so you can narrate the bidding war in the room.
         </p>
       </header>
+
+      {/* Live auctions monitor — the current player-facing acquisition flow. */}
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          Live concession auctions · {liveAuctions.length}
+        </div>
+        {liveAuctions.length === 0 ? (
+          <Card>
+            <CardBody>
+              <p className="text-[0.875rem] text-ink-muted italic">
+                No auctions running. When a team opens bidding on an airport it
+                will appear here with the standing high bid and closing quarter.
+              </p>
+            </CardBody>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {liveAuctions.map((a) => {
+              const leader = teamName(a.highBidTeamId);
+              const cityName = CITIES.find((c) => c.code === a.airportCode)?.name ?? a.airportCode;
+              const closesIn = Math.max(0, a.closesQuarter - currentQuarter);
+              const raises = a.history.filter((h) => h.kind === "raise").length;
+              return (
+                <div
+                  key={a.id}
+                  className={cn(
+                    "rounded-lg border p-4 flex items-start gap-4",
+                    closesIn === 0
+                      ? "border-warning bg-[var(--warning-soft)]/40"
+                      : "border-line bg-surface",
+                  )}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                      <span className="font-display text-[1.25rem] text-ink leading-none">
+                        {cityName}
+                      </span>
+                      <span className="font-mono text-[0.75rem] text-ink-muted">{a.airportCode}</span>
+                      {closesIn === 0 && <Badge tone="warning">Closes this quarter</Badge>}
+                    </div>
+                    <div className="flex items-center gap-2 text-[0.8125rem] mb-2">
+                      <span
+                        className="inline-block w-6 h-6 rounded-md flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg"
+                        style={{ background: leader.color }}
+                      >
+                        {leader.code}
+                      </span>
+                      <span className="text-ink font-medium">{leader.name}</span>
+                      <span className="text-ink-muted">leads at</span>
+                      <span className="font-mono tabular text-ink font-semibold">
+                        {fmtMoney(a.highBidUsd)}
+                      </span>
+                    </div>
+                    <div className="text-[0.6875rem] text-ink-muted">
+                      Opened {fmtQuarter(a.openedQuarter, startYear)} ·{" "}
+                      {raises} raise{raises === 1 ? "" : "s"} ·{" "}
+                      {closesIn === 0
+                        ? "Resolves at this quarter close — high bidder wins"
+                        : `Closes ${fmtQuarter(a.closesQuarter, startYear)} (${closesIn} quarter${closesIn === 1 ? "" : "s"})`}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {/* Pending bids inbox — the regulator's primary workspace. */}
       <section>

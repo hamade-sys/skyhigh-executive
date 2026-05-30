@@ -17,6 +17,8 @@ import {
   AIRPORT_EXPANSION_COST_PER_LEVEL,
   AIRPORT_EXPANSION_SLOTS,
   AIRPORT_MAX_CAPACITY_BY_TIER,
+  AIRPORT_AUCTION_WINDOW_QUARTERS,
+  AIRPORT_MIN_RAISE_MULT,
 } from "@/lib/airport-ownership";
 import { cityEffectiveDemand } from "@/lib/engine";
 import { cityEventImpact } from "@/lib/city-events";
@@ -327,7 +329,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   const youId = useGame((s) => s.activeTeamId ?? s.playerTeamId);
   const teams = useGame((s) => s.teams);
   const slotState = useGame((s) => s.airportSlots?.[cityCode]);
-  const airportBids = useGame((s) => s.airportBids);
+  const concessionAuctions = useGame((s) => s.airportConcessionAuctions);
   const currentQuarter = useGame((s) => s.currentQuarter);
   const submitAirportBid = useGame((s) => s.submitAirportBid);
   const sellAirport = useGame((s) => s.sellAirport);
@@ -335,6 +337,8 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   const expandAirportCapacity = useGame((s) => s.expandAirportCapacity);
   const [pendingRate, setPendingRate] = useState<string>("");
   const [confirmBuy, setConfirmBuy] = useState(false);
+  const [confirmRaise, setConfirmRaise] = useState(false);
+  const [raiseInput, setRaiseInput] = useState<string>("");
   const [confirmSell, setConfirmSell] = useState(false);
 
   if (!player) return null;
@@ -359,15 +363,18 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   const maxCap = AIRPORT_MAX_CAPACITY_BY_TIER[tier];
   const expansionCost = AIRPORT_EXPANSION_COST_PER_LEVEL[tier];
 
-  // Pending bids on this airport — separate the player's own pending
-  // bid (so we can show "Your bid pending") from any other team's
-  // bid (so we can show "Another team has a bid pending — yours will
-  // be considered against theirs").
-  const pendingBidsAtAirport = (airportBids ?? []).filter(
-    (b) => b.airportCode === cityCode && b.status === "pending",
+  // Live ascending concession auction on this airport, if any. A bid
+  // opens a VISIBLE auction: the high bid is real (escrowed cash from a
+  // real team), rivals counter at quarter close, and the standing high
+  // bidder when the window closes actually takes ownership. There is no
+  // phantom regulator verdict — the auction itself decides.
+  const liveAuction = (concessionAuctions ?? []).find(
+    (a) => a.airportCode === cityCode && a.status === "open",
   );
-  const myPendingBid = pendingBidsAtAirport.find((b) => b.bidderTeamId === player.id);
-  const otherPendingBids = pendingBidsAtAirport.filter((b) => b.bidderTeamId !== player.id);
+  const iLeadAuction = liveAuction?.highBidTeamId === player.id;
+  const auctionLeaderTeam = liveAuction
+    ? teams.find((t) => t.id === liveAuction.highBidTeamId)
+    : null;
 
   // Sell modal — only relevant when ownedByMe; rendered inline in
   // that branch's fragment.
@@ -722,12 +729,20 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
     );
   }
 
-  // Unowned — show bid CTA. Cash is escrowed at submission, regulator
-  // approval is required, 2Q window before auto-expiry refund.
-  const canAfford = player.cashUsd >= askingPrice;
-  const myBidQuartersHeld = myPendingBid
-    ? currentQuarter - myPendingBid.submittedQuarter
-    : 0;
+  // Unowned — ascending concession auction. Opening a bid starts a
+  // visible auction; rivals counter at quarter close; the standing high
+  // bidder when the window closes actually takes ownership.
+  const highBid = liveAuction?.highBidUsd ?? 0;
+  const minRaise = liveAuction ? Math.ceil(highBid * AIRPORT_MIN_RAISE_MULT) : 0;
+  const closesIn = liveAuction ? liveAuction.closesQuarter - currentQuarter : 0;
+  const closesLabel =
+    closesIn <= 0 ? "closes this quarter" : closesIn === 1 ? "closes next quarter" : `closes in ${closesIn} quarters`;
+  // Default the raise input to the minimum legal raise.
+  const raiseAmount = Math.max(minRaise, Math.round(Number(raiseInput.replace(/[^0-9.]/g, "")) || 0));
+  const canAffordOpen = player.cashUsd >= askingPrice;
+  const canAffordRaise = player.cashUsd >= minRaise;
+  // Last few bids, newest first, for the running tape.
+  const recentBids = liveAuction ? [...liveAuction.history].slice(-4).reverse() : [];
   return (
     <>
     <section>
@@ -736,109 +751,164 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
       </div>
       <div className="rounded-md border border-line bg-surface p-3 space-y-2">
         <div className="grid grid-cols-3 gap-2">
-          <Stat label="Asking price" value={fmtMoney(askingPrice)} hint="Tier base + 4× Q rev" />
+          {liveAuction ? (
+            <Stat label="Current high bid" value={fmtMoney(highBid)} hint={iLeadAuction ? "You lead" : auctionLeaderTeam?.name ?? "Rival leads"} />
+          ) : (
+            <Stat label="Opening price" value={fmtMoney(askingPrice)} hint="Tier base + 4× Q rev" />
+          )}
           <Stat label="Q slot revenue" value={fmtMoney(qRevenue)} hint="What it earns now" />
           <Stat label="Capacity" value={`${capacity} / ${maxCap}`} hint="+200 per expansion" />
         </div>
 
-        {/* ── Asking-price breakdown (Phase 2 — P1-9). The pre-fix
-            modal showed just "Tier base + 4× Q rev" as a 3-word hint
-            — players had to do the math themselves on a Tier-1
-            airport whose asking price lands near $1B. Now the
-            breakdown is spelled out explicitly. */}
-        {(() => {
-          const baseUsd = AIRPORT_BASE_PRICE_BY_TIER[tier];
-          const capitalisedUsd = askingPrice - baseUsd;
-          return (
-            <div className="rounded-md border border-line/60 bg-surface-2/30 p-2.5 text-[0.75rem] space-y-1">
-              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
-                How the asking price is calculated
-              </div>
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-ink-2">Tier {tier} base price</span>
-                <span className="tabular font-mono text-ink-2">{fmtMoney(baseUsd)}</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-ink-2">Capitalised slot revenue (4× current Q)</span>
-                <span className="tabular font-mono text-ink-2">+{fmtMoney(capitalisedUsd)}</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-3 pt-1 mt-0.5 border-t border-line/60 font-semibold">
-                <span className="text-ink">Total asking price</span>
-                <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Pending-bid surfaces — explain to the player why they
-            can't bid again while their previous bid is held. */}
-        {myPendingBid ? (
-          <div className="rounded-md border border-warning bg-[var(--warning-soft)] p-2.5 text-[0.8125rem]">
-            <div className="font-semibold text-warning flex items-baseline justify-between gap-2">
-              <span>Your bid is in regulatory review</span>
+        {liveAuction ? (
+          /* ── Live auction status ──────────────────────────────────── */
+          <div
+            className={cn(
+              "rounded-md border p-2.5 text-[0.8125rem]",
+              iLeadAuction
+                ? "border-accent bg-[var(--accent-soft)]"
+                : "border-warning bg-[var(--warning-soft)]",
+            )}
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className={cn("font-semibold", iLeadAuction ? "text-accent" : "text-warning")}>
+                {iLeadAuction ? "You hold the high bid" : "You have been out-bid"}
+              </span>
               <span className="tabular font-mono text-[0.6875rem] text-ink-muted">
-                {myBidQuartersHeld === 0 ? "submitted this quarter" : `${myBidQuartersHeld}Q held`}
+                {closesLabel}
               </span>
             </div>
             <div className="text-ink-2 mt-1 leading-relaxed">
-              {fmtMoney(myPendingBid.bidPriceUsd)} held in escrow.{" "}
-              {govPossessiveCap} will approve or reject before the
-              2-quarter window expires (auto-refund if no decision).
+              {iLeadAuction ? (
+                <>
+                  Your {fmtMoney(highBid)} bid is the standing high bid, held in
+                  escrow. Rival carriers can still counter before the auction
+                  closes. If you&apos;re still the high bidder when it{" "}
+                  {closesIn <= 0 ? "closes" : "closes"}, you take ownership of
+                  the airport.
+                </>
+              ) : (
+                <>
+                  <strong>{auctionLeaderTeam?.name ?? "A rival carrier"}</strong>{" "}
+                  leads at {fmtMoney(highBid)}. Raise above them to get back in
+                  front — the highest bidder when the window closes owns the
+                  airport. Your previous escrow has already been refunded.
+                </>
+              )}
             </div>
+            {/* Running bid tape */}
+            {recentBids.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-line/60 space-y-0.5">
+                {recentBids.map((b, i) => {
+                  const bt = teams.find((t) => t.id === b.teamId);
+                  const mine = b.teamId === player.id;
+                  return (
+                    <div key={i} className="flex items-baseline justify-between gap-2 text-[0.6875rem]">
+                      <span className="text-ink-2">
+                        {mine ? "You" : bt?.name ?? "Rival"}{" "}
+                        <span className="text-ink-muted">
+                          {b.kind === "open" ? "opened" : "raised"}
+                        </span>
+                      </span>
+                      <span className="tabular font-mono text-ink-2">{fmtMoney(b.amountUsd)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        ) : otherPendingBids.length > 0 ? (
-          <div className="rounded-md border border-line bg-surface-2/40 p-2.5 text-[0.8125rem]">
-            <div className="font-semibold text-ink">
-              {otherPendingBids.length} other bid{otherPendingBids.length === 1 ? "" : "s"} in review
-            </div>
-            <div className="text-ink-muted mt-0.5 text-[0.6875rem]">
-              You can still submit your own bid — {govPossessive} picks
-              one to approve and refunds the rest.
-            </div>
-          </div>
-        ) : null}
+        ) : (
+          /* ── Opening-price breakdown (no auction yet) ─────────────── */
+          (() => {
+            const baseUsd = AIRPORT_BASE_PRICE_BY_TIER[tier];
+            const capitalisedUsd = askingPrice - baseUsd;
+            return (
+              <div className="rounded-md border border-line/60 bg-surface-2/30 p-2.5 text-[0.75rem] space-y-1">
+                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                  How the opening price is calculated
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-ink-2">Tier {tier} base price</span>
+                  <span className="tabular font-mono text-ink-2">{fmtMoney(baseUsd)}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-ink-2">Capitalised slot revenue (4× current Q)</span>
+                  <span className="tabular font-mono text-ink-2">+{fmtMoney(capitalisedUsd)}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 pt-1 mt-0.5 border-t border-line/60 font-semibold">
+                  <span className="text-ink">Opening bid (auction reserve)</span>
+                  <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
+                </div>
+              </div>
+            );
+          })()
+        )}
 
-        {!myPendingBid && (
+        {/* CTA — open the auction, or raise if out-bid. Player can't bid
+            against themselves while leading. */}
+        {!liveAuction ? (
           <Button
             size="sm"
             variant="primary"
-            disabled={!canAfford}
+            disabled={!canAffordOpen}
             onClick={() => setConfirmBuy(true)}
           >
-            {canAfford
-              ? `Submit bid · ${fmtMoney(askingPrice)}`
+            {canAffordOpen
+              ? `Open the bidding · ${fmtMoney(askingPrice)}`
               : `Need ${fmtMoney(askingPrice - player.cashUsd)} more cash`}
+          </Button>
+        ) : iLeadAuction ? (
+          <div className="text-[0.75rem] text-ink-muted leading-relaxed">
+            You currently hold the high bid — wait for a rival to counter
+            before you can raise again.
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={!canAffordRaise}
+            onClick={() => {
+              setRaiseInput(String(minRaise));
+              setConfirmRaise(true);
+            }}
+          >
+            {canAffordRaise
+              ? `Raise · from ${fmtMoney(minRaise)}`
+              : `Need ${fmtMoney(minRaise - player.cashUsd)} more cash to raise`}
           </Button>
         )}
 
         <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
-          Tier {tier} airport. Acquiring requires {govPossessive} approval
-          — your bid amount is held in escrow for up to 2 quarters while
-          the aviation authority reviews. If approved, ownership transfers
-          and you collect every airline&apos;s slot fees as Subsidiary
-          revenue (30% opex). If rejected or expired, your cash is
-          refunded in full.
+          Tier {tier} airport. Opening a bid starts a visible {AIRPORT_AUCTION_WINDOW_QUARTERS}-quarter
+          concession auction run by {govPossessive}. Real rival carriers can
+          counter; you can raise to stay in front. Highest bidder when the
+          window closes owns the airport and collects every airline&apos;s slot
+          fees as Subsidiary revenue (30% opex). Only the standing high
+          bidder&apos;s cash is held in escrow — if you&apos;re out-bid,
+          you&apos;re refunded in full.
         </p>
       </div>
     </section>
 
+    {/* Open-the-bidding confirm */}
     <Modal open={confirmBuy} onClose={() => setConfirmBuy(false)} stack>
       <ModalHeader>
         <h2 className="font-display text-[1.5rem] text-ink">
-          Submit bid for {city.name} airport?
+          Open the bidding on {city.name} airport?
         </h2>
         <p className="text-ink-muted text-[0.8125rem] mt-1">
-          Your bid amount is held in escrow immediately. {govPossessiveCap}{" "}
-          (the aviation regulator) reviews and either approves the transfer
-          of operating control or rejects the bid. If 2 quarters pass
-          without a decision, the bid auto-expires and your cash is
-          refunded in full. No fees on rejection.
+          Your opening bid is held in escrow immediately and becomes the
+          standing high bid. {govPossessiveCap} runs the concession auction
+          for {AIRPORT_AUCTION_WINDOW_QUARTERS} quarters — rival carriers may
+          counter, and you can raise to stay in front. Whoever holds the high
+          bid when the window closes takes ownership. If you&apos;re out-bid
+          and don&apos;t raise, your escrow is refunded in full.
         </p>
       </ModalHeader>
       <ModalBody className="space-y-2">
         <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-ink-muted">Bid amount (escrowed)</span>
+            <span className="text-ink-muted">Opening bid (escrowed)</span>
             <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
           </div>
           <div className="flex items-baseline justify-between gap-3">
@@ -846,8 +916,8 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
             <span className="tabular font-mono text-positive">{fmtMoney(qRevenue)}</span>
           </div>
           <div className="flex items-baseline justify-between gap-3">
-            <span className="text-ink-muted">Approval window</span>
-            <span className="tabular font-mono text-ink">2 quarters</span>
+            <span className="text-ink-muted">Auction window</span>
+            <span className="tabular font-mono text-ink">{AIRPORT_AUCTION_WINDOW_QUARTERS} quarters</span>
           </div>
         </div>
       </ModalBody>
@@ -862,10 +932,74 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
             setConfirmBuy(false);
           }}
         >
-          Submit bid · {fmtMoney(askingPrice)}
+          Open the bidding · {fmtMoney(askingPrice)}
         </Button>
       </ModalFooter>
     </Modal>
+
+    {/* Raise confirm — lets the player choose a raise amount ≥ min raise */}
+    {liveAuction && (
+      <Modal open={confirmRaise} onClose={() => setConfirmRaise(false)} stack>
+        <ModalHeader>
+          <h2 className="font-display text-[1.5rem] text-ink">
+            Raise your bid on {city.name} airport?
+          </h2>
+          <p className="text-ink-muted text-[0.8125rem] mt-1">
+            {auctionLeaderTeam?.name ?? "A rival"} currently leads at{" "}
+            {fmtMoney(highBid)}. Your raise must beat that by at least{" "}
+            {Math.round((AIRPORT_MIN_RAISE_MULT - 1) * 100)}% — a minimum of{" "}
+            {fmtMoney(minRaise)}. The new amount is held in escrow and the
+            prior leader&apos;s escrow is refunded.
+          </p>
+        </ModalHeader>
+        <ModalBody className="space-y-2">
+          <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-2">
+            <label className="block">
+              <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+                Your raise (USD)
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={raiseInput}
+                onChange={(e) => setRaiseInput(e.target.value)}
+                className="mt-1 w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[0.875rem] tabular font-mono text-ink focus:border-accent focus:outline-none"
+                placeholder={String(minRaise)}
+              />
+            </label>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-ink-muted">Minimum raise</span>
+              <span className="tabular font-mono text-ink">{fmtMoney(minRaise)}</span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-ink-muted">Your available cash</span>
+              <span className="tabular font-mono text-ink">{fmtMoney(player.cashUsd)}</span>
+            </div>
+          </div>
+          {raiseAmount > player.cashUsd && (
+            <p className="text-[0.6875rem] text-warning">
+              Not enough cash — your raise of {fmtMoney(raiseAmount)} exceeds
+              your {fmtMoney(player.cashUsd)} on hand.
+            </p>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="ghost" onClick={() => setConfirmRaise(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={raiseAmount < minRaise || raiseAmount > player.cashUsd}
+            onClick={() => {
+              submitAirportBid({ airportCode: cityCode, bidPriceUsd: raiseAmount });
+              setConfirmRaise(false);
+            }}
+          >
+            Raise to {fmtMoney(raiseAmount)}
+          </Button>
+        </ModalFooter>
+      </Modal>
+    )}
     </>
   );
 }
