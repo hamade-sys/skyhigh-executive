@@ -15,7 +15,7 @@ import {
   airlineColorFor,
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
-import { AlertTriangle, ChevronRight, Pause, Play, Plus, SlidersHorizontal, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Pause, Play, Plus, SlidersHorizontal, X } from "lucide-react";
 import { RouteSetupModal, BidRow } from "@/components/game/RouteSetupModal";
 import { PanelSubheader } from "@/components/game/PanelSubheader";
 import { toast } from "@/store/toasts";
@@ -34,8 +34,12 @@ export function RoutesPanel() {
   const [query, setQuery] = useState("");
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
   type SortKey = "profit" | "load" | "revenue" | "fuel";
-  type FilterKey = "all" | "passenger" | "cargo" | "losing";
+  type FilterKey = "all" | "passenger" | "cargo" | "losing" | "noaircraft";
   const [sortKey, setSortKey] = useState<SortKey>("profit");
+  // Sort direction. "desc" = best/highest on top (default). Clicking the
+  // already-active sort key flips to "asc" so the WORST rows float up —
+  // the fastest way to spot $0 / no-aircraft routes that need attention.
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [filterKey, setFilterKey] = useState<FilterKey>("all");
   // Branded close-route confirmation. Replaces the legacy native
   // confirm() so the close flow stays on-brand and we can spell out
@@ -134,6 +138,11 @@ export function RoutesPanel() {
     // so it reconciles with the team P&L.
     const profitOf = (r: typeof player.routes[number]) =>
       r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost;
+    // A route is "operating" only if at least one active aircraft is assigned.
+    const hasActiveAircraft = (r: typeof player.routes[number]) =>
+      r.aircraftIds.some((id) =>
+        player.fleet.find((f) => f.id === id && f.status === "active"),
+      );
     return player.routes
       // Include pending routes too — they're awaiting auction resolution
       // and the player needs to see them.
@@ -148,6 +157,7 @@ export function RoutesPanel() {
         if (filterKey === "passenger" && r.isCargo) return false;
         if (filterKey === "cargo" && !r.isCargo) return false;
         if (filterKey === "losing" && (r.consecutiveLosingQuarters ?? 0) < 2) return false;
+        if (filterKey === "noaircraft" && hasActiveAircraft(r)) return false;
         if (!q) return true;
         return (
           r.originCode.includes(q) ||
@@ -166,20 +176,30 @@ export function RoutesPanel() {
           const rb =
             b.status === "pending" ? -2 : b.status === "active" ? 0 : 1;
           if (ra !== rb) return ra - rb;
+          // Base comparison is descending (best on top). When sortDir is
+          // "asc" we negate it so the worst float up — surfacing $0 /
+          // no-aircraft routes without hunting through the whole list.
+          const dir = sortDir === "asc" ? -1 : 1;
+          let cmp: number;
           switch (sortKey) {
             case "load":
-              return b.avgOccupancy - a.avgOccupancy;
+              cmp = b.avgOccupancy - a.avgOccupancy;
+              break;
             case "revenue":
-              return b.quarterlyRevenue - a.quarterlyRevenue;
+              cmp = b.quarterlyRevenue - a.quarterlyRevenue;
+              break;
             case "fuel":
-              return b.quarterlyFuelCost - a.quarterlyFuelCost;
+              cmp = b.quarterlyFuelCost - a.quarterlyFuelCost;
+              break;
             case "profit":
             default:
-              return profitOf(b) - profitOf(a);
+              cmp = profitOf(b) - profitOf(a);
+              break;
           }
+          return cmp * dir;
         },
       );
-  }, [player, query, sortKey, filterKey]);
+  }, [player, query, sortKey, sortDir, filterKey]);
 
   if (!player) return null;
 
@@ -279,6 +299,7 @@ export function RoutesPanel() {
           { k: "passenger", label: "Passenger" },
           { k: "cargo", label: "Cargo" },
           { k: "losing", label: "Losing 2Q+" },
+          { k: "noaircraft", label: "No aircraft" },
         ] as Array<{ k: FilterKey; label: string }>).map(({ k, label }) => (
           <button
             key={k}
@@ -299,20 +320,45 @@ export function RoutesPanel() {
           { k: "load", label: "Occupancy" },
           { k: "revenue", label: "Revenue" },
           { k: "fuel", label: "Fuel" },
-        ] as Array<{ k: SortKey; label: string }>).map(({ k, label }) => (
-          <button
-            key={k}
-            onClick={() => setSortKey(k)}
-            className={cn(
-              "px-2 py-0.5 rounded-md border transition-colors",
-              sortKey === k
-                ? "bg-accent text-white border-accent font-medium"
-                : "border-line text-ink-muted hover:bg-surface-hover",
-            )}
-          >
-            {label}
-          </button>
-        ))}
+        ] as Array<{ k: SortKey; label: string }>).map(({ k, label }) => {
+          const active = sortKey === k;
+          return (
+            <button
+              key={k}
+              // Click an inactive key → select it (descending). Click the
+              // active key again → flip direction. Ascending surfaces the
+              // worst rows (e.g. $0 / no-aircraft routes) at the top.
+              onClick={() => {
+                if (active) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+                else {
+                  setSortKey(k);
+                  setSortDir("desc");
+                }
+              }}
+              title={
+                active
+                  ? sortDir === "desc"
+                    ? "Highest first — click again for lowest first"
+                    : "Lowest first — click again for highest first"
+                  : `Sort by ${label.toLowerCase()}`
+              }
+              className={cn(
+                "px-2 py-0.5 rounded-md border transition-colors inline-flex items-center gap-1",
+                active
+                  ? "bg-accent text-white border-accent font-medium"
+                  : "border-line text-ink-muted hover:bg-surface-hover",
+              )}
+            >
+              {label}
+              {active &&
+                (sortDir === "desc" ? (
+                  <ArrowDown size={11} aria-hidden />
+                ) : (
+                  <ArrowUp size={11} aria-hidden />
+                ))}
+            </button>
+          );
+        })}
         </div>
       </PanelSubheader>
 
@@ -1317,6 +1363,11 @@ function RouteDetailModal({
   const [firstFare, setFirstFare] = useState<number | null>(route.firstFare ?? null);
   const [cargoRate, setCargoRate] = useState<number | null>(route.cargoRatePerTonne ?? null);
   const [selectedPlaneIds, setSelectedPlaneIds] = useState<string[]>(route.aircraftIds);
+  // Tracks whether the player has manually moved the frequency slider.
+  // Until they do, selecting aircraft on a route that currently carries
+  // no frequency (e.g. assigning the first plane to a no-aircraft route)
+  // auto-defaults to the physics-max schedule rather than sticking at 0.
+  const [freqTouched, setFreqTouched] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   // Inline slot-bid state — when the player tries to lift weeklyFreq
   // beyond their current slot allocation, render a BidRow instead of
@@ -1355,12 +1406,20 @@ function RouteDetailModal({
   // cascading render.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (clampMaxWeekly === 0 && weeklyFreq !== 0) {
-      setWeeklyFreq(0);
-    } else if (clampMaxWeekly > 0 && weeklyFreq > clampMaxWeekly) {
-      setWeeklyFreq(clampMaxWeekly);
+    if (clampMaxWeekly === 0) {
+      if (weeklyFreq !== 0) setWeeklyFreq(0);
+      return;
     }
-  }, [clampMaxWeekly, weeklyFreq]);
+    // Default to the physics max when the player hasn't manually set a
+    // frequency and the route currently carries none. Fixes the case
+    // where assigning the first aircraft to a no-aircraft route left
+    // frequency stuck at 0 until the slider was dragged.
+    if (!freqTouched && weeklyFreq < 1) {
+      setWeeklyFreq(clampMaxWeekly);
+      return;
+    }
+    if (weeklyFreq > clampMaxWeekly) setWeeklyFreq(clampMaxWeekly);
+  }, [clampMaxWeekly, weeklyFreq, freqTouched]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!player) return null;
@@ -1407,6 +1466,42 @@ function RouteDetailModal({
     const stale = player.routes.find((rt) => rt.id === f.routeId);
     return !stale || stale.status === "closed";
   });
+
+  // ── One-click idle assignment. Compatible idle aircraft = in-range,
+  //    right family, and not already selected. When the route has no
+  //    active aircraft on it, surface a single button that drops the
+  //    best-fit idle plane in (largest capacity) and lets frequency
+  //    default to its physics max — the smoother path the player asked
+  //    for instead of hunting through the checkbox list.
+  const planeCapacity = (p: (typeof player.fleet)[number]) => {
+    const spec = AIRCRAFT_BY_ID[p.specId];
+    if (!spec) return 0;
+    return route.isCargo
+      ? spec.cargoTonnes ?? 0
+      : spec.seats.first + spec.seats.business + spec.seats.economy;
+  };
+  const compatibleIdle = idleOrOnRoute
+    .filter((p) => {
+      if (selectedPlaneIds.includes(p.id)) return false;
+      const spec = AIRCRAFT_BY_ID[p.specId];
+      if (!spec) return false;
+      const reach = effectiveRangeKm(spec, p.engineUpgrade ?? null) >= route.distanceKm;
+      const fam = route.isCargo ? spec.family === "cargo" : spec.family === "passenger";
+      return reach && fam;
+    })
+    .sort((a, b) => planeCapacity(b) - planeCapacity(a));
+  const hasActiveAssigned = selectedPlaneIds.some((id) => {
+    const f = player.fleet.find((x) => x.id === id);
+    return !!f && f.status === "active";
+  });
+  const assignBestIdle = () => {
+    const best = compatibleIdle[0];
+    if (!best) return;
+    setSelectedPlaneIds([...selectedPlaneIds, best.id]);
+    // Reset the manual-touch flag so the clamp effect snaps frequency to
+    // the new aircraft's physics max instead of leaving it at 0.
+    setFreqTouched(false);
+  };
 
   // ── Slot shortfall — replicates updateRoute's check so the UI can
   //    inline-render a BidRow instead of bouncing on save with the
@@ -1926,6 +2021,22 @@ function RouteDetailModal({
             slider reflect the actual hardware. */}
         <div>
           <Label>1 · Aircraft assigned</Label>
+          {!hasActiveAssigned && compatibleIdle.length > 0 && (
+            <button
+              onClick={assignBestIdle}
+              className="mb-2 w-full flex items-center justify-center gap-2 rounded-md border border-primary bg-[rgba(20,53,94,0.04)] px-3 py-2 text-[0.8125rem] font-semibold text-primary hover:bg-[rgba(20,53,94,0.08)] transition-colors"
+              title="Drop the largest compatible idle aircraft onto this route and default its schedule to the physics max"
+            >
+              <Plus size={14} aria-hidden />
+              {(() => {
+                const best = compatibleIdle[0];
+                const spec = best ? AIRCRAFT_BY_ID[best.specId] : null;
+                return spec
+                  ? `Assign idle aircraft — ${spec.name}${compatibleIdle.length > 1 ? ` (+${compatibleIdle.length - 1} more idle)` : ""}`
+                  : "Assign idle aircraft";
+              })()}
+            </button>
+          )}
           <div className="space-y-1.5 max-h-40 overflow-auto">
             {idleOrOnRoute.map((p) => {
               const spec = AIRCRAFT_BY_ID[p.specId];
@@ -2039,7 +2150,10 @@ function RouteDetailModal({
                     min={1}
                     max={maxWeekly}
                     value={Math.min(weeklyFreq, maxWeekly)}
-                    onChange={(e) => setWeeklyFreq(parseInt(e.target.value, 10))}
+                    onChange={(e) => {
+                      setFreqTouched(true);
+                      setWeeklyFreq(parseInt(e.target.value, 10));
+                    }}
                     className="flex-1 accent-primary"
                   />
                   <span className="tabular font-mono text-ink text-[0.9375rem] w-20 text-right">

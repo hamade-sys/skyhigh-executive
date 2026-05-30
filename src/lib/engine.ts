@@ -2201,8 +2201,60 @@ export function computeRouteEconomics(
   // above in the demand block. Invert into elasticity space.
   const competitionFactor = clamp(0.85, 1.25, 1.0 + (1.0 - competitorPressure) * 0.60);
 
+  //   6. Market thickness (flights to the city) — total weekly flights
+  //      serving a city, frequency-weighted, across our own network AND
+  //      rivals. The relationship is QUADRATIC, not linear:
+  //        • Few flights → travelers are captive to a single point of
+  //          travel; the one daily departure has no substitute, so the
+  //          market is LESS elastic (a fare hike doesn't send them
+  //          elsewhere — there is no elsewhere).
+  //        • As flights multiply, options appear and demand spreads across
+  //          them → MORE elastic (price-shopping between frequencies/
+  //          carriers gets easy). The steepest sensitivity is at LOW
+  //          counts — adding the 2nd daily flight matters far more than the
+  //          40th.
+  //        • At very high density, connecting travel swells the total pool
+  //          (a thick city feeds onward journeys), which lifts volume and
+  //          eases the elasticity back a touch off its peak — the inverted
+  //          tail of the parabola.
+  //      Averaged across origin + dest so the route's tolerance reflects
+  //      the substitutes available at BOTH endpoints.
+  const weeklyFlightsAt = (code: string): number => {
+    let f = 0;
+    for (const r of team.routes) {
+      if (r.status === "closed") continue;
+      if (r.originCode === code || r.destCode === code) f += r.dailyFrequency * 7;
+    }
+    if (rivals) {
+      for (const rv of rivals) {
+        for (const r of rv.routes) {
+          if (r.status === "closed") continue;
+          if (r.originCode === code || r.destCode === code) f += r.dailyFrequency * 7;
+        }
+      }
+    }
+    return f;
+  };
+  // REF ≈ 140 weekly flights (~20 daily departures touching the city) = a
+  // thick, well-served market. x is the normalized market thickness 0..1.
+  const FLIGHTS_REF = 140;
+  const flightsX = clamp(
+    0,
+    1,
+    (weeklyFlightsAt(route.originCode) + weeklyFlightsAt(route.destCode)) / 2 / FLIGHTS_REF,
+  );
+  // Quadratic: 0.85 + 1.10x − 0.70x²  → peaks ≈1.28 at x≈0.79, eases to 1.25
+  // at full saturation (the connecting-volume tail). Floored captive markets
+  // at 0.82, capped at 1.30.
+  const flightsFactor = clamp(
+    0.82,
+    1.30,
+    0.85 + 1.10 * flightsX - 0.70 * flightsX * flightsX,
+  );
+
   const elasticityContext =
-    cityTierFactor * doctrineFactor * brandToleranceFactor * haulFactor * competitionFactor;
+    cityTierFactor * doctrineFactor * brandToleranceFactor * haulFactor *
+    competitionFactor * flightsFactor;
 
   // Per-cabin neutral baselines, scaled by the composite context and
   // floored so the exponent can't invert (a fare hike must never raise

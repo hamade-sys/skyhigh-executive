@@ -1373,15 +1373,10 @@ function RivalSubsidiaryIntel() {
 
 function FuelTanksSection() {
   const player = useGame(selectPlayer);
-  const setCityFuelTanks = useGame((s) => s.setCityFuelTanks);
   const applyCityFuelTanksToAll = useGame((s) => s.applyCityFuelTanksToAll);
 
-  // Draft tier+count per city, before the player commits with "Install".
-  // Falls back to the installed config (or "none") when no draft exists.
-  const [drafts, setDrafts] = useState<
-    Record<string, { tier: FuelTankTier | "none"; count: number }>
-  >({});
-  // Apply-to-all header controls.
+  // Network-wide apply controls — tanks are managed for the whole network at
+  // once, not city by city. Tier + count fan out to every operated city.
   const [allTier, setAllTier] = useState<FuelTankTier>("small");
   const [allCount, setAllCount] = useState<number>(2);
 
@@ -1395,7 +1390,7 @@ function FuelTanksSection() {
 
   const byCity = player.fuelTanksByCity ?? {};
 
-  // ─── Network rollup for the header KPIs ──────────────────────
+  // ─── Network rollup for the header KPIs (what's installed today) ──────
   let totalTanks = 0;
   let totalCapacityL = 0;
   let totalMaintUsd = 0;
@@ -1426,25 +1421,12 @@ function FuelTanksSection() {
   const blendedCoverage =
     coverDen > 0 ? coverNum / coverDen : totalTanks > 0 ? 1 : 0;
 
-  const getDraft = (
-    code: string,
-  ): { tier: FuelTankTier | "none"; count: number } => {
-    if (drafts[code]) return drafts[code];
-    const cfg = byCity[code];
-    if (cfg && cfg.count > 0) return { tier: cfg.tier, count: cfg.count };
-    return { tier: "none", count: 1 };
-  };
-  const setDraft = (
-    code: string,
-    next: { tier: FuelTankTier | "none"; count: number },
-  ) => setDrafts((d) => ({ ...d, [code]: next }));
-
   // ─── Empty state: no operated cities yet ─────────────────────
   if (cities.length === 0) {
     return (
       <section>
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
-          City fuel tanks · coverage discount
+          Network fuel tanks · coverage discount
         </div>
         <div className="rounded-lg border border-line bg-surface-2/30 px-4 py-8 text-center">
           <Fuel className="w-8 h-8 mx-auto text-ink-muted mb-2" aria-hidden />
@@ -1453,28 +1435,63 @@ function FuelTanksSection() {
           </div>
           <div className="text-[0.75rem] text-ink-muted mt-1 max-w-sm mx-auto leading-snug">
             Open a route first. Once you operate in a city you can install fuel
-            tanks there to discount the fuel bill on every route departing it.
+            tanks across your network to discount the fuel bill on every route.
           </div>
         </div>
       </section>
     );
   }
 
-  const TIER_ORDER: Array<FuelTankTier | "none"> = ["none", "small", "medium", "large"];
+  // ─── Projection: what the selected tier+count would deliver across the
+  //     whole network. Large tanks only land at Tier-1 cities; the rest get
+  //     skipped, exactly mirroring applyCityFuelTanksToAll. ────────────────
+  const selSpec = FUEL_TANK_SPECS[allTier];
+  let projCities = 0;
+  let projInstallUsd = 0;
+  let projMaintUsd = 0;
+  let projCapacityL = 0;
+  let projCoverNum = 0;
+  let projCoverDen = 0;
+  let projDiscNum = 0;
+  let projDiscDen = 0;
+  for (const code of cities) {
+    const city = CITIES_BY_CODE[code];
+    if (!city) continue;
+    if (allTier === "large" && city.tier !== 1) continue; // skipped
+    projCities += 1;
+    const cap = selSpec.capacityL * allCount;
+    const burn = burnByCity[code] ?? 0;
+    const coverage = burn > 0 ? Math.min(1, cap / burn) : 1;
+    projCapacityL += cap;
+    projMaintUsd += selSpec.maintUsd * allCount;
+    // Install only charges for incremental tanks at the same tier (matches store).
+    const prev = byCity[code];
+    const prevSame = prev && prev.tier === allTier ? prev.count : 0;
+    projInstallUsd += selSpec.installUsd * Math.max(0, allCount - prevSame);
+    const w = Math.max(burn, 1);
+    projDiscNum += selSpec.maxDiscount * coverage * w;
+    projDiscDen += w;
+    projCoverNum += Math.min(cap, burn);
+    projCoverDen += burn;
+  }
+  const projDiscount = projDiscDen > 0 ? projDiscNum / projDiscDen : 0;
+  const projCoverage = projCoverDen > 0 ? projCoverNum / projCoverDen : 1;
+  const skipped = allTier === "large" ? cities.length - projCities : 0;
+  const canAffordProj = projInstallUsd <= player.cashUsd;
 
   return (
     <section className="space-y-3">
-      {/* Header / explainer + apply-to-all */}
+      {/* Header / explainer */}
       <div className="rounded-lg border border-line bg-surface-2/30 p-3">
         <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1">
-          City fuel tanks · coverage discount
+          Network fuel tanks · coverage discount
         </div>
         <p className="text-[0.75rem] text-ink-muted leading-snug max-w-2xl">
-          Install fuel tanks in the cities you operate. Each tank covers a fixed
-          quarterly fuel volume; when your tanks cover a city&apos;s full burn you
-          earn that tier&apos;s maximum fuel discount on every route departing it.
-          As your network grows, add tanks to keep coverage near 100%. Tanks
-          never deplete — there is nothing to buy or time.
+          Pick a tank tier and how many to place in every city you operate. Each
+          tank covers a fixed quarterly fuel volume; when your tanks cover a
+          city&apos;s full burn you earn that tier&apos;s maximum fuel discount on
+          every route departing it. As your network grows, raise the count to
+          keep coverage near 100%. Tanks never deplete — nothing to buy or time.
         </p>
 
         {totalTanks > 0 && (
@@ -1502,252 +1519,116 @@ function FuelTanksSection() {
             />
           </div>
         )}
+      </div>
 
-        {/* Apply to all operated cities */}
-        <div className="mt-3 rounded-md border border-line bg-surface p-2.5">
-          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
-            Apply to all operated cities
+      {/* The one control: tier + count → whole network */}
+      <div className="rounded-lg border border-line bg-surface p-3 space-y-3">
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+          Set tanks for every operated city
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-md border border-line overflow-hidden">
+            {(["small", "medium", "large"] as FuelTankTier[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setAllTier(t)}
+                className={cn(
+                  "px-3 py-1.5 text-[0.8125rem] font-medium transition-colors",
+                  allTier === t
+                    ? "bg-[var(--accent)] text-white"
+                    : "bg-surface text-ink-muted hover:text-ink",
+                )}
+              >
+                {FUEL_TANK_SPECS[t].label}
+              </button>
+            ))}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-md border border-line overflow-hidden">
-              {(["small", "medium", "large"] as FuelTankTier[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setAllTier(t)}
-                  className={cn(
-                    "px-2.5 py-1 text-[0.75rem] font-medium transition-colors",
-                    allTier === t
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-surface text-ink-muted hover:text-ink",
-                  )}
-                >
-                  {FUEL_TANK_SPECS[t].label}
-                </button>
-              ))}
-            </div>
-            <CountStepper value={allCount} onChange={setAllCount} />
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => {
-                const r = applyCityFuelTanksToAll(allTier, allCount);
-                if (!r.ok && r.error) toast.warning("Cannot apply", r.error);
-                else setDrafts({});
-              }}
-            >
-              <Plus className="w-3.5 h-3.5" aria-hidden />
-              Apply {allCount}× {FUEL_TANK_SPECS[allTier].label}
-            </Button>
+          <span className="text-[0.75rem] text-ink-muted">×</span>
+          <CountStepper value={allCount} onChange={setAllCount} />
+          <span className="text-[0.75rem] text-ink-muted">
+            tank{allCount === 1 ? "" : "s"} per city
+          </span>
+        </div>
+
+        {/* Tier spec line */}
+        <div className="text-[0.6875rem] text-ink-muted">
+          {FUEL_TANK_SPECS[allTier].label}: {(selSpec.capacityL / 1_000_000).toFixed(0)}M L/qtr
+          per tank · up to {(selSpec.maxDiscount * 100).toFixed(0)}% fuel discount ·
+          {" "}{fmtMoney(selSpec.installUsd)} install · {fmtMoney(selSpec.maintUsd)}/qtr upkeep
+          {allTier === "large" ? " · Tier-1 airports only" : ""}
+        </div>
+
+        {/* Projection of the proposed network state */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-md border border-line bg-surface-2/30 p-2.5">
+          <Readout
+            label="Cities covered"
+            value={`${projCities}${skipped > 0 ? ` (−${skipped})` : ""}`}
+          />
+          <Readout
+            label="Proj. coverage"
+            value={`${Math.round(projCoverage * 100)}%`}
+            tone={projCoverage >= 0.999 ? "pos" : projCoverage >= 0.5 ? undefined : "warn"}
+          />
+          <Readout
+            label="Proj. discount"
+            value={`${(projDiscount * 100).toFixed(1)}%`}
+            tone={projDiscount > 0 ? "pos" : undefined}
+          />
+          <Readout label="Upkeep" value={`${fmtMoney(projMaintUsd)}/qtr`} />
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="text-[0.6875rem] text-ink-muted">
+            {projInstallUsd > 0 ? (
+              <>
+                Install cost{" "}
+                <span className={cn("font-mono font-semibold", canAffordProj ? "text-ink-2" : "text-negative")}>
+                  {fmtMoney(projInstallUsd)}
+                </span>{" "}
+                <span className="text-ink-muted">(new tanks only)</span>
+              </>
+            ) : (
+              <span>No new install cost — adjusting in place.</span>
+            )}
+            {skipped > 0 && (
+              <span className="block text-[0.625rem] mt-0.5">
+                {skipped} non-Tier-1 cit{skipped === 1 ? "y is" : "ies are"} skipped for Large tanks.
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
             <button
               onClick={() => {
                 const r = applyCityFuelTanksToAll("none", 0);
                 if (!r.ok && r.error) toast.warning("Cannot clear", r.error);
-                else setDrafts({});
+                else toast.info("Tanks cleared", "All fuel tanks removed (no refund).");
               }}
               className="text-[0.75rem] text-ink-muted hover:text-negative px-1"
+              disabled={totalTanks === 0}
             >
               Clear all
             </button>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={projInstallUsd > 0 && !canAffordProj}
+              title={projInstallUsd > 0 && !canAffordProj ? `Need ${fmtMoney(projInstallUsd)}` : undefined}
+              onClick={() => {
+                const r = applyCityFuelTanksToAll(allTier, allCount);
+                if (!r.ok && r.error) toast.warning("Cannot apply", r.error);
+                else
+                  toast.success(
+                    "Tanks applied",
+                    `${allCount}× ${FUEL_TANK_SPECS[allTier].label} across ${projCities} cit${projCities === 1 ? "y" : "ies"}.`,
+                  );
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" aria-hidden />
+              Apply to {projCities} cit{projCities === 1 ? "y" : "ies"}
+            </Button>
           </div>
-          {allTier === "large" && (
-            <div className="text-[0.625rem] text-ink-muted mt-1.5">
-              Large tanks install only at Tier-1 airports — other cities are skipped.
-            </div>
-          )}
         </div>
-      </div>
-
-      {/* Per-city rows */}
-      <div className="space-y-2">
-        {cities.map((code) => {
-          const city = CITIES_BY_CODE[code];
-          if (!city) return null;
-          const installed = byCity[code];
-          const installedTier: FuelTankTier | "none" =
-            installed && installed.count > 0 ? installed.tier : "none";
-          const installedCount =
-            installed && installed.count > 0 ? installed.count : 0;
-          const draft = getDraft(code);
-          const isTier1 = city.tier === 1;
-          const burnL = burnByCity[code] ?? 0;
-
-          const spec = draft.tier !== "none" ? FUEL_TANK_SPECS[draft.tier] : null;
-          const draftCount = draft.tier === "none" ? 0 : Math.max(1, draft.count);
-          const cap = spec ? spec.capacityL * draftCount : 0;
-          const coverage = spec ? (burnL > 0 ? Math.min(1, cap / burnL) : 1) : 0;
-          const discount = spec ? spec.maxDiscount * coverage : 0;
-          const maint = spec ? spec.maintUsd * draftCount : 0;
-          const prevSameTier =
-            installed && installed.tier === draft.tier ? installed.count : 0;
-          const incremental = spec ? Math.max(0, draftCount - prevSameTier) : 0;
-          const installCost = spec ? spec.installUsd * incremental : 0;
-          const changed =
-            draft.tier !== installedTier || draftCount !== installedCount;
-          const canAfford = installCost <= player.cashUsd;
-
-          return (
-            <div key={code} className="rounded-lg border border-line bg-surface p-3">
-              {/* City header */}
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-mono text-[0.875rem] font-semibold text-ink">
-                  {code}
-                </span>
-                <span className="text-[0.8125rem] text-ink-2 truncate">
-                  {city.name}
-                </span>
-                <span
-                  className={cn(
-                    "text-[0.5625rem] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded shrink-0",
-                    isTier1
-                      ? "bg-[var(--accent-soft)] text-accent"
-                      : "bg-surface-2 text-ink-muted",
-                  )}
-                >
-                  Tier {city.tier}
-                </span>
-                {installedCount > 0 && (
-                  <span className="ml-auto text-[0.6875rem] text-ink-muted shrink-0">
-                    Installed: {installedCount}×{" "}
-                    {FUEL_TANK_SPECS[installedTier as FuelTankTier]?.label}
-                  </span>
-                )}
-              </div>
-
-              {/* Tier selector + tank-icon count stepper */}
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <div className="flex rounded-md border border-line overflow-hidden">
-                  {TIER_ORDER.map((t) => {
-                    const disabled = t === "large" && !isTier1;
-                    const active = draft.tier === t;
-                    const label = t === "none" ? "None" : FUEL_TANK_SPECS[t].label;
-                    return (
-                      <button
-                        key={t}
-                        disabled={disabled}
-                        title={
-                          disabled
-                            ? "Large tanks require a Tier-1 airport"
-                            : undefined
-                        }
-                        onClick={() =>
-                          setDraft(code, {
-                            tier: t,
-                            count: t === "none" ? 0 : Math.max(1, draft.count),
-                          })
-                        }
-                        className={cn(
-                          "px-2.5 py-1 text-[0.75rem] font-medium transition-colors",
-                          disabled
-                            ? "bg-surface-2/50 text-ink-muted/40 cursor-not-allowed"
-                            : active
-                              ? "bg-[var(--accent)] text-white"
-                              : "bg-surface text-ink-muted hover:text-ink",
-                        )}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-                {draft.tier !== "none" && (
-                  <TankIconStepper
-                    value={draftCount}
-                    onChange={(n) => setDraft(code, { tier: draft.tier, count: n })}
-                  />
-                )}
-              </div>
-
-              {/* Live readout */}
-              {draft.tier !== "none" ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-[0.6875rem]">
-                  <Readout
-                    label="Capacity"
-                    value={`${(cap / 1_000_000).toFixed(0)}M L/qtr`}
-                  />
-                  <Readout
-                    label="City burn"
-                    value={
-                      burnL > 0
-                        ? `${(burnL / 1_000_000).toFixed(1)}M L/qtr`
-                        : "no routes yet"
-                    }
-                  />
-                  <Readout
-                    label="Coverage"
-                    value={`${Math.round(coverage * 100)}%`}
-                    tone={
-                      coverage >= 0.999 ? "pos" : coverage >= 0.5 ? undefined : "warn"
-                    }
-                  />
-                  <Readout
-                    label="Fuel discount"
-                    value={`${(discount * 100).toFixed(1)}%`}
-                    tone={discount > 0 ? "pos" : undefined}
-                  />
-                </div>
-              ) : (
-                <div className="text-[0.6875rem] text-ink-muted">
-                  No tanks — routes from {code} pay full fuel price.
-                </div>
-              )}
-
-              {/* Action row */}
-              <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-line">
-                <div className="text-[0.625rem] text-ink-muted">
-                  {draft.tier !== "none" ? (
-                    <>
-                      {installCost > 0 ? (
-                        <span className="text-ink-2">
-                          Install {fmtMoney(installCost)}
-                        </span>
-                      ) : (
-                        <span>No install cost</span>
-                      )}
-                      <span className="mx-1">·</span>
-                      <span>upkeep {fmtMoney(maint)}/qtr</span>
-                    </>
-                  ) : installedCount > 0 ? (
-                    <span className="text-negative">
-                      Removing all tanks (no refund)
-                    </span>
-                  ) : null}
-                </div>
-                <Button
-                  size="sm"
-                  variant={
-                    draft.tier === "none" && installedCount > 0
-                      ? "secondary"
-                      : "primary"
-                  }
-                  disabled={!changed || (installCost > 0 && !canAfford)}
-                  title={
-                    installCost > 0 && !canAfford
-                      ? `Need ${fmtMoney(installCost)}`
-                      : undefined
-                  }
-                  onClick={() => {
-                    const r = setCityFuelTanks(code, draft.tier, draftCount);
-                    if (!r.ok && r.error) toast.warning("Cannot install", r.error);
-                    else
-                      setDrafts((d) => {
-                        const n = { ...d };
-                        delete n[code];
-                        return n;
-                      });
-                  }}
-                >
-                  {!changed
-                    ? "Installed"
-                    : draft.tier === "none"
-                      ? "Remove"
-                      : installedCount > 0
-                        ? "Update"
-                        : "Install"}
-                </Button>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </section>
   );
@@ -1799,45 +1680,7 @@ function CountStepper({
   );
 }
 
-/** 1–10 fuel-tank icon stepper. Clicking an icon sets the count to that
- *  position; filled icons = installed-in-draft, hollow = available. */
-function TankIconStepper({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <div className="flex items-center gap-0.5" role="group" aria-label="Tank count">
-      {Array.from({ length: FUEL_TANK_MAX_COUNT }, (_, i) => i + 1).map((n) => {
-        const filled = n <= value;
-        return (
-          <button
-            key={n}
-            onClick={() => onChange(n)}
-            title={`${n} tank${n > 1 ? "s" : ""}`}
-            aria-label={`Set ${n} tank${n > 1 ? "s" : ""}`}
-            className="p-0.5"
-          >
-            <Fuel
-              className={cn(
-                "w-4 h-4 transition-colors",
-                filled ? "text-accent" : "text-ink-muted/30",
-              )}
-              aria-hidden
-            />
-          </button>
-        );
-      })}
-      <span className="ml-1.5 text-[0.75rem] tabular font-mono text-ink-2 font-semibold w-5 text-right">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/** Tiny label/value row used inside the per-city readout grid. */
+/** Tiny label/value row used inside the projection readout grid. */
 function Readout({
   label,
   value,
