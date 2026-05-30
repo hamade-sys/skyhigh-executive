@@ -1106,7 +1106,7 @@ function DoctrinePill({ doctrineId }: { doctrineId: import("@/types/game").Doctr
     return (
       <div
         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-line bg-surface-2/40 text-ink-muted text-[0.75rem] font-medium shrink-0"
-        title="Doctrine not yet set. Pick one during onboarding or wait for the facilitator to seed your strategy."
+        title="Doctrine not yet set. Pick one during onboarding or wait for the host to seed your strategy."
       >
         <span className="inline-block w-2 h-2 rounded-full bg-ink-muted/40 animate-pulse" aria-hidden />
         Doctrine pending

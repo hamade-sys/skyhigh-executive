@@ -203,7 +203,7 @@ export function adjudicateAirportBid(opts: {
       return {
         approved: false,
         rivalOfferUsd,
-        reason: `A rival carrier out-bid you with ${compactUsd(rivalOfferUsd)} for ${airportCode}. The authority awarded the concession to them — your escrow has been refunded.`,
+        reason: `A rival carrier out-bid you with ${compactUsd(rivalOfferUsd)} for the ${airportCode} airport concession. The authority awarded ownership to them — your escrow has been refunded in full. Your slots and flights at ${airportCode} are unaffected; this was a bid to OWN the airport, not to operate there. You can bid again higher next quarter.`,
       };
     }
   }

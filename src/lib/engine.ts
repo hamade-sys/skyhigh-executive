@@ -4206,7 +4206,7 @@ export function runQuarterClose(
   const wasBankrupt = (next.flags ?? new Set<string>()).has("bankrupt");
   if (rcfCeilingHitThisQuarter && newCashUsd < 0 && !wasBankrupt) {
     notes.push(
-      "BANKRUPTCY: cash negative + RCF maxed. Workshop facilitator should review whether to continue or replace this team with a bot.",
+      "BANKRUPTCY: cash negative + RCF maxed. The game master should review whether to continue or replace this team with a bot.",
     );
     // Mutate the in-progress next.flags set so closeQuarter's caller
     // captures the change. flags is always a Set on the engine path.
