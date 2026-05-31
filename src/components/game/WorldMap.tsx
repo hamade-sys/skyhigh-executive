@@ -61,7 +61,10 @@ export interface WorldMapProps {
    *  see at a glance which lanes were just launched. */
   currentQuarter: number;
   selectedOriginCode?: string | null;
-  onCityClick?: (city: City) => void;
+  /** Single-click on a city marker. `anchor` carries the click's viewport
+   *  coordinates (from the DOM event) so the route/airport card can be
+   *  positioned next to the clicked marker instead of a fixed corner. */
+  onCityClick?: (city: City, anchor?: { x: number; y: number }) => void;
   /** Double-click on a city marker — opens an airport detail popup
    *  showing slot ownership across teams, available slots, and the
    *  airport's primary hub airline. Distinct from single-click which
@@ -1060,7 +1063,13 @@ export function WorldMap({
                   className: "sf-city-hit",
                 }}
                 eventHandlers={{
-                  click: () => onCityClick?.(c),
+                  click: (e) =>
+                    onCityClick?.(
+                      c,
+                      e.originalEvent
+                        ? { x: e.originalEvent.clientX, y: e.originalEvent.clientY }
+                        : undefined,
+                    ),
                   dblclick: (e) => {
                     if (e.originalEvent) {
                       e.originalEvent.stopPropagation();

@@ -1,9 +1,10 @@
 "use client";
 
-import { X, ArrowRight, Plane, Users, MapPin } from "lucide-react";
+import { X, ArrowRight, Plane, Users, MapPin, Building2, Gavel } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { CITIES_BY_CODE } from "@/data/cities";
 import { useGame, selectPlayer } from "@/store/game";
+import { useUi } from "@/store/ui";
 import { distanceBetween, routeDemandPerDay } from "@/lib/engine";
 import { cn } from "@/lib/cn";
 import type { City, Team } from "@/types/game";
@@ -11,6 +12,10 @@ import type { City, Team } from "@/types/game";
 export interface RouteLaunchBarProps {
   origin: string | null;
   dest: string | null;
+  /** Viewport coords of the clicked city marker. When present the card
+   *  anchors next to the marker (above it, flipping below near the top
+   *  edge) instead of the fixed bottom-center fallback. */
+  anchor?: { x: number; y: number } | null;
   onCancel: () => void;
   onLaunch: (args: { isCargo: boolean }) => void;
 }
@@ -38,7 +43,7 @@ export interface RouteLaunchBarProps {
  *     will use, regardless of click order.
  */
 export function RouteLaunchBar({
-  origin, dest, onCancel, onLaunch,
+  origin, dest, anchor, onCancel, onLaunch,
 }: RouteLaunchBarProps) {
   const player = useGame(selectPlayer);
   const currentQuarter = useGame((s) => s.currentQuarter);
@@ -74,8 +79,31 @@ export function RouteLaunchBar({
     ? distanceBetween(leftCity.code, rightCity.code)
     : 0;
 
+  // Anchor the card next to the clicked marker. Place it ABOVE the marker by
+  // default, flipping BELOW when the click is near the top edge. Clamp the
+  // horizontal center so a card never runs off-screen. Falls back to the
+  // fixed bottom-center when no anchor is available (e.g. keyboard entry).
+  const GAP = 18;
+  const CARD_H = 168;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1440;
+  const placeBelow = anchor ? anchor.y < CARD_H + GAP + 12 : false;
+  const anchored = !!anchor;
+  const wrapperStyle = anchor
+    ? {
+        left: Math.min(Math.max(anchor.x, 150), vw - 150),
+        top: placeBelow ? anchor.y + GAP : anchor.y - GAP,
+        transform: placeBelow ? "translate(-50%, 0)" : "translate(-50%, -100%)",
+      }
+    : undefined;
+
   return (
-    <div className="pointer-events-none fixed bottom-6 left-1/2 -translate-x-1/2 z-[1080]">
+    <div
+      className={cn(
+        "pointer-events-none fixed z-[1080]",
+        !anchored && "bottom-6 left-1/2 -translate-x-1/2",
+      )}
+      style={wrapperStyle}
+    >
       <div className="pointer-events-auto flex items-end gap-2">
         {/* Left card (origin or hub-side) */}
         {leftCity && (
@@ -168,6 +196,16 @@ function CityCard({
   otherCity: City | null;
   role: "primary" | "secondary";
 }) {
+  const setAirportDetailCode = useUi((u) => u.setAirportDetailCode);
+  const ownerTeamId = useGame((s) => s.airportSlots?.[city.code]?.ownerTeamId);
+  const liveAuction = useGame((s) =>
+    (s.airportConcessionAuctions ?? []).find(
+      (a) => a.airportCode === city.code && a.status === "open",
+    ),
+  );
+  const ownedByMe = ownerTeamId === player.id;
+  const ownedByRival = !!ownerTeamId && ownerTeamId !== player.id;
+
   const isHub = city.code === player.hubCode;
   const isSecondaryHub = player.secondaryHubCodes.includes(city.code);
   const inNetwork =
@@ -280,6 +318,33 @@ function CityCard({
           </span>
         </div>
       </div>
+
+      {/* Airport ownership entry — single-click discoverable path to the
+          ownership / slot-bid / concession-auction modal. Before this the
+          modal opened only on double-click, which players never found, so
+          "I can't even buy an airport" was a discoverability dead-end. */}
+      <button
+        onClick={() => setAirportDetailCode(city.code)}
+        className={cn(
+          "w-full flex items-center justify-between gap-2 px-3 py-2 border-t border-line/60",
+          "text-[0.75rem] font-medium rounded-b-xl transition-colors",
+          liveAuction
+            ? "text-warning hover:bg-[var(--warning-soft)]/40"
+            : "text-primary hover:bg-[var(--primary-soft)]/40",
+        )}
+      >
+        <span className="flex items-center gap-1.5">
+          {liveAuction ? <Gavel size={12} /> : <Building2 size={12} />}
+          {liveAuction
+            ? `Auction live · ${Math.max(0, liveAuction.closesQuarter - currentQuarter)}Q left`
+            : ownedByMe
+              ? "Your airport · manage"
+              : ownedByRival
+                ? "Owned by rival · view"
+                : "Buy / bid airport"}
+        </span>
+        <ArrowRight size={13} />
+      </button>
     </div>
   );
 }

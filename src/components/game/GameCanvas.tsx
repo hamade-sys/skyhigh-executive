@@ -253,11 +253,15 @@ function CanvasInner() {
     : null;
   const [isCargo, setIsCargo] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
+  // Viewport coords of the last clicked city marker, so the route/airport
+  // card anchors next to the marker instead of the fixed bottom-center.
+  const [clickAnchor, setClickAnchor] = useState<{ x: number; y: number } | null>(null);
 
-  function handleCityClick(c: City) {
+  function handleCityClick(c: City, anchor?: { x: number; y: number }) {
     // Observers (GM) cannot create or modify routes — hard block here
     // so map clicks never start the selection/launch flow.
     if (isObserver) return;
+    if (anchor) setClickAnchor(anchor);
     // No origin yet: select it (highlighted yellow on the map).
     if (!origin) return setOrigin(c.code);
     // Clicked the same origin: deselect.
@@ -486,6 +490,7 @@ function CanvasInner() {
         <RouteLaunchBar
           origin={origin}
           dest={dest}
+          anchor={clickAnchor}
           onCancel={() => { setOrigin(null); setDest(null); setIsCargo(false); }}
           onLaunch={() => setLaunchOpen(true)}
         />
