@@ -5366,7 +5366,16 @@ export const useGame = create<GameStore>()(
           }
         }
         // Backstop: seed missing airports from initial pool so bids resolve.
-        const earlySlotsForAuction = { ...(s.airportSlots ?? {}) };
+        // IMPORTANT: read the LIVE airportSlots via get(), not the close-start
+        // snapshot `s`. The airport concession block above runs earlier in
+        // this same close and writes new ownership (ownerTeamId) into
+        // airportSlots. The slot-auction pipeline's result is written back to
+        // the store at the end of close — so if we seed it from the stale
+        // pre-concession `s.airportSlots`, that final write CLOBBERS the
+        // just-awarded ownership (the "you own it" toast fires, then the
+        // airport shows buyable again). `resolveSlotAuctions` spreads each
+        // slot state, so reading the post-concession pool preserves ownership.
+        const earlySlotsForAuction = { ...(get().airportSlots ?? s.airportSlots ?? {}) };
         const earlyFresh = makeInitialAirportSlots({ v2: s.session?.airportSystemV2 ?? false });
         for (const code of Object.keys(earlyBidsByAirport)) {
           if (!earlySlotsForAuction[code] && earlyFresh[code]) {
