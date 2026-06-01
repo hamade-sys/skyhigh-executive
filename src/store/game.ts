@@ -23,6 +23,7 @@ import {
   applyYearlyTickIfDue,
   makeInitialAirportSlots,
   resolveSlotAuctions,
+  reconcileAirportSlots,
   type BidEntry,
 } from "@/lib/slots";
 import { toast } from "./toasts";
@@ -7728,12 +7729,18 @@ export const useGame = create<GameStore>()(
           v2Approvals = nextApprovals;
         }
 
+        // Enforce the airport capacity cap on the freshly-advanced state:
+        // total leases + available ≤ totalCapacity, trimming any over-
+        // allocation above each airline's route-used floor. Authoritative
+        // for both solo and multiplayer (this is the end-of-close set).
+        const reconciledClose = reconcileAirportSlots(v2Teams, v2Slots, nextQ);
+
         set({
-          teams: v2Teams,
+          teams: reconciledClose.teams,
           currentQuarter: nextQ,
           phase: "playing",
           lastCloseResult: null,
-          airportSlots: v2Slots,
+          airportSlots: reconciledClose.airportSlots,
           ...(s.session?.airportSystemV2
             ? { airportAuctions: v2Auctions, airportApprovals: v2Approvals }
             : {}),
@@ -8869,9 +8876,20 @@ export const useGame = create<GameStore>()(
               ? restored.quarterCloseRequest
               : null;
 
+          // Migrate/enforce the airport slot capacity cap on load: trims any
+          // legacy over-allocation (total leases > capacity) down to the
+          // airport's real, grown capacity, protecting route-used slots.
+          // Safe + idempotent — once normalized it's a no-op.
+          const reconciled = reconcileAirportSlots(
+            teams,
+            (restored.airportSlots as Record<string, AirportSlotState>) ?? {},
+            restored.currentQuarter,
+          );
+
           set({
             ...restored,
-            teams,
+            teams: reconciled.teams,
+            airportSlots: reconciled.airportSlots,
             activeTeamId,
             playerTeamId,
             // Store the authenticated session ID so pushStateToServer

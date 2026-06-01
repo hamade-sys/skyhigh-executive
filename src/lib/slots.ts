@@ -26,13 +26,14 @@
  */
 
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
-import type { AirportSlotState, CityTier } from "@/types/game";
+import type { AirportSlotState, CityTier, Team } from "@/types/game";
 import {
   cityTierToLadder,
   AIRPORT_TIER_SPECS,
   playerAvailableSlots,
   backgroundSlotsUsed,
 } from "@/lib/airport-system-v2";
+import { AIRPORT_MAX_CAPACITY_BY_TIER } from "@/lib/airport-ownership";
 
 /** Starting slot capacity per tier. */
 export const STARTING_SLOTS_BY_TIER: Record<CityTier, number> = {
@@ -131,6 +132,11 @@ export function makeInitialAirportSlots(
         available: STARTING_SLOTS_BY_TIER[tier],
         nextOpening: rollYearlyOpen(tier),
         nextTickQuarter: 5,
+        // Capacity is a TRUE cap on Σ(leases) + available. It starts at the
+        // tier's pool and grows on yearly ticks toward the tier max. Earlier
+        // this was left undefined, which the type treats as "unlimited" — so
+        // total leases could blow past the displayed capacity.
+        totalCapacity: STARTING_SLOTS_BY_TIER[tier],
       };
     }
   }
@@ -180,8 +186,17 @@ export function applyYearlyTickIfDue(
     // wiped `ownerTeamId`, `ownerSlotRatePerWeekUsd`, `totalCapacity`,
     // `acquiredAtQuarter`, `purchaseCostUsd` on every yearly tick —
     // an owned airport would suddenly become "unowned" at Q5/Q9/Q13/Q17.
+    // Grow the true capacity ceiling by the opened batch (capped at the
+    // tier max). `available` follows; reconcileAirportSlots re-derives it
+    // from capacity − Σ(leases) at quarter close, so this stays consistent.
+    const tierMax = AIRPORT_MAX_CAPACITY_BY_TIER[tier as 1 | 2 | 3 | 4];
+    const grownCap = Math.min(
+      tierMax,
+      (cur.totalCapacity ?? STARTING_SLOTS_BY_TIER[tier]) + cur.nextOpening,
+    );
     out[code] = {
       ...cur,
+      totalCapacity: grownCap,
       available: cur.available + cur.nextOpening,
       nextOpening: rollYearlyOpen(tier),
       nextTickQuarter: nextTickQuarter(currentQuarter),
@@ -274,4 +289,152 @@ export function resolveSlotAuctions(
     out[code] = { ...state, available: remaining };
   }
   return { slots: out, awards, clearingPriceByAirport };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  Capacity reconciliation (2026-05)
+//
+//  The V1 slot model let total leases blow past the airport's nominal
+//  capacity: `totalCapacity` was never set on V1 airports (so the type's
+//  "undefined = unlimited" rule disabled the cap), while the `available`
+//  pool grew unbounded via the yearly drip and bots hoarded slots over
+//  many years. Result: a Tier-1 hub showing "800 / 1400" while four
+//  tenants collectively held 1,114 slots — numbers that don't reconcile.
+//
+//  `reconcileAirportSlots` makes capacity a TRUE cap and is safe to run on
+//  any save (one-time migration) and every quarter close (ongoing
+//  enforcement). For each airport it:
+//    1. Derives a real capacity: the tier's grown ceiling (starting slots
+//       + the yearly opens that have fired by `currentQuarter`, capped at
+//       the tier max), never below the slots the airlines' active routes
+//       actually consume (`used`) so no one's operations get stranded.
+//    2. If total leases exceed that capacity, trims the EXCESS (held −
+//       used) proportionally, largest-excess first — never cutting a team
+//       below what its routes need.
+//    3. Sets `available = capacity − Σ(leases)` so the auction can never
+//       re-over-allocate.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Number of yearly slot openings that have fired on/before `quarter`. */
+function yearlyTicksFired(quarter: number): number {
+  return YEARLY_TICK_QUARTERS.filter((q) => q <= quarter).length;
+}
+
+/** The grown slot ceiling a tier-`tier` airport should have by `quarter`:
+ *  starting slots + fired yearly openings (average), capped at the tier max. */
+function grownCeiling(tier: CityTier, quarter: number): number {
+  const start = STARTING_SLOTS_BY_TIER[tier];
+  const grown = start + yearlyTicksFired(quarter) * YEARLY_SLOTS_BY_TIER[tier];
+  const max = AIRPORT_MAX_CAPACITY_BY_TIER[tier as 1 | 2 | 3 | 4];
+  return Math.min(max, Math.round(grown));
+}
+
+/** Weekly slot usage of a team's routes at a given airport (1 weekly
+ *  schedule = 1 slot at each endpoint). Active, suspended and pending
+ *  routes all reserve their slots. */
+function teamUsedAt(team: Team, code: string): number {
+  let used = 0;
+  for (const r of team.routes) {
+    if (r.status !== "active" && r.status !== "suspended" && r.status !== "pending") continue;
+    if (r.originCode !== code && r.destCode !== code) continue;
+    used += Math.round(r.dailyFrequency * 7);
+  }
+  return used;
+}
+
+export function reconcileAirportSlots(
+  teams: Team[],
+  airportSlots: Record<string, AirportSlotState>,
+  currentQuarter: number,
+): { teams: Team[]; airportSlots: Record<string, AirportSlotState>; changed: boolean } {
+  // Every airport that has a slot-state entry OR any team lease.
+  const codes = new Set<string>(Object.keys(airportSlots ?? {}));
+  for (const t of teams) {
+    for (const code of Object.keys(t.airportLeases ?? {})) codes.add(code);
+  }
+
+  // newHeld[code] -> Map(teamId -> newSlotCount), only for trimmed airports.
+  const trimmed = new Map<string, Map<string, number>>();
+  const capByCode = new Map<string, number>();
+  let changed = false;
+
+  for (const code of codes) {
+    const city = CITIES_BY_CODE[code];
+    if (!city) continue;
+    const tier = city.tier as CityTier;
+    const stored = airportSlots?.[code];
+
+    const rows = teams.map((t) => {
+      const held = t.airportLeases?.[code]?.slots ?? 0;
+      const used = teamUsedAt(t, code);
+      return { id: t.id, held, used, excess: Math.max(0, held - used) };
+    });
+    const totalHeld = rows.reduce((s, r) => s + r.held, 0);
+    const totalUsed = rows.reduce((s, r) => s + r.used, 0);
+
+    // Capacity: a stored cap wins (already migrated / owner-expanded);
+    // otherwise reconstruct the grown ceiling. Never below committed usage,
+    // never above the tier's physical max.
+    const tierMax = AIRPORT_MAX_CAPACITY_BY_TIER[tier as 1 | 2 | 3 | 4];
+    const base = stored?.totalCapacity ?? grownCeiling(tier, currentQuarter);
+    const capacity = Math.min(tierMax, Math.max(base, totalUsed));
+    capByCode.set(code, capacity);
+
+    if (totalHeld <= capacity) continue; // already fits — only `available` updates
+
+    // Over-allocated → remove the surplus from EXCESS only, proportionally.
+    let toRemove = totalHeld - capacity;
+    const totalExcess = rows.reduce((s, r) => s + r.excess, 0);
+    if (totalExcess <= 0) continue; // nothing trimmable (all in use) — leave as-is
+    toRemove = Math.min(toRemove, totalExcess);
+    const cuts = rows.map((r) => {
+      const raw = (r.excess / totalExcess) * toRemove;
+      return { id: r.id, held: r.held, excess: r.excess, floor: Math.floor(raw), frac: raw - Math.floor(raw) };
+    });
+    let assigned = cuts.reduce((s, c) => s + c.floor, 0);
+    // Distribute the rounding remainder to the largest fractions, bounded by excess.
+    const order = [...cuts].sort((a, b) => b.frac - a.frac);
+    for (const c of order) {
+      if (assigned >= toRemove) break;
+      if (c.floor < c.excess) { c.floor += 1; assigned += 1; }
+    }
+    const m = new Map<string, number>();
+    for (const c of cuts) m.set(c.id, c.held - c.floor);
+    trimmed.set(code, m);
+    changed = true;
+  }
+
+  // Apply lease trims to teams (scale weekly cost with the new slot count,
+  // keep slotsByAirport in sync).
+  const newTeams = !changed ? teams : teams.map((t) => {
+    let leases = t.airportLeases;
+    let slotsBy = t.slotsByAirport;
+    let touched = false;
+    for (const [code, m] of trimmed) {
+      const newHeld = m.get(t.id);
+      if (newHeld == null) continue;
+      const lease = t.airportLeases?.[code];
+      const oldHeld = lease?.slots ?? 0;
+      if (newHeld === oldHeld) continue;
+      touched = true;
+      const ratePerSlot = oldHeld > 0 ? (lease?.totalWeeklyCost ?? 0) / oldHeld : 0;
+      leases = { ...leases, [code]: { slots: newHeld, totalWeeklyCost: Math.round(newHeld * ratePerSlot) } };
+      slotsBy = { ...slotsBy, [code]: newHeld };
+    }
+    return touched ? { ...t, airportLeases: leases, slotsByAirport: slotsBy } : t;
+  });
+
+  // Recompute available = capacity − Σ(leases) and write the real capacity.
+  const newSlots: Record<string, AirportSlotState> = { ...airportSlots };
+  for (const code of codes) {
+    const capacity = capByCode.get(code);
+    if (capacity == null) continue;
+    const leasedNow = newTeams.reduce((s, t) => s + (t.airportLeases?.[code]?.slots ?? 0), 0);
+    const cur = newSlots[code] ?? { available: 0, nextOpening: 0, nextTickQuarter: 5 };
+    const available = Math.max(0, capacity - leasedNow);
+    if (cur.totalCapacity !== capacity || cur.available !== available) changed = true;
+    newSlots[code] = { ...cur, totalCapacity: capacity, available };
+  }
+
+  return { teams: newTeams, airportSlots: newSlots, changed };
 }
