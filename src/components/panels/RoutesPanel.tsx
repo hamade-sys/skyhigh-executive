@@ -1369,6 +1369,9 @@ function RouteDetailModal({
   // auto-defaults to the physics-max schedule rather than sticking at 0.
   const [freqTouched, setFreqTouched] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  // Demand/capacity projection is collapsed by default so aircraft
+  // assignment is the first thing in reach when the editor opens.
+  const [showProjection, setShowProjection] = useState<boolean>(false);
   // Inline slot-bid state — when the player tries to lift weeklyFreq
   // beyond their current slot allocation, render a BidRow instead of
   // the legacy "Not enough slots" error so they can resolve it without
@@ -1410,12 +1413,13 @@ function RouteDetailModal({
       if (weeklyFreq !== 0) setWeeklyFreq(0);
       return;
     }
-    // Default to the physics max when the player hasn't manually set a
-    // frequency and the route currently carries none. Fixes the case
-    // where assigning the first aircraft to a no-aircraft route left
-    // frequency stuck at 0 until the slider was dragged.
-    if (!freqTouched && weeklyFreq < 1) {
-      setWeeklyFreq(clampMaxWeekly);
+    // Default to the physics max whenever the player hasn't manually set a
+    // frequency — the maximum schedule is almost always what you want when
+    // (re)assigning aircraft, and the player can always drag it back down.
+    // (Until the slider is touched, freqTouched stays false, so opening the
+    // editor snaps the schedule to the aircraft set's cap.)
+    if (!freqTouched) {
+      if (weeklyFreq !== clampMaxWeekly) setWeeklyFreq(clampMaxWeekly);
       return;
     }
     if (weeklyFreq > clampMaxWeekly) setWeeklyFreq(clampMaxWeekly);
@@ -1874,8 +1878,17 @@ function RouteDetailModal({
                   : "border-positive bg-[var(--positive-soft)]",
             )}
           >
-            <div className="flex items-baseline justify-between mb-1">
-              <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+            <button
+              type="button"
+              onClick={() => setShowProjection((v) => !v)}
+              className="w-full flex items-center justify-between gap-2"
+              aria-expanded={showProjection}
+            >
+              <span className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+                <ChevronRight
+                  className={cn("w-3 h-3 transition-transform", showProjection && "rotate-90")}
+                  aria-hidden
+                />
                 Demand · capacity · projected occupancy
               </span>
               <span
@@ -1890,8 +1903,9 @@ function RouteDetailModal({
               >
                 {(projection.occupancy * 100).toFixed(0)}%
               </span>
-            </div>
-            <div className="grid grid-cols-3 gap-3 text-[0.75rem]">
+            </button>
+            {showProjection && (<>
+            <div className="grid grid-cols-3 gap-3 text-[0.75rem] mt-2">
               <div>
                 <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
                   Daily demand
@@ -1951,6 +1965,7 @@ function RouteDetailModal({
                 ? "Demand = min(origin, dest) business demand in tonnes (before market-focus + news modifiers)."
                 : "Demand = engine-modelled pax/day for this OD pair. Capacity = total seats × daily frequency."}
             </div>
+            </>)}
           </div>
         )}
 
