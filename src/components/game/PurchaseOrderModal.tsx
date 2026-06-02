@@ -288,19 +288,22 @@ function PurchaseOrderBody({
             >
               <span aria-hidden="true">−</span>
             </button>
-            <span
-              aria-live="polite"
-              aria-atomic="true"
-              className="tabular font-mono text-[1.5rem] text-ink font-bold w-16 text-center"
-            >
-              {quantity}
-            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              aria-label="Aircraft order quantity"
+              value={quantity}
+              onChange={(e) => {
+                const n = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                setQuantity(Number.isFinite(n) && n > 0 ? n : 1);
+              }}
+              className="tabular font-mono text-[1.5rem] text-ink font-bold w-20 text-center rounded-md border border-line bg-surface py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
             <button
               type="button"
-              onClick={() => setQuantity(Math.min(20, quantity + 1))}
+              onClick={() => setQuantity(quantity + 1)}
               aria-label="Increase quantity"
               className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-[1.125rem] font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-              disabled={quantity >= 20}
             >
               <span aria-hidden="true">+</span>
             </button>

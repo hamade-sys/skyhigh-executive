@@ -5,12 +5,14 @@ import { effectiveUnlockQuarter } from "./engine";
  *  Master-ref doc Section 1E: "Announcement at R-2". */
 export const PREORDER_ANNOUNCEMENT_LEAD_ROUNDS = 2;
 
-/** Deposit fraction held when a pre-order is placed.
- *  Balance is charged at delivery; cancellation forfeits half the
- *  deposit — manufacturers don't refund 85% of a real-world airframe
- *  deposit when a slot has been built around your order. The 50%
- *  penalty matches industry practice on late-cycle cancellations. */
-export const PREORDER_DEPOSIT_PCT = 0.20;
+/** Deposit fraction held when a pre-order is placed. The remaining
+ *  balance is charged PER DELIVERY — as each airframe rolls off the FIFO
+ *  queue, the order pays (buyPrice − deposit-share) on that unit only, so
+ *  a 10-plane order spreads its balance across the quarters it delivers in.
+ *  Cancellation forfeits half the deposit — manufacturers don't refund a
+ *  real-world airframe deposit when a slot has been built around your
+ *  order. The 50% penalty matches industry practice on late cancellations. */
+export const PREORDER_DEPOSIT_PCT = 0.25;
 export const PREORDER_CANCEL_PENALTY_PCT = 0.50;
 
 /** Premium aircraft buy-price threshold — anything at or above this
