@@ -496,14 +496,24 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
       <section>
         <div className="flex items-baseline justify-between mb-2">
           <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
-            Build new · {SUBSIDIARY_CATALOG.length} options
+            Build &amp; operate
           </div>
           <div className="text-[0.6875rem] text-ink-muted">
             Cash {fmtMoney(player.cashUsd)}
           </div>
         </div>
+        {(["operations", "assets"] as const).map((cat) => (
+        <div key={cat} className="mb-4 last:mb-0">
+          <div className="flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-wider text-ink-2 font-semibold mb-1.5">
+            {cat === "operations" ? "Operations & maintenance" : "Airline assets"}
+            <span className="text-ink-muted font-normal normal-case tracking-normal">
+              {cat === "operations"
+                ? "· cost leverage — fuel, MRO, catering, training"
+                : "· brand & revenue — lounges, chauffeur, hotels"}
+            </span>
+          </div>
         <div className="grid md:grid-cols-2 gap-3">
-          {SUBSIDIARY_CATALOG.map((entry) => {
+          {SUBSIDIARY_CATALOG.filter((e) => e.category === cat).map((entry) => {
             const ownedAtCount = (ownedByType.get(entry.type)?.length ?? 0);
             const cantAfford = player.cashUsd < entry.setupCostUsd;
             return (
@@ -647,6 +657,32 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
               </div>
             );
           })}
+        </div>
+        </div>
+        ))}
+      </section>
+
+      {/* ── Subsidiary M&A (coming next) ─────────────────────────────
+          Phase 2: dynamic, time-boxed acquisition opportunities —
+          independent businesses with their own P&L that appear on the
+          market, are won via a competitive M&A process against rival
+          airlines, appreciate while held, and can be sold on later. This
+          teaser reserves the slot so the category is visible now. */}
+      <section>
+        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
+          <TrendingUp size={12} /> Subsidiary M&amp;A
+          <span className="text-[0.5625rem] font-bold tracking-wider text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
+            COMING SOON
+          </span>
+        </div>
+        <div className="rounded-md border border-dashed border-line bg-surface-2/30 p-4 text-[0.8125rem] text-ink-2 leading-relaxed">
+          Independent businesses across your network — duty-free operators,
+          regional feeders, hotel groups, ground handlers — will appear here as
+          time-boxed <strong className="text-ink">acquisition targets</strong>,
+          each with its own P&amp;L. Run diligence, bid competitively against
+          rival airlines, hold the asset as it performs and appreciates, then
+          sell it on. A real M&amp;A desk for your airline — landing in the next
+          update.
         </div>
       </section>
 

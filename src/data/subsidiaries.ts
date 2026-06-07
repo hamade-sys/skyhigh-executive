@@ -36,9 +36,19 @@ import type { SubsidiaryType } from "@/types/game";
  * selectively (e.g. maintenance hub bonus only fires for fleet based
  * at the city, fuel storage only for routes departing that city).
  */
+/** Investment grouping for the redesigned Investments panel:
+ *  - "operations": cost-leverage infrastructure you build & run (MRO,
+ *    catering, training, fuel). Framed as operational upgrades.
+ *  - "assets": brand & revenue assets tied to cities you fly (lounge,
+ *    chauffeur, hotel). Leveled up basic → premium → flagship.
+ *  (A third category, dynamic Subsidiary M&A, is a separate system —
+ *  time-boxed acquisition opportunities, not catalogue builds.) */
+export type InvestmentCategory = "operations" | "assets";
+
 export interface SubsidiaryCatalogEntry {
   type: SubsidiaryType;
   name: string;
+  category: InvestmentCategory;
   description: string;
   /** One-line elevator pitch shown on the investment card. */
   pitch: string;
@@ -54,6 +64,7 @@ export interface SubsidiaryCatalogEntry {
 export const SUBSIDIARY_CATALOG: SubsidiaryCatalogEntry[] = [
   {
     type: "hotel",
+    category: "assets",
     name: "Airport Hotel",
     description: "Premium 5-star airport hotel under the airline's brand. Captures business-traveller layover revenue and quietly steers loyalty programme members onto YOUR flights when they fly out of this city.",
     pitch: "Steady non-aviation income + a real demand pull on every route through this airport. Flagship hotels at both endpoints can push +6% revenue on the OD.",
@@ -64,6 +75,7 @@ export const SUBSIDIARY_CATALOG: SubsidiaryCatalogEntry[] = [
   },
   {
     type: "limo",
+    category: "assets",
     name: "Limo & Chauffeur Service",
     description: "Door-to-door luxury ground transfer for business and first class passengers. Real edge against rivals on shared OD pairs — high-yield travellers will swap carriers for a $0 limo home.",
     pitch: "Cheapest demand-side bet in the catalogue. Pairs especially well with a Premium Lounge at the same city.",
@@ -74,6 +86,7 @@ export const SUBSIDIARY_CATALOG: SubsidiaryCatalogEntry[] = [
   },
   {
     type: "lounge",
+    category: "assets",
     name: "Premium Lounge",
     description: "Branded business and first-class lounge at the city's main airport. Premium passengers preferentially route through hubs with a strong lounge — Emirates DXB and Qatar DOH anchor their carrier's share this way.",
     pitch: "Strongest demand pull in the catalogue. Flagship lounge at both endpoints = +8.5% revenue on the OD.",
@@ -84,6 +97,7 @@ export const SUBSIDIARY_CATALOG: SubsidiaryCatalogEntry[] = [
   },
   {
     type: "maintenance-hub",
+    category: "operations",
     name: "Maintenance Hub (MRO)",
     description: "Owned-and-operated heavy-maintenance base at the city. Reduces costs for any of your aircraft based here.",
     pitch: "Best ROI when 8+ aircraft are based here. Token revenue, big cost savings.",
@@ -94,6 +108,7 @@ export const SUBSIDIARY_CATALOG: SubsidiaryCatalogEntry[] = [
   },
   {
     type: "catering",
+    category: "operations",
     name: "Catering Kitchen",
     description: "Owned in-flight catering at the city. Drops third-party markups, lifts perceived service quality, gives every route through this city a small demand pull.",
     pitch: "Cheap, broad-stroke uplift. Small per-route bump that adds up across a 5+ route network.",
@@ -104,6 +119,7 @@ export const SUBSIDIARY_CATALOG: SubsidiaryCatalogEntry[] = [
   },
   {
     type: "training-academy",
+    category: "operations",
     name: "Training Academy",
     description: "Pilot, cabin crew and engineer training school. Generates third-party revenue while ensuring your own crews are world-class.",
     pitch: "Professional revenue + ops uplift. Looks great in the prospectus.",
