@@ -43,6 +43,9 @@ import {
   hardBotBlockingBidCodes,
   repriceBotRoutes,
   retireAgedAircraft,
+  botStance,
+  type BotStance,
+  type PlayerThreat,
   type BotDifficulty,
 } from "@/lib/ai-bots";
 import {
@@ -5703,6 +5706,57 @@ export const useGame = create<GameStore>()(
         const rankOf = (teamId: string) =>
           leaderboardSnapshot.findIndex((t) => t.id === teamId) + 1 || 1;
 
+        // ── Living Rivals (June 2026): stance + player threat ──
+        // Stance: where the bot sits vs the leader's airline value.
+        // Computed from the live snapshot; the PREVIOUS quarter's
+        // stance is derived from the airlineValue snapshots already in
+        // financialsByQuarter, so stance ESCALATIONS can be announced
+        // without storing any new state.
+        const leaderValueNow = leaderboardSnapshot.length > 0
+          ? computeAirlineValue(leaderboardSnapshot[0])
+          : 0;
+        const stanceOf = (teamId: string): BotStance => {
+          const t = leaderboardSnapshot.find((x) => x.id === teamId);
+          return botStance(t ? computeAirlineValue(t) : 0, leaderValueNow);
+        };
+        const prevStanceOf = (teamId: string): BotStance => {
+          const valueAtLastClose = (tid: string) => {
+            const team = s.teams.find((x) => x.id === tid);
+            const hist = team?.financialsByQuarter ?? [];
+            return hist.length > 0 ? hist[hist.length - 1].airlineValue ?? 0 : 0;
+          };
+          const prevLeaderValue = Math.max(
+            0, ...s.teams.map((x) => valueAtLastClose(x.id)),
+          );
+          return botStance(valueAtLastClose(teamId), prevLeaderValue);
+        };
+        // Threat: what the human(s) did during the quarter being closed.
+        const humanTeamsNow = s.teams.filter((t) => t.controlledBy === "human");
+        const humanRoutesOpenedThisQ = humanTeamsNow.reduce(
+          (n, ht) =>
+            n +
+            ht.routes.filter(
+              (r) => r.openQuarter === s.currentQuarter && r.status !== "closed",
+            ).length,
+          0,
+        );
+        const threatFor = (bot: Team): PlayerThreat => {
+          const humanSlots = humanTeamsNow.reduce(
+            (n, ht) => n + (ht.airportLeases?.[bot.hubCode]?.slots ?? 0),
+            0,
+          );
+          const botSlots = bot.airportLeases?.[bot.hubCode]?.slots ?? 0;
+          const slotState = s.airportSlots?.[bot.hubCode];
+          const humanOwnsHub =
+            !!slotState?.ownerTeamId &&
+            humanTeamsNow.some((h) => h.id === slotState.ownerTeamId);
+          const share = humanSlots / Math.max(1, humanSlots + botSlots);
+          return {
+            humanRoutesOpenedThisQ,
+            hubPressure: Math.min(1, share * (humanOwnsHub ? 1.3 : 1)),
+          };
+        };
+
         // Sequential reduce — threads `claimedODs` so later bots avoid the
         // same city pairs that earlier bots already picked this quarter.
         //
@@ -5784,7 +5838,7 @@ export const useGame = create<GameStore>()(
             // ── Route pruning ──────────────────────────────────────
             // Medium + hard bots close consistently losing routes and
             // free the aircraft for re-deployment elsewhere.
-            const toPrune = pruneBotRoutes(updated, t.botDifficulty);
+            const toPrune = pruneBotRoutes(updated, t.botDifficulty, stanceOf(t.id));
             if (toPrune.length > 0) {
               updated = {
                 ...updated,
@@ -5966,7 +6020,7 @@ export const useGame = create<GameStore>()(
             }
 
             // ── Aircraft order ─────────────────────────────────────
-            const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter, getTotalRounds(s), s.session?.campaignMode);
+            const order = planBotAircraftOrder(updated, t.botDifficulty, s.currentQuarter, getTotalRounds(s), s.session?.campaignMode, stanceOf(t.id));
             if (order) {
               const spec = AIRCRAFT_BY_ID[order.specId];
               if (spec) {
@@ -6020,6 +6074,8 @@ export const useGame = create<GameStore>()(
               claimedODs,
               rankOf(t.id),
               s.fuelIndex,
+              stanceOf(t.id),
+              threatFor(t),
             );
 
             const newBids: Record<string, { slots: number; price: number }> = {};
@@ -6198,6 +6254,16 @@ export const useGame = create<GameStore>()(
         const scenariosThisQuarter = boardDecisionsEnabled
           ? scenariosForQuarter(s.currentQuarter, getTotalRounds(s))
           : [];
+        // Collected for the rivalry feed below — the room should SEE
+        // rival boards making calls, not just feel their leaderboard
+        // effects (June 2026 Living Rivals).
+        const botScenarioAnnouncements: Array<{
+          teamName: string;
+          scenarioTitle: string;
+          optionLabel: string;
+          cash: number;
+          brandPts: number;
+        }> = [];
         const teamsAfterBotScenarios = teamsAfterBotTurns.map((t) => {
           if (!t.botDifficulty) return t;
           if (scenariosThisQuarter.length === 0) return t;
@@ -6249,6 +6315,13 @@ export const useGame = create<GameStore>()(
               lockInQuarters: 0,
               submittedAt: Date.now(),
             });
+            botScenarioAnnouncements.push({
+              teamName: t.name,
+              scenarioTitle: sc.title,
+              optionLabel: picked.label,
+              cash: typeof e.cash === "number" ? e.cash : 0,
+              brandPts: typeof e.brandPts === "number" ? e.brandPts : 0,
+            });
           }
           if (newDecisions.length > 0) {
             updated = { ...updated, decisions: [...updated.decisions, ...newDecisions] };
@@ -6259,47 +6332,101 @@ export const useGame = create<GameStore>()(
         // Replace s.teams reference for downstream rival processing
         Object.assign(s, { teams: teamsAfterBotScenarios });
 
-        // ── Rival activity toast ─────────────────────────────
-        // Help the player FEEL the bots — surface the single most
-        // notable new rival route this quarter as a toast. Notable =
-        // touches the player's hub or one of their secondary hubs
-        // (head-on competition); falls back to the highest-demand
-        // brand-new route if no head-on overlap. Limited to one toast
-        // per quarter to avoid noise. Skipped in pure-solo runs (no
-        // bot rivals).
+        // ── Rivalry feed (Living Rivals, June 2026) ──────────────
+        // The room should SEE the war, not just feel it on the
+        // leaderboard. Three signal classes, capped so a quarter close
+        // never fires more than ~5 rivalry toasts (each also lands in
+        // the NotificationCenter history for later review):
+        //   1. Stance escalations (max 2) — a rival turning aggressive
+        //      or desperate is the single most narratable bot event.
+        //   2. Notable new rival routes (max 3) — head-on first; the
+        //      old code showed only ONE route per quarter, so a bot
+        //      blitz looked like a single polite opening.
+        //   3. Boldest rival board decision (max 2, ranked by |cash|).
         const playerForToast = closed;
         if (playerForToast) {
+          // 1. Stance escalations — derived, no stored state.
+          const STANCE_RANK: Record<BotStance, number> = { cruise: 0, aggressive: 1, desperate: 2 };
+          let stanceToasts = 0;
+          for (const t of teamsAfterBotScenarios) {
+            if (!t.botDifficulty || stanceToasts >= 2) continue;
+            const now = stanceOf(t.id);
+            const before = prevStanceOf(t.id);
+            if (STANCE_RANK[now] > STANCE_RANK[before] && now !== "cruise") {
+              if (now === "desperate") {
+                toast.warning(
+                  `${t.name} is going for broke`,
+                  "Trailing badly — expect reckless route launches, undercut fares, and big fleet orders.",
+                );
+              } else {
+                toast.warning(
+                  `${t.name} turns aggressive`,
+                  "Falling behind the leader — expect a route push and contested corridors.",
+                );
+              }
+              stanceToasts++;
+            }
+          }
+
+          // 2. Notable new rival routes — head-on competition first.
           const playerHubs = new Set([
             playerForToast.hubCode,
             ...(playerForToast.secondaryHubCodes ?? []),
           ]);
-          type Notable = { rival: Team; route: Route; score: number };
+          // ODs the player actually flies — "they're on YOUR route" is a
+          // stronger signal than "they touch your hub".
+          const playerOds = new Set(
+            playerForToast.routes
+              .filter((r) => r.status === "active")
+              .map((r) =>
+                r.originCode < r.destCode
+                  ? `${r.originCode}|${r.destCode}`
+                  : `${r.destCode}|${r.originCode}`,
+              ),
+          );
+          type Notable = { rival: Team; route: Route; score: number; sharedOd: boolean; headOn: boolean };
           const notable: Notable[] = [];
           for (const t of teamsAfterBotScenarios) {
             if (!t.botDifficulty) continue;
             for (const r of t.routes) {
               if (r.openQuarter !== s.currentQuarter) continue;
               if (r.status !== "active") continue;
+              const odKey = r.originCode < r.destCode
+                ? `${r.originCode}|${r.destCode}`
+                : `${r.destCode}|${r.originCode}`;
+              const sharedOd = playerOds.has(odKey);
               const headOn = playerHubs.has(r.originCode) || playerHubs.has(r.destCode);
-              const dist = r.distanceKm;
-              // Score: head-on competition wins; longer distances win
-              // tiebreakers (more visible on map, more revenue impact).
-              const score = (headOn ? 1_000_000 : 0) + dist;
-              notable.push({ rival: t, route: r, score });
+              // Shared OD beats hub-adjacent beats expansion; distance
+              // breaks ties (longer = more revenue impact, more map).
+              const score = (sharedOd ? 2_000_000 : 0) + (headOn ? 1_000_000 : 0) + r.distanceKm;
+              notable.push({ rival: t, route: r, score, sharedOd, headOn });
             }
           }
           notable.sort((a, b) => b.score - a.score);
-          const top = notable[0];
-          if (top) {
-            const headOn =
-              playerHubs.has(top.route.originCode) ||
-              playerHubs.has(top.route.destCode);
-            const weeklyFreq = Math.round(top.route.dailyFrequency * 7);
-            // accent for head-on (tactical signal); info for routine
-            const fn = headOn ? toast.accent : toast.info;
+          for (const n of notable.slice(0, 3)) {
+            const weeklyFreq = Math.round(n.route.dailyFrequency * 7);
+            const fn = n.sharedOd ? toast.negative : n.headOn ? toast.accent : toast.info;
             fn(
-              `${top.rival.name} opened ${top.route.originCode}↔${top.route.destCode}`,
-              `${weeklyFreq}/wk · ${headOn ? "competing on your hub" : "expanding their network"}`,
+              `${n.rival.name} opened ${n.route.originCode}↔${n.route.destCode}`,
+              n.sharedOd
+                ? `${weeklyFreq}/wk at ${n.route.pricingTier} fares — competing on YOUR route`
+                : n.headOn
+                  ? `${weeklyFreq}/wk · competing on your hub`
+                  : `${weeklyFreq}/wk · expanding their network`,
+            );
+          }
+
+          // 3. Rival board decisions — biggest cash swings first.
+          const bold = [...botScenarioAnnouncements]
+            .sort((a, b) => Math.abs(b.cash) - Math.abs(a.cash))
+            .slice(0, 2);
+          for (const d of bold) {
+            const effects: string[] = [];
+            if (d.cash !== 0) effects.push(`${d.cash > 0 ? "+" : "−"}${fmtMoneyPlain(Math.abs(d.cash))}`);
+            if (d.brandPts !== 0) effects.push(`${d.brandPts > 0 ? "+" : ""}${d.brandPts} brand`);
+            toast.info(
+              `${d.teamName} board: ${d.scenarioTitle}`,
+              `Chose "${d.optionLabel}"${effects.length > 0 ? ` · ${effects.join(" · ")}` : ""}`,
             );
           }
         }
