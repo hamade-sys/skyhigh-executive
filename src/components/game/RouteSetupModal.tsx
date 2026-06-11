@@ -806,6 +806,19 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                     <button
                       key={t}
                       onClick={() => applyTier(t)}
+                      // One-line strategy explainer per tier (June 2026
+                      // First Flight bundle) — first-time players had no
+                      // way to learn what each tier trades off without
+                      // losing several quarters finding out the hard way.
+                      title={
+                        t === "budget"
+                          ? "Half-price fares fill seats fast — high volume, thin margins. Strong on short, busy routes."
+                          : t === "standard"
+                            ? "Market-rate fares — balanced load factor and yield. The safe default."
+                            : t === "premium"
+                              ? "1.5× fares, fewer takers — needs strong demand or a good brand to keep seats filled."
+                              : "2× fares — load factor caps hard at this tier; only routes with deep premium demand sustain it."
+                      }
                       className={cn(
                         "rounded-md border px-2.5 py-1.5 text-[0.75rem] capitalize transition-colors",
                         tier === t

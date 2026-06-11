@@ -315,6 +315,22 @@ export function QuarterCloseModal() {
                     {rankLine.text}
                   </div>
                 )}
+                {/* First-close coaching (First Flight bundle) — one
+                    concrete next move so a brand-new player leaves
+                    their first digest knowing exactly what to do. */}
+                {result.quarter === 1 && (() => {
+                  const idle = player.fleet.filter(
+                    (f) => f.status === "active" && !f.routeId,
+                  ).length;
+                  return (
+                    <div className="mt-1.5 text-[0.75rem] text-ink-2 leading-snug">
+                      <span className="font-semibold text-ink">Next move:</span>{" "}
+                      {idle > 0
+                        ? `you have ${idle} idle aircraft — open ${idle === 1 ? "a route" : "routes"} from ${player.hubCode} to put ${idle === 1 ? "it" : "them"} to work.`
+                        : "every aircraft is flying. Consider ordering more from the Fleet panel to keep growing."}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

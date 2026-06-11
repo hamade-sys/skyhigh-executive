@@ -30,6 +30,7 @@ import { AdminPanel } from "@/components/panels/AdminPanel";
 import { RouteSetupModal } from "@/components/game/RouteSetupModal";
 import { AirportDetailModal } from "@/components/game/AirportDetailModal";
 import { RouteLaunchBar } from "@/components/game/RouteLaunchBar";
+import { FirstFlightChecklist } from "@/components/game/FirstFlightChecklist";
 import { QuarterTimerDriver } from "@/components/game/QuarterTimer";
 import { Toaster } from "@/components/game/Toaster";
 import { useShallow } from "zustand/react/shallow";
@@ -484,6 +485,10 @@ function CanvasInner() {
           )}
         </div>
       )}
+
+      {/* First-quarter checklist — Q1 only, hidden for observers and
+          while a side panel covers its corner. */}
+      {!isObserver && !currentPanel && <FirstFlightChecklist />}
 
       {/* Floating route launch bar — hidden for observers. */}
       {!isObserver && (
