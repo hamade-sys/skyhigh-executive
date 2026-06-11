@@ -89,10 +89,10 @@ export function FirstFlightChecklist() {
     >
       <div className="px-3 py-2 border-b border-line/60 flex items-center gap-1.5">
         <Plane size={11} className="text-accent" aria-hidden />
-        <span className="text-[0.6875rem] uppercase tracking-wider text-ink font-medium flex-1">
+        <span className="text-label uppercase tracking-wider text-ink font-medium flex-1">
           Your first quarter
         </span>
-        <span className="text-[0.6875rem] tabular font-mono text-ink-muted">
+        <span className="text-label tabular font-mono text-ink-muted">
           {doneCount}/{steps.length}
         </span>
         <button
@@ -112,7 +112,7 @@ export function FirstFlightChecklist() {
               <span
                 aria-hidden
                 className={cn(
-                  "shrink-0 w-[18px] h-[18px] rounded-full flex items-center justify-center text-[0.625rem] font-bold mt-px",
+                  "shrink-0 w-[18px] h-[18px] rounded-full flex items-center justify-center text-caption font-bold mt-px",
                   st.done
                     ? "bg-positive text-primary-fg"
                     : isCurrent
@@ -125,7 +125,7 @@ export function FirstFlightChecklist() {
               <div className="min-w-0">
                 <div
                   className={cn(
-                    "text-[0.75rem] leading-snug",
+                    "text-body-sm leading-snug",
                     st.done
                       ? "text-ink-muted line-through decoration-ink-faint"
                       : isCurrent
@@ -136,7 +136,7 @@ export function FirstFlightChecklist() {
                   {st.label}
                 </div>
                 {isCurrent && (
-                  <div className="text-[0.6875rem] text-ink-muted leading-snug mt-0.5">
+                  <div className="text-label text-ink-muted leading-snug mt-0.5">
                     {st.hint}
                   </div>
                 )}

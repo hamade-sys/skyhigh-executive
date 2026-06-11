@@ -60,10 +60,10 @@ export function MarketIntelPanel() {
   return (
     <div className="space-y-4">
       <header className="space-y-1">
-        <div className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted flex items-center gap-1.5">
+        <div className="text-label uppercase tracking-[0.18em] text-ink-muted flex items-center gap-1.5">
           <Telescope size={12} /> Market intelligence
         </div>
-        <p className="text-[0.8125rem] text-ink-2 leading-relaxed">
+        <p className="text-body text-ink-2 leading-relaxed">
           See the global aircraft production queue — who has reserved which
           delivery slots, and in what order — plus a model-by-model breakdown of
           every rival&rsquo;s fleet. Slots are first-come, first-served across all
@@ -111,7 +111,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "px-2.5 py-1 rounded-sm text-[0.6875rem] flex items-center gap-1.5 transition-colors",
+        "px-2.5 py-1 rounded-sm text-label flex items-center gap-1.5 transition-colors",
         active ? "bg-primary text-primary-fg font-medium" : "text-ink-2 hover:text-ink",
       )}
     >
@@ -188,24 +188,24 @@ function OrderBook({
               </span>
               <Plane size={16} className="text-accent shrink-0" />
               <span className="min-w-0 flex-1">
-                <span className="block text-[0.8125rem] font-medium text-ink truncate">
+                <span className="block text-body font-medium text-ink truncate">
                   {model}
                   <span className="text-ink-muted font-normal"> · {maker}</span>
                 </span>
-                <span className="block text-[0.6875rem] text-ink-muted">
+                <span className="block text-label text-ink-muted">
                   {cap}/quarter off the line · {fmtMoney(spec.buyPriceUsd, { compact: true })} list
                 </span>
               </span>
               <span className="text-right shrink-0">
-                <span className="block text-[0.9375rem] font-mono tabular text-ink leading-none">
+                <span className="block text-title-sm font-mono tabular text-ink leading-none">
                   {queue.length}
                 </span>
-                <span className="block text-[0.625rem] uppercase tracking-wider text-ink-muted mt-0.5">
+                <span className="block text-caption uppercase tracking-wider text-ink-muted mt-0.5">
                   in queue
                 </span>
               </span>
               {mine > 0 && (
-                <span className="shrink-0 rounded-full bg-primary/10 text-primary text-[0.625rem] font-semibold px-2 py-0.5 tabular">
+                <span className="shrink-0 rounded-full bg-primary/10 text-primary text-caption font-semibold px-2 py-0.5 tabular">
                   {mine} yours
                 </span>
               )}
@@ -213,7 +213,7 @@ function OrderBook({
 
             {open && (
               <div className="border-t border-line">
-                <div className="px-3 py-1.5 grid grid-cols-[2rem_1fr_auto_auto] gap-2 text-[0.5625rem] uppercase tracking-wider text-ink-muted bg-surface-2/40">
+                <div className="px-3 py-1.5 grid grid-cols-[2rem_1fr_auto_auto] gap-2 text-micro uppercase tracking-wider text-ink-muted bg-surface-2/40">
                   <span>#</span>
                   <span>Airline</span>
                   <span className="text-right">Ordered</span>
@@ -230,7 +230,7 @@ function OrderBook({
                       <li
                         key={o.id}
                         className={cn(
-                          "px-3 py-1.5 grid grid-cols-[2rem_1fr_auto_auto] gap-2 items-center text-[0.75rem] border-t border-line/60",
+                          "px-3 py-1.5 grid grid-cols-[2rem_1fr_auto_auto] gap-2 items-center text-body-sm border-t border-line/60",
                           isMine && "bg-primary/[0.06]",
                         )}
                       >
@@ -244,12 +244,12 @@ function OrderBook({
                             {teamName(o.teamId)}
                           </span>
                           {isMine && (
-                            <span className="shrink-0 text-[0.5625rem] uppercase tracking-wider text-primary/70">
+                            <span className="shrink-0 text-micro uppercase tracking-wider text-primary/70">
                               you
                             </span>
                           )}
                           {o.acquisitionType === "lease" && (
-                            <span className="shrink-0 text-[0.5625rem] uppercase tracking-wider text-ink-muted">
+                            <span className="shrink-0 text-micro uppercase tracking-wider text-ink-muted">
                               lease
                             </span>
                           )}
@@ -337,19 +337,19 @@ function RivalFleetCard({ team, preOrders }: { team: Team; preOrders: PreOrder[]
       <div className="px-3 py-2.5 border-b border-line flex items-center gap-2.5">
         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: team.color }} />
         <span className="min-w-0 flex-1">
-          <span className="block text-[0.8125rem] font-semibold text-ink truncate">{team.name}</span>
-          <span className="block text-[0.6875rem] text-ink-muted truncate">
+          <span className="block text-body font-semibold text-ink truncate">{team.name}</span>
+          <span className="block text-label text-ink-muted truncate">
             {doctrine?.name ?? "—"} · Hub {hub?.name ?? team.hubCode}
           </span>
         </span>
         <span className="text-right shrink-0">
-          <span className="block text-[0.9375rem] font-mono tabular text-ink leading-none">{totalActive}</span>
-          <span className="block text-[0.5625rem] uppercase tracking-wider text-ink-muted mt-0.5">aircraft</span>
+          <span className="block text-title-sm font-mono tabular text-ink leading-none">{totalActive}</span>
+          <span className="block text-micro uppercase tracking-wider text-ink-muted mt-0.5">aircraft</span>
         </span>
       </div>
 
       {breakdown.length === 0 ? (
-        <div className="px-3 py-4 text-[0.75rem] text-ink-muted text-center">
+        <div className="px-3 py-4 text-body-sm text-ink-muted text-center">
           No aircraft yet.
         </div>
       ) : (
@@ -358,7 +358,7 @@ function RivalFleetCard({ team, preOrders }: { team: Team; preOrders: PreOrder[]
             const maker = manufacturerOf(r.spec!.name);
             const model = r.spec!.name.replace(new RegExp(`^${maker}\\s+`), "");
             return (
-              <li key={r.specId} className="px-3 py-1.5 flex items-center gap-2 text-[0.75rem]">
+              <li key={r.specId} className="px-3 py-1.5 flex items-center gap-2 text-body-sm">
                 <Plane size={12} className="text-ink-muted shrink-0" />
                 <span className="min-w-0 flex-1 truncate text-ink">
                   {model}
@@ -368,7 +368,7 @@ function RivalFleetCard({ team, preOrders }: { team: Team; preOrders: PreOrder[]
                   <span className="shrink-0 font-mono tabular text-ink">{r.owned}</span>
                 )}
                 {r.onOrder > 0 && (
-                  <span className="shrink-0 rounded-full bg-accent/10 text-accent text-[0.625rem] font-semibold px-1.5 py-0.5 tabular">
+                  <span className="shrink-0 rounded-full bg-accent/10 text-accent text-caption font-semibold px-1.5 py-0.5 tabular">
                     +{r.onOrder} on order
                   </span>
                 )}
@@ -379,7 +379,7 @@ function RivalFleetCard({ team, preOrders }: { team: Team; preOrders: PreOrder[]
       )}
 
       {totalOnOrder > 0 && (
-        <div className="px-3 py-1.5 border-t border-line bg-surface-2/40 text-[0.6875rem] text-ink-muted flex items-center gap-1.5">
+        <div className="px-3 py-1.5 border-t border-line bg-surface-2/40 text-label text-ink-muted flex items-center gap-1.5">
           <Clock size={11} /> {totalOnOrder} on order in the production queue
         </div>
       )}
@@ -399,8 +399,8 @@ function EmptyState({
       <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-surface-2 text-ink-muted mb-3">
         {icon}
       </div>
-      <div className="text-[0.8125rem] font-medium text-ink mb-1">{title}</div>
-      <p className="text-[0.75rem] text-ink-muted max-w-sm mx-auto leading-relaxed">{body}</p>
+      <div className="text-body font-medium text-ink mb-1">{title}</div>
+      <p className="text-body-sm text-ink-muted max-w-sm mx-auto leading-relaxed">{body}</p>
     </div>
   );
 }

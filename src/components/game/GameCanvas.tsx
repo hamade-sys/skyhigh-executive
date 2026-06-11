@@ -342,19 +342,19 @@ function CanvasInner() {
     return (
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="max-w-2xl text-center">
-          <div className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent mb-4">
+          <div className="text-label uppercase tracking-[0.2em] text-accent mb-4">
             ICAN Simulations · Airline
           </div>
           <h1 className="font-display text-4xl md:text-5xl text-ink leading-tight mb-4">
             Run a global airline.
           </h1>
-          <p className="text-ink-2 text-[0.9375rem] leading-relaxed mb-2">
+          <p className="text-ink-2 text-title-sm leading-relaxed mb-2">
             An executive simulation by ICAN MENA. Open routes across hundreds
             of cities, build a fleet from a deep aircraft catalogue, navigate
             board-level scenarios, and steer through real macro events — fuel
             shocks, talent wars, recession, and regulatory ultimatums.
           </p>
-          <p className="text-ink-muted text-[0.8125rem] mb-8">
+          <p className="text-ink-muted text-body mb-8">
             You begin with $150M seed capital. Q1 Brand Building sets your
             opening cash injection (up to +$80M) and brand foundation before
             Q2 operations open.
@@ -371,7 +371,7 @@ function CanvasInner() {
               Play demo round
             </Button>
           </div>
-          <div className="text-[0.75rem] text-ink-muted mt-3">
+          <div className="text-body-sm text-ink-muted mt-3">
             Demo seeds a sample airline so you can explore mechanics without setup.
           </div>
           <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4 text-left max-w-2xl mx-auto">
@@ -381,10 +381,10 @@ function CanvasInner() {
             <PreGameStat label="Scenarios" value="22" sub="Board-level decisions" />
           </div>
           <div className="mt-8 text-left max-w-2xl mx-auto rounded-md border border-line bg-surface-2/40 p-4">
-            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+            <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
               How a quarter plays
             </div>
-            <ol className="list-decimal list-inside text-[0.8125rem] text-ink-2 leading-relaxed space-y-1">
+            <ol className="list-decimal list-inside text-body text-ink-2 leading-relaxed space-y-1">
               <li>Open and price routes from your hub on the world map</li>
               <li>Set the six operational sliders (staff, marketing, service…)</li>
               <li>Resolve any board scenarios that came up this quarter</li>
@@ -555,9 +555,9 @@ export function GameCanvas() {
 function PreGameStat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div className="border-t border-line pt-3">
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">{label}</div>
-      <div className="font-display text-[1.5rem] text-ink tabular leading-tight">{value}</div>
-      <div className="text-[0.6875rem] text-ink-muted leading-tight mt-0.5">{sub}</div>
+      <div className="text-label uppercase tracking-wider text-ink-muted">{label}</div>
+      <div className="font-display text-heading-lg text-ink tabular leading-tight">{value}</div>
+      <div className="text-label text-ink-muted leading-tight mt-0.5">{sub}</div>
     </div>
   );
 }

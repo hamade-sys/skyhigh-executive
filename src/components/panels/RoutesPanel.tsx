@@ -290,9 +290,9 @@ export function RoutesPanel() {
             placeholder="Search by code or city name…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 min-w-[180px] h-9 text-[0.875rem]"
+            className="flex-1 min-w-[180px] h-9 text-body-lg"
           />
-          <div className="text-[0.75rem] text-ink-muted tabular shrink-0">
+          <div className="text-body-sm text-ink-muted tabular shrink-0">
             {rows.length} of {player.routes.filter((r) => r.status !== "closed").length}
           </div>
           <Button
@@ -348,8 +348,8 @@ export function RoutesPanel() {
         </div>
 
         {/* Filter + sort chips */}
-        <div className="flex items-center gap-1.5 flex-wrap text-[0.75rem]">
-          <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted mr-1">Filter</span>
+        <div className="flex items-center gap-1.5 flex-wrap text-body-sm">
+          <span className="text-caption uppercase tracking-wider text-ink-muted mr-1">Filter</span>
         {([
           { k: "all", label: "All" },
           { k: "passenger", label: "Passenger" },
@@ -371,7 +371,7 @@ export function RoutesPanel() {
             {label}
           </button>
         ))}
-        <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted mx-1 ml-3">Sort</span>
+        <span className="text-caption uppercase tracking-wider text-ink-muted mx-1 ml-3">Sort</span>
         {([
           { k: "profit", label: "Profit" },
           { k: "load", label: "Occupancy" },
@@ -420,14 +420,14 @@ export function RoutesPanel() {
       </PanelSubheader>
 
       {rows.length === 0 ? (
-        <div className="py-12 text-center text-ink-muted text-[0.875rem] rounded-lg border border-dashed border-line">
+        <div className="py-12 text-center text-ink-muted text-body-lg rounded-lg border border-dashed border-line">
           {query
             ? "No routes match that search."
             : "No routes yet — click New route above, or pick a city on the map."}
         </div>
       ) : (
         <div className="rounded-md border border-line overflow-hidden">
-          <table className="w-full text-[0.8125rem] table-fixed">
+          <table className="w-full text-body table-fixed">
             <thead>
               <tr className="bg-surface-2 border-b border-line">
                 <Th className="w-[26%]">Route</Th>
@@ -569,7 +569,7 @@ export function RoutesPanel() {
                           ));
                         })()}
                       </div>
-                      <div className="text-[0.6875rem] text-ink-muted truncate mt-0.5">
+                      <div className="text-label text-ink-muted truncate mt-0.5">
                         {origin?.name} · {dest?.name} · {Math.round(r.distanceKm).toLocaleString()} km
                       </div>
                     </td>
@@ -609,7 +609,7 @@ export function RoutesPanel() {
                         const delta = profit - r.prevQuarterProfitUsd;
                         if (Math.abs(delta) < 50_000) {
                           return (
-                            <span className="text-ink-muted tabular font-mono text-[0.75rem]" title="Direct profit roughly unchanged vs last quarter">
+                            <span className="text-ink-muted tabular font-mono text-body-sm" title="Direct profit roughly unchanged vs last quarter">
                               flat
                             </span>
                           );
@@ -617,7 +617,7 @@ export function RoutesPanel() {
                         return (
                           <span
                             className={cn(
-                              "tabular font-mono text-[0.75rem] font-medium inline-flex items-center gap-0.5",
+                              "tabular font-mono text-body-sm font-medium inline-flex items-center gap-0.5",
                               delta > 0 ? "text-positive" : "text-negative",
                             )}
                             title={`Direct profit ${delta > 0 ? "improved" : "dropped"} ${fmtMoney(Math.abs(delta))} vs last quarter`}
@@ -627,7 +627,7 @@ export function RoutesPanel() {
                         );
                       })()}
                     </td>
-                    <td className="py-2.5 px-3 text-right tabular font-mono text-ink-muted text-[0.75rem]">
+                    <td className="py-2.5 px-3 text-right tabular font-mono text-ink-muted text-body-sm">
                       {Math.max(0, s.currentQuarter - r.openQuarter)}Q
                     </td>
                     <td className="py-2.5 px-3 text-right">
@@ -683,11 +683,11 @@ export function RoutesPanel() {
         {closeRouteConfirm && (
           <>
             <ModalHeader>
-              <h2 className="font-display text-[1.5rem] text-ink flex items-center gap-2">
+              <h2 className="font-display text-heading-lg text-ink flex items-center gap-2">
                 <AlertTriangle size={18} className="text-warning shrink-0" />
                 Close {closeRouteConfirm.originCode} → {closeRouteConfirm.destCode}?
               </h2>
-              <p className="text-ink-muted text-[0.8125rem] mt-1">
+              <p className="text-ink-muted text-body mt-1">
                 Aircraft return to idle and become available for new routes.
                 The slots at both endpoints are released back to the auction
                 pool — you may need to re-bid (and pay) to use them again.
@@ -719,11 +719,11 @@ export function RoutesPanel() {
         {cancelPendingConfirm && (
           <>
             <ModalHeader>
-              <h2 className="font-display text-[1.5rem] text-ink flex items-center gap-2">
+              <h2 className="font-display text-heading-lg text-ink flex items-center gap-2">
                 <AlertTriangle size={18} className="text-warning shrink-0" />
                 Cancel pending route {cancelPendingConfirm.originCode} → {cancelPendingConfirm.destCode}?
               </h2>
-              <p className="text-ink-muted text-[0.8125rem] mt-1">
+              <p className="text-ink-muted text-body mt-1">
                 Aircraft return to idle. Slot bids stay queued for the next
                 auction — release them in the Slot Market panel if you don&apos;t
                 want to spend.
@@ -870,11 +870,11 @@ function ManageAllModal({
   return (
     <Modal open={open} onClose={onClose}>
       <ModalHeader>
-        <h2 className="font-display text-[1.5rem] text-ink flex items-center gap-2">
+        <h2 className="font-display text-heading-lg text-ink flex items-center gap-2">
           <SlidersHorizontal size={18} className="text-accent shrink-0" />
           Manage all routes
         </h2>
-        <p className="text-ink-muted text-[0.8125rem] mt-1">
+        <p className="text-ink-muted text-body mt-1">
           Reprice the whole network at once instead of editing each route.
           Changes apply at the next quarter close.
         </p>
@@ -902,8 +902,8 @@ function ManageAllModal({
                     n === 0 && "opacity-40 cursor-not-allowed",
                   )}
                 >
-                  <span className="text-[0.8125rem]">{label}</span>
-                  <span className="text-[0.625rem] tabular font-mono text-ink-muted">
+                  <span className="text-body">{label}</span>
+                  <span className="text-caption tabular font-mono text-ink-muted">
                     {n} route{n === 1 ? "" : "s"}
                   </span>
                 </button>
@@ -924,8 +924,8 @@ function ManageAllModal({
                     : "border-line text-ink-2 hover:bg-surface-hover",
                 )}
               >
-                <span className="text-[0.8125rem]">Adjust by %</span>
-                <span className="block text-[0.625rem] text-ink-muted font-normal mt-0.5">
+                <span className="text-body">Adjust by %</span>
+                <span className="block text-caption text-ink-muted font-normal mt-0.5">
                   Nudge today&apos;s fares up or down
                 </span>
               </button>
@@ -938,8 +938,8 @@ function ManageAllModal({
                     : "border-line text-ink-2 hover:bg-surface-hover",
                 )}
               >
-                <span className="text-[0.8125rem]">Align to tier</span>
-                <span className="block text-[0.625rem] text-ink-muted font-normal mt-0.5">
+                <span className="text-body">Align to tier</span>
+                <span className="block text-caption text-ink-muted font-normal mt-0.5">
                   Snap all to one pricing tier
                 </span>
               </button>
@@ -977,7 +977,7 @@ function ManageAllModal({
                       key={p}
                       onClick={() => setPercent(p)}
                       className={cn(
-                        "px-2 py-0.5 rounded-md border text-[0.75rem] tabular font-mono transition-colors",
+                        "px-2 py-0.5 rounded-md border text-body-sm tabular font-mono transition-colors",
                         percent === p
                           ? "border-accent bg-accent/[0.06] text-ink font-semibold"
                           : "border-line text-ink-muted hover:bg-surface-hover",
@@ -987,7 +987,7 @@ function ManageAllModal({
                     </button>
                   ))}
                 </div>
-                <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
+                <p className="text-label text-ink-muted leading-relaxed">
                   Applied to each route&apos;s current effective fare (and cargo
                   $/tonne), then clamped to each cabin&apos;s allowed range.
                   Routes already at a price floor or ceiling stop there.
@@ -1013,15 +1013,15 @@ function ManageAllModal({
                           : "border-line text-ink-2 hover:bg-surface-hover",
                       )}
                     >
-                      <span className="text-[0.8125rem]">{t}</span>
-                      <span className="text-[0.625rem] tabular font-mono text-ink-muted">
+                      <span className="text-body">{t}</span>
+                      <span className="text-caption tabular font-mono text-ink-muted">
                         {mult} base
                       </span>
                     </button>
                   );
                 })}
               </div>
-              <p className="text-[0.6875rem] text-ink-muted leading-relaxed mt-2">
+              <p className="text-label text-ink-muted leading-relaxed mt-2">
                 Snaps every route in scope to this tier and clears any
                 per-class or per-tonne overrides, so they all sit on the
                 tier baseline.
@@ -1172,10 +1172,10 @@ function NewRoutePicker({
         <div className="flex items-center gap-2 mb-1.5">
           <Badge tone="accent">New route</Badge>
         </div>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight">
+        <h2 className="font-display text-heading-lg text-ink leading-tight">
           Pick origin and destination
         </h2>
-        <p className="text-[0.8125rem] text-ink-muted mt-1">
+        <p className="text-body text-ink-muted mt-1">
           Choose the two endpoints. Aircraft, frequency, and pricing are
           configured on the next step.
         </p>
@@ -1215,7 +1215,7 @@ function NewRoutePicker({
         </div>
 
         {origin && dest && origin !== dest && (
-          <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[0.8125rem] text-ink-2">
+          <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 text-body text-ink-2">
             Great-circle distance:{" "}
             <strong className="font-mono tabular text-ink">
               {Math.round(dist).toLocaleString()} km
@@ -1224,7 +1224,7 @@ function NewRoutePicker({
         )}
 
         {origin && dest && origin === dest && (
-          <div className="rounded-md border border-negative bg-[var(--negative-soft)] px-3 py-2 text-[0.8125rem] text-negative">
+          <div className="rounded-md border border-negative bg-[var(--negative-soft)] px-3 py-2 text-body text-negative">
             Origin and destination must be different airports.
           </div>
         )}
@@ -1236,7 +1236,7 @@ function NewRoutePicker({
                 the two upper ones — just make the upper ones where the
                 text is written"). This panel is purely the results list
                 plus the in-range filter. */}
-            <div className="text-[0.6875rem] uppercase tracking-wider text-primary font-semibold mb-1.5">
+            <div className="text-label uppercase tracking-wider text-primary font-semibold mb-1.5">
               {search.trim()
                 ? `Matches for “${search.trim()}”`
                 : `Pick ${picking === "origin" ? "origin" : "destination"}`}
@@ -1246,7 +1246,7 @@ function NewRoutePicker({
                 type="button"
                 onClick={() => setInRangeOnly((v) => !v)}
                 className={cn(
-                  "mb-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[0.6875rem] font-semibold transition-colors",
+                  "mb-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-label font-semibold transition-colors",
                   inRangeOnly
                     ? "border-primary bg-[rgba(20,53,94,0.06)] text-primary"
                     : "border-line text-ink-muted hover:bg-surface-hover",
@@ -1266,7 +1266,7 @@ function NewRoutePicker({
             )}
             <div className="max-h-[320px] overflow-y-auto rounded-md border border-line bg-surface">
               {filtered.length === 0 ? (
-                <div className="py-6 text-center text-[0.8125rem] text-ink-muted">
+                <div className="py-6 text-center text-body text-ink-muted">
                   No cities match.
                 </div>
               ) : (
@@ -1340,7 +1340,7 @@ function CityField({
   const city = code ? CITIES_BY_CODE[code] : null;
   return (
     <div>
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-1">
+      <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold mb-1">
         {label}
       </div>
       <div className="flex items-center gap-1.5">
@@ -1350,7 +1350,7 @@ function CityField({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={placeholder}
-            className="flex-1 min-w-0 rounded-md border border-primary bg-surface px-3 py-2 text-[0.9375rem] text-ink outline-none focus:ring-2 focus:ring-[#00C2CB]/30"
+            className="flex-1 min-w-0 rounded-md border border-primary bg-surface px-3 py-2 text-title-sm text-ink outline-none focus:ring-2 focus:ring-[#00C2CB]/30"
           />
         ) : (
           <button
@@ -1366,15 +1366,15 @@ function CityField({
           >
             {city ? (
               <>
-                <div className="font-mono font-semibold text-ink text-[0.9375rem] leading-tight">
+                <div className="font-mono font-semibold text-ink text-title-sm leading-tight">
                   {city.code}
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted truncate">
+                <div className="text-label text-ink-muted truncate">
                   {city.name}
                 </div>
               </>
             ) : (
-              <div className="text-[0.875rem] py-1.5">{placeholder}</div>
+              <div className="text-body-lg py-1.5">{placeholder}</div>
             )}
           </button>
         )}
@@ -1404,12 +1404,12 @@ function KpiCard({
     tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
   return (
     <div className="rounded-md border border-line bg-surface px-2.5 py-2">
-      <div className="text-[0.5625rem] uppercase tracking-wider text-ink-muted">{label}</div>
-      <div className={`tabular font-display text-[1rem] leading-tight mt-0.5 ${valueColor}`}>
+      <div className="text-micro uppercase tracking-wider text-ink-muted">{label}</div>
+      <div className={`tabular font-display text-title leading-tight mt-0.5 ${valueColor}`}>
         {value}
       </div>
       {sub && (
-        <div className="text-[0.5625rem] text-ink-muted truncate mt-0.5">{sub}</div>
+        <div className="text-micro text-ink-muted truncate mt-0.5">{sub}</div>
       )}
     </div>
   );
@@ -1428,7 +1428,7 @@ function Th({
   return (
     <th
       className={cn(
-        "text-left px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted",
+        "text-left px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted",
         className,
       )}
       title={title}
@@ -1857,10 +1857,10 @@ function RouteDetailModal({
           </Badge>
           {route.isCargo && <Badge tone="warning">Cargo</Badge>}
         </div>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight">
+        <h2 className="font-display text-heading-lg text-ink leading-tight">
           {route.originCode} → {route.destCode}
         </h2>
-        <div className="text-ink-muted text-[0.8125rem] mt-1">
+        <div className="text-ink-muted text-body mt-1">
           {origin?.name} → {dest?.name} · {Math.round(route.distanceKm).toLocaleString()} km ·
           Opened Q{route.openQuarter}
           {(route.consecutiveQuartersActive ?? 0) >= 4 && (
@@ -1868,7 +1868,7 @@ function RouteDetailModal({
           )}
         </div>
         {route.status === "pending" && (
-          <div className="mt-2 rounded-md border border-warning/40 bg-[var(--warning-soft)] px-3 py-2 text-[0.75rem] text-ink-2 leading-relaxed">
+          <div className="mt-2 rounded-md border border-warning/40 bg-[var(--warning-soft)] px-3 py-2 text-body-sm text-ink-2 leading-relaxed">
             {/* Phase 4.6 — copy fixed to match actual store behavior.
                 Previously claimed "If you're outbid, it cancels and
                 aircraft return idle." That's wrong: outbid routes
@@ -1881,7 +1881,7 @@ function RouteDetailModal({
             you&apos;re outbid, the route stays pending — re-bid next quarter,
             or cancel manually to free the aircraft.
             {route.pendingReason && (
-              <div className="mt-1.5 pt-1.5 border-t border-warning/20 font-mono text-[0.6875rem] text-ink-2">
+              <div className="mt-1.5 pt-1.5 border-t border-warning/20 font-mono text-label text-ink-2">
                 Last auction: {route.pendingReason}
               </div>
             )}
@@ -1955,8 +1955,8 @@ function RouteDetailModal({
             Only shows when the engine recorded a meaningful shock at
             close. */}
         {route.lastQuarterDemandShockMult !== undefined && (
-          <div className="rounded-md border border-line bg-surface-2/30 px-3 py-2 text-[0.75rem] text-ink-2">
-            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted mr-2">
+          <div className="rounded-md border border-line bg-surface-2/30 px-3 py-2 text-body-sm text-ink-2">
+            <span className="text-caption uppercase tracking-wider font-semibold text-ink-muted mr-2">
               News impact
             </span>
             Last quarter&apos;s demand on this route was{" "}
@@ -1988,7 +1988,7 @@ function RouteDetailModal({
               className="w-full flex items-center justify-between gap-2"
               aria-expanded={showProjection}
             >
-              <span className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+              <span className="flex items-center gap-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">
                 <ChevronRight
                   className={cn("w-3 h-3 transition-transform", showProjection && "rotate-90")}
                   aria-hidden
@@ -1997,7 +1997,7 @@ function RouteDetailModal({
               </span>
               <span
                 className={cn(
-                  "tabular font-mono text-[0.875rem] font-semibold",
+                  "tabular font-mono text-body-lg font-semibold",
                   projection.occupancy < 0.25
                     ? "text-negative"
                     : projection.occupancy < 0.55
@@ -2009,9 +2009,9 @@ function RouteDetailModal({
               </span>
             </button>
             {showProjection && (<>
-            <div className="grid grid-cols-3 gap-3 text-[0.75rem] mt-2">
+            <div className="grid grid-cols-3 gap-3 text-body-sm mt-2">
               <div>
-                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                <div className="text-caption uppercase tracking-wider text-ink-muted">
                   Daily demand
                 </div>
                 <div className="tabular font-mono text-ink font-medium">
@@ -2020,7 +2020,7 @@ function RouteDetailModal({
                 </div>
               </div>
               <div>
-                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                <div className="text-caption uppercase tracking-wider text-ink-muted">
                   Daily capacity
                 </div>
                 <div className="tabular font-mono text-ink font-medium">
@@ -2029,7 +2029,7 @@ function RouteDetailModal({
                 </div>
               </div>
               <div>
-                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                <div className="text-caption uppercase tracking-wider text-ink-muted">
                   Coverage
                 </div>
                 <div className="tabular font-mono text-ink font-medium">
@@ -2046,7 +2046,7 @@ function RouteDetailModal({
                 capacity; a single-cabin on a Tier-1 trunk shows
                 business demand spilling out. */}
             {projection.kind === "passenger" && projection.byClass && (
-              <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-line/40 text-[0.6875rem]">
+              <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-line/40 text-label">
                 <ClassDemandCell
                   label="First"
                   demand={projection.byClass.demandFirst}
@@ -2064,7 +2064,7 @@ function RouteDetailModal({
                 />
               </div>
             )}
-            <div className="text-[0.625rem] text-ink-muted leading-snug mt-1.5">
+            <div className="text-caption text-ink-muted leading-snug mt-1.5">
               {projection.kind === "cargo"
                 ? "Demand = min(origin, dest) business demand in tonnes (before market-focus + news modifiers)."
                 : "Demand = engine-modelled pax/day for this OD pair. Capacity = total seats × daily frequency."}
@@ -2116,11 +2116,11 @@ function RouteDetailModal({
           return (
             <div className="rounded-md border border-warning/50 bg-[var(--warning-soft)]/60 px-3 py-2.5">
               <div className="flex items-baseline gap-2 mb-1">
-                <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-warning">
+                <span className="text-caption uppercase tracking-wider font-semibold text-warning">
                   Sold out · only {coveragePct}% of demand served
                 </span>
               </div>
-              <p className="text-[0.8125rem] text-ink-2 leading-relaxed">
+              <p className="text-body text-ink-2 leading-relaxed">
                 Every flight on this route is full, but you&apos;re leaving
                 {" "}
                 <strong className="text-ink">
@@ -2133,7 +2133,7 @@ function RouteDetailModal({
                 )}
               </p>
               {cabinMismatch && (
-                <p className="text-[0.8125rem] text-ink-2 leading-relaxed mt-2 pt-2 border-t border-warning/30">
+                <p className="text-body text-ink-2 leading-relaxed mt-2 pt-2 border-t border-warning/30">
                   <strong className="text-warning">Premium demand unserved:</strong>{" "}
                   the assigned aircraft has zero business or first seats
                   while both endpoints carry significant business demand.
@@ -2141,7 +2141,7 @@ function RouteDetailModal({
                   would unlock higher-yield seats without burning more fuel.
                 </p>
               )}
-              <p className="text-[0.6875rem] text-ink-muted leading-snug mt-2">
+              <p className="text-label text-ink-muted leading-snug mt-2">
                 Note: the &ldquo;Net after overhead&rdquo; figure above
                 can read negative on healthy direct contributors when the
                 airline carries heavy company overhead. Watch{" "}
@@ -2161,7 +2161,7 @@ function RouteDetailModal({
           {!hasActiveAssigned && compatibleIdle.length > 0 && (
             <button
               onClick={assignBestIdle}
-              className="mb-2 w-full flex items-center justify-center gap-2 rounded-md border border-primary bg-[rgba(20,53,94,0.04)] px-3 py-2 text-[0.8125rem] font-semibold text-primary hover:bg-[rgba(20,53,94,0.08)] transition-colors"
+              className="mb-2 w-full flex items-center justify-center gap-2 rounded-md border border-primary bg-[rgba(20,53,94,0.04)] px-3 py-2 text-body font-semibold text-primary hover:bg-[rgba(20,53,94,0.08)] transition-colors"
               title="Drop the largest compatible idle aircraft onto this route and default its schedule to the physics max"
             >
               <Plus size={14} aria-hidden />
@@ -2209,35 +2209,35 @@ function RouteDetailModal({
                     className="accent-primary"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-ink text-[0.875rem] flex items-center gap-1.5 flex-wrap">
+                    <div className="text-ink text-body-lg flex items-center gap-1.5 flex-wrap">
                       {spec.name}
                       {p.engineUpgrade === "fuel" && (
-                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Fuel engine retrofit: −10% fuel burn, +10% range">
+                        <span className="text-micro uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Fuel engine retrofit: −10% fuel burn, +10% range">
                           Fuel engine
                         </span>
                       )}
                       {p.engineUpgrade === "power" && (
-                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded" title="Power engine retrofit: +10% cruise speed, raises rotation cap">
+                        <span className="text-micro uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded" title="Power engine retrofit: +10% cruise speed, raises rotation cap">
                           Power engine
                         </span>
                       )}
                       {p.engineUpgrade === "super" && (
-                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-warning bg-[var(--warning-soft)] px-1.5 py-0.5 rounded" title="Super engine: stacks fuel + power retrofits">
+                        <span className="text-micro uppercase tracking-wider font-semibold text-warning bg-[var(--warning-soft)] px-1.5 py-0.5 rounded" title="Super engine: stacks fuel + power retrofits">
                           Super engine
                         </span>
                       )}
                       {p.fuselageUpgrade && (
-                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Anti-drag fuselage coating: stacks an extra −10% fuel burn">
+                        <span className="text-micro uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Anti-drag fuselage coating: stacks an extra −10% fuel burn">
                           Fuselage
                         </span>
                       )}
                       {p.ecoUpgrade && (
-                        <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Eco engine retrofit: −10% fuel burn">
+                        <span className="text-micro uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded" title="Eco engine retrofit: −10% fuel burn">
                           Eco
                         </span>
                       )}
                     </div>
-                    <div className="text-[0.6875rem] text-ink-muted font-mono">
+                    <div className="text-label text-ink-muted font-mono">
                       Range {effRange.toLocaleString()} km
                       {hasUpgrades && effRange > spec.rangeKm && (
                         <span className="text-positive"> (+10% upgrade)</span>
@@ -2293,11 +2293,11 @@ function RouteDetailModal({
                     }}
                     className="flex-1 accent-primary"
                   />
-                  <span className="tabular font-mono text-ink text-[0.9375rem] w-20 text-right">
+                  <span className="tabular font-mono text-ink text-title-sm w-20 text-right">
                     {weeklyFreq}/wk
                   </span>
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted mt-1">
+                <div className="text-label text-ink-muted mt-1">
                   Cap with this aircraft set: <strong className="text-ink">{maxWeekly}/week</strong>
                 </div>
               </>
@@ -2327,8 +2327,8 @@ function RouteDetailModal({
                       : "border-line text-ink-2 hover:bg-surface-hover",
                   )}
                 >
-                  <span className="text-[0.8125rem]">{t}</span>
-                  <span className="text-[0.625rem] tabular font-mono text-ink-muted">
+                  <span className="text-body">{t}</span>
+                  <span className="text-caption tabular font-mono text-ink-muted">
                     {mult} base
                   </span>
                 </button>
@@ -2364,7 +2364,7 @@ function RouteDetailModal({
             <div className="space-y-3">
               <Label>4 · Cargo rate per tonne (optional override)</Label>
               <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-3">
-                <div className="flex items-baseline justify-between text-[0.8125rem]">
+                <div className="flex items-baseline justify-between text-body">
                   <span className="text-ink-2">
                     Base ${baseRate.toFixed(2)}/T
                     <span className="text-ink-muted"> · {route.distanceKm < 3000 ? "short-haul" : "long-haul"}</span>
@@ -2388,7 +2388,7 @@ function RouteDetailModal({
                     ${effective.toFixed(2)}/T
                   </span>
                 </div>
-                <div className="flex items-baseline justify-between text-[0.6875rem] text-ink-muted">
+                <div className="flex items-baseline justify-between text-label text-ink-muted">
                   <span>Min ${minRate.toFixed(2)}</span>
                   {cargoRate !== null && (
                     <button
@@ -2401,7 +2401,7 @@ function RouteDetailModal({
                   )}
                   <span>Max ${maxRate.toFixed(2)}</span>
                 </div>
-                <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
+                <p className="text-label text-ink-muted leading-relaxed">
                   Higher rates extract more revenue per tonne but suppress demand against competitors;
                   lower rates fill capacity at thinner margins.
                 </p>
@@ -2442,7 +2442,7 @@ function RouteDetailModal({
             <div className="space-y-3">
               <Label>4b · Belly cargo rate per tonne (optional override)</Label>
               <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-3">
-                <div className="flex items-baseline justify-between text-[0.8125rem]">
+                <div className="flex items-baseline justify-between text-body">
                   <span className="text-ink-2">
                     Default ${tierBaseRate.toFixed(2)}/T
                     <span className="text-ink-muted"> · belly (parcels/mail)</span>
@@ -2466,7 +2466,7 @@ function RouteDetailModal({
                     ${effective.toFixed(2)}/T
                   </span>
                 </div>
-                <div className="flex items-baseline justify-between text-[0.6875rem] text-ink-muted">
+                <div className="flex items-baseline justify-between text-label text-ink-muted">
                   <span>Min ${minRate.toFixed(2)}</span>
                   {cargoRate !== null && (
                     <button
@@ -2479,7 +2479,7 @@ function RouteDetailModal({
                   )}
                   <span>Max ${maxRate.toFixed(2)}</span>
                 </div>
-                <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
+                <p className="text-label text-ink-muted leading-relaxed">
                   Belly cargo on this passenger route carries parcels and mail
                   alongside passengers (no extra fuel burn). Higher rates extract
                   more revenue per tonne; lower rates compete harder for the
@@ -2498,7 +2498,7 @@ function RouteDetailModal({
         {hasShortfall && (
           <div>
             <Label>5 · Slots needed — bid to lift schedule</Label>
-            <div className="rounded-md border border-warning/40 bg-[var(--warning-soft)]/40 px-3 py-2 mb-2 text-[0.75rem] text-ink-2">
+            <div className="rounded-md border border-warning/40 bg-[var(--warning-soft)]/40 px-3 py-2 mb-2 text-body-sm text-ink-2">
               Lifting to <strong className="text-ink">{weeklyFreq}/wk</strong> needs more
               slots. Auctions resolve at quarter close — you only pay if you win.
             </div>
@@ -2554,7 +2554,7 @@ function RouteDetailModal({
         <CompetitorsTable route={route} />
 
         {error && (
-          <div className="text-negative text-[0.875rem] rounded-md border border-[var(--negative-soft)] bg-[var(--negative-soft)] px-3 py-2">
+          <div className="text-negative text-body-lg rounded-md border border-[var(--negative-soft)] bg-[var(--negative-soft)] px-3 py-2">
             {error}
           </div>
         )}
@@ -2646,27 +2646,27 @@ function CompetitorsTable({
 
   return (
     <details className="rounded-md border border-line">
-      <summary className="px-3 py-2 cursor-pointer text-[0.625rem] uppercase tracking-wider font-semibold text-ink-2 hover:bg-surface-hover flex items-center justify-between">
+      <summary className="px-3 py-2 cursor-pointer text-caption uppercase tracking-wider font-semibold text-ink-2 hover:bg-surface-hover flex items-center justify-between">
         <span>Competitors on this route</span>
         <span className="tabular text-ink-muted">
           {rivals.length === 0 ? "Uncontested" : `${rivals.length} airline${rivals.length > 1 ? "s" : ""}`}
         </span>
       </summary>
       {rivals.length === 0 ? (
-        <div className="p-3 text-[0.75rem] text-ink-muted leading-relaxed border-t border-line">
+        <div className="p-3 text-body-sm text-ink-muted leading-relaxed border-t border-line">
           No other airlines fly this OD pair right now. You have first-mover
           advantage on demand capture.
         </div>
       ) : (
-        <table className="w-full text-[0.75rem] border-t border-line">
+        <table className="w-full text-body-sm border-t border-line">
           <thead>
             <tr className="bg-surface-2">
-              <th className="text-left px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Airline</th>
-              <th className="text-left px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Aircraft</th>
-              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Sch/wk</th>
-              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Tier</th>
-              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Occupancy</th>
-              <th className="text-right px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Q profit</th>
+              <th className="text-left px-2 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Airline</th>
+              <th className="text-left px-2 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Aircraft</th>
+              <th className="text-right px-2 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Sch/wk</th>
+              <th className="text-right px-2 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Tier</th>
+              <th className="text-right px-2 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Occupancy</th>
+              <th className="text-right px-2 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Q profit</th>
             </tr>
           </thead>
           <tbody>
@@ -2690,7 +2690,7 @@ function CompetitorsTable({
                       }}
                     />
                     <span className="font-semibold text-ink">{player.name}</span>
-                    <span className="ml-1 text-[0.6875rem] text-accent uppercase tracking-wider font-bold">YOU</span>
+                    <span className="ml-1 text-label text-accent uppercase tracking-wider font-bold">YOU</span>
                   </td>
                   <td className="px-2 py-1.5 font-mono text-ink-2">
                     {(() => {
@@ -2700,7 +2700,7 @@ function CompetitorsTable({
                     })()}
                   </td>
                   <td className="px-2 py-1.5 text-right tabular font-mono text-ink">{Math.round(route.dailyFrequency * 7)}</td>
-                  <td className="px-2 py-1.5 text-right text-[0.6875rem] capitalize">{route.pricingTier}</td>
+                  <td className="px-2 py-1.5 text-right text-label capitalize">{route.pricingTier}</td>
                   <td className={cn(
                     "px-2 py-1.5 text-right tabular font-mono",
                     route.avgOccupancy > 0.7 ? "text-positive" :
@@ -2741,7 +2741,7 @@ function CompetitorsTable({
                   </td>
                   <td className="px-2 py-1.5 font-mono text-ink-muted">{plane?.specId ?? "—"}</td>
                   <td className="px-2 py-1.5 text-right tabular font-mono text-ink-2">{Math.round(r.dailyFrequency * 7)}</td>
-                  <td className="px-2 py-1.5 text-right text-[0.6875rem] capitalize text-ink-muted">{r.pricingTier}</td>
+                  <td className="px-2 py-1.5 text-right text-label capitalize text-ink-muted">{r.pricingTier}</td>
                   <td className={cn(
                     "px-2 py-1.5 text-right tabular font-mono",
                     r.avgOccupancy > 0.7 ? "text-positive" :
@@ -2836,7 +2836,7 @@ function DemandBreakdown({
 
   return (
     <details className="rounded-md border border-line">
-      <summary className="px-3 py-2 cursor-pointer text-[0.625rem] uppercase tracking-wider font-semibold text-ink-2 hover:bg-surface-hover flex items-center justify-between">
+      <summary className="px-3 py-2 cursor-pointer text-caption uppercase tracking-wider font-semibold text-ink-2 hover:bg-surface-hover flex items-center justify-between">
         <span>Demand multipliers · why this route performs</span>
         <span className={`tabular font-mono ${compound > 1 ? "text-positive" : compound < 1 ? "text-negative" : "text-ink"}`}>
           ×{compound.toFixed(2)}
@@ -2844,7 +2844,7 @@ function DemandBreakdown({
       </summary>
       <div className="p-3 space-y-1.5 border-t border-line">
         {rows.map((r) => (
-          <div key={r.label} className="flex items-baseline justify-between text-[0.75rem]">
+          <div key={r.label} className="flex items-baseline justify-between text-body-sm">
             <span className="text-ink-2">{r.label}</span>
             <span className={`tabular font-mono ${
               r.tone === "pos" ? "text-positive" :
@@ -2855,12 +2855,12 @@ function DemandBreakdown({
           </div>
         ))}
         {hasFuelTank && (
-          <div className="flex items-baseline justify-between text-[0.75rem] pt-1.5 border-t border-line">
+          <div className="flex items-baseline justify-between text-body-sm pt-1.5 border-t border-line">
             <span className="text-ink-2">Fuel reserve tank discount</span>
             <span className="tabular font-mono text-positive">−5% fuel</span>
           </div>
         )}
-        <div className="text-[0.6875rem] text-ink-muted leading-relaxed pt-1.5 border-t border-line">
+        <div className="text-label text-ink-muted leading-relaxed pt-1.5 border-t border-line">
           The compounded multiplier scales the base origin↔destination demand
           before capacity is applied. A multiplier of ×1.20 means demand is
           20% higher than a vanilla version of this same route.
@@ -2872,7 +2872,7 @@ function DemandBreakdown({
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+    <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
       {children}
     </div>
   );
@@ -2885,19 +2885,19 @@ function MiniStat({
 }) {
   return (
     <div className="rounded-md border border-line bg-surface-2 p-2.5">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+      <div className="text-caption uppercase tracking-wider text-ink-muted">
         {label}
       </div>
       <div
         className={cn(
-          "tabular font-display text-[1rem] mt-0.5 leading-none",
+          "tabular font-display text-title mt-0.5 leading-none",
           tone === "pos" ? "text-positive" : tone === "neg" ? "text-negative" : "text-ink",
         )}
       >
         {value}
       </div>
       {sub && (
-        <div className="text-[0.625rem] text-ink-muted mt-1 leading-tight truncate">
+        <div className="text-caption text-ink-muted mt-1 leading-tight truncate">
           {sub}
         </div>
       )}
@@ -2922,7 +2922,7 @@ function FareRow({
         active ? "border-line" : "border-line opacity-50",
       )}
     >
-      <span className="w-20 text-[0.8125rem] text-ink">{label}</span>
+      <span className="w-20 text-body text-ink">{label}</span>
       <input
         type="range"
         min={range.min}
@@ -2932,7 +2932,7 @@ function FareRow({
         onChange={(e) => setFare(parseInt(e.target.value, 10))}
         className="flex-1 accent-primary"
       />
-      <span className="tabular font-mono text-ink text-[0.8125rem] w-16 text-right">
+      <span className="tabular font-mono text-ink text-body w-16 text-right">
         ${v}
       </span>
     </div>
@@ -3007,7 +3007,7 @@ function TournamentBanner() {
           <div
             key={it.label}
             className={cn(
-              "rounded-md px-3 py-2 flex items-center gap-2 text-[0.8125rem] border",
+              "rounded-md px-3 py-2 flex items-center gap-2 text-body border",
               it.tone === "accent"
                 ? "border-accent/40 bg-[var(--accent-soft)]/40"
                 : "border-warning/40 bg-[var(--warning-soft)]/40",
@@ -3015,7 +3015,7 @@ function TournamentBanner() {
           >
             <span
               className={cn(
-                "text-[0.625rem] uppercase tracking-wider font-bold shrink-0",
+                "text-caption uppercase tracking-wider font-bold shrink-0",
                 it.tone === "accent" ? "text-accent" : "text-warning",
               )}
             >
@@ -3063,10 +3063,10 @@ function RegionSection({
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-baseline justify-between px-3 py-1.5 bg-surface-2/40 hover:bg-surface-hover text-left"
       >
-        <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+        <span className="text-caption uppercase tracking-wider font-semibold text-ink-muted">
           {label}
         </span>
-        <span className="text-[0.625rem] tabular text-ink-muted">
+        <span className="text-caption tabular text-ink-muted">
           {entries.length} {open ? "▾" : "▸"}
         </span>
       </button>
@@ -3085,7 +3085,7 @@ function RegionSection({
               onClick={() => onPick(c.code)}
               disabled={picking === "dest" && c.code === origin}
               className={cn(
-                "w-full flex items-baseline gap-2 px-3 py-1.5 text-left text-[0.8125rem]",
+                "w-full flex items-baseline gap-2 px-3 py-1.5 text-left text-body",
                 "hover:bg-surface-hover transition-colors border-t border-line/40",
                 picking === "dest" && c.code === origin && "opacity-40 cursor-not-allowed",
                 isConnected && "bg-accent/[0.06]",
@@ -3103,19 +3103,19 @@ function RegionSection({
                 )}
               </span>
               {isConnected && (
-                <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-accent shrink-0">
+                <span className="text-caption font-semibold uppercase tracking-wider text-accent shrink-0">
                   Existing route
                 </span>
               )}
               {outOfRange && !isConnected && (
-                <span className="text-[0.625rem] font-semibold uppercase tracking-wider text-negative shrink-0">
+                <span className="text-caption font-semibold uppercase tracking-wider text-negative shrink-0">
                   Out of range
                 </span>
               )}
               {sortRef && distance > 0 && (
                 <span
                   className={cn(
-                    "text-[0.6875rem] tabular shrink-0",
+                    "text-label tabular shrink-0",
                     outOfRange ? "text-negative" : "text-ink-muted",
                   )}
                 >
@@ -3126,7 +3126,7 @@ function RegionSection({
             );
           })}
           {entries.length > 50 && (
-            <div className="px-3 py-1 text-[0.625rem] text-ink-muted italic border-t border-line/40">
+            <div className="px-3 py-1 text-caption text-ink-muted italic border-t border-line/40">
               + {entries.length - 50} more — refine the search above
             </div>
           )}
@@ -3273,7 +3273,7 @@ function RouteBreakdown({ route }: { route: Route }) {
     // should be collapsed and only expanded if prompted"). Native
     // <details> keeps it keyboard-accessible with zero extra state.
     <details className="group rounded-md border border-line bg-surface-2/30 [&[open]]:p-3 [&:not([open])]:p-0">
-      <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted hover:text-ink-2">
+      <summary className="flex items-center gap-1.5 cursor-pointer list-none select-none px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted hover:text-ink-2">
         <ChevronRight className="w-3 h-3 transition-transform group-open:rotate-90" aria-hidden />
         Revenue &amp; cost breakdown
       </summary>
@@ -3282,7 +3282,7 @@ function RouteBreakdown({ route }: { route: Route }) {
       {/* Revenue block */}
       {revRows.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">Revenue</div>
+          <div className="text-label uppercase tracking-wider text-ink-muted font-semibold">Revenue</div>
           <div className="space-y-1">
             {revRows.map((r) => (
               <BreakdownRow
@@ -3318,7 +3318,7 @@ function RouteBreakdown({ route }: { route: Route }) {
 
       {/* Cost block */}
       <div className="space-y-1.5 pt-2 border-t border-line/60">
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">Cost</div>
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold">Cost</div>
         <div className="space-y-1">
           {costRows.map((r) => (
             <BreakdownRow key={r.label} label={r.label} amount={r.amount} detail={r.hint} negative />
@@ -3336,7 +3336,7 @@ function RouteBreakdown({ route }: { route: Route }) {
           negative={operatingProfit < 0}
           bold
         />
-        <div className="text-[0.6875rem] text-ink-muted leading-snug mt-1">
+        <div className="text-label text-ink-muted leading-snug mt-1">
           Cost categories are allocated to this route by its share of team revenue.
           Fuel is direct (exact); the rest is share-based and sums to the team total
           when aggregated across every active route.
@@ -3367,11 +3367,11 @@ function ClassDemandCell({
       : "text-ink";
   return (
     <div className="space-y-0.5">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">{label}</div>
+      <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">{label}</div>
       <div className={cn("tabular font-mono", tone)}>
         {Math.round(demand).toLocaleString()} / {Math.round(capacity).toLocaleString()}
       </div>
-      <div className="text-[0.625rem] text-ink-muted">
+      <div className="text-caption text-ink-muted">
         {demand > 0
           ? `${Math.min(999, Math.round(coverage * 100))}% covered`
           : "no demand"}
@@ -3392,7 +3392,7 @@ function BreakdownRow({
 }) {
   return (
     <div className={cn("space-y-0.5", bold && "pt-1 mt-1 border-t border-line/40")}>
-      <div className="flex items-baseline justify-between gap-2 text-[0.8125rem]">
+      <div className="flex items-baseline justify-between gap-2 text-body">
         <span className={cn(bold ? "text-ink font-semibold" : "text-ink-2")}>{label}</span>
         <span className={cn(
           "tabular font-mono",
@@ -3404,7 +3404,7 @@ function BreakdownRow({
         </span>
       </div>
       {detail && (
-        <div className="text-[0.6875rem] text-ink-muted leading-snug">{detail}</div>
+        <div className="text-label text-ink-muted leading-snug">{detail}</div>
       )}
     </div>
   );

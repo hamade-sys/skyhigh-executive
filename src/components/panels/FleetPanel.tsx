@@ -293,7 +293,7 @@ export function FleetPanel() {
       )}
 
       <div className="flex items-center justify-between">
-        <div className="text-[0.8125rem] text-ink-2">
+        <div className="text-body text-ink-2">
           {player.fleet.length} aircraft total · {groups.length} type{groups.length === 1 ? "" : "s"}
         </div>
         <Button variant="primary" size="sm" onClick={() => setBuyOpen(true)}>
@@ -314,12 +314,12 @@ export function FleetPanel() {
           recurring quarterly cost just like staff/marketing/maint. */}
 
       {groups.length === 0 ? (
-        <div className="py-12 text-center text-ink-muted text-[0.875rem] rounded-lg border border-dashed border-line">
+        <div className="py-12 text-center text-ink-muted text-body-lg rounded-lg border border-dashed border-line">
           Fleet is empty. Order your first aircraft to begin flying routes.
         </div>
       ) : (
         <div className="rounded-md border border-line overflow-hidden">
-          <table className="w-full text-[0.8125rem]">
+          <table className="w-full text-body">
             <thead>
               <tr className="bg-surface-2 border-b border-line">
                 <Th className="w-[36%]">Model</Th>
@@ -362,7 +362,7 @@ export function FleetPanel() {
                           const effCutoff = effectiveCutoffRound(spec, s.session?.campaignMode);
                           return (
                             <span
-                              className="inline-flex items-center gap-1 text-[0.625rem] uppercase tracking-wider font-semibold text-warning bg-[var(--warning-soft)] px-1.5 py-0.5 rounded"
+                              className="inline-flex items-center gap-1 text-caption uppercase tracking-wider font-semibold text-warning bg-[var(--warning-soft)] px-1.5 py-0.5 rounded"
                               title={`Production for this aircraft ended R${effCutoff ?? spec.cutoffRound}. Parts availability declining — maintenance +${br.pct}% (bracket ${br.bracketLabel}).`}
                             >
                               <AlertTriangle size={10} />
@@ -371,7 +371,7 @@ export function FleetPanel() {
                           );
                         })()}
                       </div>
-                      <div className="text-[0.6875rem] text-ink-muted mt-0.5 font-mono">
+                      <div className="text-label text-ink-muted mt-0.5 font-mono">
                         {spec.family === "passenger"
                           ? `${spec.seats.first}F/${spec.seats.business}C/${spec.seats.economy}Y · ${spec.rangeKm.toLocaleString()} km`
                           : `${spec.cargoTonnes ?? 0}T · ${spec.rangeKm.toLocaleString()} km`}
@@ -394,7 +394,7 @@ export function FleetPanel() {
                         })()}
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-right tabular font-display text-[1.25rem] text-ink leading-none">
+                    <td className="py-2.5 px-3 text-right tabular font-display text-heading text-ink leading-none">
                       {g.total}
                     </td>
                     <td className="py-2.5 px-3 text-right tabular font-mono text-positive font-semibold">
@@ -442,7 +442,7 @@ export function FleetPanel() {
       {/* Second-hand market preview */}
       {listings.length > 0 && (
         <section className="mt-5">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Second-hand market · {listings.length} listing{listings.length > 1 ? "s" : ""}
           </div>
           <div className="space-y-1.5">
@@ -451,11 +451,11 @@ export function FleetPanel() {
               if (!spec) return null;
               const remainingLifespan = Math.max(0, l.retirementQuarter - s.currentQuarter);
               return (
-                <div key={l.id} className="rounded-md border border-line bg-surface-2/50 p-2.5 text-[0.8125rem]">
+                <div key={l.id} className="rounded-md border border-line bg-surface-2/50 p-2.5 text-body">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-medium text-ink">{spec.name}</div>
-                      <div className="text-[0.6875rem] text-ink-muted font-mono">
+                      <div className="text-label text-ink-muted font-mono">
                         Seller: {l.sellerTeamId === "admin" ? "Broker" : l.sellerTeamId.slice(-6)}
                         {l.ecoUpgrade && " · Eco"} · {remainingLifespan}Q left
                       </div>
@@ -509,21 +509,21 @@ export function FleetPanel() {
                   <Badge tone={expanded.family === "cargo" ? "warning" : "neutral"}>
                     {expanded.family}
                   </Badge>
-                  <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-mono">
+                  <span className="text-caption uppercase tracking-wider text-ink-muted font-mono">
                     {expanded.id}
                   </span>
                 </div>
                 <h2 className="font-display text-[1.625rem] text-ink leading-tight">
                   {expanded.name}
-                  <span className="ml-2 text-ink-muted text-[0.9375rem] font-sans">
+                  <span className="ml-2 text-ink-muted text-title-sm font-sans">
                     × {expandedFleet.length}
                   </span>
                 </h2>
                 {/* Spec readout — 4-up grid is roomier than the previous
                     inline string and reads like a proper datasheet. */}
-                <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[0.75rem]">
+                <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-body-sm">
                   <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                    <div className="text-caption uppercase tracking-wider text-ink-muted">
                       Cabin
                     </div>
                     {/* Real cabin display (May 2026 fix): the previous
@@ -562,7 +562,7 @@ export function FleetPanel() {
                             {fmt(firstMin, firstMax)}F/{fmt(busMin, busMax)}C/{fmt(ecoMin, ecoMax)}Y
                           </div>
                           {hasVariance && (
-                            <div className="text-[0.5625rem] text-ink-muted mt-0.5">
+                            <div className="text-micro text-ink-muted mt-0.5">
                               varies · spec {expanded.seats.first}F/{expanded.seats.business}C/{expanded.seats.economy}Y
                             </div>
                           )}
@@ -575,15 +575,15 @@ export function FleetPanel() {
                     )}
                   </div>
                   <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Range</div>
+                    <div className="text-caption uppercase tracking-wider text-ink-muted">Range</div>
                     <div className="font-mono tabular text-ink mt-0.5">{expanded.rangeKm.toLocaleString()} km</div>
                   </div>
                   <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Fuel burn</div>
+                    <div className="text-caption uppercase tracking-wider text-ink-muted">Fuel burn</div>
                     <div className="font-mono tabular text-ink mt-0.5">{expanded.fuelBurnPerKm} L/km</div>
                   </div>
                   <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">List price</div>
+                    <div className="text-caption uppercase tracking-wider text-ink-muted">List price</div>
                     <div className="font-mono tabular text-ink mt-0.5">{fmtMoney(expanded.buyPriceUsd)}</div>
                   </div>
                 </div>
@@ -598,7 +598,7 @@ export function FleetPanel() {
                 Only one drawer is open at a time (openTail). This replaces the
                 previous full-height card-per-tail list that buried an 86-tail
                 fleet under endless scroll. */}
-            <div className="sticky top-0 z-10 grid grid-cols-[1.25rem_6.5rem_1fr_5rem] sm:grid-cols-[1.25rem_7rem_1fr_4.5rem_3rem_6rem] items-center gap-2 px-4 py-2 bg-surface-2/70 backdrop-blur border-b border-line text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <div className="sticky top-0 z-10 grid grid-cols-[1.25rem_6.5rem_1fr_5rem] sm:grid-cols-[1.25rem_7rem_1fr_4.5rem_3rem_6rem] items-center gap-2 px-4 py-2 bg-surface-2/70 backdrop-blur border-b border-line text-caption uppercase tracking-wider text-ink-muted">
               <span />
               <span>Tail</span>
               <span>Route &amp; flags</span>
@@ -635,9 +635,9 @@ export function FleetPanel() {
                     <ChevronRight className={cn("w-4 h-4 text-ink-muted transition-transform", isOpen && "rotate-90")} />
                     <span className="flex items-center gap-1.5 min-w-0">
                       <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusDot)} />
-                      <span className="font-mono text-[0.8125rem] text-ink font-semibold tracking-wide truncate">{tail}</span>
+                      <span className="font-mono text-body text-ink font-semibold tracking-wide truncate">{tail}</span>
                     </span>
-                    <span className="flex items-center gap-1 min-w-0 text-[0.75rem] text-ink-muted overflow-hidden">
+                    <span className="flex items-center gap-1 min-w-0 text-body-sm text-ink-muted overflow-hidden">
                       {route ? (
                         <span className="font-mono text-ink-2 truncate shrink-0">{route.originCode} → {route.destCode}</span>
                       ) : (
@@ -659,34 +659,34 @@ export function FleetPanel() {
                       {f.fuselageUpgrade && <FlagChip tone="accent" title="Anti-drag fuselage coating">Fus</FlagChip>}
                       {f.customSeats && <FlagChip tone="muted" title="Custom cabin layout">Cabin</FlagChip>}
                     </span>
-                    <span className="hidden sm:block font-mono tabular text-[0.75rem] text-ink-muted text-right">{fmtAgeYQ(remainingQ)}</span>
-                    <span className={cn("hidden sm:block font-mono tabular text-[0.75rem] text-right", satTone)}>{sat}%</span>
-                    <span className="font-mono tabular text-[0.75rem] text-ink text-right truncate">{fmtMoney(f.bookValue)}</span>
+                    <span className="hidden sm:block font-mono tabular text-body-sm text-ink-muted text-right">{fmtAgeYQ(remainingQ)}</span>
+                    <span className={cn("hidden sm:block font-mono tabular text-body-sm text-right", satTone)}>{sat}%</span>
+                    <span className="font-mono tabular text-body-sm text-ink text-right truncate">{fmtMoney(f.bookValue)}</span>
                   </button>
 
                   {/* ── Expanded drawer — full detail + actions ─────────── */}
                   {isOpen && (
                   <div className="px-4 pb-4 pt-1">
                   {/* 4-up stat strip — full detail for the expanded tail */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[0.75rem]">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-body-sm">
                     <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Age</div>
+                      <div className="text-caption uppercase tracking-wider text-ink-muted">Age</div>
                       <div className="font-mono tabular text-ink mt-0.5">
                         {fmtAgeYQ(ageQ)} <span className="text-ink-muted">· {fmtAgeYQ(remainingQ)} left</span>
                       </div>
                     </div>
                     <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Cabin sat.</div>
+                      <div className="text-caption uppercase tracking-wider text-ink-muted">Cabin sat.</div>
                       <div className={cn("font-mono tabular mt-0.5", satTone)}>
                         {sat}%
                       </div>
                     </div>
                     <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Book value</div>
+                      <div className="text-caption uppercase tracking-wider text-ink-muted">Book value</div>
                       <div className="font-mono tabular text-ink mt-0.5">{fmtMoney(f.bookValue)}</div>
                     </div>
                     <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
-                      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Acquisition</div>
+                      <div className="text-caption uppercase tracking-wider text-ink-muted">Acquisition</div>
                       <div className="font-mono tabular text-ink mt-0.5 capitalize">{f.acquisitionType}</div>
                     </div>
                   </div>
@@ -710,9 +710,9 @@ export function FleetPanel() {
                     (f.acquisitionType === "buy" && f.status === "active")
                   ) && (
                     <div className="mt-3">
-                      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+                      <div className="text-caption uppercase tracking-wider text-ink-muted mb-1.5">
                         Customisations
-                        <span className="ml-1.5 normal-case tracking-normal text-[0.6875rem] text-ink-muted/80">
+                        <span className="ml-1.5 normal-case tracking-normal text-label text-ink-muted/80">
                           (each grounds the plane for 1 quarter)
                         </span>
                       </div>
@@ -728,7 +728,7 @@ export function FleetPanel() {
                               effectLine: "−10% fuel burn · 1Q downtime",
                             })}
                             title={`Eco engine retrofit · ${fmtMoney(expanded.ecoUpgradeUsd ?? 0)} · −10% fuel burn · grounds 1Q`}
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors"
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-label border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors"
                           >
                             + Eco · {fmtMoney(expanded.ecoUpgradeUsd ?? 0)}
                           </button>
@@ -744,7 +744,7 @@ export function FleetPanel() {
                               costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "fuel"),
                               effectLine: "+10% range · −10% fuel burn · 1Q downtime",
                             })} title="Fuel-efficient engine: +10% range, −10% fuel burn · grounds 1Q"
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-label border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
                               + Fuel engine
                             </button>
                             <button onClick={() => setRetrofitState({
@@ -756,7 +756,7 @@ export function FleetPanel() {
                               costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "power"),
                               effectLine: "+10% cruise speed · 1Q downtime",
                             })} title="Power engine: +10% cruise speed · grounds 1Q"
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-label border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
                               + Power engine
                             </button>
                             <button onClick={() => setRetrofitState({
@@ -768,7 +768,7 @@ export function FleetPanel() {
                               costUsd: engineUpgradeCostUsd(expanded.buyPriceUsd, "super"),
                               effectLine: "+10% range · −10% fuel burn · +10% speed · 1Q downtime",
                             })} title="Super engine: combines fuel + power · grounds 1Q"
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-label border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
                               + Super
                             </button>
                           </>
@@ -782,7 +782,7 @@ export function FleetPanel() {
                             costUsd: fuselageUpgradeCostUsd(expanded.buyPriceUsd),
                             effectLine: "−10% fuel burn · stacks · 1Q downtime",
                           })} title="Anti-drag fuselage coating · −10% fuel burn · grounds 1Q"
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-label border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
                             + Fuselage
                           </button>
                         )}
@@ -795,7 +795,7 @@ export function FleetPanel() {
                             costUsd: Math.round(f.bookValue * 0.05),
                             effectLine: "Cabin satisfaction restored · no downtime",
                           })} title={`Quick service · ${fmtMoney(f.bookValue * 0.05)} · cabin sat. restored, no downtime`}
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-label border border-line text-ink-2 bg-surface hover:bg-surface-hover transition-colors">
                             Quick svc · no downtime
                           </button>
                         )}
@@ -809,7 +809,7 @@ export function FleetPanel() {
                       oversized cards now that full detail lives in the drawer
                       above. */}
                   <div className="mt-3 pt-3 border-t border-line/60">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2">
+                    <div className="text-caption uppercase tracking-wider text-ink-muted mb-2">
                       Lifecycle decisions
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -913,10 +913,10 @@ export function FleetPanel() {
         return (
         <Modal open onClose={() => setSellState(null)} className="w-[min(560px,calc(100vw-3rem))]">
           <ModalHeader>
-            <h2 className="font-display text-[1.25rem] text-ink leading-tight">
+            <h2 className="font-display text-heading text-ink leading-tight">
               Sell {sellState.name}
             </h2>
-            <p className="text-[0.8125rem] text-ink-muted mt-1">
+            <p className="text-body text-ink-muted mt-1">
               Current book value {fmtMoney(sellState.bookValue)}. Choose how to part with this airframe.
             </p>
           </ModalHeader>
@@ -925,14 +925,14 @@ export function FleetPanel() {
                 quarter, airframe goes back on the open market. */}
             <div className="rounded-md border border-primary bg-[var(--accent-soft)] p-3.5">
               <div className="flex items-baseline justify-between">
-                <div className="text-[0.625rem] uppercase tracking-wider font-semibold text-primary">
+                <div className="text-caption uppercase tracking-wider font-semibold text-primary">
                   Sell to broker
                 </div>
-                <div className="font-mono tabular text-ink font-semibold text-[1.0625rem]">
+                <div className="font-mono tabular text-ink font-semibold text-title-lg">
                   {fmtMoney(brokerQuote)}
                 </div>
               </div>
-              <div className="text-[0.8125rem] text-ink-2 leading-snug mt-1.5">
+              <div className="text-body text-ink-2 leading-snug mt-1.5">
                 The broker pays a fixed {fmtMoney(brokerQuote)} (50% of book) in cash this quarter,
                 then re-lists the airframe on the open market.
               </div>
@@ -942,14 +942,14 @@ export function FleetPanel() {
                 quote; the airframe is scrapped and never reappears. */}
             <div className="rounded-md border border-line bg-surface-2/40 p-3.5">
               <div className="flex items-baseline justify-between">
-                <div className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+                <div className="text-caption uppercase tracking-wider font-semibold text-ink-muted">
                   Salvage
                 </div>
-                <div className="font-mono tabular text-ink-2 font-semibold text-[1.0625rem]">
+                <div className="font-mono tabular text-ink-2 font-semibold text-title-lg">
                   {fmtMoney(salvageQuote)}
                 </div>
               </div>
-              <div className="text-[0.8125rem] text-ink-2 leading-snug mt-1.5">
+              <div className="text-body text-ink-2 leading-snug mt-1.5">
                 Scrap the airframe for {fmtMoney(salvageQuote)} (half the broker quote). It leaves the
                 game entirely — no one else can buy it.
               </div>
@@ -992,15 +992,15 @@ export function FleetPanel() {
       {retireState && (
         <Modal open onClose={() => setRetireState(null)} className="w-[min(440px,calc(100vw-3rem))]">
           <ModalHeader>
-            <h2 className="font-display text-[1.25rem] text-ink leading-tight">
+            <h2 className="font-display text-heading text-ink leading-tight">
               Retire {retireState.name}?
             </h2>
-            <p className="text-[0.8125rem] text-ink-muted mt-1">
+            <p className="text-body text-ink-muted mt-1">
               Tail <span className="font-mono text-ink">{retireState.tail}</span>
             </p>
           </ModalHeader>
           <ModalBody>
-            <p className="text-[0.875rem] text-ink-2 leading-relaxed">
+            <p className="text-body-lg text-ink-2 leading-relaxed">
               This permanently retires the aircraft. Insurance proceeds (if your policy is set) pay out at
               the next quarter close based on the aircraft&apos;s book value.
             </p>
@@ -1100,15 +1100,15 @@ export function FleetPanel() {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   {titleByKind[kind]}
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   {subByKind[kind]}
                 </p>
               </ModalHeader>
               <ModalBody>
-                <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+                <div className="rounded-md border border-line bg-surface p-3 text-body space-y-1">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-ink-muted">Aircraft</span>
                     <span className="text-ink">{name}</span>
@@ -1131,7 +1131,7 @@ export function FleetPanel() {
                   </div>
                 </div>
                 {cantAfford && (
-                  <div className="mt-2 text-[0.8125rem] text-negative">
+                  <div className="mt-2 text-body text-negative">
                     Insufficient cash — you have {fmtMoney(player2?.cashUsd ?? 0)}.
                   </div>
                 )}
@@ -1186,7 +1186,7 @@ function Th({
   return (
     <th
       className={cn(
-        "text-left px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted",
+        "text-left px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted",
         className,
       )}
     >
@@ -1221,7 +1221,7 @@ function FlagChip({
     <span
       title={title}
       className={cn(
-        "shrink-0 px-1.5 py-0.5 rounded-full text-[0.625rem] font-semibold uppercase tracking-wide",
+        "shrink-0 px-1.5 py-0.5 rounded-full text-caption font-semibold uppercase tracking-wide",
         tones[tone],
       )}
     >
@@ -1253,7 +1253,7 @@ function RowAction({
       onClick={onClick}
       title={title}
       className={cn(
-        "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[0.75rem] font-medium transition-colors",
+        "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-body-sm font-medium transition-colors",
         tones[tone],
       )}
     >
@@ -1296,11 +1296,11 @@ function PreOrderQueue() {
       <div className="flex items-baseline justify-between gap-3 px-3 py-2 border-b border-line bg-surface-2/40">
         <div className="flex items-center gap-2">
           <Clock size={13} className="text-accent" />
-          <span className="text-[0.8125rem] font-semibold text-ink">
+          <span className="text-body font-semibold text-ink">
             Pre-orders queued · {myQueued.length}
           </span>
         </div>
-        <div className="text-[0.6875rem] text-ink-muted tabular font-mono">
+        <div className="text-label text-ink-muted tabular font-mono">
           deposits paid {fmtMoney(totalDeposit)} · balance owed at delivery {fmtMoney(totalBalance)}
         </div>
       </div>
@@ -1316,20 +1316,20 @@ function PreOrderQueue() {
           return (
             <div key={order.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[0.875rem] text-ink font-medium">{spec.name}</div>
-                <div className="text-[0.6875rem] text-ink-muted mt-0.5 tabular font-mono">
+                <div className="text-body-lg text-ink font-medium">{spec.name}</div>
+                <div className="text-label text-ink-muted mt-0.5 tabular font-mono">
                   Position {pos ?? "—"} of {myQueued.length} (cap {cap}/Q) ·
                   {" "}ETA <span className="text-ink">{fmtQuarter(eta, startYear)}</span> ·
                   {" "}{order.acquisitionType === "buy" ? "Buy" : "Lease"}
                 </div>
               </div>
-              <div className="text-right text-[0.6875rem] text-ink-muted tabular font-mono shrink-0">
+              <div className="text-right text-label text-ink-muted tabular font-mono shrink-0">
                 <div>Deposit {fmtMoney(order.depositUsd)}</div>
                 <div>Balance {fmtMoney(order.totalPriceUsd - order.depositUsd)}</div>
               </div>
               <button
                 onClick={() => setConfirmCancelId(order.id)}
-                className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-line text-[0.6875rem] text-ink-2 hover:text-negative hover:border-negative"
+                className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-line text-label text-ink-2 hover:text-negative hover:border-negative"
                 title="Cancel pre-order (50% penalty on deposit)"
               >
                 <X size={11} /> Cancel
@@ -1352,17 +1352,17 @@ function PreOrderQueue() {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Cancel pre-order for {cancelTargetSpec.name}?
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   Pre-orders are real commitments — cancelling forfeits
                   half the deposit. The remaining refund is paid in cash
                   next quarter close.
                 </p>
               </ModalHeader>
               <ModalBody className="space-y-2">
-                <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+                <div className="rounded-md border border-line bg-surface p-3 text-body space-y-1">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-ink-muted">Deposit paid</span>
                     <span className="tabular font-mono text-ink">{fmtMoney(cancelTarget.depositUsd)}</span>
@@ -1438,30 +1438,30 @@ function RetiredHistory() {
         aria-expanded={open}
       >
         <div className="flex items-center gap-2">
-          <span className="text-[0.8125rem] font-semibold text-ink">
+          <span className="text-body font-semibold text-ink">
             Aircraft history · {history.length}
           </span>
-          <span className="text-[0.6875rem] text-ink-muted">
+          <span className="text-label text-ink-muted">
             sold / retired / returned / crashed
           </span>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-[0.6875rem] text-ink-muted tabular font-mono">
+          <span className="text-label text-ink-muted tabular font-mono">
             {fmtMoney(proceedsTotal)} lifetime proceeds
           </span>
-          <span className="text-ink-muted text-[0.6875rem]">{open ? "▾" : "▸"}</span>
+          <span className="text-ink-muted text-label">{open ? "▾" : "▸"}</span>
         </div>
       </button>
       {open && (
         <div className="border-t border-line/40">
-          <table className="w-full text-[0.75rem]">
+          <table className="w-full text-body-sm">
             <thead>
               <tr className="bg-surface-2 border-b border-line/40">
-                <th className="text-left px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Aircraft</th>
-                <th className="text-left px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">In-service</th>
-                <th className="text-left px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Exited</th>
-                <th className="text-left px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Reason</th>
-                <th className="text-right px-3 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Proceeds</th>
+                <th className="text-left px-3 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Aircraft</th>
+                <th className="text-left px-3 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">In-service</th>
+                <th className="text-left px-3 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Exited</th>
+                <th className="text-left px-3 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Reason</th>
+                <th className="text-right px-3 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted">Proceeds</th>
               </tr>
             </thead>
             <tbody>
@@ -1469,7 +1469,7 @@ function RetiredHistory() {
                 <tr key={h.id} className="border-b border-line/30 last:border-0">
                   <td className="px-3 py-1.5">
                     <div className="text-ink">{h.specName}</div>
-                    <div className="text-[0.625rem] text-ink-muted font-mono">
+                    <div className="text-caption text-ink-muted font-mono">
                       {h.acquisitionType} · {h.id.slice(-6)}
                     </div>
                   </td>
@@ -1479,7 +1479,7 @@ function RetiredHistory() {
                   <td className="px-3 py-1.5 tabular font-mono text-ink-2">
                     {fmtQuarter(h.exitQuarter, startYear)}
                   </td>
-                  <td className={cn("px-3 py-1.5 text-[0.6875rem] font-semibold", reasonTone[h.exitReason])}>
+                  <td className={cn("px-3 py-1.5 text-label font-semibold", reasonTone[h.exitReason])}>
                     {reasonLabel[h.exitReason]}
                   </td>
                   <td className="px-3 py-1.5 text-right tabular font-mono text-ink">
@@ -1525,13 +1525,13 @@ function FleetStateCard({
         !interactive && "cursor-default",
       )}
     >
-      <div className="flex items-center justify-between text-[0.625rem] uppercase tracking-wider text-ink-muted">
+      <div className="flex items-center justify-between text-caption uppercase tracking-wider text-ink-muted">
         <span>{label}</span>
         {interactive && <span className="text-ink-muted">→</span>}
       </div>
       <div
         className={cn(
-          "font-display text-[1.5rem] tabular leading-none mt-0.5",
+          "font-display text-heading-lg tabular leading-none mt-0.5",
           tone === "positive" && "text-positive",
           tone === "warn" && "text-warning",
           tone === "info" && "text-primary",
@@ -1540,7 +1540,7 @@ function FleetStateCard({
       >
         {count}
       </div>
-      <div className="text-[0.625rem] text-ink-muted mt-1 leading-snug">{sub}</div>
+      <div className="text-caption text-ink-muted mt-1 leading-snug">{sub}</div>
     </button>
   );
 }
@@ -1600,14 +1600,14 @@ function AgingFleetModal({
       <ModalHeader>
         <div className="flex items-baseline gap-2 mb-1">
           <Badge tone="warning">Aging fleet</Badge>
-          <span className="text-[0.6875rem] text-ink-muted">
+          <span className="text-label text-ink-muted">
             {agingPlanes.length} ≤4Q from retirement
           </span>
         </div>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight">
+        <h2 className="font-display text-heading-lg text-ink leading-tight">
           Plan replacements
         </h2>
-        <p className="text-[0.8125rem] text-ink-muted mt-1 leading-snug">
+        <p className="text-body text-ink-muted mt-1 leading-snug">
           Retrofit once for +14Q life, or replace via a fresh order in the
           same model line.
         </p>
@@ -1615,7 +1615,7 @@ function AgingFleetModal({
 
       <ModalBody className="max-h-[60vh] overflow-auto p-0">
         {agingPlanes.length === 0 ? (
-          <div className="px-4 py-8 text-center text-[0.8125rem] text-ink-muted">
+          <div className="px-4 py-8 text-center text-body text-ink-muted">
             No aging aircraft right now. The &ldquo;Aging&rdquo; card lights
             up when a plane has 4 quarters or fewer of mandatory life
             remaining.
@@ -1691,24 +1691,24 @@ function AgingFleetRow({
           text instead of a stacked layout, keeps the row compact. */}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="font-semibold text-ink text-[0.875rem]">
+          <span className="font-semibold text-ink text-body-lg">
             {spec.name}
           </span>
-          <span className="font-mono text-[0.6875rem] text-ink-muted">
+          <span className="font-mono text-label text-ink-muted">
             #{tail}
           </span>
           {routeAssignment && routeAssignment.status !== "closed" && (
-            <span className="font-mono text-[0.6875rem] text-accent">
+            <span className="font-mono text-label text-accent">
               {routeAssignment.originCode} → {routeAssignment.destCode}
             </span>
           )}
           {alreadyExtended && (
-            <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
+            <span className="text-micro uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
               Retrofitted
             </span>
           )}
         </div>
-        <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+        <div className="text-label text-ink-muted mt-0.5">
           Age <span className="tabular font-mono text-ink-2">{ageQ}Q</span>
           {" · "}retires in
           {" "}<span className="tabular font-mono text-warning font-semibold">{quartersLeft}Q</span>
@@ -1808,7 +1808,7 @@ function ReplaceChooserModal({
 
   const sameModel = (specId: string) =>
     specId === aging.specId ? (
-      <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
+      <span className="text-micro uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
         Same model
       </span>
     ) : null;
@@ -1819,15 +1819,15 @@ function ReplaceChooserModal({
         <div className="flex items-baseline gap-2 mb-1">
           <Badge tone="warning">Replace</Badge>
           {route && route.status !== "closed" && (
-            <span className="font-mono text-[0.6875rem] text-accent">
+            <span className="font-mono text-label text-accent">
               {route.originCode} → {route.destCode}
             </span>
           )}
         </div>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight">
+        <h2 className="font-display text-heading-lg text-ink leading-tight">
           Replace {agingSpec.name}
         </h2>
-        <p className="text-[0.8125rem] text-ink-muted mt-1 leading-snug">
+        <p className="text-body text-ink-muted mt-1 leading-snug">
           {route
             ? "Pick how you'll cover this route. The aging airframe is parked idle once a replacement is in place — sell it from the fleet list when you're ready."
             : "This airframe isn't on a route. Buy a fresh one, or sell it directly from the fleet list."}
@@ -1837,15 +1837,15 @@ function ReplaceChooserModal({
       <ModalBody className="space-y-5 max-h-[60vh] overflow-auto">
         {/* ── 1 · From your inventory ─────────────────────────────── */}
         <section>
-          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+          <h3 className="text-label font-semibold uppercase tracking-wider text-ink-muted mb-2">
             From your inventory
           </h3>
           {!route ? (
-            <p className="text-[0.8125rem] text-ink-muted">
+            <p className="text-body text-ink-muted">
               Only available for an airframe currently flying a route.
             </p>
           ) : idleInventory.length === 0 ? (
-            <p className="text-[0.8125rem] text-ink-muted">
+            <p className="text-body text-ink-muted">
               No idle aircraft. Planes flying other routes can&apos;t be pulled in here.
             </p>
           ) : (
@@ -1857,11 +1857,11 @@ function ReplaceChooserModal({
                   <div key={f.id} className="flex items-center gap-3 px-3 py-2.5">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="text-[0.875rem] font-medium text-ink">{sp.name}</span>
-                        <span className="font-mono text-[0.6875rem] text-ink-muted">#{f.id.slice(-4).toUpperCase()}</span>
+                        <span className="text-body-lg font-medium text-ink">{sp.name}</span>
+                        <span className="font-mono text-label text-ink-muted">#{f.id.slice(-4).toUpperCase()}</span>
                         {sameModel(f.specId)}
                       </div>
-                      <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                      <div className="text-label text-ink-muted mt-0.5">
                         Age <span className="tabular font-mono text-ink-2">{currentQuarter - f.purchaseQuarter}Q</span>
                         {" · "}idle
                       </div>
@@ -1887,15 +1887,15 @@ function ReplaceChooserModal({
 
         {/* ── 2 · From planes on order ────────────────────────────── */}
         <section>
-          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+          <h3 className="text-label font-semibold uppercase tracking-wider text-ink-muted mb-2">
             From planes on order
           </h3>
           {!route ? (
-            <p className="text-[0.8125rem] text-ink-muted">
+            <p className="text-body text-ink-muted">
               Only available for an airframe currently flying a route.
             </p>
           ) : queuedOrders.length === 0 ? (
-            <p className="text-[0.8125rem] text-ink-muted">
+            <p className="text-body text-ink-muted">
               No pre-orders in the queue.
             </p>
           ) : (
@@ -1910,20 +1910,20 @@ function ReplaceChooserModal({
                   <div key={o.id} className="flex items-center gap-3 px-3 py-2.5">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="text-[0.875rem] font-medium text-ink">{sp.name}</span>
+                        <span className="text-body-lg font-medium text-ink">{sp.name}</span>
                         {sameModel(o.specId)}
                         {earmarkedHere && (
-                          <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
+                          <span className="text-micro uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
                             Earmarked
                           </span>
                         )}
                         {earmarkedElse && (
-                          <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-ink-muted bg-surface-2 px-1.5 py-0.5 rounded">
+                          <span className="text-micro uppercase tracking-wider font-semibold text-ink-muted bg-surface-2 px-1.5 py-0.5 rounded">
                             Earmarked elsewhere
                           </span>
                         )}
                       </div>
-                      <div className="text-[0.6875rem] text-ink-muted mt-0.5 tabular font-mono">
+                      <div className="text-label text-ink-muted mt-0.5 tabular font-mono">
                         ETA <span className="text-ink">{fmtQuarter(eta, startYear)}</span>
                         {" · "}{o.acquisitionType === "buy" ? "Buy" : "Lease"}
                       </div>
@@ -1950,11 +1950,11 @@ function ReplaceChooserModal({
 
         {/* ── 3 · Buy a fresh one ─────────────────────────────────── */}
         <section>
-          <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+          <h3 className="text-label font-semibold uppercase tracking-wider text-ink-muted mb-2">
             Buy a fresh one
           </h3>
           <div className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2.5">
-            <p className="text-[0.8125rem] text-ink-muted">
+            <p className="text-body text-ink-muted">
               Open the market filtered to {agingSpec.name} (or pick any other model).
             </p>
             <Button

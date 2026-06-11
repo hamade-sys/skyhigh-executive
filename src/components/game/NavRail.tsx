@@ -227,7 +227,7 @@ export function NavRail() {
             >
               <item.Icon size={18} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
               {expanded && (
-                <span className="text-[0.8125rem] font-medium truncate">
+                <span className="text-body font-medium truncate">
                   {item.label}
                 </span>
               )}
@@ -236,7 +236,7 @@ export function NavRail() {
                   aria-hidden="true"
                   className={cn(
                     "absolute min-w-[16px] h-4 rounded-full bg-accent text-primary-fg",
-                    "text-[0.625rem] font-semibold flex items-center justify-center",
+                    "text-caption font-semibold flex items-center justify-center",
                     "px-1 tabular leading-none",
                     expanded ? "right-2" : "-top-1 -right-1",
                   )}
@@ -249,7 +249,7 @@ export function NavRail() {
                   aria-hidden="true"
                   className={cn(
                     "absolute left-full ml-3 px-2.5 py-1 rounded-md",
-                    "bg-ink text-[var(--bg)] text-[0.75rem] font-medium",
+                    "bg-ink text-[var(--bg)] text-body-sm font-medium",
                     "opacity-0 group-hover:opacity-100 pointer-events-none",
                     "whitespace-nowrap transition-opacity duration-[var(--dur-fast)]",
                     "shadow-[var(--shadow-2)]",
@@ -270,8 +270,8 @@ export function NavRail() {
         className={cn(
           "border-t border-line",
           expanded
-            ? "px-3 py-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[0.6875rem] tabular font-mono text-ink-muted"
-            : "py-2 flex flex-col items-center gap-2 text-[0.625rem] text-ink-muted font-mono tabular",
+            ? "px-3 py-2 grid grid-cols-2 gap-x-3 gap-y-1 text-label tabular font-mono text-ink-muted"
+            : "py-2 flex flex-col items-center gap-2 text-caption text-ink-muted font-mono tabular",
         )}
       >
         {expanded ? (
@@ -296,15 +296,15 @@ export function NavRail() {
               <span className={travelIndex >= 100 ? "text-positive" : "text-warning"}>
                 {Math.round(travelIndex)}
               </span>
-              <span className="text-[0.5625rem] uppercase tracking-wider">pax</span>
+              <span className="text-micro uppercase tracking-wider">pax</span>
             </div>
             <div className="flex flex-col items-center leading-tight">
               <span>{Math.round(fuelIndex)}</span>
-              <span className="text-[0.5625rem] uppercase tracking-wider">fuel</span>
+              <span className="text-micro uppercase tracking-wider">fuel</span>
             </div>
             <div className="flex flex-col items-center leading-tight">
               <span>{baseInterestRatePct.toFixed(1)}</span>
-              <span className="text-[0.5625rem] uppercase tracking-wider">rate</span>
+              <span className="text-micro uppercase tracking-wider">rate</span>
             </div>
           </>
         )}
@@ -326,14 +326,14 @@ export function NavRail() {
             title="Click to read this quarter's full news"
           >
             <div className="flex items-baseline justify-between mb-0.5">
-              <span className="text-[0.5625rem] uppercase tracking-[0.18em] font-bold text-accent">
+              <span className="text-micro uppercase tracking-[0.18em] font-bold text-accent">
                 {outletFor(item)} · live
               </span>
-              <span className="text-[0.5625rem] tabular font-mono text-ink-muted">
+              <span className="text-micro tabular font-mono text-ink-muted">
                 {tickerIndex + 1}/{currentItems.length}
               </span>
             </div>
-            <h3 className="text-[0.6875rem] font-medium text-ink leading-snug line-clamp-2">
+            <h3 className="text-label font-medium text-ink leading-snug line-clamp-2">
               {item.headline}
             </h3>
           </button>
@@ -351,7 +351,7 @@ export function NavRail() {
             onClick={() => setNewsExpanded((v) => !v)}
             aria-expanded={newsExpanded}
             aria-controls="navrail-news-list"
-            className="flex items-center justify-between px-3 py-2 text-[0.6875rem] uppercase tracking-wider text-ink-muted hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+            className="flex items-center justify-between px-3 py-2 text-label uppercase tracking-wider text-ink-muted hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
           >
             <span className="flex items-center gap-1.5">
               <Newspaper size={12} aria-hidden="true" /> World news
@@ -371,15 +371,15 @@ export function NavRail() {
                 >
                   <div className="flex items-baseline justify-between mb-0.5">
                     <span
-                      className="text-[0.625rem] uppercase tracking-wider font-bold text-accent"
+                      className="text-caption uppercase tracking-wider font-bold text-accent"
                     >
                       {outletFor(n)}
                     </span>
-                    <span className="text-[0.625rem] tabular text-ink-muted font-mono">
+                    <span className="text-caption tabular text-ink-muted font-mono">
                       {fmtQuarter(n.quarter, startYear)}
                     </span>
                   </div>
-                  <h3 className="text-[0.75rem] font-medium text-ink leading-snug">
+                  <h3 className="text-body-sm font-medium text-ink leading-snug">
                     {n.headline}
                   </h3>
                 </button>
@@ -387,7 +387,7 @@ export function NavRail() {
               <button
                 type="button"
                 onClick={() => useUi.getState().openPanel("news")}
-                className="w-full mt-1 px-2 py-1.5 rounded-md border border-line bg-surface-2/50 text-[0.6875rem] uppercase tracking-wider text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="w-full mt-1 px-2 py-1.5 rounded-md border border-line bg-surface-2/50 text-label uppercase tracking-wider text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 Open World News <span aria-hidden="true">→</span>
               </button>
@@ -404,7 +404,7 @@ export function NavRail() {
           className="border-t border-line py-3 flex flex-col items-center text-ink-2 hover:text-ink hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
         >
           <Newspaper size={16} aria-hidden="true" />
-          <span className="text-[0.5625rem] uppercase tracking-wider mt-0.5">News</span>
+          <span className="text-micro uppercase tracking-wider mt-0.5">News</span>
         </button>
       )}
 
@@ -418,7 +418,7 @@ export function NavRail() {
           next.config.ts from package.json. */}
       <div
         className={cn(
-          "border-t border-line text-[0.5625rem] text-ink-muted/70 font-mono tabular leading-tight",
+          "border-t border-line text-micro text-ink-muted/70 font-mono tabular leading-tight",
           expanded ? "px-3 py-1.5 text-left" : "px-1 py-1.5 text-center",
         )}
         title={`V${process.env.NEXT_PUBLIC_APP_VERSION ?? "?"} · commit ${process.env.NEXT_PUBLIC_GIT_SHA ?? "dev"}`}

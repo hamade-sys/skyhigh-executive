@@ -20,7 +20,7 @@ export function LeaderboardPanel() {
 
   return (
     <div className="space-y-3">
-      <div className="text-[0.8125rem] text-ink-2">
+      <div className="text-body text-ink-2">
         Ranked by Airline Value (book equity × brand multiplier).
         Competitor finances stay private — only the rank, brand grade,
         and fleet size are shown. Arrows show Q/Q rank movement vs
@@ -88,7 +88,7 @@ export function LeaderboardPanel() {
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "shrink-0 inline-flex items-center gap-0.5 text-[0.625rem] tabular font-mono font-semibold rounded px-1 py-0.5",
+                    "shrink-0 inline-flex items-center gap-0.5 text-caption tabular font-mono font-semibold rounded px-1 py-0.5",
                     rankDelta > 0 && "bg-[var(--positive-soft)] text-positive",
                     rankDelta < 0 && "bg-[var(--negative-soft)] text-negative",
                     rankDelta === 0 && "text-ink-muted",
@@ -112,7 +112,7 @@ export function LeaderboardPanel() {
               )}
               <span
                 aria-label={`${airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).label} airline — ${t.name}`}
-                className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-[0.6875rem] font-semibold shrink-0"
+                className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-label font-semibold shrink-0"
                 style={{
                   // Phase 9 — prefer the player's chosen airline color
                   // over the legacy team.color hex. Falls back to a
@@ -131,12 +131,12 @@ export function LeaderboardPanel() {
               </span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className={`${isPlayer ? "font-semibold text-ink" : "text-ink-2"} truncate text-[0.875rem]`}>
+                  <span className={`${isPlayer ? "font-semibold text-ink" : "text-ink-2"} truncate text-body-lg`}>
                     {t.name}
                   </span>
                   {isPlayer && <Badge tone="primary">You</Badge>}
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted font-mono">
+                <div className="text-label text-ink-muted font-mono">
                   Hub {t.hubCode}
                   {gapToNext !== null && gapToNext > 0 && (
                     <>
@@ -149,10 +149,10 @@ export function LeaderboardPanel() {
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className="tabular font-display text-[1.25rem] text-ink leading-none">
+                <div className="tabular font-display text-heading text-ink leading-none">
                   {fmtMoney(av)}
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted mt-0.5 flex items-center justify-end gap-1.5">
+                <div className="text-label text-ink-muted mt-0.5 flex items-center justify-end gap-1.5">
                   <span>Brand {brandRating(t).grade}</span>
                   {isPlayer && (
                     <>

@@ -54,7 +54,7 @@ export default function FacilitatorPage() {
       fallback={
         <main className="flex-1 min-h-0 flex flex-col items-center justify-center bg-surface-2/30">
           <Loader2 className="w-6 h-6 text-ink-muted animate-spin mb-3" />
-          <p className="text-[0.875rem] text-ink-muted">Loading facilitator console…</p>
+          <p className="text-body-lg text-ink-muted">Loading facilitator console…</p>
         </main>
       }
     >
@@ -135,7 +135,7 @@ function FacilitatorPageInner() {
     return (
       <main className="flex-1 min-h-0 flex flex-col items-center justify-center bg-surface-2/30">
         <Loader2 className="w-6 h-6 text-ink-muted animate-spin mb-3" />
-        <p className="text-[0.875rem] text-ink-muted">Loading game state…</p>
+        <p className="text-body-lg text-ink-muted">Loading game state…</p>
       </main>
     );
   }
@@ -182,12 +182,12 @@ function FacilitatorContent() {
     <main className="flex-1 min-h-0 flex flex-col bg-surface-2/30">
       <header className="px-8 py-4 border-b border-line bg-surface flex items-center justify-between">
         <div className="flex items-baseline gap-3">
-          <Link href="/" className="text-ink-muted hover:text-ink flex items-center gap-1.5 text-[0.8125rem]">
+          <Link href="/" className="text-ink-muted hover:text-ink flex items-center gap-1.5 text-body">
             <ArrowLeft size={13} /> Back to game
           </Link>
           <span className="text-line">·</span>
           <span className="font-display text-xl text-ink">Facilitator</span>
-          <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
+          <span className="text-label uppercase tracking-[0.18em] text-ink-muted">
             {fmtQuarter(s.currentQuarter, startYear)} · {s.teams.length} team{s.teams.length === 1 ? "" : "s"}
           </span>
           {/* Cohort readiness counter — visible in any mode where 2+
@@ -206,7 +206,7 @@ function FacilitatorContent() {
               <span
                 className={cn(
                   "ml-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 border",
-                  "text-[0.6875rem] font-mono font-semibold tabular",
+                  "text-label font-mono font-semibold tabular",
                   allReady
                     ? "border-positive/40 bg-[var(--positive-soft)]/40 text-positive"
                     : "border-line bg-surface-2 text-ink-2",
@@ -220,10 +220,10 @@ function FacilitatorContent() {
           })()}
         </div>
         {player && (
-          <div className="flex items-center gap-2 text-[0.75rem]">
+          <div className="flex items-center gap-2 text-body-sm">
             <span className="text-ink-muted">Viewing as:</span>
             <span
-              className="inline-block w-6 h-6 rounded-md flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg"
+              className="inline-block w-6 h-6 rounded-md flex items-center justify-center font-mono text-caption font-semibold text-primary-fg"
               style={{ background: player.color }}
             >
               {player.code}
@@ -302,7 +302,7 @@ function FacilitatorContent() {
           {section === "teams" && s.teams.length === 0 && (
             <Card>
               <CardBody>
-                <p className="text-ink-2 text-[0.875rem]">
+                <p className="text-ink-2 text-body-lg">
                   No teams yet. Start a session in the Session tab to invite players.
                 </p>
               </CardBody>
@@ -322,7 +322,7 @@ function FacilitatorContent() {
           {section === "livesims" && s.teams.length === 0 && (
             <Card>
               <CardBody>
-                <p className="text-ink-2 text-[0.875rem]">
+                <p className="text-ink-2 text-body-lg">
                   Live-sim outcomes apply to existing teams. Start a session first.
                 </p>
               </CardBody>
@@ -339,7 +339,7 @@ function FacilitatorContent() {
           {section === "admin" && s.teams.length === 0 && (
             <Card>
               <CardBody>
-                <p className="text-ink-2 text-[0.875rem]">
+                <p className="text-ink-2 text-body-lg">
                   Game-state admin requires an active simulation. Start a session first.
                 </p>
               </CardBody>
@@ -366,8 +366,8 @@ function SessionView() {
   return (
     <div className="space-y-4 max-w-2xl">
       <header>
-        <h1 className="font-display text-[1.75rem] text-ink mb-1">Facilitated session</h1>
-        <p className="text-ink-2 text-[0.9375rem] leading-relaxed">
+        <h1 className="font-display text-display text-ink mb-1">Facilitated session</h1>
+        <p className="text-ink-2 text-title-sm leading-relaxed">
           Generate a 4-digit join code, share it with the players in the
           room, and watch them claim seats as they enter the simulation
           on their own devices via <span className="font-mono">/join</span>.
@@ -377,12 +377,12 @@ function SessionView() {
       {!sessionCode ? (
         <Card>
           <CardBody>
-            <h2 className="font-display text-[1.25rem] text-ink mb-3">Start a new session</h2>
+            <h2 className="font-display text-heading text-ink mb-3">Start a new session</h2>
             <div className="space-y-3">
               <div>
                 <div
                   id="seat-count-label"
-                  className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5"
+                  className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5"
                 >
                   Number of teams
                 </div>
@@ -394,13 +394,13 @@ function SessionView() {
                   <button
                     onClick={() => setSeatCount(Math.max(2, seatCount - 1))}
                     aria-label="Decrease team count"
-                    className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-[1.125rem] font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                    className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-heading-sm font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                     disabled={seatCount <= 2}
                   >
                     <span aria-hidden="true">−</span>
                   </button>
                   <span
-                    className="tabular font-mono text-[1.5rem] text-ink font-bold w-14 text-center"
+                    className="tabular font-mono text-heading-lg text-ink font-bold w-14 text-center"
                     aria-live="polite"
                     aria-atomic="true"
                   >
@@ -409,12 +409,12 @@ function SessionView() {
                   <button
                     onClick={() => setSeatCount(Math.min(10, seatCount + 1))}
                     aria-label="Increase team count"
-                    className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-[1.125rem] font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                    className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-heading-sm font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                     disabled={seatCount >= 10}
                   >
                     <span aria-hidden="true">+</span>
                   </button>
-                  <span className="text-[0.75rem] text-ink-muted ml-2">
+                  <span className="text-body-sm text-ink-muted ml-2">
                     Between 2 and 10 players
                   </span>
                 </div>
@@ -435,18 +435,18 @@ function SessionView() {
         <Card>
           <CardBody>
             <div className="flex items-baseline justify-between mb-4">
-              <h2 className="font-display text-[1.25rem] text-ink">Session active</h2>
+              <h2 className="font-display text-heading text-ink">Session active</h2>
               <Badge tone="positive">{claimed}/{total} seats claimed</Badge>
             </div>
 
             <div className="rounded-lg border-2 border-primary bg-[rgba(20,53,94,0.04)] p-6 text-center mb-4">
-              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+              <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
                 Share this code
               </div>
               <div className="font-mono tabular text-[3.5rem] text-ink leading-none font-bold tracking-[0.4em] mb-2">
                 {sessionCode}
               </div>
-              <div className="text-[0.8125rem] text-ink-muted">
+              <div className="text-body text-ink-muted">
                 Players visit{" "}
                 <span className="font-mono text-ink">/join</span>{" "}
                 and enter this code along with their company name and hub.
@@ -474,7 +474,7 @@ function SessionView() {
               >
                 Reissue code
               </Button>
-              <span className="text-[0.6875rem] text-ink-muted leading-relaxed flex-1 min-w-[180px]">
+              <span className="text-label text-ink-muted leading-relaxed flex-1 min-w-[180px]">
                 {sessionLocked
                   ? "Locked — only existing players can reconnect (by their original company name)."
                   : "Unlocked — new players can claim any open seat. Lock once your cohort is in to prevent strays."}
@@ -482,20 +482,20 @@ function SessionView() {
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+              <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
                 Seats
               </div>
               {sessionSlots.map((seat, i) => (
                 <div
                   key={seat.id}
                   className={cn(
-                    "flex items-center gap-3 rounded-md border px-3 py-2 text-[0.875rem]",
+                    "flex items-center gap-3 rounded-md border px-3 py-2 text-body-lg",
                     seat.claimed
                       ? "border-positive/40 bg-[var(--positive-soft)]/40"
                       : "border-dashed border-line",
                   )}
                 >
-                  <span className="font-mono text-ink-muted w-8 tabular text-center text-[0.75rem]">
+                  <span className="font-mono text-ink-muted w-8 tabular text-center text-body-sm">
                     #{i + 1}
                   </span>
                   {seat.claimed ? (
@@ -545,9 +545,9 @@ function NavItem({
     >
       <Icon size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0 mt-0.5" />
       <div className="min-w-0 flex-1">
-        <div className="font-medium text-[0.875rem] leading-tight">{label}</div>
+        <div className="font-medium text-body-lg leading-tight">{label}</div>
         <div className={cn(
-          "text-[0.6875rem] mt-0.5",
+          "text-label mt-0.5",
           active ? "text-primary-fg/80" : "text-ink-muted",
         )}>
           {sub}
@@ -557,7 +557,7 @@ function NavItem({
         <span
           aria-hidden="true"
           className={cn(
-            "shrink-0 min-w-[20px] h-5 rounded-full flex items-center justify-center px-1.5 text-[0.625rem] font-bold tabular leading-none",
+            "shrink-0 min-w-[20px] h-5 rounded-full flex items-center justify-center px-1.5 text-caption font-bold tabular leading-none",
             active
               ? "bg-primary-fg text-primary"
               : "bg-accent text-primary-fg",
@@ -581,8 +581,8 @@ function TeamsView({
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="font-display text-[1.75rem] text-ink mb-1">Teams</h1>
-        <p className="text-ink-2 text-[0.875rem] leading-relaxed max-w-[60ch]">
+        <h1 className="font-display text-display text-ink mb-1">Teams</h1>
+        <p className="text-ink-2 text-body-lg leading-relaxed max-w-[60ch]">
           Switch the active view between teams. The selected airline becomes
           the &ldquo;player&rdquo; in the main game UI; the facilitator toggle
           here lets you flip through each airline&apos;s state without
@@ -618,14 +618,14 @@ function TeamsView({
             >
               <div className="flex items-start gap-3 mb-3">
                 <span
-                  className="inline-block w-10 h-10 rounded-md flex items-center justify-center font-mono text-[0.75rem] font-semibold text-primary-fg shrink-0"
+                  className="inline-block w-10 h-10 rounded-md flex items-center justify-center font-mono text-body-sm font-semibold text-primary-fg shrink-0"
                   style={{ background: t.color }}
                 >
                   {t.code}
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="font-display text-[1.0625rem] text-ink leading-tight truncate">
+                    <span className="font-display text-title-lg text-ink leading-tight truncate">
                       {t.name}
                     </span>
                     {isActive && <Badge tone="primary">Active</Badge>}
@@ -650,13 +650,13 @@ function TeamsView({
                       <Badge tone="positive">Ready</Badge>
                     )}
                   </div>
-                  <div className="text-[0.75rem] text-ink-muted font-mono">
+                  <div className="text-body-sm text-ink-muted font-mono">
                     Hub {t.hubCode} · {t.doctrine}
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[0.8125rem]">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-body">
                 <Row k="Cash" v={fmtMoney(t.cashUsd)} />
                 <Row k="Debt" v={fmtMoney(t.totalDebtUsd)} />
                 <Row k="Airline value" v={fmtMoney(av)} bold />
@@ -679,21 +679,21 @@ function LeaderboardView({ teams }: { teams: Team[] }) {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="font-display text-[1.75rem] text-ink mb-1">Leaderboard</h1>
-        <p className="text-ink-2 text-[0.875rem] leading-relaxed">
+        <h1 className="font-display text-display text-ink mb-1">Leaderboard</h1>
+        <p className="text-ink-2 text-body-lg leading-relaxed">
           Real-time ranking by Airline Value. Updated each quarter close.
         </p>
       </header>
       <Card>
         <CardBody>
-          <table className="w-full text-[0.875rem]">
+          <table className="w-full text-body-lg">
             <thead>
               <tr className="border-b border-line">
-                <th className="text-left py-2 px-3 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">#</th>
-                <th className="text-left py-2 px-3 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Team</th>
-                <th className="text-right py-2 px-3 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Airline value</th>
-                <th className="text-right py-2 px-3 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Brand</th>
-                <th className="text-right py-2 px-3 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted"><Plane size={11} className="inline" /></th>
+                <th className="text-left py-2 px-3 text-caption uppercase tracking-wider font-semibold text-ink-muted">#</th>
+                <th className="text-left py-2 px-3 text-caption uppercase tracking-wider font-semibold text-ink-muted">Team</th>
+                <th className="text-right py-2 px-3 text-caption uppercase tracking-wider font-semibold text-ink-muted">Airline value</th>
+                <th className="text-right py-2 px-3 text-caption uppercase tracking-wider font-semibold text-ink-muted">Brand</th>
+                <th className="text-right py-2 px-3 text-caption uppercase tracking-wider font-semibold text-ink-muted"><Plane size={11} className="inline" /></th>
               </tr>
             </thead>
             <tbody>
@@ -702,7 +702,7 @@ function LeaderboardView({ teams }: { teams: Team[] }) {
                   <td className="py-2 px-3 font-mono text-ink-muted tabular">{i + 1}</td>
                   <td className="py-2 px-3">
                     <div className="flex items-center gap-2">
-                      <span className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-[0.5625rem] font-semibold text-primary-fg shrink-0" style={{ background: t.color }}>
+                      <span className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-micro font-semibold text-primary-fg shrink-0" style={{ background: t.color }}>
                         {t.code}
                       </span>
                       <span className="font-medium text-ink">{t.name}</span>
@@ -724,7 +724,7 @@ function LeaderboardView({ teams }: { teams: Team[] }) {
 function Row({ k, v, bold = false }: { k: string; v: string; bold?: boolean }) {
   return (
     <div className="flex items-baseline justify-between">
-      <span className="text-ink-muted text-[0.6875rem] uppercase tracking-wider">{k}</span>
+      <span className="text-ink-muted text-label uppercase tracking-wider">{k}</span>
       <span className={cn("tabular font-mono", bold ? "text-ink font-semibold" : "text-ink-2")}>{v}</span>
     </div>
   );
@@ -830,8 +830,8 @@ function SavesView({ gameId }: { gameId: string | null }) {
   return (
     <div className="space-y-4 max-w-3xl">
       <header>
-        <h1 className="font-display text-[1.75rem] text-ink mb-1">Game saves</h1>
-        <p className="text-ink-2 text-[0.9375rem] leading-relaxed">
+        <h1 className="font-display text-display text-ink mb-1">Game saves</h1>
+        <p className="text-ink-2 text-title-sm leading-relaxed">
           One snapshot per round, auto-saved into the database when each round begins. Use
           <span className="font-medium text-ink"> Restore</span> to roll the
           game back to that exact moment — useful for re-syncing a cohort
@@ -842,7 +842,7 @@ function SavesView({ gameId }: { gameId: string | null }) {
       {!gameId && (
         <Card>
           <CardBody>
-            <p className="text-[0.875rem] text-ink-muted leading-relaxed">
+            <p className="text-body-lg text-ink-muted leading-relaxed">
               Snapshot persistence is database-backed now, so it only appears when this console
               is attached to a real game session.
             </p>
@@ -881,13 +881,13 @@ function SavesView({ gameId }: { gameId: string | null }) {
                 e.target.value = "";
               }}
             />
-            <span className="text-[0.6875rem] text-ink-muted ml-auto">
+            <span className="text-label text-ink-muted ml-auto">
               {snapshots.length} snapshot{snapshots.length === 1 ? "" : "s"}
             </span>
           </div>
 
           {snapshots.length === 0 ? (
-            <div className="text-[0.875rem] text-ink-muted italic py-8 text-center rounded-md border border-dashed border-line">
+            <div className="text-body-lg text-ink-muted italic py-8 text-center rounded-md border border-dashed border-line">
               No snapshots yet. They auto-save at the start of each round, or
               click <strong className="text-ink">Save current state</strong> above
               to take one now.
@@ -901,20 +901,20 @@ function SavesView({ gameId }: { gameId: string | null }) {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[0.8125rem] text-ink font-semibold">
+                      <span className="font-mono text-body text-ink font-semibold">
                         {m.quarterLabel}
                       </span>
-                      <span className="text-[0.6875rem] text-ink-muted">
+                      <span className="text-label text-ink-muted">
                         Round {m.quarter}/40
                       </span>
                       {m.quarter === currentQuarter && (
                         <Badge tone="primary">Current</Badge>
                       )}
                     </div>
-                    <div className="text-[0.75rem] text-ink-muted mt-0.5 truncate">
+                    <div className="text-body-sm text-ink-muted mt-0.5 truncate">
                       {m.label}
                     </div>
-                    <div className="text-[0.625rem] text-ink-muted/70 mt-0.5">
+                    <div className="text-caption text-ink-muted/70 mt-0.5">
                       Saved {new Date(m.savedAt).toLocaleString("en-AE", {
                         day: "numeric", month: "short", year: "numeric",
                         hour: "numeric", minute: "2-digit",
@@ -925,14 +925,14 @@ function SavesView({ gameId }: { gameId: string | null }) {
                     <button
                       onClick={() => setConfirmRestoreId(m.id)}
                       disabled={pendingId === m.id}
-                      className="px-2 py-1 rounded-md border border-line text-[0.75rem] hover:bg-[var(--accent-soft)] hover:border-accent flex items-center gap-1 disabled:opacity-50"
+                      className="px-2 py-1 rounded-md border border-line text-body-sm hover:bg-[var(--accent-soft)] hover:border-accent flex items-center gap-1 disabled:opacity-50"
                       title="Restore this snapshot — replaces live game state"
                     >
                       <RotateCcw size={11} /> Restore
                     </button>
                     <button
                       onClick={() => handleExport(m.id)}
-                      className="px-2 py-1 rounded-md border border-line text-[0.75rem] hover:bg-surface-hover flex items-center gap-1"
+                      className="px-2 py-1 rounded-md border border-line text-body-sm hover:bg-surface-hover flex items-center gap-1"
                       title="Download this snapshot as JSON"
                     >
                       <Download size={11} /> Export
@@ -940,7 +940,7 @@ function SavesView({ gameId }: { gameId: string | null }) {
                     <button
                       onClick={() => setConfirmDeleteId(m.id)}
                       aria-label={`Delete snapshot ${m.quarterLabel}`}
-                      className="px-2 py-1 rounded-md border border-line text-[0.75rem] hover:bg-[var(--negative-soft)] hover:border-negative flex items-center gap-1 text-ink-muted hover:text-negative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                      className="px-2 py-1 rounded-md border border-line text-body-sm hover:bg-[var(--negative-soft)] hover:border-negative flex items-center gap-1 text-ink-muted hover:text-negative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                       title="Delete this snapshot"
                     >
                       <Trash2 size={11} />
@@ -953,7 +953,7 @@ function SavesView({ gameId }: { gameId: string | null }) {
         </CardBody>
       </Card>
 
-      <p className="text-[0.75rem] text-ink-muted leading-relaxed">
+      <p className="text-body-sm text-ink-muted leading-relaxed">
         Snapshots now live in the database. To move a save
         between environments, export it as JSON and import it on the new
         machine. The schema is versioned — saves from incompatible builds
@@ -971,10 +971,10 @@ function SavesView({ gameId }: { gameId: string | null }) {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Restore {meta.quarterLabel}?
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   This replaces the current game state with the snapshot taken
                   at the start of that round. Every team rolls back to where
                   they were at that moment. Subsequent rounds are wiped from
@@ -983,7 +983,7 @@ function SavesView({ gameId }: { gameId: string | null }) {
                 </p>
               </ModalHeader>
               <ModalBody>
-                <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+                <div className="rounded-md border border-line bg-surface p-3 text-body space-y-1">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-ink-muted">Quarter</span>
                     <span className="tabular font-mono text-ink">{meta.quarterLabel}</span>
@@ -1026,10 +1026,10 @@ function SavesView({ gameId }: { gameId: string | null }) {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Delete {meta.quarterLabel} snapshot?
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   Removes this saved state from local storage. The current
                   game session is unaffected — only the snapshot you took at
                   the start of {meta.quarterLabel} is lost.
@@ -1139,8 +1139,8 @@ function AirportsView() {
   return (
     <div className="space-y-6 max-w-4xl">
       <header>
-        <h1 className="font-display text-[1.75rem] text-ink mb-1">Airports · acquisitions</h1>
-        <p className="text-ink-2 text-[0.9375rem] leading-relaxed">
+        <h1 className="font-display text-display text-ink mb-1">Airports · acquisitions</h1>
+        <p className="text-ink-2 text-title-sm leading-relaxed">
           Teams buy airports directly: a purchase placed this quarter completes
           at the next quarter close. In the rare case two teams bid on the same
           airport the same quarter, the higher offer wins and the loser is
@@ -1151,13 +1151,13 @@ function AirportsView() {
 
       {/* Pending purchases monitor — the current player-facing acquisition flow. */}
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
           Pending airport purchases · {liveAuctions.length}
         </div>
         {liveAuctions.length === 0 ? (
           <Card>
             <CardBody>
-              <p className="text-[0.875rem] text-ink-muted italic">
+              <p className="text-body-lg text-ink-muted italic">
                 No pending purchases. When a team buys an airport it will appear
                 here with the offer and the quarter it completes.
               </p>
@@ -1182,15 +1182,15 @@ function AirportsView() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                      <span className="font-display text-[1.25rem] text-ink leading-none">
+                      <span className="font-display text-heading text-ink leading-none">
                         {cityName}
                       </span>
-                      <span className="font-mono text-[0.75rem] text-ink-muted">{a.airportCode}</span>
+                      <span className="font-mono text-body-sm text-ink-muted">{a.airportCode}</span>
                       {closesIn === 0 && <Badge tone="warning">Closes this quarter</Badge>}
                     </div>
-                    <div className="flex items-center gap-2 text-[0.8125rem] mb-2">
+                    <div className="flex items-center gap-2 text-body mb-2">
                       <span
-                        className="inline-block w-6 h-6 rounded-md flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg"
+                        className="inline-block w-6 h-6 rounded-md flex items-center justify-center font-mono text-caption font-semibold text-primary-fg"
                         style={{ background: leader.color }}
                       >
                         {leader.code}
@@ -1201,7 +1201,7 @@ function AirportsView() {
                         {fmtMoney(a.highBidUsd)}
                       </span>
                     </div>
-                    <div className="text-[0.6875rem] text-ink-muted">
+                    <div className="text-label text-ink-muted">
                       Opened {fmtQuarter(a.openedQuarter, startYear)} ·{" "}
                       {raises} raise{raises === 1 ? "" : "s"} ·{" "}
                       {closesIn === 0
@@ -1219,11 +1219,11 @@ function AirportsView() {
       {/* Pending bids inbox — the regulator's primary workspace. */}
       <section>
         <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+          <div className="text-label uppercase tracking-wider text-ink-muted font-semibold">
             Pending bids · {pendingBids.length}
           </div>
           {pendingBids.length > 0 && (
-            <div className="text-[0.6875rem] text-warning font-semibold uppercase tracking-wider">
+            <div className="text-label text-warning font-semibold uppercase tracking-wider">
               ⚠ Awaiting your decision
             </div>
           )}
@@ -1231,7 +1231,7 @@ function AirportsView() {
         {pendingBids.length === 0 ? (
           <Card>
             <CardBody>
-              <p className="text-[0.875rem] text-ink-muted italic">
+              <p className="text-body-lg text-ink-muted italic">
                 No pending bids. Submitted bids will appear here for
                 approval or rejection.
               </p>
@@ -1256,17 +1256,17 @@ function AirportsView() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                      <span className="font-display text-[1.25rem] text-ink leading-none">
+                      <span className="font-display text-heading text-ink leading-none">
                         {cityName}
                       </span>
-                      <span className="font-mono text-[0.75rem] text-ink-muted">{bid.airportCode}</span>
+                      <span className="font-mono text-body-sm text-ink-muted">{bid.airportCode}</span>
                       {expiresInQ === 0 && (
                         <Badge tone="warning">Expires this quarter</Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-[0.8125rem] mb-2">
+                    <div className="flex items-center gap-2 text-body mb-2">
                       <span
-                        className="inline-block w-6 h-6 rounded-md flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg"
+                        className="inline-block w-6 h-6 rounded-md flex items-center justify-center font-mono text-caption font-semibold text-primary-fg"
                         style={{ background: bidder.color }}
                       >
                         {bidder.code}
@@ -1277,7 +1277,7 @@ function AirportsView() {
                         {fmtMoney(bid.bidPriceUsd)}
                       </span>
                     </div>
-                    <div className="text-[0.6875rem] text-ink-muted">
+                    <div className="text-label text-ink-muted">
                       Submitted {fmtQuarter(bid.submittedQuarter, startYear)} ·{" "}
                       Held {heldQ} quarter{heldQ === 1 ? "" : "s"} ·{" "}
                       {expiresInQ === 0
@@ -1314,13 +1314,13 @@ function AirportsView() {
       {/* Airport ownership table — Bids column is highlighted when an
           active bid exists. Sorted: bids first, then owned, then code. */}
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
           Airports · {rows.length} active
         </div>
         {rows.length === 0 ? (
           <Card>
             <CardBody>
-              <p className="text-[0.875rem] text-ink-muted italic">
+              <p className="text-body-lg text-ink-muted italic">
                 No airport ownership yet. Once teams submit bids or own
                 airports, they&apos;ll appear here.
               </p>
@@ -1328,14 +1328,14 @@ function AirportsView() {
           </Card>
         ) : (
           <div className="rounded-md border border-line overflow-hidden bg-surface">
-            <table className="w-full text-[0.8125rem]">
+            <table className="w-full text-body">
               <thead className="bg-surface-2/40">
                 <tr className="text-left">
-                  <th className="px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Airport</th>
-                  <th className="px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Owner</th>
-                  <th className="px-3 py-2 text-right text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Slot rate / wk</th>
-                  <th className="px-3 py-2 text-right text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Capacity</th>
-                  <th className="px-3 py-2 text-right text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Bids</th>
+                  <th className="px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">Airport</th>
+                  <th className="px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">Owner</th>
+                  <th className="px-3 py-2 text-right text-caption uppercase tracking-wider font-semibold text-ink-muted">Slot rate / wk</th>
+                  <th className="px-3 py-2 text-right text-caption uppercase tracking-wider font-semibold text-ink-muted">Capacity</th>
+                  <th className="px-3 py-2 text-right text-caption uppercase tracking-wider font-semibold text-ink-muted">Bids</th>
                 </tr>
               </thead>
               <tbody>
@@ -1345,13 +1345,13 @@ function AirportsView() {
                     <tr key={r.code} className="border-t border-line/60">
                       <td className="px-3 py-2.5">
                         <div className="font-display text-ink">{r.name}</div>
-                        <div className="font-mono text-[0.6875rem] text-ink-muted">{r.code}</div>
+                        <div className="font-mono text-label text-ink-muted">{r.code}</div>
                       </td>
                       <td className="px-3 py-2.5">
                         {owner ? (
                           <div className="flex items-center gap-1.5">
                             <span
-                              className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-[0.5625rem] font-semibold text-primary-fg"
+                              className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-micro font-semibold text-primary-fg"
                               style={{ background: owner.color }}
                             >
                               {owner.code}
@@ -1359,7 +1359,7 @@ function AirportsView() {
                             <span className="text-ink">{owner.name}</span>
                           </div>
                         ) : (
-                          <span className="text-ink-muted italic text-[0.75rem]">unowned · auction</span>
+                          <span className="text-ink-muted italic text-body-sm">unowned · auction</span>
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular font-mono text-ink">
@@ -1370,7 +1370,7 @@ function AirportsView() {
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         {r.pendingCount > 0 ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--warning-soft)] text-warning font-semibold tabular text-[0.75rem]">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--warning-soft)] text-warning font-semibold tabular text-body-sm">
                             ⚠ {r.pendingCount}
                           </span>
                         ) : (
@@ -1390,7 +1390,7 @@ function AirportsView() {
           remember what they approved/rejected. */}
       {recentResolved.length > 0 && (
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
             Recent decisions
           </div>
           <div className="space-y-1.5">
@@ -1400,7 +1400,7 @@ function AirportsView() {
               return (
                 <div
                   key={bid.id}
-                  className="flex items-baseline gap-3 rounded-md border border-line bg-surface px-3 py-2 text-[0.8125rem]"
+                  className="flex items-baseline gap-3 rounded-md border border-line bg-surface px-3 py-2 text-body"
                 >
                   <Badge
                     tone={
@@ -1412,15 +1412,15 @@ function AirportsView() {
                     {bid.status}
                   </Badge>
                   <span className="text-ink font-medium">{cityName}</span>
-                  <span className="text-ink-muted text-[0.75rem] font-mono">{bid.airportCode}</span>
+                  <span className="text-ink-muted text-body-sm font-mono">{bid.airportCode}</span>
                   <span className="text-ink-muted">·</span>
-                  <span className="text-ink-2 text-[0.75rem]">{bidder.name}</span>
+                  <span className="text-ink-2 text-body-sm">{bidder.name}</span>
                   <span className="text-ink-muted">·</span>
-                  <span className="tabular font-mono text-ink-2 text-[0.75rem]">
+                  <span className="tabular font-mono text-ink-2 text-body-sm">
                     {fmtMoney(bid.bidPriceUsd)}
                   </span>
                   {bid.resolvedQuarter && (
-                    <span className="ml-auto text-[0.6875rem] text-ink-muted font-mono">
+                    <span className="ml-auto text-label text-ink-muted font-mono">
                       {fmtQuarter(bid.resolvedQuarter, startYear)}
                     </span>
                   )}
@@ -1441,10 +1441,10 @@ function AirportsView() {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Approve bid for {cityName}?
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   Operating control transfers to <strong>{bidder.name}</strong>.
                   The escrowed bid is committed (no further cash movement —
                   the {fmtMoney(bid.bidPriceUsd)} was already deducted at
@@ -1481,10 +1481,10 @@ function AirportsView() {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Reject bid for {cityName}?
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   The escrowed {fmtMoney(bid.bidPriceUsd)} is refunded to{" "}
                   <strong>{bidder.name}</strong> at this quarter close. They
                   can submit a new bid afterwards. Optional: leave a reason
@@ -1492,7 +1492,7 @@ function AirportsView() {
                 </p>
               </ModalHeader>
               <ModalBody>
-                <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+                <label className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
                   Reason (optional)
                 </label>
                 <textarea
@@ -1500,9 +1500,9 @@ function AirportsView() {
                   onChange={(e) => setRejectReason(e.target.value.slice(0, 200))}
                   placeholder="e.g. Strategic asset, government wants to retain control"
                   rows={3}
-                  className="w-full rounded-md border border-line bg-surface px-3 py-2 text-[0.875rem] text-ink focus:outline-none focus:border-primary resize-none"
+                  className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body-lg text-ink focus:outline-none focus:border-primary resize-none"
                 />
-                <div className="text-[0.625rem] text-ink-muted mt-1 tabular font-mono">
+                <div className="text-caption text-ink-muted mt-1 tabular font-mono">
                   {rejectReason.length}/200
                 </div>
               </ModalBody>

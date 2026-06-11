@@ -47,17 +47,17 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <main className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="max-w-xl text-center">
-          <div className="text-[0.6875rem] uppercase tracking-[0.2em] text-negative mb-4">
+          <div className="text-label uppercase tracking-[0.2em] text-negative mb-4">
             Runtime error
           </div>
           <h1 className="font-display text-3xl text-ink leading-tight mb-3">
             Something broke during the simulation.
           </h1>
-          <p className="text-ink-2 text-[0.9375rem] leading-relaxed mb-2">
+          <p className="text-ink-2 text-title-sm leading-relaxed mb-2">
             Try retrying the action; if it keeps crashing, reset the simulation
             and reload fresh state from the server.
           </p>
-          <pre className="text-[0.75rem] text-ink-muted font-mono bg-surface-2 border border-line rounded-md p-3 mt-4 mb-5 text-left overflow-auto max-h-32">
+          <pre className="text-body-sm text-ink-muted font-mono bg-surface-2 border border-line rounded-md p-3 mt-4 mb-5 text-left overflow-auto max-h-32">
             {err.message}
           </pre>
           <div className="flex items-center justify-center gap-3">

@@ -83,14 +83,14 @@ export function SlotMarketPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[0.8125rem] text-ink-2 leading-relaxed">
+        <p className="text-body text-ink-2 leading-relaxed">
           Each route consumes one slot per weekly schedule at both endpoints.
           Bids set the <strong>weekly per-slot rent</strong> — winners pay
           ongoing fees as long as they hold the slot. Release a slot to stop
           paying for it; it returns to the airport pool.
         </p>
         {totalQuarterlySlotFees > 0 && (
-          <div className="mt-2 rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[0.8125rem] flex items-baseline justify-between">
+          <div className="mt-2 rounded-md border border-line bg-surface-2/40 px-3 py-2 text-body flex items-baseline justify-between">
             <span className="text-ink-2">Your recurring slot expense</span>
             <span className="tabular font-mono font-semibold text-ink">
               {fmtMoney(totalQuarterlySlotFees)} / quarter
@@ -98,18 +98,18 @@ export function SlotMarketPanel() {
           </div>
         )}
         {(player.pendingSlotBids ?? []).length > 0 && (
-          <div className="mt-2 rounded-md border border-warning/40 bg-[var(--warning-soft)]/40 px-3 py-2 text-[0.8125rem]">
+          <div className="mt-2 rounded-md border border-warning/40 bg-[var(--warning-soft)]/40 px-3 py-2 text-body">
             <div className="flex items-baseline justify-between mb-1">
-              <span className="font-semibold text-warning text-[0.6875rem] uppercase tracking-wider">
+              <span className="font-semibold text-warning text-label uppercase tracking-wider">
                 {(player.pendingSlotBids ?? []).length} pending bid{(player.pendingSlotBids ?? []).length === 1 ? "" : "s"}
               </span>
-              <span className="text-ink-muted text-[0.6875rem]">
+              <span className="text-ink-muted text-label">
                 Resolves at quarter close
               </span>
             </div>
             <div className="space-y-0.5">
               {(player.pendingSlotBids ?? []).map((b, i) => (
-                <div key={i} className="flex items-baseline justify-between text-[0.75rem] tabular font-mono">
+                <div key={i} className="flex items-baseline justify-between text-body-sm tabular font-mono">
                   <span className="text-ink-2">
                     {b.airportCode} · {b.slots} slot{b.slots === 1 ? "" : "s"}
                   </span>
@@ -131,14 +131,14 @@ export function SlotMarketPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by airport code, city, or region…"
-            className="w-full rounded-md border border-line bg-surface px-8 py-2 text-[0.875rem] text-ink placeholder:text-ink-muted focus:outline-none focus:border-primary"
+            className="w-full rounded-md border border-line bg-surface px-8 py-2 text-body-lg text-ink placeholder:text-ink-muted focus:outline-none focus:border-primary"
           />
         </div>
       </PanelSubheader>
 
       <div className="rounded-md border border-line overflow-hidden">
         {/* Table header */}
-        <div className="bg-surface-2 border-b border-line grid grid-cols-12 gap-2 px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+        <div className="bg-surface-2 border-b border-line grid grid-cols-12 gap-2 px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">
           <div className="col-span-4">Airport</div>
           <div className="col-span-1 text-center">Tier</div>
           <div className="col-span-2 text-right">Owned</div>
@@ -196,7 +196,7 @@ export function SlotMarketPanel() {
               <button
                 onClick={() => setExpandedCode(expanded ? null : c.code)}
                 className={cn(
-                  "w-full grid grid-cols-12 gap-2 pl-3 pr-9 py-2.5 text-left transition-colors text-[0.8125rem]",
+                  "w-full grid grid-cols-12 gap-2 pl-3 pr-9 py-2.5 text-left transition-colors text-body",
                   "hover:bg-surface-hover",
                 )}
               >
@@ -212,17 +212,17 @@ export function SlotMarketPanel() {
                   </span>
                   <span className="text-ink-2 truncate">{c.name}</span>
                   {isOwnHub && (
-                    <span className="text-[0.5625rem] uppercase tracking-wider text-accent font-bold shrink-0">
+                    <span className="text-micro uppercase tracking-wider text-accent font-bold shrink-0">
                       HUB
                     </span>
                   )}
                   {isSecondary && (
-                    <span className="text-[0.5625rem] uppercase tracking-wider text-info font-bold shrink-0">
+                    <span className="text-micro uppercase tracking-wider text-info font-bold shrink-0">
                       2ND
                     </span>
                   )}
                   {myBid && (
-                    <span className="text-[0.5625rem] uppercase tracking-wider text-warning font-bold shrink-0">
+                    <span className="text-micro uppercase tracking-wider text-warning font-bold shrink-0">
                       BID PENDING
                     </span>
                   )}
@@ -230,7 +230,7 @@ export function SlotMarketPanel() {
                       colored when a team has captured the airport. */}
                   {airportOwnerTeam ? (
                     <span
-                      className="text-[0.5625rem] uppercase tracking-wider font-bold shrink-0 px-1.5 py-0.5 rounded"
+                      className="text-micro uppercase tracking-wider font-bold shrink-0 px-1.5 py-0.5 rounded"
                       style={{
                         background: `${airportOwnerTeam.color ?? "#888"}1A`,
                         color: airportOwnerTeam.color ?? "#888",
@@ -241,7 +241,7 @@ export function SlotMarketPanel() {
                     </span>
                   ) : (
                     <span
-                      className="text-[0.5625rem] uppercase tracking-wider text-ink-muted font-medium shrink-0 hidden sm:inline"
+                      className="text-micro uppercase tracking-wider text-ink-muted font-medium shrink-0 hidden sm:inline"
                       title="No team has acquired this airport — slot fees flow to the public authority"
                     >
                       PUBLIC
@@ -250,7 +250,7 @@ export function SlotMarketPanel() {
                 </div>
 
                 {/* Tier */}
-                <div className="col-span-1 text-center text-ink-muted tabular text-[0.75rem]">
+                <div className="col-span-1 text-center text-ink-muted tabular text-body-sm">
                   T{tier}
                 </div>
 
@@ -264,7 +264,7 @@ export function SlotMarketPanel() {
                 </div>
 
                 {/* Fee/Q — only shown when there's a recurring fee */}
-                <div className="col-span-2 text-right tabular font-mono text-[0.75rem]">
+                <div className="col-span-2 text-right tabular font-mono text-body-sm">
                   {quarterlyFee > 0 ? (
                     <span className="text-warning">{fmtMoney(quarterlyFee)}</span>
                   ) : owned > 0 ? (
@@ -310,7 +310,7 @@ export function SlotMarketPanel() {
                 </div>
 
                 {/* Next Q — calendar quarter when next batch opens */}
-                <div className="col-span-2 text-right tabular font-mono text-[0.6875rem] text-ink-muted">
+                <div className="col-span-2 text-right tabular font-mono text-label text-ink-muted">
                   {state ? (
                     <>
                       +{state.nextOpening.toLocaleString("en-US")}
@@ -346,13 +346,13 @@ export function SlotMarketPanel() {
       </div>
 
       {rows.length > 60 && (
-        <div className="text-[0.6875rem] text-ink-muted text-center">
+        <div className="text-label text-ink-muted text-center">
           Showing first 60 of {rows.length}. Refine search to see more.
         </div>
       )}
 
-      <div className="rounded-md border border-line bg-surface-2/40 p-3 text-[0.75rem] text-ink-2">
-        <div className="flex items-center gap-1.5 mb-1 text-ink font-semibold uppercase tracking-wider text-[0.625rem]">
+      <div className="rounded-md border border-line bg-surface-2/40 p-3 text-body-sm text-ink-2">
+        <div className="flex items-center gap-1.5 mb-1 text-ink font-semibold uppercase tracking-wider text-caption">
           <Calendar size={11} /> Yearly slot opens
         </div>
         Once per simulated year, a fresh batch of slots opens at every
@@ -395,13 +395,13 @@ function BidPanel({
     <div className="bg-surface px-4 py-3 border-t border-line space-y-4">
       {/* Pending bid summary + cancel */}
       {myBid && (
-        <div className="rounded-md border border-warning bg-[var(--warning-soft)] px-3 py-2 flex items-baseline justify-between text-[0.75rem]">
+        <div className="rounded-md border border-warning bg-[var(--warning-soft)] px-3 py-2 flex items-baseline justify-between text-body-sm">
           <span className="text-ink-2">
             Pending bid: <strong className="text-ink">{myBid.slots.toLocaleString("en-US")}</strong> slots at <strong className="text-ink">${myBid.pricePerSlot.toLocaleString("en-US")}/wk</strong>
           </span>
           <button
             onClick={onCancelBid}
-            className="text-negative hover:underline text-[0.6875rem]"
+            className="text-negative hover:underline text-label"
           >
             Cancel bid
           </button>
@@ -410,12 +410,12 @@ function BidPanel({
 
       {/* Bid form */}
       <div>
-        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+        <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold mb-2">
           Place a bid {myBid ? "(replaces pending)" : ""}
         </div>
         <div className="grid grid-cols-12 gap-3 items-end">
           <div className="col-span-4">
-            <label className="text-[0.6875rem] text-ink-muted block mb-1">
+            <label className="text-label text-ink-muted block mb-1">
               Slots requested
             </label>
             <input
@@ -424,14 +424,14 @@ function BidPanel({
               max={Math.max(1, available)}
               value={slotsRequested}
               onChange={(e) => setSlotsRequested(Math.max(1, parseInt(e.target.value, 10) || 1))}
-              className="w-full h-9 px-2 rounded-md border border-line bg-surface text-[0.875rem] text-ink text-right tabular font-mono focus:outline-none focus:border-primary"
+              className="w-full h-9 px-2 rounded-md border border-line bg-surface text-body-lg text-ink text-right tabular font-mono focus:outline-none focus:border-primary"
             />
-            <div className="text-[0.625rem] text-ink-muted mt-0.5 tabular">
+            <div className="text-caption text-ink-muted mt-0.5 tabular">
               {available.toLocaleString("en-US")} open at this airport
             </div>
           </div>
           <div className="col-span-5">
-            <label className="text-[0.6875rem] text-ink-muted block mb-1">
+            <label className="text-label text-ink-muted block mb-1">
               Bid per slot ($/week)
             </label>
             <input
@@ -441,11 +441,11 @@ function BidPanel({
               value={pricePerSlot}
               onChange={(e) => setPricePerSlot(Math.max(0, parseInt(e.target.value, 10) || 0))}
               className={cn(
-                "w-full h-9 px-2 rounded-md border bg-surface text-[0.875rem] text-ink text-right tabular font-mono focus:outline-none",
+                "w-full h-9 px-2 rounded-md border bg-surface text-body-lg text-ink text-right tabular font-mono focus:outline-none",
                 priceTooLow ? "border-negative focus:border-negative" : "border-line focus:border-primary",
               )}
             />
-            <div className="text-[0.625rem] text-ink-muted mt-0.5 tabular">
+            <div className="text-caption text-ink-muted mt-0.5 tabular">
               Min ${minPrice.toLocaleString("en-US")}/wk · Tier {tier} base
             </div>
           </div>
@@ -462,9 +462,9 @@ function BidPanel({
         </div>
 
         {/* Cost preview */}
-        <div className="mt-3 rounded-md border border-line bg-surface-2/40 px-3 py-2 grid grid-cols-3 gap-3 text-[0.75rem]">
+        <div className="mt-3 rounded-md border border-line bg-surface-2/40 px-3 py-2 grid grid-cols-3 gap-3 text-body-sm">
           <div>
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <div className="text-caption uppercase tracking-wider text-ink-muted">
               Weekly commit
             </div>
             <div className="tabular font-mono text-ink mt-0.5">
@@ -472,7 +472,7 @@ function BidPanel({
             </div>
           </div>
           <div>
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <div className="text-caption uppercase tracking-wider text-ink-muted">
               Quarterly commit
             </div>
             <div className="tabular font-mono text-ink mt-0.5">
@@ -480,22 +480,22 @@ function BidPanel({
             </div>
           </div>
           <div>
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <div className="text-caption uppercase tracking-wider text-ink-muted">
               Resolves
             </div>
-            <div className="text-[0.75rem] text-ink-2 mt-0.5">
+            <div className="text-body-sm text-ink-2 mt-0.5">
               At quarter close
             </div>
           </div>
         </div>
 
         {priceTooLow && (
-          <div className="mt-2 text-[0.75rem] text-negative">
+          <div className="mt-2 text-body-sm text-negative">
             Below the Tier {tier} minimum (${minPrice.toLocaleString("en-US")}/wk).
           </div>
         )}
         {noSlotsAvailable && (
-          <div className="mt-2 text-[0.75rem] text-warning">
+          <div className="mt-2 text-body-sm text-warning">
             No slots available right now. Next batch opens{" "}
             {fmtQuarter(useGame.getState().airportSlots?.[airportCode]?.nextTickQuarter ?? 99, startYear)}.
           </div>
@@ -505,12 +505,12 @@ function BidPanel({
       {/* Release control — only when player owns AND pays a fee */}
       {owned > 0 && (
         <div className="pt-3 border-t border-line">
-          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold mb-2">
             Release slots
           </div>
           <div className="grid grid-cols-12 gap-3 items-end">
             <div className="col-span-4">
-              <label className="text-[0.6875rem] text-ink-muted block mb-1">
+              <label className="text-label text-ink-muted block mb-1">
                 Slots to release
               </label>
               <input
@@ -519,13 +519,13 @@ function BidPanel({
                 max={owned}
                 value={releaseCount}
                 onChange={(e) => setReleaseCount(Math.max(1, Math.min(owned, parseInt(e.target.value, 10) || 1)))}
-                className="w-full h-9 px-2 rounded-md border border-line bg-surface text-[0.875rem] text-ink text-right tabular font-mono focus:outline-none focus:border-primary"
+                className="w-full h-9 px-2 rounded-md border border-line bg-surface text-body-lg text-ink text-right tabular font-mono focus:outline-none focus:border-primary"
               />
-              <div className="text-[0.625rem] text-ink-muted mt-0.5 tabular">
+              <div className="text-caption text-ink-muted mt-0.5 tabular">
                 You own {owned.toLocaleString("en-US")}
               </div>
             </div>
-            <div className="col-span-5 text-[0.75rem] text-ink-2 leading-relaxed">
+            <div className="col-span-5 text-body-sm text-ink-2 leading-relaxed">
               Stops the recurring fee on the released slots and returns
               them to the airport&apos;s open pool. Routes touching this
               airport must still fit within remaining slots.

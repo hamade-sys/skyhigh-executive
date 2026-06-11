@@ -71,7 +71,7 @@ export function QuarterTimerChip() {
     if (!canControlTimer) {
       return (
         <span
-          className="text-[0.6875rem] font-medium px-2 py-1 rounded-md border border-line bg-surface-2 text-ink-muted"
+          className="text-label font-medium px-2 py-1 rounded-md border border-line bg-surface-2 text-ink-muted"
           title="Game Master controls the quarter timer"
         >
           Timer idle
@@ -81,7 +81,7 @@ export function QuarterTimerChip() {
     return (
       <button
         onClick={() => start(fallbackStart)}
-        className="text-[0.6875rem] font-medium px-2 py-1 rounded-md border border-line bg-surface-2 text-ink-2 hover:text-ink"
+        className="text-label font-medium px-2 py-1 rounded-md border border-line bg-surface-2 text-ink-2 hover:text-ink"
         title={`Start ${Math.round(fallbackStart / 60)}m quarter timer`}
       >
         Start timer
@@ -98,7 +98,7 @@ export function QuarterTimerChip() {
     <div className="flex items-center gap-1">
       <span
         className={cn(
-          "tabular font-mono text-[0.875rem] font-semibold px-2 py-1 rounded-md",
+          "tabular font-mono text-body-lg font-semibold px-2 py-1 rounded-md",
           expired
             ? "bg-[var(--negative-soft)] text-negative"
             : urgent
@@ -115,14 +115,14 @@ export function QuarterTimerChip() {
         <>
           <button
             onClick={paused ? resume : pause}
-            className="w-6 h-6 rounded-md text-ink-2 hover:bg-surface-hover hover:text-ink text-[0.6875rem]"
+            className="w-6 h-6 rounded-md text-ink-2 hover:bg-surface-hover hover:text-ink text-label"
             title={paused ? "Resume" : "Pause"}
           >
             {paused ? "▶" : "❚❚"}
           </button>
           <button
             onClick={() => extend(300)}
-            className="w-6 h-6 rounded-md text-ink-2 hover:bg-surface-hover hover:text-ink text-[0.625rem] tabular"
+            className="w-6 h-6 rounded-md text-ink-2 hover:bg-surface-hover hover:text-ink text-caption tabular"
             title="Extend 5 minutes"
           >
             +5

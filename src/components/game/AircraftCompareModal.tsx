@@ -60,10 +60,10 @@ export function AircraftCompareModal({
       <ModalHeader>
         <div className="flex items-baseline justify-between gap-3">
           <div>
-            <h2 className="font-display text-[1.5rem] text-ink">
+            <h2 className="font-display text-heading-lg text-ink">
               Compare aircraft
             </h2>
-            <p className="text-[0.8125rem] text-ink-muted mt-1">
+            <p className="text-body text-ink-muted mt-1">
               Side-by-side specs for {cols} aircraft. Highlighted cell wins
               that row — but lowest fuel doesn&apos;t always mean best route fit.
             </p>
@@ -94,10 +94,10 @@ export function AircraftCompareModal({
                   <Plane size={28} className="text-ink-muted" strokeWidth={1.25} />
                 )}
               </div>
-              <div className="text-[0.875rem] font-semibold text-ink leading-tight">
+              <div className="text-body-lg font-semibold text-ink leading-tight">
                 {s.name}
               </div>
-              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+              <div className="text-caption uppercase tracking-wider text-ink-muted">
                 {s.family}
                 {(() => {
                   const c = effectiveCutoffRound(s, campaignMode);
@@ -216,7 +216,7 @@ export function AircraftCompareModal({
           </Row>
         </div>
 
-        <div className="rounded-md border border-line bg-surface-2/30 px-3 py-2.5 text-[0.75rem] text-ink-2 leading-relaxed">
+        <div className="rounded-md border border-line bg-surface-2/30 px-3 py-2.5 text-body-sm text-ink-2 leading-relaxed">
           <strong className="text-ink">How to read this:</strong> the
           highlighted cell wins that row, but winning every row doesn&apos;t
           mean it&apos;s the right plane for YOUR routes — a long-range
@@ -260,10 +260,10 @@ function Row({
 }) {
   return (
     <>
-      <div className="flex items-center px-2.5 py-2 text-[0.75rem] text-ink-2 border-r border-line/60">
+      <div className="flex items-center px-2.5 py-2 text-body-sm text-ink-2 border-r border-line/60">
         <div>
           <div className="font-medium text-ink">{label}</div>
-          {sub && <div className="text-[0.625rem] text-ink-muted leading-tight">{sub}</div>}
+          {sub && <div className="text-caption text-ink-muted leading-tight">{sub}</div>}
         </div>
       </div>
       {children}
@@ -281,7 +281,7 @@ function Cell({
   return (
     <div
       className={cn(
-        "px-2.5 py-2 text-[0.8125rem] tabular font-mono rounded-md border flex items-center gap-1.5",
+        "px-2.5 py-2 text-body tabular font-mono rounded-md border flex items-center gap-1.5",
         best
           ? tone === "lower-is-better"
             ? "border-positive bg-[var(--positive-soft)] text-positive font-semibold"

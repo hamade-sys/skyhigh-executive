@@ -142,8 +142,8 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
   return (
     <div className="space-y-4">
       <header>
-        <h2 className="font-display text-[1.5rem] text-ink mb-1">Live simulation outcomes</h2>
-        <p className="text-ink-2 text-[0.875rem] leading-relaxed">
+        <h2 className="font-display text-heading-lg text-ink mb-1">Live simulation outcomes</h2>
+        <p className="text-ink-2 text-body-lg leading-relaxed">
           Capture the result of each offline live sim and push it to a team.
           Deltas apply immediately. Use the notes field to log verbal
           commitments (especially L4 Podium press conference).
@@ -164,24 +164,24 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
             )}
           >
             <div className="flex items-baseline gap-1.5 mb-0.5">
-              <span className="font-mono text-[0.8125rem] font-semibold text-primary">{s.id}</span>
-              <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted">{s.timing}</span>
+              <span className="font-mono text-body font-semibold text-primary">{s.id}</span>
+              <span className="text-caption uppercase tracking-wider text-ink-muted">{s.timing}</span>
             </div>
-            <div className="text-[0.8125rem] text-ink leading-tight">{s.title}</div>
+            <div className="text-body text-ink leading-tight">{s.title}</div>
           </button>
         ))}
       </div>
 
       {/* Sim hint */}
-      <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[0.8125rem] text-ink-2 leading-relaxed">
+      <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 text-body text-ink-2 leading-relaxed">
         <div className="flex items-baseline gap-2 mb-1">
           <Badge tone="primary">{sim.id}</Badge>
           <span className="text-ink font-medium">{sim.title}</span>
-          <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">{sim.who}</span>
+          <span className="text-label uppercase tracking-wider text-ink-muted">{sim.who}</span>
         </div>
         {sim.hint}
         {sim.flags && sim.flags.length > 0 && (
-          <div className="mt-1.5 text-[0.6875rem] text-ink-muted">
+          <div className="mt-1.5 text-label text-ink-muted">
             Common flags: <span className="font-mono">{sim.flags.join(", ")}</span>
           </div>
         )}
@@ -189,13 +189,13 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
 
       {/* Team picker */}
       <div>
-        <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        <label className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
           Team
         </label>
         <select
           value={teamId}
           onChange={(e) => setTeamId(e.target.value)}
-          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-[0.875rem] text-ink focus:outline-none focus:border-primary"
+          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body-lg text-ink focus:outline-none focus:border-primary"
         >
           {teams.map((t) => (
             <option key={t.id} value={t.id}>
@@ -215,7 +215,7 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
 
       {/* MVP per role */}
       <div>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
           MVP points per role
         </div>
         <div className="grid grid-cols-4 gap-2">
@@ -228,7 +228,7 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
 
       {/* Flags + notes */}
       <div>
-        <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        <label className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
           Set flags (comma-separated)
         </label>
         <Input
@@ -242,7 +242,7 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
               <button
                 key={f}
                 onClick={() => setSetFlags((p) => (p ? `${p}, ${f}` : f))}
-                className="text-[0.6875rem] rounded border border-line bg-surface-2 px-1.5 py-0.5 hover:bg-surface-hover font-mono"
+                className="text-label rounded border border-line bg-surface-2 px-1.5 py-0.5 hover:bg-surface-hover font-mono"
               >
                 + {f}
               </button>
@@ -252,7 +252,7 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
       </div>
 
       <div>
-        <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        <label className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
           Notes
         </label>
         <textarea
@@ -266,7 +266,7 @@ export function LiveSimForm({ teams }: { teams: Team[] }) {
                 : "Free-text context the platform should remember."
           }
           rows={3}
-          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-[0.875rem] text-ink focus:outline-none focus:border-primary resize-y"
+          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body-lg text-ink focus:outline-none focus:border-primary resize-y"
         />
       </div>
 
@@ -292,7 +292,7 @@ function DeltaField({
     <div>
       <label className={cn(
         "block uppercase tracking-wider text-ink-muted font-semibold mb-1",
-        compact ? "text-[0.5625rem]" : "text-[0.625rem]",
+        compact ? "text-micro" : "text-caption",
       )}>
         {label}
       </label>
@@ -303,7 +303,7 @@ function DeltaField({
         className="tabular font-mono"
       />
       {hint && !compact && (
-        <div className="text-[0.625rem] text-ink-muted mt-0.5">{hint}</div>
+        <div className="text-caption text-ink-muted mt-0.5">{hint}</div>
       )}
     </div>
   );

@@ -70,7 +70,7 @@ export function MapCommandHud({ origin, dest, hubCode, activeRouteCount, compact
           "px-3 py-2 shadow-[var(--shadow-2)] max-w-[14rem]",
         )}
       >
-        <div className="flex items-start gap-1.5 text-[0.6875rem] text-ink-muted leading-snug">
+        <div className="flex items-start gap-1.5 text-label text-ink-muted leading-snug">
           <Info size={10} className="mt-0.5 shrink-0" />
           <span>
             {hasSelection
@@ -95,7 +95,7 @@ export function MapCommandHud({ origin, dest, hubCode, activeRouteCount, compact
           out of seeing it once they have 2+ active routes. */}
       <div className="px-3 py-2 border-b border-line/60 flex items-center gap-1.5">
         <Plane size={11} className="text-primary" />
-        <span className="text-[0.6875rem] uppercase tracking-wider text-ink font-medium">
+        <span className="text-label uppercase tracking-wider text-ink font-medium">
           Start a route
         </span>
         <button
@@ -147,7 +147,7 @@ export function MapCommandHud({ origin, dest, hubCode, activeRouteCount, compact
 
       {/* Footer tip */}
       <div className="px-3 py-2 border-t border-line/60">
-        <div className="flex items-start gap-1.5 text-[0.6875rem] text-ink-muted leading-snug">
+        <div className="flex items-start gap-1.5 text-label text-ink-muted leading-snug">
           <Info size={10} className="mt-0.5 shrink-0" />
           <div>
             <span className="text-ink-2">Double-click</span> any city to see
@@ -179,7 +179,7 @@ function Step({
     <li className="flex items-start gap-2">
       <div
         className={cn(
-          "shrink-0 w-4 h-4 rounded-full text-[0.625rem] font-semibold tabular flex items-center justify-center mt-0.5",
+          "shrink-0 w-4 h-4 rounded-full text-caption font-semibold tabular flex items-center justify-center mt-0.5",
           done
             ? "bg-positive/20 text-positive"
             : active
@@ -192,7 +192,7 @@ function Step({
       <div className="min-w-0 flex-1">
         <div
           className={cn(
-            "text-[0.75rem] leading-snug",
+            "text-body-sm leading-snug",
             active ? "text-ink font-medium" : done ? "text-ink-2" : "text-ink-muted",
           )}
         >
@@ -201,7 +201,7 @@ function Step({
         {detail && (
           <div
             className={cn(
-              "text-[0.6875rem] leading-tight mt-0.5 flex items-center gap-1 truncate",
+              "text-label leading-tight mt-0.5 flex items-center gap-1 truncate",
               detailIsHint ? "text-primary/70 italic" : "text-ink-muted",
             )}
           >

@@ -99,17 +99,17 @@ export function DecisionsPanel() {
         return (
           <div className="space-y-3">
             <div className="rounded-lg border border-dashed border-line bg-surface-2/30 px-4 py-5 text-center">
-              <div className="text-[0.875rem] text-ink-2 font-medium">
+              <div className="text-body-lg text-ink-2 font-medium">
                 No board decision this quarter
               </div>
-              <div className="text-[0.6875rem] text-ink-muted mt-1 leading-relaxed">
+              <div className="text-label text-ink-muted mt-1 leading-relaxed">
                 Use the breathing room to expand fleet, refurbish a subsidiary,
                 or watch the fuel index.
               </div>
             </div>
             {upcoming.length > 0 && (
               <div>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+                <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
                   Scheduled board events
                 </div>
                 <div className="space-y-1.5">
@@ -119,16 +119,16 @@ export function DecisionsPanel() {
                     return (
                       <div
                         key={sc.id}
-                        className="flex items-baseline justify-between gap-3 px-3 py-2 rounded-md border border-line bg-surface text-[0.8125rem]"
+                        className="flex items-baseline justify-between gap-3 px-3 py-2 rounded-md border border-line bg-surface text-body"
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline gap-2">
-                            <span className="font-mono text-primary text-[0.75rem] shrink-0">
+                            <span className="font-mono text-primary text-body-sm shrink-0">
                               {sc.id}
                             </span>
                             <span className="text-ink truncate">{sc.title}</span>
                           </div>
-                          <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                          <div className="text-caption text-ink-muted mt-0.5">
                             {fmtQuarter(q, startYear)} · {qFromNow}Q from now
                           </div>
                         </div>
@@ -164,19 +164,19 @@ export function DecisionsPanel() {
 
       {pastDecisions.length > 0 && (
         <section className="pt-3 border-t border-line">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">Past decisions</div>
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">Past decisions</div>
           <div className="space-y-1.5">
             {pastDecisions.map((d) => {
               const sc = SCENARIOS.find((x) => x.id === d.scenarioId);
               if (!sc) return null;
               const opt = sc.options.find((o) => o.id === d.optionId);
               return (
-                <div key={`${d.scenarioId}-${d.quarter}`} className="flex items-baseline justify-between text-[0.8125rem] py-1.5 border-b border-line last:border-0">
+                <div key={`${d.scenarioId}-${d.quarter}`} className="flex items-baseline justify-between text-body py-1.5 border-b border-line last:border-0">
                   <div className="min-w-0">
-                    <span className="font-mono text-primary mr-1.5 text-[0.75rem]">{fmtQuarter(d.quarter, startYear)} · {sc.id}</span>
+                    <span className="font-mono text-primary mr-1.5 text-body-sm">{fmtQuarter(d.quarter, startYear)} · {sc.id}</span>
                     <span className="text-ink truncate">{sc.title}</span>
                   </div>
-                  <span className="shrink-0 text-accent font-mono text-[0.75rem] ml-2">
+                  <span className="shrink-0 text-accent font-mono text-body-sm ml-2">
                     {d.optionId} · {opt?.label}
                   </span>
                 </div>
@@ -251,15 +251,15 @@ function ScenarioCard({
           recommendation called for. */}
       <div className="flex items-baseline justify-between gap-3 mb-2 flex-wrap">
         <div className="flex items-baseline gap-2">
-          <span className="text-[0.5625rem] uppercase tracking-[0.22em] text-accent font-bold">
+          <span className="text-micro uppercase tracking-[0.22em] text-accent font-bold">
             Boardroom · {fmtQuarter(firingQuarter, startYear)}
           </span>
-          <span className="font-mono text-[0.625rem] text-ink-muted">{scenario.id}</span>
+          <span className="font-mono text-caption text-ink-muted">{scenario.id}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Badge tone={severityTone}>{scenario.severity}</Badge>
           <span className={cn(
-            "text-[0.6875rem] uppercase tracking-wider tabular font-mono font-semibold",
+            "text-label uppercase tracking-wider tabular font-mono font-semibold",
             scenario.timeLimitMinutes <= 15 ? "text-warning" : "text-ink-muted",
           )}>
             {scenario.timeLimitMinutes}m to decide
@@ -269,13 +269,13 @@ function ScenarioCard({
             : <Badge tone="accent">Awaiting decision</Badge>}
         </div>
       </div>
-      <h3 className="font-display text-[1.5rem] text-ink leading-tight mb-2">
+      <h3 className="font-display text-heading-lg text-ink leading-tight mb-2">
         {scenario.title}
       </h3>
-      <p className="italic text-ink-2 text-[0.9375rem] leading-relaxed mb-2 max-w-[60ch]">
+      <p className="italic text-ink-2 text-title-sm leading-relaxed mb-2 max-w-[60ch]">
         {scenario.teaser}
       </p>
-      <p className="text-ink-2 text-[0.875rem] leading-relaxed mb-3">{scenario.context}</p>
+      <p className="text-ink-2 text-body-lg leading-relaxed mb-3">{scenario.context}</p>
       <HostCityCallout scenarioId={scenario.id} />
 
       <div
@@ -315,7 +315,7 @@ function ScenarioCard({
                 {/* Letter chip */}
                 <span
                   className={cn(
-                    "shrink-0 w-7 h-7 rounded-md flex items-center justify-center font-mono text-[0.875rem] font-semibold",
+                    "shrink-0 w-7 h-7 rounded-md flex items-center justify-center font-mono text-body-lg font-semibold",
                     isSelected
                       ? "bg-primary text-primary-fg"
                       : "bg-surface-2 text-ink-2",
@@ -327,7 +327,7 @@ function ScenarioCard({
                 {/* Body — option label + description */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-ink text-[0.9375rem] leading-tight">
+                    <span className="font-semibold text-ink text-title-sm leading-tight">
                       {opt.label}
                     </span>
                     {blocker && (
@@ -372,7 +372,7 @@ function ScenarioCard({
                       );
                     })()}
                   </div>
-                  <div className="text-[0.8125rem] text-ink-2 mt-1 leading-relaxed">
+                  <div className="text-body text-ink-2 mt-1 leading-relaxed">
                     {opt.description}
                   </div>
                 </div>
@@ -380,19 +380,19 @@ function ScenarioCard({
                 {/* Right-side financial column — the "cost" */}
                 {headline ? (
                   <div className="shrink-0 text-right min-w-[120px]">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                    <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
                       Financial impact
                     </div>
                     <div
                       className={cn(
-                        "tabular font-display text-[1rem] mt-0.5 leading-tight",
+                        "tabular font-display text-title mt-0.5 leading-tight",
                         isPositiveFinancial(headline) ? "text-positive" : "text-negative",
                       )}
                     >
                       {headline}
                     </div>
                     {extras.length > 0 && (
-                      <div className="text-[0.6875rem] text-ink-muted tabular mt-1 leading-relaxed">
+                      <div className="text-label text-ink-muted tabular mt-1 leading-relaxed">
                         {extras.map((t) => (
                           <div key={t}>{t}</div>
                         ))}
@@ -401,10 +401,10 @@ function ScenarioCard({
                   </div>
                 ) : (
                   <div className="shrink-0 text-right min-w-[120px]">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                    <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
                       Financial impact
                     </div>
-                    <div className="text-[0.8125rem] text-ink-muted italic mt-0.5">
+                    <div className="text-body text-ink-muted italic mt-0.5">
                       No direct cost
                     </div>
                   </div>
@@ -417,7 +417,7 @@ function ScenarioCard({
 
       {!locked && (
         <div className="flex items-center justify-between pt-3 mt-3 border-t border-line">
-          <span className="text-[0.75rem] text-ink-muted">
+          <span className="text-body-sm text-ink-muted">
             {selected ? `Option ${selected} selected` : "Pick an option"}
           </span>
           <Button size="sm" variant="primary" disabled={!selected} onClick={() => selected && onSubmit(selected)}>
@@ -486,15 +486,15 @@ function ConsequenceCard({ option, player }: { option: ScenarioOption; player: T
   const deferred = e.deferred;
   return (
     <div className="mt-3 pt-3 border-t border-line">
-      <div className="flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-wider text-positive font-semibold mb-2">
+      <div className="flex items-center gap-1.5 text-label uppercase tracking-wider text-positive font-semibold mb-2">
         <CheckCircle2 size={12} /> Boardroom consequence
       </div>
       {hasImmediate ? (
         <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 space-y-1">
-          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-0.5">
+          <div className="text-caption uppercase tracking-wider text-ink-muted mb-0.5">
             Effects this quarter
           </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[0.8125rem]">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-body">
             {e.cash !== undefined && e.cash !== 0 && (
               <Pill tone={e.cash >= 0 ? "positive" : "negative"}>
                 Cash {e.cash >= 0 ? "+" : ""}{fmtMoney(e.cash)}
@@ -537,12 +537,12 @@ function ConsequenceCard({ option, player }: { option: ScenarioOption; player: T
           </div>
         </div>
       ) : (
-        <div className="text-[0.75rem] text-ink-muted italic">No immediate effects.</div>
+        <div className="text-body-sm text-ink-muted italic">No immediate effects.</div>
       )}
 
       {deferred && (
         <div className="mt-2 rounded-md border border-warning bg-[var(--warning-soft)] px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-warning font-semibold mb-1">
+          <div className="flex items-center gap-1.5 text-caption uppercase tracking-wider text-warning font-semibold mb-1">
             <AlertTriangle size={11} /> Deferred consequence
             {typeof deferred.quarter === "number"
               ? ` · ${fmtQuarter(deferred.quarter, startYear)}`
@@ -550,9 +550,9 @@ function ConsequenceCard({ option, player }: { option: ScenarioOption; player: T
                 ? ` · in ${deferred.lagQuarters}Q`
                 : ""}
           </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[0.8125rem]">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-body">
             {deferred.probability !== undefined && deferred.probability < 1 && (
-              <span className="text-[0.6875rem] tabular font-mono text-warning font-semibold">
+              <span className="text-label tabular font-mono text-warning font-semibold">
                 {(deferred.probability * 100).toFixed(0)}% chance
               </span>
             )}
@@ -619,10 +619,10 @@ function HostCityCallout({ scenarioId }: { scenarioId: string }) {
   const city = CITIES_BY_CODE[code];
   if (!city) return null;
   return (
-    <div className="mb-3 rounded-md border border-accent/40 bg-[var(--accent-soft)]/30 px-3 py-2 flex items-center gap-2 text-[0.8125rem]">
+    <div className="mb-3 rounded-md border border-accent/40 bg-[var(--accent-soft)]/30 px-3 py-2 flex items-center gap-2 text-body">
       <MapPin size={14} className="text-accent shrink-0" />
       <div className="flex-1">
-        <span className="text-[0.6875rem] uppercase tracking-wider text-accent font-semibold">
+        <span className="text-label uppercase tracking-wider text-accent font-semibold">
           {label}
         </span>
         <div className="text-ink">
@@ -642,7 +642,7 @@ function Pill({ tone, children }: { tone: "positive" | "negative" | "info"; chil
       : "bg-[var(--info-soft)] text-info";
   return (
     <span className={cn(
-      "inline-flex items-center text-[0.6875rem] tabular font-mono px-1.5 py-0.5 rounded",
+      "inline-flex items-center text-label tabular font-mono px-1.5 py-0.5 rounded",
       cls,
     )}>
       {children}

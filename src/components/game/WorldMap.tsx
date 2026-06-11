@@ -1325,7 +1325,7 @@ export function WorldMap({
           aria-label={profitLens ? "Turn profit lens off" : "Turn profit lens on — color routes by last quarter's profit"}
           title="Color route lines by last quarter's profit (green = earning, amber = breakeven, red = losing)"
           className={cn(
-            "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.75rem] transition shadow-sm shrink-0",
+            "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-body-sm transition shadow-sm shrink-0",
             profitLens
               ? "border-accent bg-accent text-white font-medium"
               : "border-line bg-surface/90 backdrop-blur text-ink-2 hover:bg-surface hover:text-ink",
@@ -1342,14 +1342,14 @@ export function WorldMap({
           type="button"
           onClick={openLegend}
           aria-label="Show map legend"
-          className="flex items-center gap-1.5 rounded-full border border-line bg-surface/90 backdrop-blur px-3 py-1.5 text-[0.75rem] text-ink-2 hover:bg-surface hover:text-ink transition shadow-sm shrink-0"
+          className="flex items-center gap-1.5 rounded-full border border-line bg-surface/90 backdrop-blur px-3 py-1.5 text-body-sm text-ink-2 hover:bg-surface hover:text-ink transition shadow-sm shrink-0"
         >
           <Info size={12} />
           <span className="font-medium">Legend</span>
         </button>
       )}
       {legendOpen && (
-      <div className="flex items-center gap-3 rounded-md border border-line bg-surface/90 backdrop-blur pl-3 pr-1.5 py-2 text-[0.75rem] flex-wrap">
+      <div className="flex items-center gap-3 rounded-md border border-line bg-surface/90 backdrop-blur pl-3 pr-1.5 py-2 text-body-sm flex-wrap">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full border-2 border-white" style={{ background: teamColor }} />
           <span className="text-ink font-medium">Hub</span>

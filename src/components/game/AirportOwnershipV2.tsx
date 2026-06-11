@@ -236,11 +236,11 @@ function AuctionBidForm({
     <section className="rounded-xl border border-[var(--warning-soft)] bg-[var(--warning-soft)]/30 p-4">
       <div className="flex items-center gap-2 mb-1.5">
         <Gavel size={15} className="text-warning" />
-        <h3 className="font-display text-[0.95rem] text-ink font-semibold">
+        <h3 className="font-display text-title-sm text-ink font-semibold">
           Privatization auction — sealed bids open
         </h3>
       </div>
-      <p className="text-[0.8125rem] text-ink-2 leading-relaxed mb-3">
+      <p className="text-body text-ink-2 leading-relaxed mb-3">
         {govt} is privatizing this airport. File a single sealed bid — the
         winner is chosen on money <span className="text-ink-muted">and</span>{" "}
         government confidence, so a richer bid can still lose to a more credible
@@ -265,7 +265,7 @@ function AuctionBidForm({
         />
       </div>
 
-      <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+      <label className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
         Your sealed bid (USD)
       </label>
       <div className="flex items-center gap-2 mb-1">
@@ -278,11 +278,11 @@ function AuctionBidForm({
           onChange={(e) => setBidStr(e.target.value)}
           className="font-mono tabular"
         />
-        <span className="font-mono tabular text-ink-2 text-[0.8125rem] whitespace-nowrap w-20 text-right">
+        <span className="font-mono tabular text-ink-2 text-body whitespace-nowrap w-20 text-right">
           {fmtMoney(bidAmount)}
         </span>
       </div>
-      <div className="text-[0.6875rem] text-ink-muted mb-3">
+      <div className="text-label text-ink-muted mb-3">
         Deposit held now:{" "}
         <span className="font-mono tabular text-ink">{fmtMoney(deposit)}</span> ·
         Your cash:{" "}
@@ -294,12 +294,12 @@ function AuctionBidForm({
       {/* Live GAP confidence meter */}
       <div className="rounded-md border border-line bg-surface p-3 mb-3">
         <div className="flex items-baseline justify-between mb-1.5">
-          <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+          <span className="text-label uppercase tracking-wider text-ink-muted font-semibold">
             Government acceptance confidence
           </span>
           <span
             className={cn(
-              "font-mono tabular font-bold text-[1.05rem]",
+              "font-mono tabular font-bold text-title-lg",
               qualifies ? "text-positive" : "text-negative",
             )}
           >
@@ -322,7 +322,7 @@ function AuctionBidForm({
         </div>
         <div
           className={cn(
-            "text-[0.6875rem] mt-2",
+            "text-label mt-2",
             qualifies ? "text-positive" : "text-warning",
           )}
         >
@@ -333,7 +333,7 @@ function AuctionBidForm({
       </div>
 
       {myExistingBidUsd != null && (
-        <div className="text-[0.75rem] text-ink-2 mb-2">
+        <div className="text-body-sm text-ink-2 mb-2">
           You have a standing bid of{" "}
           <span className="font-mono tabular text-ink">
             {fmtMoney(myExistingBidUsd)}
@@ -353,12 +353,12 @@ function AuctionBidForm({
         {myExistingBidUsd != null ? "Replace sealed bid" : "File sealed bid"}
       </Button>
       {belowReserve && (
-        <div className="text-[0.6875rem] text-negative mt-1.5">
+        <div className="text-label text-negative mt-1.5">
           Bid is below the {fmtMoney(reserveFloorUsd)} reserve floor.
         </div>
       )}
       {!belowReserve && cantAfford && (
-        <div className="text-[0.6875rem] text-negative mt-1.5">
+        <div className="text-label text-negative mt-1.5">
           You must be able to cover the full {fmtMoney(bidAmount)} bid (cash{" "}
           {fmtMoney(player.cashUsd)}).
         </div>
@@ -398,11 +398,11 @@ function ApprovalGauntlet({
     <section className="rounded-xl border border-primary bg-[rgba(20,53,94,0.04)] p-4">
       <div className="flex items-center gap-2 mb-1.5">
         <Building2 size={15} className="text-primary" />
-        <h3 className="font-display text-[0.95rem] text-ink font-semibold">
+        <h3 className="font-display text-title-sm text-ink font-semibold">
           You won the auction — approval gauntlet
         </h3>
       </div>
-      <p className="text-[0.8125rem] text-ink-2 leading-relaxed mb-3">
+      <p className="text-body text-ink-2 leading-relaxed mb-3">
         {govt} will transfer operating control once you accept its conditions.
         Accept at least{" "}
         <span className="font-mono tabular text-ink">{approval.minToAccept}</span>{" "}
@@ -447,7 +447,7 @@ function ApprovalGauntlet({
 
       <div
         className={cn(
-          "text-[0.75rem] mt-3 font-medium",
+          "text-body-sm mt-3 font-medium",
           enough ? "text-positive" : "text-warning",
         )}
       >
@@ -481,14 +481,14 @@ function DemandCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[0.8125rem] font-semibold text-ink">
+            <span className="text-body font-semibold text-ink">
               {def.label}
             </span>
             <Badge tone={demand.accepted ? "positive" : "neutral"}>
               {demandMagnitudeLabel(demand)}
             </Badge>
           </div>
-          <p className="text-[0.75rem] text-ink-muted leading-snug">
+          <p className="text-body-sm text-ink-muted leading-snug">
             {def.blurb}
           </p>
         </div>
@@ -637,11 +637,11 @@ function OwnerConsole({
         <div className="rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)]/40 p-3">
           <div className="flex items-center gap-2 mb-1">
             <ShieldAlert size={13} className="text-warning" />
-            <span className="text-[0.75rem] font-semibold text-ink uppercase tracking-wide">
+            <span className="text-body-sm font-semibold text-ink uppercase tracking-wide">
               Regulatory watch
             </span>
           </div>
-          <ul className="text-[0.75rem] text-ink-2 space-y-0.5">
+          <ul className="text-body-sm text-ink-2 space-y-0.5">
             {regulated && (
               <li>
                 Equal-pricing order in force for {regulatedRoundsLeft} more
@@ -668,7 +668,7 @@ function OwnerConsole({
       {/* Fees */}
       <section>
         <SectionLabel icon={<Gauge size={12} />}>Fee schedule</SectionLabel>
-        <p className="text-[0.75rem] text-ink-muted mb-2 leading-snug">
+        <p className="text-body-sm text-ink-muted mb-2 leading-snug">
           Charged to every airline using the airport — including you. Raise for
           more per-unit revenue, but rivals route away past the market sweet
           spot. Public default for this tier: {fmtMoney(def.slotFeeUsd)}/slot ·{" "}
@@ -733,7 +733,7 @@ function OwnerConsole({
         <SectionLabel icon={<Lock size={12} />}>
           Slot reservation (own use)
         </SectionLabel>
-        <p className="text-[0.75rem] text-ink-muted mb-2 leading-snug">
+        <p className="text-body-sm text-ink-muted mb-2 leading-snug">
           Reserve up to {Math.round(AIRPORT_OWNER_RESERVE_PCT_MAX * 100)}% of
           this airport&apos;s player slots for your own airline, allocated first
           each round. The defensive value of owning your hub as slots tighten.
@@ -753,14 +753,14 @@ function OwnerConsole({
         <SectionLabel icon={<Percent size={12} />}>
           Own-airline slot discount
         </SectionLabel>
-        <p className="text-[0.75rem] text-ink-muted mb-2 leading-snug">
+        <p className="text-body-sm text-ink-muted mb-2 leading-snug">
           Bill your own flights up to{" "}
           {Math.round(AIRPORT_OWNER_SELF_DISCOUNT_MAX * 100)}% below the rival
           slot rate. A modest cost edge — the regulator caps it and watches for
           abuse.
         </p>
         {regulated ? (
-          <div className="rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)]/40 p-2.5 text-[0.75rem] text-warning flex items-center gap-2">
+          <div className="rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)]/40 p-2.5 text-body-sm text-warning flex items-center gap-2">
             <Lock size={13} /> Equal pricing enforced for {regulatedRoundsLeft}{" "}
             more quarter{regulatedRoundsLeft === 1 ? "" : "s"}.
           </div>
@@ -818,7 +818,7 @@ function SpecializationSection({ cityCode }: { cityCode: string }) {
         <SectionLabel icon={<Sparkles size={12} />}>
           Choose a specialization
         </SectionLabel>
-        <p className="text-[0.75rem] text-ink-muted mb-2 leading-snug">
+        <p className="text-body-sm text-ink-muted mb-2 leading-snug">
           Free the first time. Each specialization reshapes the airport&apos;s
           non-aero economics; pick the fork that matches your network.
         </p>
@@ -855,19 +855,19 @@ function SpecializationSection({ cityCode }: { cityCode: string }) {
       <SectionLabel icon={<Sparkles size={12} />}>Specialization</SectionLabel>
       <div className="rounded-md border border-line bg-surface p-3 mb-2">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-[0.875rem] font-semibold text-ink">
+          <span className="text-body-lg font-semibold text-ink">
             {def.name}
           </span>
           <Badge tone="accent">{def.nonAeroModifier.toFixed(2)}× non-aero</Badge>
           {rebuilding && <Badge tone="warning">Rebuild in progress</Badge>}
         </div>
-        <p className="text-[0.75rem] text-ink-muted mb-2">
+        <p className="text-body-sm text-ink-muted mb-2">
           Pays off if {def.paysOffIf.toLowerCase()} · underperforms if{" "}
           {def.underperformsIf.toLowerCase()}.
         </p>
 
         {/* Fork toggle within current specialization */}
-        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
           Fork
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -897,12 +897,12 @@ function SpecializationSection({ cityCode }: { cityCode: string }) {
                   {fork.id === "fuel-farm" && (
                     <Fuel size={12} className="text-accent" />
                   )}
-                  <span className="text-[0.8125rem] font-semibold text-ink">
+                  <span className="text-body font-semibold text-ink">
                     {fork.name}
                   </span>
                   {active && <Badge tone="accent">Active</Badge>}
                 </div>
-                <p className="text-[0.6875rem] text-ink-muted leading-snug">
+                <p className="text-label text-ink-muted leading-snug">
                   {fork.blurb}
                 </p>
               </button>
@@ -916,13 +916,13 @@ function SpecializationSection({ cityCode }: { cityCode: string }) {
         <>
           <button
             onClick={() => setShowSwitch((v) => !v)}
-            className="text-[0.75rem] text-accent font-medium hover:underline"
+            className="text-body-sm text-accent font-medium hover:underline"
           >
             {showSwitch ? "Cancel" : "Switch to a different specialization…"}
           </button>
           {showSwitch && (
             <div className="mt-2 rounded-md border border-line bg-surface-2/40 p-3">
-              <p className="text-[0.75rem] text-warning mb-2 leading-snug">
+              <p className="text-body-sm text-warning mb-2 leading-snug">
                 Reconfiguring is a {fmtMoney(AIRPORT_SPECIALIZATION_SWITCH_COST)}{" "}
                 rebuild over {AIRPORT_SPECIALIZATION_SWITCH_ROUNDS} quarters. The
                 new specialization only takes effect once the build completes.
@@ -988,16 +988,16 @@ function SpecCard({
       >
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[0.8125rem] font-semibold text-ink">
+            <span className="text-body font-semibold text-ink">
               {spec.name}
             </span>
             <Badge tone="neutral">{spec.nonAeroModifier.toFixed(2)}×</Badge>
           </div>
-          <p className="text-[0.6875rem] text-ink-muted truncate">
+          <p className="text-label text-ink-muted truncate">
             {spec.optimizedFor}
           </p>
         </div>
-        <span className="text-ink-muted text-[0.75rem] shrink-0">
+        <span className="text-ink-muted text-body-sm shrink-0">
           {expanded ? "−" : "+"}
         </span>
       </button>
@@ -1012,11 +1012,11 @@ function SpecCard({
                 {fork.id === "fuel-farm" && (
                   <Fuel size={12} className="text-accent" />
                 )}
-                <span className="text-[0.8125rem] font-semibold text-ink">
+                <span className="text-body font-semibold text-ink">
                   {fork.name}
                 </span>
               </div>
-              <p className="text-[0.6875rem] text-ink-muted leading-snug mb-2">
+              <p className="text-label text-ink-muted leading-snug mb-2">
                 {fork.blurb}
               </p>
               <Button
@@ -1060,11 +1060,11 @@ function RivalOwnerCard({
     <section className="rounded-xl border border-[var(--warning-soft)] bg-[var(--warning-soft)]/30 p-4">
       <div className="flex items-center gap-2 mb-1.5">
         <Building2 size={15} className="text-warning" />
-        <h3 className="font-display text-[0.95rem] text-ink font-semibold">
+        <h3 className="font-display text-title-sm text-ink font-semibold">
           Privately operated{owner ? ` by ${owner.name}` : ""}
         </h3>
       </div>
-      <p className="text-[0.8125rem] text-ink-2 leading-relaxed mb-3">
+      <p className="text-body text-ink-2 leading-relaxed mb-3">
         This airport was privatized — {owner?.name ?? "a rival airline"} runs it
         and sets the fees you pay to fly here. {govt} no longer controls slot
         pricing at this field.
@@ -1095,11 +1095,11 @@ function PublicAirportCard({
     <section className="rounded-xl border border-line bg-surface-2/40 p-4">
       <div className="flex items-center gap-2 mb-1.5">
         <Landmark size={15} className="text-ink-2" />
-        <h3 className="font-display text-[0.95rem] text-ink font-semibold">
+        <h3 className="font-display text-title-sm text-ink font-semibold">
           Government-run airport
         </h3>
       </div>
-      <p className="text-[0.8125rem] text-ink-2 leading-relaxed mb-3">
+      <p className="text-body text-ink-2 leading-relaxed mb-3">
         {govt} operates this airport and charges the public fee schedule below.
         It may be released for privatization in a future round — when it is,
         you&apos;ll be able to bid for operating control here.
@@ -1125,7 +1125,7 @@ function SectionLabel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+    <div className="flex items-center gap-1.5 text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
       {icon}
       {children}
     </div>
@@ -1145,12 +1145,12 @@ function Stat({
 }) {
   return (
     <div className="rounded-md border border-line bg-surface px-3 py-2">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+      <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
         {label}
       </div>
       <div
         className={cn(
-          "font-mono tabular font-bold text-[0.95rem] leading-tight mt-0.5",
+          "font-mono tabular font-bold text-title-sm leading-tight mt-0.5",
           tone === "positive" && "text-positive",
           tone === "negative" && "text-negative",
           tone === "warning" && "text-warning",
@@ -1159,7 +1159,7 @@ function Stat({
       >
         {value}
       </div>
-      {hint && <div className="text-[0.625rem] text-ink-muted mt-0.5">{hint}</div>}
+      {hint && <div className="text-caption text-ink-muted mt-0.5">{hint}</div>}
     </div>
   );
 }
@@ -1177,7 +1177,7 @@ function FeeInput({
 }) {
   return (
     <div>
-      <label className="block text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-1">
+      <label className="block text-caption uppercase tracking-wider text-ink-muted font-semibold mb-1">
         {label}
       </label>
       <Input
@@ -1187,7 +1187,7 @@ function FeeInput({
         step={step}
         min={0}
         onChange={(e) => onChange(e.target.value)}
-        className="font-mono tabular !h-9 !px-2 text-[0.8125rem]"
+        className="font-mono tabular !h-9 !px-2 text-body"
       />
     </div>
   );
@@ -1219,7 +1219,7 @@ function SliderRow({
         onChange={(e) => onChange(Number(e.target.value))}
         className="flex-1 accent-[#00C2CB]"
       />
-      <span className="font-mono tabular text-ink text-[0.875rem] w-12 text-right">
+      <span className="font-mono tabular text-ink text-body-lg w-12 text-right">
         {value}
         {suffix}
       </span>
@@ -1260,9 +1260,9 @@ function InvestRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 mb-0.5">
           {icon}
-          <span className="text-[0.8125rem] font-semibold text-ink">{title}</span>
+          <span className="text-body font-semibold text-ink">{title}</span>
         </div>
-        <p className="text-[0.6875rem] text-ink-muted leading-snug">{detail}</p>
+        <p className="text-label text-ink-muted leading-snug">{detail}</p>
       </div>
       {atMax ? (
         <Badge tone="positive">{atMaxLabel}</Badge>

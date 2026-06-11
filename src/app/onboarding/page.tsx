@@ -87,11 +87,11 @@ export default function Onboarding() {
       <header className="px-8 py-5 border-b border-line flex items-center justify-between shrink-0">
         <div className="flex items-baseline gap-3">
           <span className="font-display text-xl text-ink">ICAN Simulations</span>
-          <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
+          <span className="text-label uppercase tracking-[0.18em] text-ink-muted">
             Q1 Brand Building · L0
           </span>
         </div>
-        <div className="text-[0.75rem] text-ink-muted tabular">
+        <div className="text-body-sm text-ink-muted tabular">
           Step {step + 1} of {STEP_COUNT}
         </div>
       </header>
@@ -159,7 +159,7 @@ export default function Onboarding() {
                     tracks locally. */}
                 <div className="md:col-span-2 mt-2">
                   <Field label="Brand color">
-                    <p className="text-[0.75rem] text-ink-muted mb-3 -mt-1">
+                    <p className="text-body-sm text-ink-muted mb-3 -mt-1">
                       Travels with your airline across the lobby,
                       leaderboard, route map, and chat. Pick the color
                       your cohort should associate with you.
@@ -169,7 +169,7 @@ export default function Onboarding() {
                       onChange={setAirlineColorId}
                       airlineName={airlineName.trim() || undefined}
                     />
-                    <p className="text-[0.75rem] text-ink-muted mt-2">
+                    <p className="text-body-sm text-ink-muted mt-2">
                       Chosen: <span className="font-medium text-ink">{AIRLINE_COLOR_BY_ID[airlineColorId].label}</span>
                     </p>
                   </Field>
@@ -221,10 +221,10 @@ export default function Onboarding() {
                         </span>
                         <span className="font-semibold text-ink">{d.name}</span>
                       </div>
-                      <p className="italic text-ink-2 text-[0.8125rem] mb-3">
+                      <p className="italic text-ink-2 text-body mb-3">
                         &ldquo;{d.tagline}&rdquo;
                       </p>
-                      <p className="text-ink-2 text-[0.875rem] leading-relaxed mb-3">
+                      <p className="text-ink-2 text-body-lg leading-relaxed mb-3">
                         {d.description}
                       </p>
                       <div className="flex flex-wrap gap-1.5">
@@ -266,7 +266,7 @@ export default function Onboarding() {
                         ariaLabel={`Market focus: ${m}`}
                       >
                         <div className="font-medium capitalize">{m}</div>
-                        <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                        <div className="text-label text-ink-muted mt-0.5">
                           {m === "passenger" ? "People first" : m === "cargo" ? "Logistics engine" : "Diversified book"}
                         </div>
                       </PillButton>
@@ -287,7 +287,7 @@ export default function Onboarding() {
                         onClick={() => setGeoPriority(g)}
                         ariaLabel={`Geographic priority: ${g.replace("-", " ")}`}
                       >
-                        <div className="font-medium text-[0.8125rem] capitalize">
+                        <div className="font-medium text-body capitalize">
                           {g.replace("-", " ")}
                         </div>
                       </PillButton>
@@ -318,7 +318,7 @@ export default function Onboarding() {
                     ariaLabel={`${p.lbl}: ${p.sub}`}
                   >
                     <div className="font-medium">{p.lbl}</div>
-                    <div className="text-[0.6875rem] text-ink-muted mt-0.5">{p.sub}</div>
+                    <div className="text-label text-ink-muted mt-0.5">{p.sub}</div>
                   </PillButton>
                 ))}
               </div>
@@ -344,7 +344,7 @@ export default function Onboarding() {
                     ariaLabel={`${p.lbl}: ${p.sub}`}
                   >
                     <div className="font-medium">{p.lbl}</div>
-                    <div className="text-[0.6875rem] text-ink-muted mt-0.5">{p.sub}</div>
+                    <div className="text-label text-ink-muted mt-0.5">{p.sub}</div>
                   </PillButton>
                 ))}
               </div>
@@ -371,7 +371,7 @@ export default function Onboarding() {
                     ariaLabel={`${p.lbl}: ${p.sub}`}
                   >
                     <div className="font-medium">{p.lbl}</div>
-                    <div className="text-[0.6875rem] text-ink-muted mt-0.5">{p.sub}</div>
+                    <div className="text-label text-ink-muted mt-0.5">{p.sub}</div>
                   </PillButton>
                 ))}
               </div>
@@ -398,7 +398,7 @@ export default function Onboarding() {
                     ariaLabel={`${p.lbl}: ${p.sub}`}
                   >
                     <div className="font-medium">{p.lbl}</div>
-                    <div className="text-[0.6875rem] text-ink-muted mt-0.5">{p.sub}</div>
+                    <div className="text-label text-ink-muted mt-0.5">{p.sub}</div>
                   </PillButton>
                 ))}
               </div>
@@ -431,7 +431,7 @@ export default function Onboarding() {
                 </CardBody>
               </Card>
 
-              <div className="rounded-md border border-line bg-surface-2/40 px-4 py-3 text-[0.8125rem] text-ink-2 leading-relaxed">
+              <div className="rounded-md border border-line bg-surface-2/40 px-4 py-3 text-body text-ink-2 leading-relaxed">
                 <div className="font-semibold text-ink mb-1">Starting position</div>
                 <div>
                   Operating cash:{" "}
@@ -444,7 +444,7 @@ export default function Onboarding() {
                   </span>
                   {" "}· 2× A320 starter aircraft · Brand 50.
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted mt-1">
+                <div className="text-label text-ink-muted mt-1">
                   Total budget {fmtMoney(ONBOARDING_TOTAL_BUDGET_USD)} less hub purchase cost. Rivals and tournament hosts are seeded by the facilitator.
                 </div>
               </div>
@@ -489,7 +489,7 @@ function Step({
   return (
     <div>
       <h1 className="font-display text-4xl text-ink leading-tight mb-2">{title}</h1>
-      <p className="text-ink-2 text-[0.9375rem] mb-8">{sub}</p>
+      <p className="text-ink-2 text-title-sm mb-8">{sub}</p>
       {children}
     </div>
   );
@@ -498,7 +498,7 @@ function Step({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5">
+      <div className="text-label uppercase tracking-wider text-ink-muted mb-1.5">
         {label}
       </div>
       {children}
@@ -508,7 +508,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function SubLabel({ id, children }: { id?: string; children: React.ReactNode }) {
   return (
-    <div id={id} className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+    <div id={id} className="text-label uppercase tracking-wider text-ink-muted mb-2">
       {children}
     </div>
   );
@@ -535,7 +535,7 @@ function PillButton({
       aria-label={ariaLabel}
       onClick={onClick}
       className={cn(
-        "text-left rounded-md border px-3 py-2.5 transition-colors text-[0.8125rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+        "text-left rounded-md border px-3 py-2.5 transition-colors text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
         active
           ? "border-primary bg-[rgba(20,53,94,0.06)] text-ink font-medium"
           : "border-line text-ink-2 hover:bg-surface-hover",
@@ -549,7 +549,7 @@ function PillButton({
 function Row({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex items-baseline justify-between py-2 border-b border-line last:border-0">
-      <span className="text-[0.8125rem] uppercase tracking-wider text-ink-muted">{k}</span>
+      <span className="text-body uppercase tracking-wider text-ink-muted">{k}</span>
       <span className="text-ink font-medium capitalize text-right truncate max-w-[60%]">{v}</span>
     </div>
   );
@@ -629,20 +629,20 @@ function HubPickerStep({
       <div className="rounded-md border border-primary bg-[rgba(20,53,94,0.04)] px-4 py-3 mb-4">
         <div className="flex items-baseline justify-between flex-wrap gap-2">
           <div>
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <div className="text-caption uppercase tracking-wider text-ink-muted">
               Total budget
             </div>
-            <div className="font-display text-[1.5rem] tabular text-ink leading-none mt-0.5">
+            <div className="font-display text-heading-lg tabular text-ink leading-none mt-0.5">
               {fmtMoney(ONBOARDING_TOTAL_BUDGET_USD)}
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <div className="text-caption uppercase tracking-wider text-ink-muted">
               Hub cost
             </div>
             <div
               className={cn(
-                "font-display text-[1.5rem] tabular leading-none mt-0.5",
+                "font-display text-heading-lg tabular leading-none mt-0.5",
                 selectedCost > 0 ? "text-negative" : "text-ink-muted",
               )}
             >
@@ -650,12 +650,12 @@ function HubPickerStep({
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <div className="text-caption uppercase tracking-wider text-ink-muted">
               Remaining cash
             </div>
             <div
               className={cn(
-                "font-display text-[1.5rem] tabular leading-none mt-0.5",
+                "font-display text-heading-lg tabular leading-none mt-0.5",
                 // Phase 6 — flag low operating runway. Anything under
                 // ~$50M starts the player on cash-flow watch from
                 // Q1; anything under $30M is dangerously thin once
@@ -673,7 +673,7 @@ function HubPickerStep({
           </div>
         </div>
         {selected && (
-          <div className="text-[0.6875rem] text-ink-2 mt-2">
+          <div className="text-label text-ink-2 mt-2">
             <strong className="text-ink">{selected.name}</strong> ({selected.code})
             {" · "}{selected.regionName}
           </div>
@@ -688,7 +688,7 @@ function HubPickerStep({
           <div
             role="note"
             className={cn(
-              "mt-3 rounded-md border px-3 py-2 text-[0.75rem] leading-relaxed",
+              "mt-3 rounded-md border px-3 py-2 text-body-sm leading-relaxed",
               remainingCash < 30_000_000
                 ? "border-rose-300 bg-rose-50 text-rose-900"
                 : "border-amber-300 bg-amber-50 text-amber-900",
@@ -696,7 +696,7 @@ function HubPickerStep({
           >
             {remainingCash < 30_000_000 ? (
               <>
-                <strong className="block text-[0.8125rem] mb-0.5">
+                <strong className="block text-body mb-0.5">
                   Tight runway warning
                 </strong>
                 After the hub, you’ll have under {fmtMoney(remainingCash)}.
@@ -705,7 +705,7 @@ function HubPickerStep({
               </>
             ) : (
               <>
-                <strong className="block text-[0.8125rem] mb-0.5">
+                <strong className="block text-body mb-0.5">
                   Lean budget
                 </strong>
                 {fmtMoney(remainingCash)} after the hub leaves room
@@ -739,7 +739,7 @@ function HubPickerStep({
           />
         ))}
         {filtered.length === 0 && (
-          <div className="text-center text-[0.8125rem] text-ink-muted py-8 italic">
+          <div className="text-center text-body text-ink-muted py-8 italic">
             No airports match that search.
           </div>
         )}
@@ -760,11 +760,11 @@ function RegionGroup({
   return (
     <div>
       <div className="flex items-baseline gap-2 mb-1.5">
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold">
           {label}
         </div>
         {sub && (
-          <div className="text-[0.625rem] text-ink-muted">{sub}</div>
+          <div className="text-caption text-ink-muted">{sub}</div>
         )}
       </div>
       <div
@@ -793,15 +793,15 @@ function RegionGroup({
             >
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-[0.8125rem] text-primary">{city.code}</span>
-                  <span className="font-medium text-ink text-[0.875rem] truncate">{city.name}</span>
+                  <span className="font-mono text-body text-primary">{city.code}</span>
+                  <span className="font-medium text-ink text-body-lg truncate">{city.name}</span>
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted truncate">
+                <div className="text-label text-ink-muted truncate">
                   {city.regionName}
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className="tabular font-mono text-[0.875rem] text-ink font-semibold">
+                <div className="tabular font-mono text-body-lg text-ink font-semibold">
                   {fmtMoney(price)}
                 </div>
               </div>

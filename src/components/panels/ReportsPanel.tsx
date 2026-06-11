@@ -60,7 +60,7 @@ export function ReportsPanel() {
               }}
               className={cn(
                 "flex-1 flex items-center justify-center gap-2 px-3 py-2.5",
-                "text-[0.875rem] font-medium border-b-2 -mb-px transition-colors",
+                "text-body-lg font-medium border-b-2 -mb-px transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-t",
                 active
                   ? "border-primary text-primary"
@@ -74,7 +74,7 @@ export function ReportsPanel() {
         })}
       </nav>
 
-      <div className="text-[0.6875rem] text-ink-muted leading-relaxed mb-3 px-0.5">
+      <div className="text-label text-ink-muted leading-relaxed mb-3 px-0.5">
         {meta.subtitle}
       </div>
 

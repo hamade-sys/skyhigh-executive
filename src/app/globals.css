@@ -174,6 +174,29 @@ dialog:not([open]) {
   --radius-md: var(--r-4);
   --radius-lg: var(--r-5);
   --radius-xl: var(--r-6);
+
+  /* ── Semantic type scale (June 2026 design-system hardening) ──
+     Replaces 1,600+ scattered arbitrary sizes (text-[0.6875rem] etc)
+     with named steps so hierarchy is consistent and globally tunable.
+     Font-size ONLY — no --text-*--line-height companions on purpose:
+     the arbitrary values these replace never set line-height either,
+     so the sweep is pixel-identical. Ladder (px): micro 9 · caption 10
+     · label 11 · body-sm 12 · body 13 · body-lg 14 · title-sm 15 ·
+     title 16 · title-lg 17 · heading-sm 18 · heading 20 ·
+     heading-lg 24 · display 28. */
+  --text-micro: 0.5625rem;
+  --text-caption: 0.625rem;
+  --text-label: 0.6875rem;
+  --text-body-sm: 0.75rem;
+  --text-body: 0.8125rem;
+  --text-body-lg: 0.875rem;
+  --text-title-sm: 0.9375rem;
+  --text-title: 1rem;
+  --text-title-lg: 1.0625rem;
+  --text-heading-sm: 1.125rem;
+  --text-heading: 1.25rem;
+  --text-heading-lg: 1.5rem;
+  --text-display: 1.75rem;
 }
 
 /* ───────────────────────────────────────────────────────────────

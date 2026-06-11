@@ -66,7 +66,7 @@ export function Toaster() {
       aria-live="polite"
     >
       {overflow > 0 && (
-        <div className="pointer-events-auto rounded-md border border-line bg-surface/95 backdrop-blur-md px-3 py-1.5 text-[0.6875rem] text-ink-muted self-end shadow-[var(--shadow-2)]">
+        <div className="pointer-events-auto rounded-md border border-line bg-surface/95 backdrop-blur-md px-3 py-1.5 text-label text-ink-muted self-end shadow-[var(--shadow-2)]">
           +{overflow} more in <strong className="text-ink">Notifications</strong>
         </div>
       )}
@@ -87,11 +87,11 @@ export function Toaster() {
           >
             <meta.Icon size={18} className={cn("shrink-0 mt-0.5", meta.tint)} />
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-ink text-[0.875rem] leading-tight">
+              <div className="font-medium text-ink text-body-lg leading-tight">
                 {t.title}
               </div>
               {t.detail && (
-                <div className="text-[0.8125rem] text-ink-2 mt-0.5 leading-relaxed">
+                <div className="text-body text-ink-2 mt-0.5 leading-relaxed">
                   {t.detail}
                 </div>
               )}

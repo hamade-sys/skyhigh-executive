@@ -87,13 +87,13 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
   return (
     <Modal open={open} onClose={onClose} className="max-w-2xl">
       <ModalHeader>
-        <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
+        <span className="text-label uppercase tracking-[0.2em] text-accent">
           Hub infrastructure
         </span>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight mt-1">
+        <h2 className="font-display text-heading-lg text-ink leading-tight mt-1">
           Hub investments
         </h2>
-        <p className="text-[0.8125rem] text-ink-muted mt-1.5 leading-relaxed">
+        <p className="text-body text-ink-muted mt-1.5 leading-relaxed">
           One-time capital spends that compound forever. Choose which hub to
           upgrade — primary or secondary — and the engine applies the effect
           on every quarter close from now on.
@@ -104,7 +104,7 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
         {/* Hub picker */}
         {allHubs.length > 1 && (
           <div>
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+            <div className="text-caption uppercase tracking-wider text-ink-muted mb-1.5">
               Target hub
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -113,7 +113,7 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
                   key={code}
                   onClick={() => setHubCode(code)}
                   className={cn(
-                    "px-2.5 py-1 rounded-md text-[0.75rem] font-mono font-semibold border",
+                    "px-2.5 py-1 rounded-md text-body-sm font-mono font-semibold border",
                     targetHub === code
                       ? "bg-primary text-primary-fg border-primary"
                       : "bg-surface border-line text-ink-2 hover:bg-surface-hover",
@@ -152,29 +152,29 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                    <span className="font-semibold text-ink text-[0.9375rem]">
+                    <span className="font-semibold text-ink text-title-sm">
                       {iv.title}
                     </span>
                     <span className={cn(
-                      "tabular font-mono text-[0.8125rem] shrink-0",
+                      "tabular font-mono text-body shrink-0",
                       canAfford ? "text-ink" : "text-negative",
                     )}>
                       {fmtMoney(iv.cost)}
                     </span>
                   </div>
-                  <div className="text-[0.8125rem] text-ink leading-snug">{iv.effect}</div>
-                  <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-0.5">
+                  <div className="text-body text-ink leading-snug">{iv.effect}</div>
+                  <div className="text-label text-ink-muted leading-relaxed mt-0.5">
                     {iv.detail}
                   </div>
                   {isOpsExpansion && inv.opsExpansionSlots > 0 && (
-                    <div className="text-[0.6875rem] text-positive mt-1">
+                    <div className="text-label text-positive mt-1">
                       Already installed: +{inv.opsExpansionSlots} slots
                     </div>
                   )}
                 </div>
                 <div className="shrink-0">
                   {installed && !isOpsExpansion ? (
-                    <span className="inline-flex items-center gap-1 text-[0.6875rem] uppercase tracking-wider text-positive font-semibold">
+                    <span className="inline-flex items-center gap-1 text-label uppercase tracking-wider text-positive font-semibold">
                       <Check size={11} aria-hidden="true" /> Installed
                     </span>
                   ) : (
@@ -209,17 +209,17 @@ export function HubInvestmentsModal({ open, onClose }: Props) {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Buy {confirmInvestment.title} at {targetHub}?
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   One-time capital spend. The effect compounds every quarter
                   for the rest of the game — no recurring fees, no maintenance
                   cost on the asset itself.
                 </p>
               </ModalHeader>
               <ModalBody>
-                <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+                <div className="rounded-md border border-line bg-surface p-3 text-body space-y-1">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-ink-muted">Asset</span>
                     <span className="text-ink">{confirmInvestment.title}</span>

@@ -43,11 +43,11 @@ export function Panel({
     >
       <header className="flex items-start justify-between gap-3 px-6 pt-5 pb-4 border-b border-line">
         <div className="min-w-0">
-          <h2 className="font-display text-[1.5rem] text-ink leading-tight truncate">
+          <h2 className="font-display text-heading-lg text-ink leading-tight truncate">
             {title}
           </h2>
           {subtitle && (
-            <p className="text-[0.8125rem] text-ink-muted mt-1 leading-snug">
+            <p className="text-body text-ink-muted mt-1 leading-snug">
               {subtitle}
             </p>
           )}

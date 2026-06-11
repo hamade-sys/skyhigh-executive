@@ -90,10 +90,10 @@ export function NewsPanel() {
     <div className="space-y-4">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted mb-1 flex items-center gap-1.5">
+          <div className="text-label uppercase tracking-[0.18em] text-ink-muted mb-1 flex items-center gap-1.5">
             <Newspaper size={12} /> World news · current + past quarters
           </div>
-          <p className="text-[0.8125rem] text-ink-2 leading-relaxed">
+          <p className="text-body text-ink-2 leading-relaxed">
             {view === "compact"
               ? "Tap a story to see which of your cities and routes it touches."
               : "Click a headline on the left to read the full article on the right. Forecasts are not shown — you read the world the same way the boardroom does."}
@@ -104,7 +104,7 @@ export function NewsPanel() {
           <button
             onClick={() => setView("compact")}
             className={cn(
-              "px-2 py-1 rounded-sm text-[0.6875rem] flex items-center gap-1",
+              "px-2 py-1 rounded-sm text-label flex items-center gap-1",
               view === "compact"
                 ? "bg-primary text-primary-fg font-medium"
                 : "text-ink-2 hover:text-ink",
@@ -116,7 +116,7 @@ export function NewsPanel() {
           <button
             onClick={() => setView("newspaper")}
             className={cn(
-              "px-2 py-1 rounded-sm text-[0.6875rem] flex items-center gap-1",
+              "px-2 py-1 rounded-sm text-label flex items-center gap-1",
               view === "newspaper"
                 ? "bg-primary text-primary-fg font-medium"
                 : "text-ink-2 hover:text-ink",
@@ -148,7 +148,7 @@ export function NewsPanel() {
           if (items.length === 0) return null;
           return (
             <section key={q}>
-              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2 flex items-center gap-2">
+              <div className="text-label uppercase tracking-wider text-ink-muted mb-2 flex items-center gap-2">
                 <span className="font-mono tabular text-ink">{fmtQuarter(q, startYear)}</span>
                 <span className="h-px flex-1 bg-line" />
                 <span className="tabular text-ink-muted">{items.length}</span>
@@ -252,7 +252,7 @@ function NewspaperView({
                   key={`section-${it.quarter}`}
                   className="sticky top-0 z-10 bg-surface-2/95 backdrop-blur-sm px-3 py-1.5 border-b border-line/60 flex items-center gap-2"
                 >
-                  <span className="text-[0.625rem] uppercase tracking-[0.2em] font-semibold text-ink-muted tabular font-mono">
+                  <span className="text-caption uppercase tracking-[0.2em] font-semibold text-ink-muted tabular font-mono">
                     {fmtQuarter(it.quarter, startYear)}
                   </span>
                   <span className="h-px flex-1 bg-line/60" />
@@ -273,12 +273,12 @@ function NewspaperView({
                 )}
               >
                 <div className="flex items-baseline justify-between gap-2 mb-1">
-                  <span className="text-[0.5625rem] uppercase tracking-wider font-bold text-accent">
+                  <span className="text-micro uppercase tracking-wider font-bold text-accent">
                     {outletFor(it.id)}
                   </span>
                 </div>
                 <h3 className={cn(
-                  "text-[0.8125rem] leading-snug",
+                  "text-body leading-snug",
                   isActive ? "font-semibold text-ink" : "text-ink-2",
                 )}>
                   {it.headline}
@@ -294,13 +294,13 @@ function NewspaperView({
       <article className="border border-line rounded-md bg-surface px-5 py-5 md:px-7 md:py-6">
         {/* Masthead — outlet + dateline + byline like a real paper */}
         <div className="border-b border-line pb-3 mb-4">
-          <div className="text-[0.625rem] uppercase tracking-[0.2em] font-bold text-accent mb-1">
+          <div className="text-caption uppercase tracking-[0.2em] font-bold text-accent mb-1">
             {outletFor(active.id)}
           </div>
-          <h1 className="font-display text-[1.5rem] md:text-[1.75rem] text-ink leading-tight">
+          <h1 className="font-display text-heading-lg md:text-display text-ink leading-tight">
             {active.headline}
           </h1>
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-2 text-[0.6875rem] text-ink-muted">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mt-2 text-label text-ink-muted">
             <span className="font-mono uppercase tracking-wider text-ink">
               {article.dateline}
             </span>
@@ -318,7 +318,7 @@ function NewspaperView({
         </div>
 
         {/* Article body — drop cap on first paragraph for newspaper feel */}
-        <div className="space-y-3 text-[0.875rem] text-ink-2 leading-relaxed columns-1 md:columns-2 md:gap-7">
+        <div className="space-y-3 text-body-lg text-ink-2 leading-relaxed columns-1 md:columns-2 md:gap-7">
           {article.body.map((p, i) => (
             <p key={i} className={cn(i === 0 && "first-letter:font-display first-letter:text-[3rem] first-letter:leading-none first-letter:float-left first-letter:mr-1.5 first-letter:text-ink")}>
               {p}
@@ -328,9 +328,9 @@ function NewspaperView({
 
         {/* Pull quote (if the article carries one) */}
         {article.quote && (
-          <blockquote className="my-5 border-l-2 border-accent pl-4 italic text-[0.9375rem] text-ink leading-relaxed">
+          <blockquote className="my-5 border-l-2 border-accent pl-4 italic text-title-sm text-ink leading-relaxed">
             &ldquo;{article.quote.text}&rdquo;
-            <footer className="not-italic mt-1.5 text-[0.6875rem] text-ink-muted uppercase tracking-wider">
+            <footer className="not-italic mt-1.5 text-label text-ink-muted uppercase tracking-wider">
               — {article.quote.attribution}
             </footer>
           </blockquote>
@@ -339,7 +339,7 @@ function NewspaperView({
         {/* Network exposure sidebar — what this story does to YOUR cities */}
         {affectedCities.length > 0 && (
           <div className="mt-6 pt-4 border-t border-line">
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2">
+            <div className="text-caption uppercase tracking-wider text-ink-muted mb-2">
               Your network · cities affected
             </div>
             <div className="grid grid-cols-2 gap-1.5">
@@ -349,11 +349,11 @@ function NewspaperView({
                   className="flex items-center justify-between rounded-md border border-line bg-surface-2 px-2 py-1.5"
                 >
                   <span className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-mono text-[0.6875rem] text-ink-muted">{c.code}</span>
-                    <span className="text-[0.75rem] text-ink truncate">{c.name}</span>
+                    <span className="font-mono text-label text-ink-muted">{c.code}</span>
+                    <span className="text-body-sm text-ink truncate">{c.name}</span>
                   </span>
                   <span className={cn(
-                    "tabular font-mono text-[0.6875rem] font-semibold shrink-0",
+                    "tabular font-mono text-label font-semibold shrink-0",
                     c.pct >= 0 ? "text-positive" : "text-negative",
                   )}>
                     {c.pct >= 0 ? "+" : ""}{c.pct}%
@@ -362,7 +362,7 @@ function NewspaperView({
               ))}
             </div>
             {active.modifiers && active.modifiers.some((m) => m.rounds > 1) && (
-              <p className="text-[0.6875rem] text-ink-muted italic mt-2">
+              <p className="text-label text-ink-muted italic mt-2">
                 Demand effect persists for {Math.max(...active.modifiers.map((m) => m.rounds))} quarters from when this news fired.
               </p>
             )}
@@ -460,18 +460,18 @@ function NewsCard({
         aria-expanded={expanded}
       >
         <div className="flex items-baseline justify-between gap-3 mb-1.5">
-          <span className="text-[0.625rem] uppercase tracking-[0.18em] font-bold text-accent shrink-0">
+          <span className="text-caption uppercase tracking-[0.18em] font-bold text-accent shrink-0">
             {outletFor(item.id)}
           </span>
           <div className="flex items-center gap-2 shrink-0">
             {isCurrent && (
-              <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-accent">
+              <span className="text-micro uppercase tracking-wider font-semibold text-accent">
                 Today
               </span>
             )}
             {hasImpact && (
               <span className={cn(
-                "text-[0.6875rem] tabular font-mono font-semibold px-1.5 py-0.5 rounded",
+                "text-label tabular font-mono font-semibold px-1.5 py-0.5 rounded",
                 positive
                   ? "bg-[var(--positive-soft)] text-positive"
                   : "bg-[var(--negative-soft)] text-negative",
@@ -486,16 +486,16 @@ function NewsCard({
             )}
           </div>
         </div>
-        <h3 className="text-[1rem] font-display text-ink leading-snug">
+        <h3 className="text-title font-display text-ink leading-snug">
           {item.headline}
         </h3>
         {!expanded && (
-          <div className="text-[0.75rem] text-ink-2 mt-1 leading-relaxed line-clamp-2">
+          <div className="text-body-sm text-ink-2 mt-1 leading-relaxed line-clamp-2">
             {item.detail}
           </div>
         )}
         {!expanded && (
-          <div className="text-[0.6875rem] text-ink-muted mt-1.5 italic">
+          <div className="text-label text-ink-muted mt-1.5 italic">
             {hasImpact
               ? `Touches ${affectedCities.length} of your cit${affectedCities.length === 1 ? "y" : "ies"} · tap to read`
               : "Tap to read"}
@@ -506,7 +506,7 @@ function NewsCard({
       {expanded && article && (
         <div className="mt-3 pt-3 border-t border-line space-y-3">
           {/* Dateline + byline like a real newspaper */}
-          <div className="text-[0.6875rem] text-ink-muted leading-relaxed">
+          <div className="text-label text-ink-muted leading-relaxed">
             <span className="font-mono uppercase tracking-wider text-ink">
               {article.dateline}
             </span>
@@ -517,7 +517,7 @@ function NewsCard({
           </div>
 
           {/* Article body */}
-          <div className="space-y-2 text-[0.8125rem] text-ink-2 leading-relaxed">
+          <div className="space-y-2 text-body text-ink-2 leading-relaxed">
             {article.body.map((p, i) => (
               <p key={i}>{p}</p>
             ))}
@@ -525,7 +525,7 @@ function NewsCard({
 
           {hasImpact ? (
             <div className="pt-2 border-t border-line/60">
-              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+              <div className="text-caption uppercase tracking-wider text-ink-muted mb-1.5">
                 Your network · cities affected
               </div>
               <div className="grid grid-cols-2 gap-1.5">
@@ -535,16 +535,16 @@ function NewsCard({
                     className="flex items-center justify-between rounded-md border border-line bg-surface-2 px-2 py-1.5"
                   >
                     <span className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-mono text-[0.6875rem] text-ink-muted">{c.code}</span>
-                      <span className="text-[0.75rem] text-ink truncate">{c.name}</span>
+                      <span className="font-mono text-label text-ink-muted">{c.code}</span>
+                      <span className="text-body-sm text-ink truncate">{c.name}</span>
                       {c.cat && c.cat !== "all" && (
-                        <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted shrink-0">
+                        <span className="text-micro uppercase tracking-wider text-ink-muted shrink-0">
                           {c.cat}
                         </span>
                       )}
                     </span>
                     <span className={cn(
-                      "tabular font-mono text-[0.6875rem] font-semibold shrink-0",
+                      "tabular font-mono text-label font-semibold shrink-0",
                       c.pct >= 0 ? "text-positive" : "text-negative",
                     )}>
                       {c.pct >= 0 ? "+" : ""}{c.pct}%
@@ -553,7 +553,7 @@ function NewsCard({
                 ))}
               </div>
               {item.modifiers && item.modifiers.some((m) => m.rounds > 1) && (
-                <p className="text-[0.6875rem] text-ink-muted italic mt-2">
+                <p className="text-label text-ink-muted italic mt-2">
                   Demand effect persists for {Math.max(...item.modifiers.map((m) => m.rounds))} rounds from when this news fired.
                 </p>
               )}
@@ -561,7 +561,7 @@ function NewsCard({
               <ActOnThisRow />
             </div>
           ) : (
-            <div className="pt-2 border-t border-line/60 text-[0.75rem] text-ink-muted italic">
+            <div className="pt-2 border-t border-line/60 text-body-sm text-ink-muted italic">
               No direct impact on your current network.
             </div>
           )}
@@ -583,7 +583,7 @@ function ActOnThisRow() {
       <button
         type="button"
         onClick={() => openPanel("routes")}
-        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[0.75rem] text-ink hover:bg-surface-hover hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-body-sm text-ink hover:bg-surface-hover hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
       >
         <Plane size={12} aria-hidden="true" />
         <span>Review routes</span>
@@ -592,7 +592,7 @@ function ActOnThisRow() {
       <button
         type="button"
         onClick={() => openPanel("slots")}
-        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[0.75rem] text-ink hover:bg-surface-hover hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-body-sm text-ink hover:bg-surface-hover hover:border-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
       >
         <Gavel size={12} aria-hidden="true" />
         <span>Open Slot Market</span>

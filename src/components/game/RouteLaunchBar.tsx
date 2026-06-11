@@ -122,7 +122,7 @@ export function RouteLaunchBar({
           <div className="flex flex-col items-center gap-2 pb-3">
             <div className="flex items-center gap-1.5 text-ink-muted">
               <ArrowRight size={14} />
-              <span className="text-[0.75rem] tabular font-mono">
+              <span className="text-body-sm tabular font-mono">
                 {Math.round(distKm).toLocaleString()} km
               </span>
             </div>
@@ -151,7 +151,7 @@ export function RouteLaunchBar({
         {/* Inline hint when only origin is picked */}
         {leftCity && !rightCity && (
           <div className="flex flex-col gap-2 pl-2 pb-2">
-            <div className="text-[0.75rem] text-ink-muted leading-tight max-w-[10rem]">
+            <div className="text-body-sm text-ink-muted leading-tight max-w-[10rem]">
               Pick a destination on the map
             </div>
             <button
@@ -254,10 +254,10 @@ function CityCard({
       {/* Header: code + name + tier pill */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-line/60">
         <MapPin size={11} className="text-primary shrink-0" />
-        <span className="font-mono text-[0.9375rem] font-bold tabular text-ink">
+        <span className="font-mono text-title-sm font-bold tabular text-ink">
           {city.code}
         </span>
-        <span className="text-[0.75rem] text-ink-2 truncate flex-1">
+        <span className="text-body-sm text-ink-2 truncate flex-1">
           {city.name}
         </span>
         {isHub && (
@@ -274,16 +274,16 @@ function CityCard({
       {/* Body: demand + slots */}
       <div className="px-3 py-2 space-y-1.5">
         <div className="flex items-baseline justify-between gap-3">
-          <div className="flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+          <div className="flex items-center gap-1.5 text-label uppercase tracking-wider text-ink-muted">
             <Users size={10} />
             {demand.kind === "od" ? "OD demand · day" : "City demand · day"}
           </div>
-          <span className="font-mono text-[0.875rem] font-semibold tabular text-ink">
+          <span className="font-mono text-body-lg font-semibold tabular text-ink">
             {demand.total.toLocaleString()}
           </span>
         </div>
         {/* Tourism / business split bar */}
-        <div className="flex items-center gap-2 text-[0.6875rem] tabular">
+        <div className="flex items-center gap-2 text-label tabular">
           <span className="text-ink-muted">Leisure</span>
           <div className="flex-1 h-1.5 rounded-full bg-surface-2 overflow-hidden">
             {demand.total > 0 && (
@@ -299,19 +299,19 @@ function CityCard({
         </div>
 
         <div className="flex items-baseline justify-between pt-1.5 border-t border-line/40">
-          <div className="flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+          <div className="flex items-center gap-1.5 text-label uppercase tracking-wider text-ink-muted">
             <Plane size={10} />
             Your slots
           </div>
           <span
             className={cn(
-              "font-mono text-[0.875rem] font-semibold tabular",
+              "font-mono text-body-lg font-semibold tabular",
               slotsHeld > 0 ? "text-ink" : "text-warning",
             )}
           >
             {slotsHeld}
             {slotsHeld === 0 && (
-              <span className="ml-1 text-[0.6875rem] font-normal text-warning">
+              <span className="ml-1 text-label font-normal text-warning">
                 bid required
               </span>
             )}
@@ -327,7 +327,7 @@ function CityCard({
         onClick={() => setAirportDetailCode(city.code)}
         className={cn(
           "w-full flex items-center justify-between gap-2 px-3 py-2 border-t border-line/60",
-          "text-[0.75rem] font-medium rounded-b-xl transition-colors",
+          "text-body-sm font-medium rounded-b-xl transition-colors",
           liveAuction
             ? "text-warning hover:bg-[var(--warning-soft)]/40"
             : "text-primary hover:bg-[var(--primary-soft)]/40",

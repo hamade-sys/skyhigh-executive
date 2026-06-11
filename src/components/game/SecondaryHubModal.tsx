@@ -68,13 +68,13 @@ export function SecondaryHubModal({ open, onClose }: Props) {
   return (
     <Modal open={open} onClose={onClose} className="max-w-2xl">
       <ModalHeader>
-        <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
+        <span className="text-label uppercase tracking-[0.2em] text-accent">
           Network expansion
         </span>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight mt-1">
+        <h2 className="font-display text-heading-lg text-ink leading-tight mt-1">
           Activate a secondary hub
         </h2>
-        <p className="text-[0.8125rem] text-ink-muted mt-1.5 leading-relaxed">
+        <p className="text-body text-ink-muted mt-1.5 leading-relaxed">
           Adds a new origin/destination point on your network. Routes from
           a secondary hub pay <strong>2× terminal fee</strong> until the city
           stabilises, but unlock new market access and break the
@@ -84,7 +84,7 @@ export function SecondaryHubModal({ open, onClose }: Props) {
 
       <ModalBody className="space-y-4">
         {locked ? (
-          <div className="rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)] p-3 text-[0.8125rem] text-warning">
+          <div className="rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)] p-3 text-body text-warning">
             Secondary hubs unlock from <strong>Q3</strong>. Build out from your
             primary hub for the first two quarters.
           </div>
@@ -92,11 +92,11 @@ export function SecondaryHubModal({ open, onClose }: Props) {
           <>
             {/* Current network summary */}
             <div className="rounded-md border border-line bg-surface-2 p-3">
-              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+              <div className="text-caption uppercase tracking-wider text-ink-muted mb-1.5">
                 Your network
               </div>
               <div className="flex flex-wrap gap-1.5 items-center">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary text-primary-fg text-[0.75rem] font-mono font-semibold">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary text-primary-fg text-body-sm font-mono font-semibold">
                   HUB · {player.hubCode}
                 </span>
                 {player.secondaryHubCodes.map((code) => (
@@ -107,13 +107,13 @@ export function SecondaryHubModal({ open, onClose }: Props) {
                       toast.info(`${code} removed`, "No more secondary-hub fees from there.");
                     }}
                     title="Click to remove"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed border-primary text-primary text-[0.75rem] font-mono font-semibold hover:bg-[var(--accent-soft)]"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed border-primary text-primary text-body-sm font-mono font-semibold hover:bg-[var(--accent-soft)]"
                   >
                     HUB·2 · {code} ×
                   </button>
                 ))}
                 {player.secondaryHubCodes.length === 0 && (
-                  <span className="text-[0.75rem] text-ink-muted italic">
+                  <span className="text-body-sm text-ink-muted italic">
                     No secondary hubs yet.
                   </span>
                 )}
@@ -129,13 +129,13 @@ export function SecondaryHubModal({ open, onClose }: Props) {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search by name or IATA code…"
-                  className="w-full rounded-md border border-line bg-surface px-8 py-2 text-[0.875rem] text-ink placeholder:text-ink-muted focus:outline-none focus:border-primary"
+                  className="w-full rounded-md border border-line bg-surface px-8 py-2 text-body-lg text-ink placeholder:text-ink-muted focus:outline-none focus:border-primary"
                 />
               </div>
 
               <div className="mt-2 max-h-[320px] overflow-y-auto rounded-md border border-line">
                 {candidates.length === 0 ? (
-                  <div className="p-4 text-center text-[0.8125rem] text-ink-muted">
+                  <div className="p-4 text-center text-body text-ink-muted">
                     No cities match. Try a different search.
                   </div>
                 ) : (
@@ -148,7 +148,7 @@ export function SecondaryHubModal({ open, onClose }: Props) {
                           <button
                             onClick={() => setSelected(c.code)}
                             className={cn(
-                              "w-full flex items-center justify-between px-3 py-2 text-left text-[0.8125rem] border-b border-line last:border-0",
+                              "w-full flex items-center justify-between px-3 py-2 text-left text-body border-b border-line last:border-0",
                               isSelected
                                 ? "bg-[var(--accent-soft-2)] text-ink"
                                 : "hover:bg-surface-hover text-ink-2",
@@ -158,11 +158,11 @@ export function SecondaryHubModal({ open, onClose }: Props) {
                               <Plane size={13} className={isSelected ? "text-accent" : "text-ink-muted"} />
                               <span className="font-mono text-ink shrink-0">{c.code}</span>
                               <span className="truncate">{c.name}</span>
-                              <span className="text-[0.6875rem] text-ink-muted shrink-0">
+                              <span className="text-label text-ink-muted shrink-0">
                                 · {c.regionName} · T{c.tier}
                               </span>
                             </span>
-                            <span className="tabular font-mono text-[0.75rem] text-ink-2 shrink-0">
+                            <span className="tabular font-mono text-body-sm text-ink-2 shrink-0">
                               {fmtMoney(tierCost)}
                             </span>
                           </button>
@@ -178,24 +178,24 @@ export function SecondaryHubModal({ open, onClose }: Props) {
             {selectedCity && (
               <div className="rounded-md border border-primary bg-[var(--accent-soft)] p-3">
                 <div className="flex items-baseline justify-between mb-1">
-                  <span className="text-[0.6875rem] uppercase tracking-wider text-accent font-semibold">
+                  <span className="text-label uppercase tracking-wider text-accent font-semibold">
                     Selected · {selectedCity.code}
                   </span>
                   <span className={cn(
-                    "tabular font-mono font-semibold text-[0.875rem]",
+                    "tabular font-mono font-semibold text-body-lg",
                     canAfford ? "text-ink" : "text-negative",
                   )}>
                     {fmtMoney(cost)}
                   </span>
                 </div>
-                <div className="text-[0.875rem] font-medium text-ink">
+                <div className="text-body-lg font-medium text-ink">
                   {selectedCity.name}
                 </div>
-                <div className="text-[0.75rem] text-ink-muted leading-relaxed mt-1">
+                <div className="text-body-sm text-ink-muted leading-relaxed mt-1">
                   {selectedCity.character}
                 </div>
                 {!canAfford && (
-                  <div className="text-[0.75rem] text-negative mt-2">
+                  <div className="text-body-sm text-negative mt-2">
                     Need {fmtMoney(cost - player.cashUsd)} more in cash to activate.
                   </div>
                 )}

@@ -124,14 +124,14 @@ export function FinancialsPanel() {
       {/* ── 1. Balance sheet ── */}
       <section>
         <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+          <div className="text-label uppercase tracking-wider text-ink-muted">
             Balance sheet
           </div>
-          <div className="text-[0.6875rem] tabular text-ink-muted">
+          <div className="text-label tabular text-ink-muted">
             as of <strong className="text-ink">{fmtQuarter(s.currentQuarter, startYear)}</strong>
           </div>
         </div>
-        <div className="space-y-1.5 text-[0.8125rem]">
+        <div className="space-y-1.5 text-body">
           <Row k="Cash" v={fmtMoney(player.cashUsd)} />
           <Row k="Fleet book value" v={fmtMoney(player.fleet.reduce((s, f) => s + f.bookValue, 0))} />
           <Row k="Total debt" v={fmtMoney(player.totalDebtUsd)} tone="neg" />
@@ -165,7 +165,7 @@ export function FinancialsPanel() {
       {/* ── 2. Borrowing ── */}
       <section>
         <div className="flex items-center justify-between mb-2">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Borrowing</div>
+          <div className="text-label uppercase tracking-wider text-ink-muted">Borrowing</div>
           <Button size="sm" variant="primary" onClick={() => setBorrowOpen(true)}>
             Borrow →
           </Button>
@@ -192,14 +192,14 @@ export function FinancialsPanel() {
           return (
             <div className="rounded-md border border-negative bg-[var(--negative-soft)] p-3 mb-3 space-y-2">
               <div className="flex items-baseline justify-between gap-2">
-                <div className="font-semibold text-negative text-[0.8125rem]">
+                <div className="font-semibold text-negative text-body">
                   Overdraft active · {fmtMoney(-player.cashUsd)}
                 </div>
-                <div className="text-[0.6875rem] tabular font-mono text-negative">
+                <div className="text-label tabular font-mono text-negative">
                   paying ~{(s.baseInterestRatePct * 2).toFixed(1)}% RCF rate
                 </div>
               </div>
-              <p className="text-[0.75rem] text-ink-2 leading-snug">
+              <p className="text-body-sm text-ink-2 leading-snug">
                 Your revolving credit facility is bridging the negative
                 balance at a penalty rate. Refinancing converts the
                 overdraft into a regular term loan at your effective
@@ -207,7 +207,7 @@ export function FinancialsPanel() {
                 as a normal loan, much lower interest while it sits.
               </p>
               {refiDisabledReason && (
-                <p className="text-[0.6875rem] text-negative leading-snug font-medium">
+                <p className="text-label text-negative leading-snug font-medium">
                   Refi blocked: {refiDisabledReason}
                 </p>
               )}
@@ -229,13 +229,13 @@ export function FinancialsPanel() {
           );
         })()}
 
-        <div className="space-y-1.5 text-[0.8125rem]">
+        <div className="space-y-1.5 text-body">
           <Row k="Base rate" v={`${s.baseInterestRatePct.toFixed(1)}%`} />
           <Row k="Your effective rate" v={`${rate.toFixed(2)}%`} bold />
           <Row k="Max borrowing" v={fmtMoney(maxBorrow)} />
           {player.loans.length > 0 && (
             <div className="mt-3 pt-2 border-t border-line space-y-1.5">
-              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+              <div className="text-caption uppercase tracking-wider text-ink-muted">
                 Active facilities · {player.loans.length}
               </div>
               {player.loans.map((loan) => {
@@ -254,28 +254,28 @@ export function FinancialsPanel() {
                   <div key={loan.id} className="rounded-md border border-line bg-surface px-2.5 py-2">
                     <div className="flex items-baseline justify-between gap-2 mb-1">
                       <div className="min-w-0">
-                        <div className="font-semibold text-ink text-[0.8125rem] truncate">
+                        <div className="font-semibold text-ink text-body truncate">
                           {loanDisplayName(loan)}
                         </div>
-                        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+                        <div className="text-caption uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
                           <span>Originated {fmtQuarter(loan.originQuarter, startYear)}</span>
                           {loan.source === "overdraft-refi" && (
-                            <span className="text-warning bg-[var(--warning-soft)] px-1 py-0.5 rounded text-[0.5625rem] font-semibold">
+                            <span className="text-warning bg-[var(--warning-soft)] px-1 py-0.5 rounded text-micro font-semibold">
                               Overdraft refi
                             </span>
                           )}
                           {loan.govBacked && (
-                            <span className="text-positive bg-[var(--positive-soft)] px-1 py-0.5 rounded text-[0.5625rem] font-semibold">
+                            <span className="text-positive bg-[var(--positive-soft)] px-1 py-0.5 rounded text-micro font-semibold">
                               Gov-backed
                             </span>
                           )}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="tabular font-mono text-ink font-semibold text-[0.875rem]">
+                        <div className="tabular font-mono text-ink font-semibold text-body-lg">
                           {fmtMoney(loan.remainingPrincipal)}
                         </div>
-                        <div className="text-[0.625rem] tabular font-mono text-ink-muted">
+                        <div className="text-caption tabular font-mono text-ink-muted">
                           @ {loan.ratePct.toFixed(2)}% · {fmtMoney(quarterlyCost)}/Q
                         </div>
                       </div>
@@ -327,7 +327,7 @@ export function FinancialsPanel() {
 
       {/* ── 3. P&L statements ── */}
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           P&amp;L · most recent + projected
         </div>
         <div className="grid md:grid-cols-2 gap-3">
@@ -343,7 +343,7 @@ export function FinancialsPanel() {
           one-off cash movements without needing per-line storage. */}
       {player.financialsByQuarter.length > 0 && (
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Cash flow · last {Math.min(4, player.financialsByQuarter.length)} quarter
             {Math.min(4, player.financialsByQuarter.length) === 1 ? "" : "s"}
           </div>
@@ -357,17 +357,17 @@ export function FinancialsPanel() {
           <button
             type="button"
             onClick={() => setHistoryOpen((v) => !v)}
-            className="flex items-center justify-between w-full text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2 hover:text-ink"
+            className="flex items-center justify-between w-full text-label uppercase tracking-wider text-ink-muted mb-2 hover:text-ink"
             aria-expanded={historyOpen}
           >
             <span>Quarterly P&amp;L history · {player.financialsByQuarter.length} quarter{player.financialsByQuarter.length === 1 ? "" : "s"}</span>
-            <span className="text-[0.625rem] text-ink-muted">{historyOpen ? "Hide ▴" : "Show full ▾"}</span>
+            <span className="text-caption text-ink-muted">{historyOpen ? "Hide ▴" : "Show full ▾"}</span>
           </button>
           {historyOpen ? (
             <PLHistoryTable rows={player.financialsByQuarter} />
           ) : (
             <div className="rounded-md border border-line overflow-hidden">
-              <table className="w-full text-[0.75rem]">
+              <table className="w-full text-body-sm">
                 <thead>
                   <tr className="bg-surface-2 border-b border-line">
                     <Th>Quarter</Th>
@@ -399,7 +399,7 @@ export function FinancialsPanel() {
       {/* Tax loss carryforward — only show if there's anything pending. */}
       {(player.taxLossCarryForward ?? []).length > 0 && (
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Tax loss carryforward · 5-quarter expiry
           </div>
           <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-1.5">
@@ -407,7 +407,7 @@ export function FinancialsPanel() {
               const total = player.taxLossCarryForward.reduce((sum, e) => sum + e.amount, 0);
               return (
                 <>
-                  <div className="flex items-baseline justify-between text-[0.875rem]">
+                  <div className="flex items-baseline justify-between text-body-lg">
                     <span className="font-semibold text-ink">Available offset</span>
                     <span className="tabular font-mono text-ink font-semibold">
                       {fmtMoney(total)}
@@ -419,7 +419,7 @@ export function FinancialsPanel() {
                       .map((e) => {
                         const expiresIn = Math.max(0, 5 - (s.currentQuarter - e.quarter));
                         return (
-                          <div key={e.quarter} className="flex items-baseline justify-between text-[0.6875rem] tabular font-mono">
+                          <div key={e.quarter} className="flex items-baseline justify-between text-label tabular font-mono">
                             <span className="text-ink-muted">
                               Q{e.quarter} loss · expires in {expiresIn}Q
                             </span>
@@ -428,7 +428,7 @@ export function FinancialsPanel() {
                         );
                       })}
                   </div>
-                  <div className="text-[0.6875rem] text-ink-muted leading-relaxed pt-1.5 border-t border-line">
+                  <div className="text-label text-ink-muted leading-relaxed pt-1.5 border-t border-line">
                     Profitable quarters consume oldest losses first to reduce
                     your 20% corporate tax bill. Losses older than 5 quarters
                     expire unused.
@@ -443,7 +443,7 @@ export function FinancialsPanel() {
       {/* ── 5. Trajectory charts with X-axis labels ── */}
       {player.financialsByQuarter.length >= 2 && (
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Brand · Loyalty · Ops trajectory
           </div>
           <div className="rounded-md border border-line bg-surface p-3 space-y-3">
@@ -474,18 +474,18 @@ export function FinancialsPanel() {
 
       <Modal open={borrowOpen} onClose={() => { setBorrowOpen(false); setError(null); }}>
         <ModalHeader>
-          <h2 className="font-display text-[1.5rem] text-ink">Borrow capital</h2>
-          <p className="text-ink-muted text-[0.8125rem] mt-1">
+          <h2 className="font-display text-heading-lg text-ink">Borrow capital</h2>
+          <p className="text-ink-muted text-body mt-1">
             Rate <span className="tabular font-mono text-ink">{rate.toFixed(2)}%</span> · Max <span className="tabular font-mono text-ink">{fmtMoney(maxBorrow)}</span>
           </p>
         </ModalHeader>
         <ModalBody className="space-y-4">
           <div>
-            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">Amount</div>
+            <div className="text-label uppercase tracking-wider text-ink-muted mb-2">Amount</div>
             <Input type="number" value={borrowAmount} onChange={(e) => setBorrowAmount(parseInt(e.target.value, 10) || 0)} />
-            <div className="text-[0.75rem] text-ink-muted mt-1">= {fmtMoney(borrowAmount)}</div>
+            <div className="text-body-sm text-ink-muted mt-1">= {fmtMoney(borrowAmount)}</div>
           </div>
-          {error && <div className="text-negative text-[0.875rem]">{error}</div>}
+          {error && <div className="text-negative text-body-lg">{error}</div>}
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={() => { setBorrowOpen(false); setError(null); }}>Cancel</Button>
@@ -510,39 +510,39 @@ export function FinancialsPanel() {
         return (
           <Modal open onClose={() => { setRepayState(null); setError(null); }}>
             <ModalHeader>
-              <h2 className="font-display text-[1.5rem] text-ink">Repay {repayState.loanName}</h2>
-              <p className="text-ink-muted text-[0.8125rem] mt-1">
+              <h2 className="font-display text-heading-lg text-ink">Repay {repayState.loanName}</h2>
+              <p className="text-ink-muted text-body mt-1">
                 Principal <span className="tabular font-mono text-ink">{fmtMoney(principalCeiling)}</span> @ <span className="tabular font-mono text-ink">{repayState.ratePct.toFixed(2)}%</span> · Cash on hand <span className="tabular font-mono text-ink">{fmtMoney(cashCeiling)}</span>
               </p>
             </ModalHeader>
             <ModalBody className="space-y-4">
               <div>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">Repay amount</div>
+                <div className="text-label uppercase tracking-wider text-ink-muted mb-2">Repay amount</div>
                 <Input
                   type="number"
                   value={amt}
                   onChange={(e) => setAmt(parseInt(e.target.value, 10) || 0)}
                 />
-                <div className="text-[0.75rem] text-ink-muted mt-1">= {fmtMoney(amt)}</div>
+                <div className="text-body-sm text-ink-muted mt-1">= {fmtMoney(amt)}</div>
                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
                   {([0.25, 0.5, 0.75, 1.0] as const).map((frac) => (
                     <button
                       key={frac}
                       onClick={() => setAmt(Math.round(maxRepay * frac))}
-                      className="px-2 py-1 text-[0.6875rem] rounded-md border border-line bg-surface hover:bg-surface-hover transition-colors"
+                      className="px-2 py-1 text-label rounded-md border border-line bg-surface hover:bg-surface-hover transition-colors"
                     >
                       {Math.round(frac * 100)}%
                     </button>
                   ))}
                   <button
                     onClick={() => setAmt(maxRepay)}
-                    className="px-2 py-1 text-[0.6875rem] rounded-md border border-line bg-surface hover:bg-surface-hover transition-colors font-medium"
+                    className="px-2 py-1 text-label rounded-md border border-line bg-surface hover:bg-surface-hover transition-colors font-medium"
                   >
                     Max ({fmtMoney(maxRepay)})
                   </button>
                 </div>
               </div>
-              <div className="text-[0.75rem] text-ink-2 leading-snug space-y-0.5 bg-surface-2 p-2.5 rounded-md">
+              <div className="text-body-sm text-ink-2 leading-snug space-y-0.5 bg-surface-2 p-2.5 rounded-md">
                 <div className="flex justify-between">
                   <span>Remaining principal after</span>
                   <span className="tabular font-mono">{fmtMoney(newPrincipal)}</span>
@@ -557,7 +557,7 @@ export function FinancialsPanel() {
                   </div>
                 )}
               </div>
-              {error && <div className="text-negative text-[0.875rem]">{error}</div>}
+              {error && <div className="text-negative text-body-lg">{error}</div>}
             </ModalBody>
             <ModalFooter>
               <Button variant="ghost" onClick={() => { setRepayState(null); setError(null); }}>Cancel</Button>
@@ -675,13 +675,13 @@ function PLCard({
     (pl.operationsCost ?? 0) + (pl.customerServiceCost ?? 0);
   const hasOtherBreakdown = otherTotal > 0 || (pl.marketingCost !== undefined);
   return (
-    <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+    <div className="rounded-md border border-line bg-surface p-3 text-body space-y-1">
       <div className="flex items-baseline justify-between mb-2">
-        <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink">
+        <span className="text-caption uppercase tracking-wider font-semibold text-ink">
           {title}
         </span>
         {projected && (
-          <span className="text-[0.5625rem] uppercase tracking-wider text-accent font-semibold">
+          <span className="text-micro uppercase tracking-wider text-accent font-semibold">
             Estimate
           </span>
         )}
@@ -791,7 +791,7 @@ function PLHistoryTable({
 
   return (
     <div className="rounded-md border border-line overflow-x-auto">
-      <table className="w-full text-[0.75rem]">
+      <table className="w-full text-body-sm">
         <thead>
           <tr className="bg-surface-2 border-b border-line">
             <Th className="sticky left-0 z-10 bg-surface-2">Line item</Th>
@@ -808,7 +808,7 @@ function PLHistoryTable({
               <>
                 {showSectionHeader && (
                   <tr key={`s-${i}`} className="bg-surface-2/60">
-                    <td colSpan={cols.length + 1} className="px-2 py-1 text-[0.5625rem] uppercase tracking-wider font-semibold text-ink-muted">
+                    <td colSpan={cols.length + 1} className="px-2 py-1 text-micro uppercase tracking-wider font-semibold text-ink-muted">
                       {line.section}
                     </td>
                   </tr>
@@ -959,7 +959,7 @@ function CashflowCard({
   });
 
   return (
-    <div className="rounded-md border border-line overflow-hidden text-[0.75rem]">
+    <div className="rounded-md border border-line overflow-hidden text-body-sm">
       <table className="w-full">
         <thead>
           <tr className="bg-surface-2 border-b border-line">
@@ -974,7 +974,7 @@ function CashflowCard({
         <tbody>
           {/* Operating section */}
           <tr className="border-t border-line">
-            <td colSpan={cols.length + 1} className="px-2 py-1 bg-surface-2/40 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+            <td colSpan={cols.length + 1} className="px-2 py-1 bg-surface-2/40 text-caption uppercase tracking-wider font-semibold text-ink-muted">
               Operating activities
             </td>
           </tr>
@@ -984,7 +984,7 @@ function CashflowCard({
 
           {/* Investing section */}
           <tr className="border-t border-line">
-            <td colSpan={cols.length + 1} className="px-2 py-1 bg-surface-2/40 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+            <td colSpan={cols.length + 1} className="px-2 py-1 bg-surface-2/40 text-caption uppercase tracking-wider font-semibold text-ink-muted">
               Investing activities
             </td>
           </tr>
@@ -998,7 +998,7 @@ function CashflowCard({
 
           {/* Financing section */}
           <tr className="border-t border-line">
-            <td colSpan={cols.length + 1} className="px-2 py-1 bg-surface-2/40 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+            <td colSpan={cols.length + 1} className="px-2 py-1 bg-surface-2/40 text-caption uppercase tracking-wider font-semibold text-ink-muted">
               Financing activities
             </td>
           </tr>
@@ -1008,7 +1008,7 @@ function CashflowCard({
 
           {/* Reconciliation footer */}
           <tr className="border-t-2 border-line">
-            <td colSpan={cols.length + 1} className="px-2 py-1 bg-surface-2/40 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+            <td colSpan={cols.length + 1} className="px-2 py-1 bg-surface-2/40 text-caption uppercase tracking-wider font-semibold text-ink-muted">
               Reconciliation
             </td>
           </tr>
@@ -1016,7 +1016,7 @@ function CashflowCard({
           <CashflowRow label="Cash, end of quarter" values={cols.map((c) => c.endingCash)} bold />
         </tbody>
       </table>
-      <div className="px-3 py-2 bg-surface-2/30 border-t border-line text-[0.625rem] text-ink-muted leading-snug">
+      <div className="px-3 py-2 bg-surface-2/30 border-t border-line text-caption text-ink-muted leading-snug">
         Operating &amp; financing built from P&amp;L line items + debt
         delta. Investing is the residual that reconciles cash, so it
         captures CapEx and any one-off movements without needing a
@@ -1044,7 +1044,7 @@ function CashflowRow({
       <td className={cn("px-2 py-1.5", indent && "pl-5", bold && "font-semibold text-ink")}>
         <span className={cn(bold ? "text-ink" : "text-ink-2")}>{label}</span>
         {hint && (
-          <span className="ml-1 text-[0.625rem] text-ink-muted" title={hint}>ⓘ</span>
+          <span className="ml-1 text-caption text-ink-muted" title={hint}>ⓘ</span>
         )}
       </td>
       {values.map((v, i) => (
@@ -1065,7 +1065,7 @@ function CashflowRow({
 
 function SubHeader({ children, nested }: { children: React.ReactNode; nested?: boolean }) {
   return (
-    <div className={`text-[0.625rem] uppercase tracking-wider text-ink-muted ${nested ? "mt-2 ml-2" : "mt-3"} mb-1`}>
+    <div className={`text-caption uppercase tracking-wider text-ink-muted ${nested ? "mt-2 ml-2" : "mt-3"} mb-1`}>
       {children}
     </div>
   );
@@ -1079,7 +1079,7 @@ function Row({ k, v, tone, bold }: { k: string; v: string | React.ReactNode; ton
   );
 }
 function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <th className={`text-left px-2 py-1.5 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted ${className ?? ""}`}>{children}</th>;
+  return <th className={`text-left px-2 py-1.5 text-caption uppercase tracking-wider font-semibold text-ink-muted ${className ?? ""}`}>{children}</th>;
 }
 function Td({ children, className }: { children?: React.ReactNode; className?: string }) {
   return <td className={`px-2 py-1.5 align-top ${className ?? ""}`}>{children}</td>;
@@ -1127,7 +1127,7 @@ function TrendRow({
   })();
   return (
     <div className="flex items-start gap-3">
-      <span className="w-20 text-[0.75rem] text-ink-2 shrink-0 pt-1">{label}</span>
+      <span className="w-20 text-body-sm text-ink-2 shrink-0 pt-1">{label}</span>
       <div className="flex-1">
         <svg
           viewBox={`0 0 ${w} ${h}`}
@@ -1157,16 +1157,16 @@ function TrendRow({
             />
           ))}
         </svg>
-        <div className="flex justify-between text-[0.5625rem] text-ink-muted tabular font-mono mt-0.5 px-0">
+        <div className="flex justify-between text-micro text-ink-muted tabular font-mono mt-0.5 px-0">
           {tickIdx.map((i) => (
             <span key={i}>{fmtQuarter(series[i].q, startYear)}</span>
           ))}
         </div>
       </div>
-      <span className="tabular font-mono text-[0.8125rem] text-ink w-10 text-right pt-1">
+      <span className="tabular font-mono text-body text-ink w-10 text-right pt-1">
         {fmt(current)}
       </span>
-      <span className={`tabular font-mono text-[0.6875rem] w-12 text-right pt-1 ${tone}`}>
+      <span className={`tabular font-mono text-label w-12 text-right pt-1 ${tone}`}>
         {delta >= 0 ? "+" : ""}{fmt(delta)}
       </span>
     </div>
@@ -1191,11 +1191,11 @@ function CovenantGauge({
   return (
     <div className="mt-3 rounded-md border border-line bg-surface-2/30 p-3">
       <div className="flex items-baseline justify-between mb-1.5">
-        <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+        <span className="text-caption uppercase tracking-wider font-semibold text-ink-muted">
           Covenant pressure
         </span>
         <span
-          className={`tabular font-mono text-[0.875rem] font-semibold ${
+          className={`tabular font-mono text-body-lg font-semibold ${
             tone === "neg" ? "text-negative" :
             tone === "warn" ? "text-warning" :
             tone === "info" ? "text-accent" : "text-positive"
@@ -1217,7 +1217,7 @@ function CovenantGauge({
           style={{ left: `calc(${pct}% - 1.5px)` }}
         />
       </div>
-      <div className="flex justify-between text-[0.5625rem] tabular font-mono text-ink-muted mt-1 px-[1px]">
+      <div className="flex justify-between text-micro tabular font-mono text-ink-muted mt-1 px-[1px]">
         <span>0%</span>
         <span>25%</span>
         <span>35%</span>
@@ -1225,9 +1225,9 @@ function CovenantGauge({
         <span>100%</span>
       </div>
       {label && (
-        <div className="mt-1.5 text-[0.6875rem] leading-relaxed">
+        <div className="mt-1.5 text-label leading-relaxed">
           <span
-            className={`font-semibold uppercase tracking-wider text-[0.625rem] mr-1.5 ${
+            className={`font-semibold uppercase tracking-wider text-caption mr-1.5 ${
               tone === "neg" ? "text-negative" :
               tone === "warn" ? "text-warning" :
               tone === "info" ? "text-accent" : "text-positive"
@@ -1263,11 +1263,11 @@ function CashRunwayGauge({
   return (
     <div className="mt-3 rounded-md border border-line bg-surface-2/30 p-3">
       <div className="flex items-baseline justify-between mb-1.5">
-        <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">
+        <span className="text-caption uppercase tracking-wider font-semibold text-ink-muted">
           Distress runway
         </span>
         <span
-          className={`tabular font-mono text-[0.875rem] font-semibold ${
+          className={`tabular font-mono text-body-lg font-semibold ${
             tone === "pos" ? "text-positive" :
             tone === "neg" ? "text-negative" :
             tone === "warn" ? "text-warning" : "text-ink"
@@ -1286,16 +1286,16 @@ function CashRunwayGauge({
           style={{ width: `${fillPct}%` }}
         />
       </div>
-      <div className="flex justify-between text-[0.5625rem] tabular font-mono text-ink-muted mt-1">
+      <div className="flex justify-between text-micro tabular font-mono text-ink-muted mt-1">
         <span>0Q</span>
         <span>6Q</span>
         <span>12Q</span>
         <span>18Q</span>
         <span>24Q+</span>
       </div>
-      <div className="mt-1.5 text-[0.6875rem] text-ink-2 leading-relaxed">
+      <div className="mt-1.5 text-label text-ink-2 leading-relaxed">
         <span
-          className={`font-semibold uppercase tracking-wider text-[0.625rem] mr-1.5 ${
+          className={`font-semibold uppercase tracking-wider text-caption mr-1.5 ${
             tone === "neg" ? "text-negative" :
             tone === "warn" ? "text-warning" :
             tone === "pos" ? "text-positive" : "text-ink-muted"

@@ -197,7 +197,7 @@ export function AirlineColorPicker({
       {error && (
         <p
           role="alert"
-          className="text-[0.6875rem] text-amber-700 leading-snug"
+          className="text-label text-amber-700 leading-snug"
         >
           {error}
         </p>
