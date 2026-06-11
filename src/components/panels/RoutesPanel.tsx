@@ -15,7 +15,7 @@ import {
   airlineColorFor,
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
-import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Pause, Play, Plus, SlidersHorizontal, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronRight, Pause, Play, Plus, SlidersHorizontal, TrendingDown, X } from "lucide-react";
 import { RouteSetupModal, BidRow } from "@/components/game/RouteSetupModal";
 import { PanelSubheader } from "@/components/game/PanelSubheader";
 import { toast } from "@/store/toasts";
@@ -34,7 +34,7 @@ export function RoutesPanel() {
   const [query, setQuery] = useState("");
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
   type SortKey = "profit" | "load" | "revenue" | "fuel";
-  type FilterKey = "all" | "passenger" | "cargo" | "losing" | "noaircraft";
+  type FilterKey = "all" | "passenger" | "cargo" | "losing" | "noaircraft" | "contested";
   const [sortKey, setSortKey] = useState<SortKey>("profit");
   // Sort direction. "desc" = best/highest on top (default). Clicking the
   // already-active sort key flips to "asc" so the WORST rows float up —
@@ -123,6 +123,32 @@ export function RoutesPanel() {
   }, [focusedRouteId, setFocusedRouteId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // Direction-agnostic OD keys every rival (bot or human) currently
+  // flies — drives the "Contested" filter chip + row marker so the
+  // player can triage head-to-head routes without opening the map.
+  const rivalODs = useMemo(() => {
+    const set = new Set<string>();
+    if (!player) return set;
+    for (const t of s.teams) {
+      if (t.id === player.id) continue;
+      for (const r of t.routes) {
+        if (r.status !== "active" && r.status !== "pending") continue;
+        set.add(
+          r.originCode < r.destCode
+            ? `${r.originCode}|${r.destCode}`
+            : `${r.destCode}|${r.originCode}`,
+        );
+      }
+    }
+    return set;
+  }, [s.teams, player]);
+  const isContested = (r: { originCode: string; destCode: string }) =>
+    rivalODs.has(
+      r.originCode < r.destCode
+        ? `${r.originCode}|${r.destCode}`
+        : `${r.destCode}|${r.originCode}`,
+    );
+
   const rows = useMemo(() => {
     if (!player) return [];
     const q = query.trim().toUpperCase();
@@ -158,6 +184,7 @@ export function RoutesPanel() {
         if (filterKey === "cargo" && !r.isCargo) return false;
         if (filterKey === "losing" && (r.consecutiveLosingQuarters ?? 0) < 2) return false;
         if (filterKey === "noaircraft" && hasActiveAircraft(r)) return false;
+        if (filterKey === "contested" && !isContested(r)) return false;
         if (!q) return true;
         return (
           r.originCode.includes(q) ||
@@ -199,7 +226,8 @@ export function RoutesPanel() {
           return cmp * dir;
         },
       );
-  }, [player, query, sortKey, sortDir, filterKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isContested is a thin wrapper over rivalODs
+  }, [player, query, sortKey, sortDir, filterKey, rivalODs]);
 
   if (!player) return null;
 
@@ -277,6 +305,34 @@ export function RoutesPanel() {
           >
             <SlidersHorizontal size={13} className="mr-1" /> Manage all
           </Button>
+          {/* Triage shortcut (June 2026 Map Command Center): each click
+              opens the NEXT unprofitable route (worst direct profit
+              first, cycling) so a 40-route late-game network can be
+              triaged in seconds instead of scroll-and-scan minutes. */}
+          {(() => {
+            const losingRoutes = player.routes
+              .filter((r) => r.status === "active")
+              .filter((r) => r.quarterlyRevenue - r.quarterlyFuelCost - r.quarterlySlotCost < 0)
+              .sort((a, b) =>
+                (a.quarterlyRevenue - a.quarterlyFuelCost - a.quarterlySlotCost) -
+                (b.quarterlyRevenue - b.quarterlyFuelCost - b.quarterlySlotCost));
+            if (losingRoutes.length === 0) return null;
+            const idx = activeRouteId
+              ? losingRoutes.findIndex((r) => r.id === activeRouteId)
+              : -1;
+            const next = losingRoutes[(idx + 1) % losingRoutes.length];
+            return (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveRouteId(next.id)}
+                className="shrink-0 !text-negative"
+                title={`${losingRoutes.length} route${losingRoutes.length === 1 ? "" : "s"} not covering direct costs — click to step through them, worst first`}
+              >
+                <TrendingDown size={13} className="mr-1" /> Next losing ({losingRoutes.length})
+              </Button>
+            );
+          })()}
           <Button
             variant="primary"
             size="sm"
@@ -300,6 +356,7 @@ export function RoutesPanel() {
           { k: "cargo", label: "Cargo" },
           { k: "losing", label: "Losing 2Q+" },
           { k: "noaircraft", label: "No aircraft" },
+          { k: "contested", label: "Contested" },
         ] as Array<{ k: FilterKey; label: string }>).map(({ k, label }) => (
           <button
             key={k}
@@ -373,17 +430,26 @@ export function RoutesPanel() {
           <table className="w-full text-[0.8125rem] table-fixed">
             <thead>
               <tr className="bg-surface-2 border-b border-line">
-                <Th className="w-[30%]">Route</Th>
-                <Th className="text-right w-[80px]">Occupancy</Th>
-                <Th className="text-right w-[80px]">Freq</Th>
-                <Th className="text-right w-[120px]">Q revenue</Th>
+                <Th className="w-[26%]">Route</Th>
+                <Th className="text-right w-[70px]">Occupancy</Th>
+                <Th className="text-right w-[64px]">Freq</Th>
+                <Th className="text-right w-[100px]">Q revenue</Th>
                 <Th
-                  className="text-right w-[140px]"
+                  className="text-right w-[110px]"
                   title="Direct contribution: revenue minus fuel and slot costs for this route. Excludes the route's share of company overhead (staff, marketing, maintenance, depreciation, interest, taxes), which is shown in the route detail modal as 'Net after overhead'."
                 >
                   Direct profit
                 </Th>
-                <Th className="text-right w-[100px]">Status</Th>
+                <Th
+                  className="text-right w-[90px]"
+                  title="Change in direct profit vs the previous quarter. Improving routes trend up; deteriorating ones trend down."
+                >
+                  Trend
+                </Th>
+                <Th className="text-right w-[54px]" title="Quarters since the route opened">
+                  Age
+                </Th>
+                <Th className="text-right w-[88px]">Status</Th>
               </tr>
             </thead>
             <tbody>
@@ -487,6 +553,15 @@ export function RoutesPanel() {
                               });
                             }
                           }
+                          // Head-to-head: a rival flies this OD too —
+                          // demand pool is split, pricing wars likely.
+                          if (isContested(r)) {
+                            tags.push({
+                              tone: "info",
+                              label: "Contested",
+                              title: "A rival flies this origin↔destination — you're splitting the demand pool. Watch your fares.",
+                            });
+                          }
                           return tags.map((t) => (
                             <Badge key={t.label} tone={t.tone} title={t.title}>
                               {t.label}
@@ -525,6 +600,35 @@ export function RoutesPanel() {
                       )}
                     >
                       {fmtMoney(profit)}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      {(() => {
+                        if (r.status !== "active" || r.prevQuarterProfitUsd === undefined) {
+                          return <span className="text-ink-faint">—</span>;
+                        }
+                        const delta = profit - r.prevQuarterProfitUsd;
+                        if (Math.abs(delta) < 50_000) {
+                          return (
+                            <span className="text-ink-muted tabular font-mono text-[0.75rem]" title="Direct profit roughly unchanged vs last quarter">
+                              flat
+                            </span>
+                          );
+                        }
+                        return (
+                          <span
+                            className={cn(
+                              "tabular font-mono text-[0.75rem] font-medium inline-flex items-center gap-0.5",
+                              delta > 0 ? "text-positive" : "text-negative",
+                            )}
+                            title={`Direct profit ${delta > 0 ? "improved" : "dropped"} ${fmtMoney(Math.abs(delta))} vs last quarter`}
+                          >
+                            {delta > 0 ? "▲" : "▼"} {fmtMoney(Math.abs(delta))}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="py-2.5 px-3 text-right tabular font-mono text-ink-muted text-[0.75rem]">
+                      {Math.max(0, s.currentQuarter - r.openQuarter)}Q
                     </td>
                     <td className="py-2.5 px-3 text-right">
                       {pending ? (

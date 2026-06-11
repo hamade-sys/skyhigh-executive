@@ -3638,6 +3638,14 @@ export function runQuarterClose(
         occupancy: econ.occupancy,
         noOperatingAircraft: !hasOperatingAircraft,
       });
+      // Snapshot LAST quarter's direct contribution before this close
+      // overwrites the quarterly fields — feeds the Routes panel Trend
+      // column (Δ profit Q/Q). Undefined until the route has a real
+      // prior quarter (first close would otherwise diff against zeros
+      // and read as a huge fake improvement).
+      r.prevQuarterProfitUsd = (r.consecutiveQuartersActive ?? 0) > 0
+        ? (r.quarterlyRevenue ?? 0) - (r.quarterlyFuelCost ?? 0) - (r.quarterlySlotCost ?? 0)
+        : undefined;
       r.avgOccupancy = econ.occupancy;
       r.quarterlyRevenue = boostedRevenue;
       r.quarterlyFuelCost = econ.quarterlyFuelCost;
