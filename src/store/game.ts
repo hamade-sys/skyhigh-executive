@@ -5546,6 +5546,7 @@ export const useGame = create<GameStore>()(
           baseInterestRatePct: s.baseInterestRatePct,
           fuelIndex: s.fuelIndex,
           quarter: s.currentQuarter,
+          campaignMode: s.session?.campaignMode,
           rivals: rivalsAfterActivation,
           cargoContracts: s.cargoContracts ?? [],
           worldCupHostCode: s.worldCupHostCode,
