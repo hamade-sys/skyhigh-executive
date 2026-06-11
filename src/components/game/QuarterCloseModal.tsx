@@ -6,6 +6,7 @@ import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components
 import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds, getCampaignStartYear } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
 import { brandRating, computeAirlineValue, effectiveTravelIndex } from "@/lib/engine";
+import { buildQuarterStory, buildRankLine } from "@/lib/quarter-story";
 import { MILESTONES_BY_ID } from "@/data/milestones";
 import { TrendingUp, TrendingDown, Newspaper, Plane, Award, Users, FileBarChart, NotebookPen } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -13,12 +14,17 @@ import { getGamePreference, setGamePreference } from "@/lib/client-preferences";
 
 type Tab = "overview" | "news" | "routes" | "people" | "pnl" | "notes";
 
+/** Tab order is narrative-first: Headline answers "what happened and
+ *  why", Routes and P&L are the natural follow-ups ("which routes" /
+ *  "which lines"), News/People/Notes are supporting color. Routes and
+ *  P&L were previously buried behind News, which players rarely
+ *  clicked through. */
 const TABS: Array<{ id: Tab; label: string; Icon: typeof TrendingUp }> = [
   { id: "overview", label: "Headline",   Icon: TrendingUp },
-  { id: "news",     label: "News",       Icon: Newspaper },
   { id: "routes",   label: "Routes",     Icon: Plane },
-  { id: "people",   label: "People",     Icon: Users },
   { id: "pnl",      label: "P&L",        Icon: FileBarChart },
+  { id: "news",     label: "News",       Icon: Newspaper },
+  { id: "people",   label: "People",     Icon: Users },
   { id: "notes",    label: "Notes",      Icon: NotebookPen },
 ];
 
@@ -126,6 +132,45 @@ export function QuarterCloseModal() {
       topLosers: sorted.slice(-3).reverse().filter((r) => r.direct < 0),
     };
   }, [result]);
+
+  // ── Quarter story — the one-sentence "why" for the Headline tab.
+  //    Diffs this close's P&L lines against the prior quarter's
+  //    financialsByQuarter snapshot and names the 1-2 biggest drivers.
+  //    Without it players had to mentally diff six tabs to learn why
+  //    profit moved (verified audit finding, June 2026).
+  const story = useMemo(() => {
+    if (!result || !player) return null;
+    const prev =
+      player.financialsByQuarter.find((f) => f.quarter === result.quarter - 1) ??
+      null;
+    const newRouteIds = new Set(
+      (result.newRoutesActivatedThisQuarter ?? []).map((r) => r.routeId),
+    );
+    const newRouteRevenue = result.routeBreakdown
+      .filter((r) => newRouteIds.has(r.routeId))
+      .reduce((sum, r) => sum + r.revenue, 0);
+    return buildQuarterStory({
+      cur: result,
+      prev,
+      newRouteCount: newRouteIds.size,
+      newRouteRevenue,
+    });
+  }, [result, player]);
+
+  // Rank movement vs the prior close. Ranks are snapshotted into
+  // financialsByQuarter by closeQuarter (sorted by airline value),
+  // so both ends of the comparison use the same metric the
+  // Leaderboard panel shows.
+  const teamCount = s.teams.length;
+  const rankLine = useMemo(() => {
+    if (!result || !player) return null;
+    const hist = player.financialsByQuarter;
+    return buildRankLine({
+      prevRank: hist.find((f) => f.quarter === result.quarter - 1)?.rank,
+      newRank: hist.find((f) => f.quarter === result.quarter)?.rank,
+      teamCount,
+    });
+  }, [result, player, teamCount]);
 
   if (!result || !player) return null;
 
@@ -238,6 +283,62 @@ export function QuarterCloseModal() {
                 tone={result.netProfit >= 0 ? "positive" : "negative"}
               />
             </div>
+
+            {/* The quarter in one line — auto-generated "why" so the
+                player doesn't have to diff six tabs to learn what
+                moved profit. Rank movement sits with it because
+                standing is the other thing every team asks first. */}
+            {story && (
+              <div className="rounded-md border border-[var(--accent-soft-2)] bg-[var(--accent-soft)]/60 p-3">
+                <div className="text-[0.625rem] uppercase tracking-wider text-accent font-semibold">
+                  The quarter in one line
+                </div>
+                <p className="text-[0.875rem] text-ink leading-relaxed mt-1">
+                  {story}
+                </p>
+                {rankLine && (
+                  <div
+                    className={cn(
+                      "mt-1.5 inline-flex items-center gap-1 text-[0.75rem] font-semibold tabular",
+                      rankLine.tone === "up"
+                        ? "text-positive"
+                        : rankLine.tone === "down"
+                          ? "text-negative"
+                          : "text-ink-2",
+                    )}
+                  >
+                    {rankLine.tone === "up" ? (
+                      <TrendingUp size={12} aria-hidden="true" />
+                    ) : rankLine.tone === "down" ? (
+                      <TrendingDown size={12} aria-hidden="true" />
+                    ) : null}
+                    {rankLine.text}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Route pulse — best + worst routes inline so a bleeding
+                route can't hide behind the Routes tab. Click-through
+                jumps to the full breakdown. */}
+            {(topWinners.length > 0 || topLosers.length > 0) && (
+              <div className="grid grid-cols-2 gap-3">
+                <RoutePulseCard
+                  title="Top routes"
+                  tone="positive"
+                  entries={topWinners.slice(0, 2)}
+                  routes={player.routes}
+                  onAll={() => setTab("routes")}
+                />
+                <RoutePulseCard
+                  title="Needs attention"
+                  tone="negative"
+                  entries={topLosers.slice(0, 2)}
+                  routes={player.routes}
+                  onAll={() => setTab("routes")}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <DeltaRow
@@ -1009,6 +1110,75 @@ function Row({ k, v, tone, bold }: { k: string; v: string; tone?: "positive" | "
         {v}
       </td>
     </tr>
+  );
+}
+
+/**
+ * Compact best/worst route strip for the Headline tab. Shows up to two
+ * routes ranked by DIRECT contribution (same metric as the Routes tab
+ * winners/losers) with a click-through to the full breakdown. An empty
+ * "Needs attention" card renders as a clean-sheet confirmation rather
+ * than disappearing — no losers is news worth showing.
+ */
+function RoutePulseCard({
+  title, tone, entries, routes, onAll,
+}: {
+  title: string;
+  tone: "positive" | "negative";
+  entries: Array<{ routeId: string; direct: number }>;
+  routes: Array<{ id: string; originCode: string; destCode: string; isCargo?: boolean }>;
+  onAll: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-line p-3 flex flex-col">
+      <div
+        className={cn(
+          "text-[0.625rem] uppercase tracking-wider font-semibold",
+          tone === "positive" ? "text-positive" : "text-negative",
+        )}
+      >
+        {title}
+      </div>
+      {entries.length === 0 ? (
+        <div className="text-[0.75rem] text-ink-muted mt-1.5 flex-1">
+          {tone === "positive"
+            ? "No route covered its direct costs this quarter."
+            : "No routes losing money — clean sheet."}
+        </div>
+      ) : (
+        <div className="mt-1.5 space-y-1 flex-1">
+          {entries.map((e) => {
+            const route = routes.find((x) => x.id === e.routeId);
+            const label = route
+              ? `${route.originCode} → ${route.destCode}${route.isCargo ? " · cargo" : ""}`
+              : e.routeId;
+            return (
+              <div
+                key={e.routeId}
+                className="flex items-baseline justify-between gap-2 text-[0.75rem]"
+              >
+                <span className="font-mono text-ink truncate">{label}</span>
+                <span
+                  className={cn(
+                    "tabular font-mono font-semibold shrink-0",
+                    e.direct >= 0 ? "text-positive" : "text-negative",
+                  )}
+                >
+                  {e.direct >= 0 ? "+" : ""}{fmtMoney(e.direct)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onAll}
+        className="mt-2 self-start text-[0.6875rem] uppercase tracking-wider text-ink-muted hover:text-ink font-semibold rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+      >
+        All routes →
+      </button>
+    </div>
   );
 }
 

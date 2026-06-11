@@ -6,6 +6,7 @@ import { useUi } from "@/store/ui";
 import { fmtMoney, fmtQuarter, fmtQuarterShort } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { computeAirlineValue, brandRating } from "@/lib/engine";
+import { ordinal } from "@/lib/quarter-story";
 import { QuarterTimerChip } from "@/components/game/QuarterTimer";
 import { HelpModal } from "@/components/game/HelpModal";
 import { NotificationCenter } from "@/components/game/NotificationCenter";
@@ -308,26 +309,94 @@ export function TopBar() {
   );
 }
 
+/**
+ * Rank pill (June 2026 audit). Replaces the icon-only Trophy button —
+ * in a 4-10 team cohort, competitive standing is a primary decision
+ * signal every quarter, and an unlabeled 16px icon hid it from
+ * executives unfamiliar with game UI. The pill shows live rank
+ * ("2nd of 6", same airline-value metric the Leaderboard panel
+ * sorts by) plus a movement arrow vs the last quarter close.
+ */
 function LeaderboardButton() {
   const openPanel = useUi((u) => u.openPanel);
   const currentPanel = useUi((u) => u.panel);
   const isOpen = currentPanel === "leaderboard";
+  const teams = useGame(useShallow((s) => s.teams));
+  const activeTeam = useGame(selectActiveTeam);
+  const legacyPlayer = useGame(selectPlayer);
+  const me = activeTeam ?? legacyPlayer;
+
+  // Live rank by airline value — identical sort to LeaderboardPanel so
+  // the pill and the panel never disagree.
+  const ranked = [...teams].sort(
+    (a, b) => computeAirlineValue(b) - computeAirlineValue(a),
+  );
+  const rank = me ? ranked.findIndex((t) => t.id === me.id) + 1 : 0;
+  // Rank at the last quarter close (snapshotted by closeQuarter). The
+  // arrow reads "since last close" — live drift within the quarter
+  // moves the number, the arrow anchors to the last settled standing.
+  const hist = me?.financialsByQuarter ?? [];
+  const lastClosedRank = hist.length > 0 ? hist[hist.length - 1].rank : undefined;
+  const delta = lastClosedRank !== undefined && rank > 0 ? lastClosedRank - rank : 0;
+
+  if (!me || rank === 0 || teams.length < 2) {
+    // Solo sandbox or pre-setup — fall back to the plain icon button.
+    return (
+      <button
+        type="button"
+        onClick={() => openPanel("leaderboard")}
+        aria-label="Open leaderboard"
+        aria-pressed={isOpen}
+        title="Leaderboard"
+        className={cn(
+          "w-8 h-8 min-h-[40px] min-w-[40px] rounded-md flex items-center justify-center transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+          isOpen
+            ? "bg-surface-hover text-ink"
+            : "text-ink-muted hover:text-ink hover:bg-surface-hover",
+        )}
+      >
+        <Trophy size={16} aria-hidden="true" />
+      </button>
+    );
+  }
+
+  const ord = ordinal(rank);
   return (
     <button
       type="button"
       onClick={() => openPanel("leaderboard")}
-      aria-label="Open leaderboard"
+      aria-label={`Open leaderboard — currently ${ord} of ${teams.length}${delta > 0 ? ", up since last close" : delta < 0 ? ", down since last close" : ""}`}
       aria-pressed={isOpen}
-      title="Leaderboard"
+      title={`Leaderboard · ranked by airline value${delta !== 0 ? ` · ${delta > 0 ? "up" : "down"} ${Math.abs(delta)} since last close` : ""}`}
       className={cn(
-        "w-8 h-8 min-h-[40px] min-w-[40px] rounded-md flex items-center justify-center transition-colors",
+        "h-8 min-h-[40px] px-2.5 rounded-md flex items-center gap-1.5 transition-colors shrink-0",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
-        isOpen
-          ? "bg-surface-hover text-ink"
-          : "text-ink-muted hover:text-ink hover:bg-surface-hover",
+        rank === 1
+          ? "text-[var(--gold)] hover:bg-[var(--gold-soft)]"
+          : isOpen
+            ? "bg-surface-hover text-ink"
+            : "text-ink-2 hover:text-ink hover:bg-surface-hover",
       )}
     >
-      <Trophy size={16} aria-hidden="true" />
+      <Trophy size={14} aria-hidden="true" className="shrink-0" />
+      <span className="flex items-baseline gap-1 whitespace-nowrap">
+        <span className="font-display text-[0.9375rem] leading-none tabular">{ord}</span>
+        <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-medium">
+          of {teams.length}
+        </span>
+      </span>
+      {delta !== 0 && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "text-[0.6875rem] font-bold tabular leading-none",
+            delta > 0 ? "text-positive" : "text-negative",
+          )}
+        >
+          {delta > 0 ? "▲" : "▼"}{Math.abs(delta)}
+        </span>
+      )}
     </button>
   );
 }
