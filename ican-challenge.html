@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ICAN Business Simulation Challenge UAE 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --teal:     #2BBFB3;
+  --teal-d:   #1FA89D;
+  --teal-dd:  #178077;
+  --teal-bg:  #EDF9F8;
+  --dark:     #1C2133;
+  --dark2:    #242A3D;
+  --charcoal: #2D3748;
+  --text:     #374151;
+  --muted:    #6B7280;
+  --light:    #F9FAFB;
+  --border:   #E5E7EB;
+  --white:    #FFFFFF;
+}
+
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', sans-serif; background: var(--white); color: var(--text); overflow-x: hidden; line-height: 1.6; }
+
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  padding: 0 60px; height: 70px;
+  display: flex; align-items: center; justify-content: space-between;
+  transition: box-shadow .3s;
+}
+nav.scrolled { box-shadow: 0 2px 20px rgba(0,0,0,.07); }
+
+.logo-wrap { display: flex; align-items: center; text-decoration: none; }
+.logo-wrap img { height: 36px; }
+
+.nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+.nav-links a { font-size: 14px; font-weight: 500; color: var(--charcoal); text-decoration: none; transition: color .2s; }
+.nav-links a:hover { color: var(--teal); }
+.nav-cta {
+  padding: 10px 24px; background: var(--teal); color: var(--white) !important;
+  border-radius: 6px; font-weight: 600 !important;
+  transition: background .25s, transform .2s !important;
+}
+.nav-cta:hover { background: var(--teal-d) !important; transform: translateY(-1px); }
+
+/* ── HERO (light) ── */
+.hero-light {
+  min-height: 100vh; padding-top: 70px;
+  background: linear-gradient(160deg, #F0FAFA 0%, #FFFFFF 55%);
+  display: flex; align-items: center;
+  position: relative; overflow: hidden;
+}
+.hero-light-dots {
+  position: absolute; inset: 0;
+  background-image: radial-gradient(circle, rgba(43,191,179,.12) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.hero-light-blob {
+  position: absolute; top: -120px; right: -120px;
+  width: 600px; height: 600px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(43,191,179,.12) 0%, transparent 65%);
+}
+
+.hero-inner {
+  position: relative; z-index: 1;
+  max-width: 1160px; margin: 0 auto; padding: 80px 60px;
+  display: grid; grid-template-columns: 1fr 420px; gap: 80px; align-items: center;
+}
+
+.hero-tag {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--teal-d); margin-bottom: 22px;
+}
+.hero-tag span { width: 24px; height: 2px; background: var(--teal); display: inline-block; }
+
+.hero-title {
+  font-size: clamp(36px, 5vw, 58px);
+  font-weight: 800; line-height: 1.1;
+  color: var(--charcoal); margin-bottom: 22px;
+  letter-spacing: -0.5px;
+}
+.hero-title em { font-style: normal; color: var(--teal); }
+
+.hero-body {
+  font-size: 17px; color: var(--muted); line-height: 1.75;
+  margin-bottom: 40px; max-width: 500px;
+}
+
+.hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 52px; }
+
+.btn-primary {
+  padding: 13px 30px; background: var(--teal); color: var(--white);
+  border-radius: 6px; font-size: 15px; font-weight: 600;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+  border: none; cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: all .25s ease;
+}
+.btn-primary:hover { background: var(--teal-d); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(43,191,179,.35); }
+
+.btn-ghost {
+  padding: 13px 28px; background: transparent; color: var(--charcoal);
+  border-radius: 6px; font-size: 15px; font-weight: 600;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+  border: 1.5px solid var(--border); cursor: pointer; font-family: 'Inter', sans-serif;
+  transition: all .25s ease;
+}
+.btn-ghost:hover { border-color: var(--teal); color: var(--teal); }
+
+.hero-stats { display: flex; gap: 36px; }
+.hs { }
+.hs-num { font-size: 28px; font-weight: 800; color: var(--charcoal); line-height: 1; }
+.hs-num span { color: var(--teal); }
+.hs-label { font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+
+/* Right panel — competition card */
+.comp-card {
+  background: var(--dark);
+  border-radius: 16px; padding: 40px 36px;
+  animation: fadeLeft .7s .15s ease both;
+}
+.cc-eyebrow {
+  font-size: 11px; font-weight: 700; letter-spacing: 2.5px;
+  text-transform: uppercase; color: var(--teal);
+  margin-bottom: 22px; display: block;
+}
+.cc-title {
+  font-size: 28px; font-weight: 800; line-height: 1.2;
+  color: var(--white); margin-bottom: 18px;
+}
+.cc-title em { font-style: italic; color: var(--teal); }
+.cc-body { font-size: 14px; color: rgba(255,255,255,.5); line-height: 1.7; margin-bottom: 30px; }
+.cc-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: rgba(255,255,255,.08); border-radius: 10px; overflow: hidden; margin-bottom: 30px; }
+.cc-stat { padding: 18px 16px; background: rgba(255,255,255,.04); text-align: center; }
+.cc-stat-num { font-size: 26px; font-weight: 800; color: var(--white); line-height: 1; }
+.cc-stat-label { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,.35); margin-top: 5px; }
+.cc-note { font-size: 12px; color: rgba(255,255,255,.3); letter-spacing: .5px; }
+
+/* ── SECTIONS ── */
+.section { padding: 96px 0; }
+.section-alt { background: var(--light); }
+.section-teal { background: var(--dark); }
+.container { max-width: 1160px; margin: 0 auto; padding: 0 60px; }
+
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--teal-d); margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+.eyebrow::before { content: ''; width: 20px; height: 2px; background: var(--teal); flex-shrink: 0; }
+
+.h2 { font-size: clamp(26px, 3.5vw, 40px); font-weight: 800; color: var(--charcoal); line-height: 1.15; margin-bottom: 16px; letter-spacing: -.3px; }
+.h2 em { font-style: normal; color: var(--teal); }
+.lead { font-size: 17px; color: var(--muted); line-height: 1.75; max-width: 580px; }
+
+/* ── ABOUT ── */
+.about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; }
+.about-body { font-size: 16px; color: #4B5568; line-height: 1.85; margin-bottom: 18px; }
+.about-features { margin-top: 36px; border-top: 1px solid var(--border); }
+.af { display: flex; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+.af-icon { width: 40px; height: 40px; border-radius: 8px; background: var(--teal-bg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 18px; }
+.af h4 { font-size: 15px; font-weight: 700; color: var(--charcoal); margin-bottom: 4px; }
+.af p  { font-size: 14px; color: var(--muted); line-height: 1.55; }
+
+/* Journey card */
+.journey-box { background: var(--dark); border-radius: 16px; padding: 40px; position: sticky; top: 90px; }
+.jb-title { font-size: 18px; font-weight: 700; color: var(--white); margin-bottom: 28px; }
+.jb-step { display: flex; gap: 16px; margin-bottom: 22px; position: relative; }
+.jb-step:not(:last-child)::before { content: ''; position: absolute; left: 14px; top: 30px; bottom: -22px; width: 1px; background: rgba(43,191,179,.2); }
+.jb-num { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; background: rgba(43,191,179,.15); border: 1.5px solid rgba(43,191,179,.4); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--teal); }
+.jb-text h5 { font-size: 14px; font-weight: 600; color: var(--white); margin-bottom: 3px; }
+.jb-text p  { font-size: 13px; color: rgba(255,255,255,.38); line-height: 1.5; }
+
+/* ── ELIGIBILITY ── */
+.elig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 52px; }
+.elig-card { background: var(--white); border: 1.5px solid var(--border); border-radius: 12px; padding: 36px; transition: all .25s; }
+.elig-card:hover { border-color: var(--teal); box-shadow: 0 6px 32px rgba(43,191,179,.12); transform: translateY(-4px); }
+.elig-icon-box { width: 48px; height: 48px; border-radius: 10px; background: var(--teal-bg); display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 18px; }
+.elig-card h3 { font-size: 18px; font-weight: 700; color: var(--charcoal); margin-bottom: 16px; }
+.check-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.check-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--muted); line-height: 1.55; }
+.check-icon { width: 20px; height: 20px; border-radius: 50%; background: var(--teal-bg); border: 1.5px solid rgba(43,191,179,.3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.check-icon svg { width: 10px; height: 10px; }
+
+/* ── TEAM ── */
+.team-inner { max-width: 760px; margin: 0 auto; }
+.team-flow { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 52px; }
+.tf-uni { width: 100%; padding: 16px 24px; border: 1.5px solid rgba(43,191,179,.3); border-radius: 8px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--teal); background: rgba(43,191,179,.06); }
+.tf-line { width: 1.5px; height: 24px; background: linear-gradient(to bottom, rgba(43,191,179,.4), transparent); }
+.tf-advisor { display: flex; align-items: center; gap: 14px; padding: 18px 28px; background: rgba(255,255,255,.05); border: 1.5px solid rgba(255,255,255,.1); border-radius: 10px; }
+.tf-advisor-av { width: 40px; height: 40px; border-radius: 50%; background: rgba(43,191,179,.18); border: 1.5px solid rgba(43,191,179,.3); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.tf-advisor-info span { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,.35); margin-bottom: 3px; }
+.tf-advisor-info strong { font-size: 14px; color: var(--white); font-weight: 600; }
+.tf-students { display: flex; gap: 12px; width: 100%; justify-content: center; }
+.tf-student { flex: 1; max-width: 178px; padding: 18px 12px; background: rgba(255,255,255,.04); border: 1.5px solid rgba(255,255,255,.08); border-radius: 10px; text-align: center; transition: all .25s; }
+.tf-student.cap { border-color: rgba(43,191,179,.35); background: rgba(43,191,179,.07); }
+.tf-student:hover { border-color: rgba(255,255,255,.2); }
+.tf-student-av { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.07); margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.tf-student.cap .tf-student-av { background: rgba(43,191,179,.18); }
+.cap-badge { display: inline-block; margin-bottom: 8px; font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--teal); background: rgba(43,191,179,.15); padding: 3px 10px; border-radius: 20px; }
+.tf-student h5 { font-size: 12px; font-weight: 700; color: var(--white); margin-bottom: 3px; }
+.tf-student p  { font-size: 11px; color: rgba(255,255,255,.3); }
+
+/* ── PRIZE banner ── */
+.prize-band {
+  background: linear-gradient(135deg, var(--dark) 0%, var(--dark2) 100%);
+  border-radius: 16px; padding: 64px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 40px; flex-wrap: wrap; margin-top: 52px;
+  position: relative; overflow: hidden;
+}
+.prize-band::before { content: ''; position: absolute; top: -80px; right: -80px; width: 320px; height: 320px; border-radius: 50%; border: 70px solid rgba(43,191,179,.06); }
+.prize-left { position: relative; z-index: 1; }
+.prize-sub-label { font-size: 11px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--teal); margin-bottom: 12px; display: block; }
+.prize-num { font-size: clamp(52px, 8vw, 84px); font-weight: 800; line-height: 1; color: var(--white); letter-spacing: -1px; }
+.prize-num span { color: var(--teal); }
+.prize-desc { font-size: 15px; color: rgba(255,255,255,.4); margin-top: 10px; }
+.prize-pills { display: flex; flex-direction: column; gap: 12px; position: relative; z-index: 1; }
+.pp { display: flex; align-items: center; gap: 14px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); border-radius: 10px; padding: 16px 20px; min-width: 260px; }
+.pp-icon { font-size: 20px; }
+.pp strong { display: block; font-size: 14px; font-weight: 700; color: var(--white); margin-bottom: 2px; }
+.pp span   { font-size: 12px; color: rgba(255,255,255,.35); }
+
+/* ── FORM ── */
+.form-area { max-width: 820px; margin: 0 auto; }
+.form-block { background: var(--white); border: 1.5px solid var(--border); border-radius: 14px; padding: 40px; margin-bottom: 20px; transition: border-color .25s; }
+.form-block:focus-within { border-color: rgba(43,191,179,.45); box-shadow: 0 0 0 3px rgba(43,191,179,.06); }
+.fb-header { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.fb-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--teal-bg); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.fb-header h3 { font-size: 18px; font-weight: 700; color: var(--charcoal); }
+.fb-sub { font-size: 13px; color: var(--muted); margin-bottom: 28px; padding-left: 48px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.span2 { grid-column: 1 / -1; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+label { font-size: 12px; font-weight: 600; color: #374151; letter-spacing: .3px; }
+label .req { color: var(--teal-d); margin-left: 2px; }
+.err { display: none; color: #e53e3e; font-size: 12px; margin-top: 4px; }
+#submitSpinner { display: inline-flex; align-items: center; gap: 8px; }
+input, select, textarea {
+  width: 100%; padding: 11px 14px;
+  background: var(--light); border: 1.5px solid var(--border);
+  border-radius: 7px; font-family: 'Inter', sans-serif;
+  font-size: 14px; color: var(--text); outline: none;
+  transition: border-color .2s, box-shadow .2s, background .2s; appearance: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--teal); background: var(--white); box-shadow: 0 0 0 3px rgba(43,191,179,.1); }
+input::placeholder, textarea::placeholder { color: #B4BCC8; }
+select { background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 7L11 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 38px; cursor: pointer; }
+select option { background: var(--white); }
+textarea { resize: vertical; min-height: 84px; }
+
+/* Student tabs */
+.stabs { display: flex; gap: 6px; margin-bottom: 26px; flex-wrap: wrap; }
+.stab { padding: 8px 18px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--white); font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; transition: all .2s; font-family: 'Inter', sans-serif; }
+.stab:hover { border-color: var(--teal); color: var(--teal); }
+.stab.active { background: var(--teal); border-color: var(--teal); color: var(--white); }
+.spanel { display: none; }
+.spanel.active { display: block; }
+
+/* File */
+.file-btn { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: var(--light); border: 1.5px dashed #D1D5DB; border-radius: 7px; font-size: 14px; color: var(--muted); cursor: pointer; transition: all .2s; width: 100%; text-align: left; font-family: 'Inter', sans-serif; }
+.file-btn:hover { border-color: var(--teal); color: var(--teal-d); }
+
+/* Declarations */
+.decl-list { display: flex; flex-direction: column; gap: 10px; }
+.decl-item { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; background: var(--light); border: 1.5px solid var(--border); border-radius: 9px; cursor: pointer; transition: all .2s; }
+.decl-item:hover { border-color: rgba(43,191,179,.4); background: rgba(43,191,179,.03); }
+.decl-item input[type=checkbox] { width: 17px; height: 17px; min-width: 17px; accent-color: var(--teal); margin-top: 2px; cursor: pointer; padding: 0; border: none; background: transparent; box-shadow: none; }
+.decl-item span { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+/* Submit */
+.submit-wrap { text-align: center; padding: 44px 0 0; }
+.btn-submit { padding: 15px 52px; background: var(--teal); color: var(--white); border: none; border-radius: 7px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: 'Inter', sans-serif; display: inline-flex; align-items: center; gap: 10px; transition: all .25s ease; box-shadow: 0 4px 16px rgba(43,191,179,.3); letter-spacing: .2px; }
+.btn-submit:hover { background: var(--teal-d); transform: translateY(-3px); box-shadow: 0 10px 28px rgba(43,191,179,.4); }
+.submit-note { font-size: 13px; color: var(--muted); margin-top: 12px; }
+
+/* ── CONTACT ── */
+.contact-wrap { display: grid; grid-template-columns: 1fr auto; gap: 60px; align-items: center; }
+.contact-title { font-size: 36px; font-weight: 800; color: var(--charcoal); margin-bottom: 8px; letter-spacing: -.3px; }
+.contact-sub { color: var(--muted); font-size: 15px; margin-bottom: 28px; }
+.contact-links { display: flex; flex-direction: column; gap: 14px; }
+.c-link { display: flex; align-items: center; gap: 14px; text-decoration: none; color: var(--muted); font-size: 15px; transition: color .2s; }
+.c-link:hover { color: var(--teal-d); }
+.c-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--teal-bg); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; transition: all .2s; }
+.c-link:hover .c-icon { background: rgba(43,191,179,.2); }
+.contact-badge { background: var(--dark); border-radius: 14px; padding: 36px 44px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+.cb-logo img { height: 44px; }
+.cb-sub { font-size: 11px; color: rgba(255,255,255,.35); letter-spacing: 2px; text-transform: uppercase; }
+
+/* ── FOOTER ── */
+footer { background: var(--dark); padding: 28px 60px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,.07); }
+.footer-copy { font-size: 13px; color: rgba(255,255,255,.3); }
+.footer-copy a { color: rgba(255,255,255,.5); text-decoration: none; }
+.footer-copy a:hover { color: var(--teal); }
+.footer-flag { display: flex; height: 22px; width: 36px; border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+.footer-flag .uae-red { background: #EF3F3F; width: 10px; flex-shrink: 0; }
+.footer-flag .uae-stripes { display: flex; flex-direction: column; flex: 1; }
+.footer-flag .uae-stripes div { flex: 1; }
+
+/* ── MODAL ── */
+.overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(28,33,51,.7); backdrop-filter: blur(10px); display: none; align-items: center; justify-content: center; }
+.overlay.show { display: flex; }
+.modal { background: var(--white); border-radius: 18px; padding: 52px 44px; max-width: 480px; width: 92%; text-align: center; animation: pop .4s cubic-bezier(.175,.885,.32,1.275) both; box-shadow: 0 32px 80px rgba(0,0,0,.2); }
+.modal-icon { width: 68px; height: 68px; border-radius: 50%; background: var(--teal-bg); border: 2px solid rgba(43,191,179,.25); margin: 0 auto 24px; display: flex; align-items: center; justify-content: center; font-size: 30px; }
+.modal-title { font-size: 26px; font-weight: 800; color: var(--charcoal); margin-bottom: 12px; }
+.modal-body { font-size: 15px; color: var(--muted); line-height: 1.75; margin-bottom: 32px; }
+.modal-btn { padding: 12px 36px; background: var(--teal); color: var(--white); border: none; border-radius: 7px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; transition: all .25s; }
+.modal-btn:hover { background: var(--teal-d); transform: translateY(-2px); }
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp   { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeLeft { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes pop      { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: scale(1); } }
+@keyframes spin     { to { transform: rotate(360deg); } }
+
+.hero-text > * { animation: fadeUp .65s ease both; }
+.hero-text > *:nth-child(2) { animation-delay: .05s; }
+.hero-text > *:nth-child(3) { animation-delay: .1s; }
+.hero-text > *:nth-child(4) { animation-delay: .15s; }
+.hero-text > *:nth-child(5) { animation-delay: .2s; }
+
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: translateY(0); }
+.reveal.d1 { transition-delay: .1s; }
+.reveal.d2 { transition-delay: .2s; }
+
+.rule { height: 1px; background: var(--border); }
+
+/* ── MOBILE HAMBURGER ── */
+.hamburger {
+  display: none; flex-direction: column; justify-content: center; gap: 5px;
+  width: 40px; height: 40px; cursor: pointer; background: none; border: none; padding: 4px;
+}
+.hamburger span {
+  display: block; height: 2px; border-radius: 2px;
+  background: var(--charcoal); transition: all .3s ease;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.mobile-menu {
+  display: none; position: fixed; top: 70px; left: 0; right: 0; z-index: 998;
+  background: var(--white); border-bottom: 1px solid var(--border);
+  padding: 20px 24px 28px; flex-direction: column; gap: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.08);
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a {
+  padding: 12px 16px; font-size: 15px; font-weight: 500;
+  color: var(--charcoal); text-decoration: none; border-radius: 8px;
+  transition: background .2s, color .2s;
+}
+.mobile-menu a:hover { background: var(--light); color: var(--teal); }
+.mobile-menu .m-cta {
+  margin-top: 10px; background: var(--teal); color: var(--white) !important;
+  text-align: center; font-weight: 600 !important; border-radius: 7px;
+}
+.mobile-menu .m-cta:hover { background: var(--teal-d) !important; }
+
+/* ── LAPTOP (1024–1280px) ── */
+@media (max-width: 1280px) {
+  .hero-inner { padding: 70px 48px 90px; gap: 56px; }
+  .container { padding: 0 48px; }
+  .form-wrap { padding: 0 48px; }
+}
+
+/* ── TABLET (641–960px) ── */
+@media (max-width: 960px) {
+  /* Nav */
+  nav { padding: 0 24px; height: 64px; }
+  .nav-links { display: none; }
+  .hamburger { display: flex; }
+  .mobile-menu { top: 64px; }
+
+  /* Hero */
+  .hero-light { min-height: auto; padding-bottom: 20px; }
+  .hero-inner {
+    grid-template-columns: 1fr;
+    gap: 40px; padding: 52px 24px 64px;
+  }
+  .comp-card { display: block; }
+  .cc-stats { }
+
+  /* Sections */
+  .section { padding: 72px 0; }
+  .container { padding: 0 24px; }
+
+  /* About */
+  .about-grid { grid-template-columns: 1fr; gap: 40px; }
+  .journey-box { position: static; }
+
+  /* Eligibility */
+  .elig-grid { grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  /* Team */
+  .tf-students { flex-wrap: wrap; justify-content: center; }
+  .tf-student { max-width: 48%; flex: 0 0 calc(50% - 6px); }
+
+  /* Prize */
+  .prize-band { padding: 44px 32px; flex-direction: column; gap: 32px; }
+  .prize-pills { width: 100%; }
+  .pp { min-width: unset; }
+
+  /* Form */
+  .form-block { padding: 30px 24px; }
+  .grid2 { grid-template-columns: 1fr 1fr; }
+
+  /* Contact */
+  .contact-wrap { grid-template-columns: 1fr; gap: 36px; }
+  .contact-badge { text-align: left; padding: 28px 32px; }
+
+  /* Footer */
+  footer { padding: 24px; }
+}
+
+/* ── MOBILE (≤ 640px) ── */
+@media (max-width: 640px) {
+  nav { padding: 0 20px; height: 60px; }
+  .logo-wrap img { height: 30px; }
+  .mobile-menu { top: 60px; }
+
+  /* Hero */
+  .hero-inner { padding: 40px 20px 56px; gap: 32px; }
+  .hero-title { font-size: 36px; letter-spacing: -.3px; }
+  .hero-body  { font-size: 15px; }
+  .hero-actions { flex-direction: column; gap: 10px; }
+  .btn-primary, .btn-ghost { width: 100%; justify-content: center; padding: 14px 20px; }
+  .hero-stats { gap: 24px; flex-wrap: wrap; }
+  .hs-num { font-size: 24px; }
+
+  /* Comp card */
+  .comp-card { padding: 28px 24px; border-radius: 12px; }
+  .cc-title { font-size: 22px; }
+  .cc-stat-num { font-size: 22px; }
+
+  /* Sections */
+  .section { padding: 60px 0; }
+  .container { padding: 0 20px; }
+
+  /* About */
+  .about-body { font-size: 15px; }
+
+  /* Eligibility */
+  .elig-grid { grid-template-columns: 1fr; }
+  .elig-card { padding: 28px 22px; }
+
+  /* Team */
+  .tf-students { flex-wrap: wrap; gap: 10px; }
+  .tf-student { max-width: calc(50% - 5px); flex: 0 0 calc(50% - 5px); padding: 16px 10px; }
+  .tf-advisor { flex-direction: column; text-align: center; padding: 20px; }
+
+  /* Prize */
+  .prize-band { padding: 36px 20px; border-radius: 12px; }
+  .prize-num  { font-size: 52px; }
+  .prize-pills { gap: 10px; }
+  .pp { padding: 14px 16px; }
+
+  /* Form */
+  .form-block { padding: 24px 18px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .span2 { grid-column: 1; }
+  .stabs { gap: 6px; }
+  .stab { padding: 8px 14px; font-size: 12px; }
+  .btn-submit { width: 100%; justify-content: center; padding: 15px; }
+
+  /* Contact */
+  .contact-title { font-size: 28px; }
+  .contact-badge { padding: 24px; }
+
+  /* Footer */
+  footer { flex-direction: column; gap: 12px; padding: 20px; text-align: center; }
+
+  /* Modal */
+  .modal { padding: 40px 28px; }
+  .modal-title { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+
+<!-- MODAL -->
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="modal-icon">🏆</div>
+    <h2 class="modal-title">Nomination Received</h2>
+    <p class="modal-body">Thank you for submitting your team's nomination. The ICAN team will review your submission and your faculty representative will be contacted regarding the next stage.</p>
+    <button class="modal-btn" onclick="closeModal()">Done</button>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="#" class="logo-wrap">
+    <img src="ICAN_dark_clear.png" alt="ICAN MENA" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+    <div style="display:none; align-items:center; gap:8px;">
+      <svg width="32" height="32" viewBox="0 0 32 32"><ellipse cx="10" cy="16" rx="10" ry="10" fill="#2BBFB3" opacity=".7"/><text x="8" y="22" font-family="Inter" font-weight="800" font-size="14" fill="#2D3748">ICAN</text></svg>
+    </div>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#about">About</a></li>
+    <li><a href="#eligibility">Eligibility</a></li>
+    <li><a href="#team">Team</a></li>
+    <li><a href="#prize">Prize</a></li>
+    <li><a href="#register" class="nav-cta">Register Now</a></li>
+  </ul>
+  <button class="hamburger" id="hamburger" onclick="toggleMenu()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- MOBILE MENU -->
+<div class="mobile-menu" id="mobileMenu">
+  <a href="#about"       onclick="closeMenu()">About</a>
+  <a href="#eligibility" onclick="closeMenu()">Eligibility</a>
+  <a href="#team"        onclick="closeMenu()">Team</a>
+  <a href="#prize"       onclick="closeMenu()">Prize</a>
+  <a href="#register" class="m-cta" onclick="closeMenu()">Register Now</a>
+</div>
+
+<!-- ══ HERO ══ -->
+<section class="hero-light">
+  <div class="hero-light-dots"></div>
+  <div class="hero-light-blob"></div>
+  <div class="hero-inner">
+    <div class="hero-text">
+      <div class="hero-tag"><span></span>UAE National Inter-University Competition · 2026</div>
+      <h1 class="hero-title">Lead. <em>Decide.</em> Win.</h1>
+      <p class="hero-body">An invitational live business simulation championship for the UAE's top undergraduate business programmes — compete, collaborate, and be crowned the nation's best.</p>
+      <div class="hero-actions">
+        <a href="#register" class="btn-primary">Register Your Team &nbsp;→</a>
+        <a href="#about" class="btn-ghost">Learn More</a>
+      </div>
+      <div class="hero-stats">
+        <div class="hs"><div class="hs-num">AED <span>10K+</span></div><div class="hs-label">Prize Pool</div></div>
+        <div class="hs"><div class="hs-num"><span>1</span></div><div class="hs-label">Team / University</div></div>
+        <div class="hs"><div class="hs-num"><span>4</span></div><div class="hs-label">Students / Team</div></div>
+      </div>
+    </div>
+
+    <!-- Dark competition card -->
+    <div class="comp-card">
+      <span class="cc-eyebrow">ICAN Business Simulation Challenge · UAE 2026</span>
+      <div class="cc-title">Lead. <em>Decide.</em> Win.</div>
+      <p class="cc-body">An invitational live business simulation championship for the UAE's top business programmes — hosted each year at a selected partner university.</p>
+      <div class="cc-stats">
+        <div class="cc-stat"><div class="cc-stat-num">10+</div><div class="cc-stat-label">Schools</div></div>
+        <div class="cc-stat"><div class="cc-stat-num">4</div><div class="cc-stat-label">Per Team</div></div>
+        <div class="cc-stat"><div class="cc-stat-num">2</div><div class="cc-stat-label">Days · UAE</div></div>
+      </div>
+      <div class="cc-note">10 Schools · AED 10,000+ in Prizes</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ ABOUT ══ -->
+<section class="section" id="about">
+  <div class="container">
+    <div class="about-grid">
+      <div class="reveal">
+        <div class="eyebrow">About the Challenge</div>
+        <h2 class="h2">Not a Case Study —<br><em>A Live Business Arena</em></h2>
+        <p class="about-body">Unlike traditional case competitions, participants engage in a <strong>dynamic digital business simulation</strong> where teams make real-time decisions, respond to shifting market conditions, and collaborate to achieve the strongest outcomes.</p>
+        <p class="about-body">Designed to bridge the gap between academic learning and real-world business environments through practical, experiential learning.</p>
+        <div class="about-features">
+          <div class="af">
+            <div class="af-icon">🧠</div>
+            <div>
+              <h4>Strategic Decision-Making</h4>
+              <p>Navigate complex scenarios with real consequences under competitive pressure.</p>
+            </div>
+          </div>
+          <div class="af">
+            <div class="af-icon">🤝</div>
+            <div>
+              <h4>Team Leadership & Collaboration</h4>
+              <p>Build cohesive strategies, delegate effectively, and perform as a unit.</p>
+            </div>
+          </div>
+          <div class="af">
+            <div class="af-icon">📊</div>
+            <div>
+              <h4>Real-Time Analytics</h4>
+              <p>Interpret live simulation data and pivot your strategy to outperform rivals.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal d2">
+        <div class="journey-box">
+          <div class="jb-title">The Competition Journey</div>
+          <div class="jb-step"><div class="jb-num">1</div><div class="jb-text"><h5>Registration</h5><p>Universities nominate one team of four undergraduates with a faculty advisor.</p></div></div>
+          <div class="jb-step"><div class="jb-num">2</div><div class="jb-text"><h5>Briefing & Onboarding</h5><p>Confirmed teams receive platform access and orientation sessions.</p></div></div>
+          <div class="jb-step"><div class="jb-num">3</div><div class="jb-text"><h5>Simulation Rounds</h5><p>Teams compete across multiple rounds making live business decisions.</p></div></div>
+          <div class="jb-step"><div class="jb-num">4</div><div class="jb-text"><h5>Final Showcase</h5><p>Top teams present strategies to industry judges for the title.</p></div></div>
+          <div class="jb-step"><div class="jb-num">5</div><div class="jb-text"><h5>Awards Ceremony</h5><p>UAE's top student business team crowned at a prestigious event.</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="rule"></div>
+
+<!-- ══ ELIGIBILITY ══ -->
+<section class="section section-alt" id="eligibility">
+  <div class="container">
+    <div class="reveal" style="max-width:580px;">
+      <div class="eyebrow">Eligibility</div>
+      <h2 class="h2">Who Can <em>Compete?</em></h2>
+      <p class="lead">Open to university teams across the UAE meeting the following criteria.</p>
+    </div>
+    <div class="elig-grid">
+      <div class="elig-card reveal d1">
+        <div class="elig-icon-box">🎓</div>
+        <h3>Student Requirements</h3>
+        <ul class="check-list">
+          <li><div class="check-icon"><svg viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#2BBFB3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Currently enrolled in an undergraduate degree</li>
+          <li><div class="check-icon"><svg viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#2BBFB3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Preferred: 3rd or 4th year of study</li>
+          <li><div class="check-icon"><svg viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#2BBFB3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Nominated by their university</li>
+          <li><div class="check-icon"><svg viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#2BBFB3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Available for all competition and briefing sessions</li>
+        </ul>
+      </div>
+      <div class="elig-card reveal d2">
+        <div class="elig-icon-box">🏛️</div>
+        <h3>University Requirements</h3>
+        <ul class="check-list">
+          <li><div class="check-icon"><svg viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#2BBFB3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Recognised UAE university or higher education institution</li>
+          <li><div class="check-icon"><svg viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#2BBFB3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>One team submission per university</li>
+          <li><div class="check-icon"><svg viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#2BBFB3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Must include a faculty advisor or university representative</li>
+          <li><div class="check-icon"><svg viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="#2BBFB3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Submission of all required documentation and Emirates IDs</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="rule"></div>
+
+<!-- ══ TEAM ══ -->
+<section class="section section-teal" id="team">
+  <div class="container">
+    <div class="team-inner">
+      <div class="reveal" style="text-align:center;">
+        <div class="eyebrow" style="justify-content:center; color:var(--teal);">Team Structure</div>
+        <h2 class="h2" style="color:#fff; text-align:center;">Your <em>Dream Team</em></h2>
+        <p class="lead" style="color:rgba(255,255,255,.45); text-align:center; margin:0 auto;">Each university nominates one team of four undergraduate students, led by a faculty advisor.</p>
+      </div>
+      <div class="team-flow reveal d1">
+        <div class="tf-uni">🏛️ &nbsp;&nbsp; Participating University</div>
+        <div class="tf-line"></div>
+        <div class="tf-advisor">
+          <div class="tf-advisor-av">👨‍🏫</div>
+          <div class="tf-advisor-info"><span>Role</span><strong>Faculty Advisor / University Representative</strong></div>
+        </div>
+        <div class="tf-line"></div>
+        <div class="tf-students">
+          <div class="tf-student cap">
+            <div class="cap-badge">Captain</div>
+            <div class="tf-student-av">⭐</div>
+            <h5>Team Captain</h5><p>Undergraduate</p>
+          </div>
+          <div class="tf-student"><div class="tf-student-av">👤</div><h5>Student 2</h5><p>Undergraduate</p></div>
+          <div class="tf-student"><div class="tf-student-av">👤</div><h5>Student 3</h5><p>Undergraduate</p></div>
+          <div class="tf-student"><div class="tf-student-av">👤</div><h5>Student 4</h5><p>Undergraduate</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="rule" style="background:rgba(255,255,255,.07);"></div>
+
+<!-- ══ PRIZE ══ -->
+<section class="section" id="prize">
+  <div class="container">
+    <div class="reveal" style="max-width:560px;">
+      <div class="eyebrow">Prize Pool</div>
+      <h2 class="h2">Compete for <em>Recognition & Reward</em></h2>
+    </div>
+    <div class="prize-band reveal d1">
+      <div class="prize-left">
+        <span class="prize-sub-label">Total Prize Pool</span>
+        <div class="prize-num">AED <span>10,000+</span></div>
+        <p class="prize-desc">Awarded to UAE's top student business team</p>
+      </div>
+      <div class="prize-pills">
+        <div class="pp"><span class="pp-icon">🏆</span><div><strong>Championship Title</strong><span>UAE's Top Student Business Team</span></div></div>
+        <div class="pp"><span class="pp-icon">⚖️</span><div><strong>Industry Judges</strong><span>Assessed by leading business professionals</span></div></div>
+        <div class="pp"><span class="pp-icon">🤝</span><div><strong>Sponsors & Partners</strong><span>Network with top UAE companies</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="rule"></div>
+
+<!-- ══ REGISTRATION ══ -->
+<section class="section section-alt" id="register">
+  <div class="container" style="margin-bottom:52px;">
+    <div class="reveal" style="text-align:center;">
+      <div class="eyebrow" style="justify-content:center;">Team Nomination</div>
+      <h2 class="h2" style="text-align:center;">Register Your <em>University Team</em></h2>
+      <p class="lead" style="margin:0 auto; text-align:center;">All fields marked <strong style="color:var(--teal-d)">*</strong> are required. Your faculty advisor will be contacted with next steps.</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="form-area">
+      <form id="form" onsubmit="submitForm(event)" novalidate name="ican-registration" netlify netlify-honeypot="bot-field" data-netlify="true">
+        <input type="hidden" name="form-name" value="ican-registration">
+        <p style="display:none"><label>Don't fill this out: <input name="bot-field"></label></p>
+
+        <!-- UNIVERSITY -->
+        <div class="form-block reveal">
+          <div class="fb-header"><div class="fb-icon">🏛️</div><h3>University Information</h3></div>
+          <p class="fb-sub">Details about your institution and faculty representative.</p>
+          <div class="grid2">
+            <div class="field span2">
+              <label for="uni_name">University Name <span class="req">*</span></label>
+              <input id="uni_name" name="University Name" type="text" placeholder="e.g. American University of Sharjah" required>
+              <span class="err" id="err_uni_name"></span>
+            </div>
+            <div class="field">
+              <label for="faculty">Faculty / School <span class="req">*</span></label>
+              <input id="faculty" name="Faculty / School" type="text" placeholder="e.g. School of Business" required>
+              <span class="err" id="err_faculty"></span>
+            </div>
+            <div class="field">
+              <label for="advisor_name">Faculty Advisor Full Name <span class="req">*</span></label>
+              <input id="advisor_name" name="Advisor Full Name" type="text" placeholder="Full name" required>
+              <span class="err" id="err_advisor_name"></span>
+            </div>
+            <div class="field">
+              <label for="advisor_pos">Advisor Position <span class="req">*</span></label>
+              <input id="advisor_pos" name="Advisor Position" type="text" placeholder="e.g. Assistant Professor" required>
+              <span class="err" id="err_advisor_pos"></span>
+            </div>
+            <div class="field">
+              <label for="advisor_email">Advisor Email <span class="req">*</span></label>
+              <input id="advisor_email" name="Advisor Email" type="email" placeholder="advisor@university.ac.ae" required>
+              <span class="err" id="err_advisor_email"></span>
+            </div>
+            <div class="field span2">
+              <label for="advisor_mobile">Advisor Mobile <span class="req">*</span></label>
+              <input id="advisor_mobile" name="Advisor Mobile" type="tel" placeholder="+971 50 000 0000" required>
+              <span class="err" id="err_advisor_mobile"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TEAM -->
+        <div class="form-block reveal">
+          <div class="fb-header"><div class="fb-icon">⭐</div><h3>Team Information</h3></div>
+          <p class="fb-sub">Your team name and captain contact details.</p>
+          <div class="grid2">
+            <div class="field span2">
+              <label for="team_name">Team Name <span class="req">*</span></label>
+              <input id="team_name" name="Team Name" type="text" placeholder="e.g. The Strategists" required>
+              <span class="err" id="err_team_name"></span>
+            </div>
+            <div class="field">
+              <label for="captain_name">Team Captain Full Name <span class="req">*</span></label>
+              <input id="captain_name" name="Captain Full Name" type="text" placeholder="Full name" required>
+              <span class="err" id="err_captain_name"></span>
+            </div>
+            <div class="field">
+              <label for="captain_email">Captain Email <span class="req">*</span></label>
+              <input id="captain_email" name="Captain Email" type="email" placeholder="captain@email.com" required>
+              <span class="err" id="err_captain_email"></span>
+            </div>
+            <div class="field span2">
+              <label for="captain_mobile">Captain Mobile <span class="req">*</span></label>
+              <input id="captain_mobile" name="Captain Mobile" type="tel" placeholder="+971 50 000 0000" required>
+              <span class="err" id="err_captain_mobile"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- STUDENTS -->
+        <div class="form-block reveal">
+          <div class="fb-header"><div class="fb-icon">👥</div><h3>Student Information</h3></div>
+          <p class="fb-sub">Complete details for all 4 team members.</p>
+          <div class="stabs">
+            <button type="button" class="stab active" onclick="switchTab(0)" id="stab0">Student 1 — Captain</button>
+            <button type="button" class="stab" onclick="switchTab(1)" id="stab1">Student 2</button>
+            <button type="button" class="stab" onclick="switchTab(2)" id="stab2">Student 3</button>
+            <button type="button" class="stab" onclick="switchTab(3)" id="stab3">Student 4</button>
+          </div>
+          <div id="panels"></div>
+        </div>
+
+        <!-- DECLARATIONS -->
+        <div class="form-block reveal">
+          <div class="fb-header"><div class="fb-icon">✅</div><h3>Declarations & Consent</h3></div>
+          <p class="fb-sub">Please confirm all declarations before submitting.</p>
+          <div class="decl-list">
+            <label class="decl-item"><input type="checkbox" name="decl_enrolled" required><span>We confirm that all nominated participants are currently enrolled undergraduate students.</span></label>
+            <label class="decl-item"><input type="checkbox" name="decl_accurate" required><span>We confirm that all information provided is accurate and complete.</span></label>
+            <label class="decl-item"><input type="checkbox" name="decl_rules" required><span>We agree to abide by the competition rules, guidelines, and deadlines.</span></label>
+            <label class="decl-item"><input type="checkbox" name="decl_comms" required><span>We consent to receiving competition-related communications from ICAN MENA.</span></label>
+            <label class="decl-item"><input type="checkbox" name="decl_media" required><span>We consent to photography and videography during the competition and related promotional activities.</span></label>
+          </div>
+          <span class="err" id="err_decl" style="margin-top:10px;display:block;"></span>
+        </div>
+
+        <div class="submit-wrap reveal">
+          <button type="submit" class="btn-submit" id="submitBtn">
+            <span id="submitText">Submit Nomination &nbsp;→</span>
+            <span id="submitSpinner" style="display:none;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="animation:spin 1s linear infinite;"><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,.3)" stroke-width="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="white" stroke-width="3" stroke-linecap="round"/></svg>
+              Submitting…
+            </span>
+          </button>
+          <p class="submit-note">The ICAN team will contact your faculty representative regarding the next steps.</p>
+          <p class="err" id="err_submit" style="margin-top:12px;text-align:center;font-size:14px;"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div style="padding-bottom:20px;"></div>
+</section>
+
+<div class="rule"></div>
+
+<!-- ══ CONTACT ══ -->
+<section class="section" id="contact">
+  <div class="container">
+    <div class="contact-wrap">
+      <div class="reveal">
+        <h2 class="contact-title">Get in Touch</h2>
+        <p class="contact-sub">Questions about the competition? Reach out to the ICAN MENA team.</p>
+        <div class="contact-links">
+          <a href="mailto:businesschallenge@icanmena.com" class="c-link"><div class="c-icon">✉️</div>businesschallenge@icanmena.com</a>
+          <a href="https://www.icanmena.com" target="_blank" class="c-link"><div class="c-icon">🌐</div>www.icanmena.com</a>
+        </div>
+      </div>
+      <div class="contact-badge reveal d1">
+        <div class="cb-logo"><img src="ICAN_dark_clear.png" alt="ICAN MENA"></div>
+        <div class="cb-sub">Business Simulation Challenge</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <span class="footer-copy">© 2026 ICAN MENA &nbsp;·&nbsp; <a href="https://www.icanmena.com" target="_blank">icanmena.com</a> &nbsp;·&nbsp; <a href="mailto:businesschallenge@icanmena.com">businesschallenge@icanmena.com</a></span>
+  <div class="footer-flag">
+    <div class="uae-red"></div>
+    <div class="uae-stripes">
+      <div style="background:#009B48;"></div>
+      <div style="background:#fff;"></div>
+      <div style="background:#000;"></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+window.addEventListener('scroll', () => {
+  document.getElementById('nav').classList.toggle('scrolled', scrollY > 40);
+  closeMenu();
+});
+
+function toggleMenu() {
+  const hb = document.getElementById('hamburger');
+  const mm = document.getElementById('mobileMenu');
+  const open = mm.classList.toggle('open');
+  hb.classList.toggle('open', open);
+  document.body.style.overflow = open ? 'hidden' : '';
+}
+
+function closeMenu() {
+  document.getElementById('hamburger').classList.remove('open');
+  document.getElementById('mobileMenu').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+const STUDENT_LABELS = ['Captain', 'Student 2', 'Student 3', 'Student 4'];
+
+function buildPanels() {
+  document.getElementById('panels').innerHTML = [0,1,2,3].map(i => `
+    <div class="spanel ${i===0?'active':''}" id="p${i}">
+      <div class="grid2">
+        <div class="field">
+          <label>Full Name (as per Emirates ID) <span class="req">*</span></label>
+          <input type="text" name="S${i+1} Full Name" placeholder="Full legal name" required>
+        </div>
+        <div class="field">
+          <label>Gender <span class="req">*</span></label>
+          <select name="S${i+1} Gender" required><option value="" disabled selected>Select</option><option>Male</option><option>Female</option><option>Prefer not to say</option></select>
+        </div>
+        <div class="field">
+          <label>Nationality <span class="req">*</span></label>
+          <input type="text" name="S${i+1} Nationality" placeholder="e.g. Emirati" required>
+        </div>
+        <div class="field">
+          <label>Date of Birth <span class="req">*</span></label>
+          <input type="date" name="S${i+1} Date of Birth" required>
+        </div>
+        <div class="field">
+          <label>Personal Email <span class="req">*</span></label>
+          <input type="email" name="S${i+1} Personal Email" placeholder="personal@email.com" required>
+        </div>
+        <div class="field">
+          <label>University Email <span class="req">*</span></label>
+          <input type="email" name="S${i+1} University Email" placeholder="student@university.ac.ae" required>
+        </div>
+        <div class="field">
+          <label>Mobile Number <span class="req">*</span></label>
+          <input type="tel" name="S${i+1} Mobile" placeholder="+971 50 000 0000" required>
+        </div>
+        <div class="field">
+          <label>Degree Program <span class="req">*</span></label>
+          <input type="text" name="S${i+1} Degree Program" placeholder="e.g. BSc Business Management" required>
+        </div>
+        <div class="field">
+          <label>Year of Study <span class="req">*</span></label>
+          <select name="S${i+1} Year of Study" required><option value="" disabled selected>Select</option><option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option></select>
+        </div>
+        <div class="field">
+          <label>Expected Graduation <span class="req">*</span></label>
+          <select name="S${i+1} Expected Graduation" required><option value="" disabled selected>Select</option><option>2025</option><option>2026</option><option>2027</option><option>2028</option><option>2029</option></select>
+        </div>
+        <div class="field">
+          <label>Residential Emirate <span class="req">*</span></label>
+          <select name="S${i+1} Emirate" required><option value="" disabled selected>Select</option><option>Abu Dhabi</option><option>Dubai</option><option>Sharjah</option><option>Ajman</option><option>Umm Al Quwain</option><option>Ras Al Khaimah</option><option>Fujairah</option></select>
+        </div>
+        <div class="field">
+          <label>Emirates ID Number <span class="req">*</span></label>
+          <input type="text" name="S${i+1} Emirates ID" placeholder="784-XXXX-XXXXXXX-X" required>
+        </div>
+        <div class="field span2">
+          <label>Upload Emirates ID Copy <span class="req">*</span></label>
+          <button type="button" class="file-btn" onclick="this.nextElementSibling.click()">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 1v10M4 5l4-4 4 4M2 13h12" stroke="#6B7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="fl${i}">Upload file (PDF or image)</span>
+          </button>
+          <input type="file" name="S${i+1} Emirates ID File" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="document.getElementById('fl${i}').textContent='✓  '+this.files[0].name">
+        </div>
+        <div class="field">
+          <label>Emergency Contact Name <span class="req">*</span></label>
+          <input type="text" name="S${i+1} Emergency Name" placeholder="Full name" required>
+        </div>
+        <div class="field">
+          <label>Relationship <span class="req">*</span></label>
+          <input type="text" name="S${i+1} Emergency Relationship" placeholder="e.g. Parent, Sibling" required>
+        </div>
+        <div class="field span2">
+          <label>Emergency Contact Mobile <span class="req">*</span></label>
+          <input type="tel" name="S${i+1} Emergency Mobile" placeholder="+971 50 000 0000" required>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+buildPanels();
+
+function switchTab(i) {
+  document.querySelectorAll('.spanel').forEach((p,j) => p.classList.toggle('active', j===i));
+  document.querySelectorAll('.stab').forEach((t,j) => t.classList.toggle('active', j===i));
+}
+
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  if (el) { el.textContent = msg; el.style.display = msg ? 'block' : 'none'; }
+}
+function markField(input, invalid) {
+  input.style.borderColor = invalid ? '#e53e3e' : '';
+}
+function clearErrors() {
+  document.querySelectorAll('.err').forEach(e => { e.textContent=''; e.style.display='none'; });
+  document.querySelectorAll('input,select').forEach(i => i.style.borderColor='');
+}
+
+function validateForm() {
+  clearErrors();
+  let ok = true;
+
+  const staticFields = [
+    ['uni_name','err_uni_name'],['faculty','err_faculty'],
+    ['advisor_name','err_advisor_name'],['advisor_pos','err_advisor_pos'],
+    ['advisor_email','err_advisor_email'],['advisor_mobile','err_advisor_mobile'],
+    ['team_name','err_team_name'],['captain_name','err_captain_name'],
+    ['captain_email','err_captain_email'],['captain_mobile','err_captain_mobile']
+  ];
+  staticFields.forEach(([id, errId]) => {
+    const el = document.getElementById(id);
+    if (!el || !el.value.trim()) { markField(el, true); showErr(errId, 'This field is required.'); ok = false; }
+  });
+
+  // validate all student panel required fields
+  document.querySelectorAll('#panels [required]').forEach(el => {
+    if (!el.value || el.value === '') { markField(el, true); ok = false; }
+  });
+
+  const checkboxes = document.querySelectorAll('.decl-item input[type=checkbox]');
+  const allChecked = [...checkboxes].every(c => c.checked);
+  if (!allChecked) { showErr('err_decl', 'Please accept all declarations to proceed.'); ok = false; }
+
+  return ok;
+}
+
+async function submitForm(e) {
+  e.preventDefault();
+  if (!validateForm()) {
+    // scroll to first error
+    const first = document.querySelector('.err[style*="block"], input[style*="border-color: rgb(229"]');
+    if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+
+  const btn = document.getElementById('submitBtn');
+  const text = document.getElementById('submitText');
+  const spinner = document.getElementById('submitSpinner');
+  btn.disabled = true; text.style.display = 'none'; spinner.style.display = 'inline-flex';
+
+  // Collect all form data
+  const fd = new FormData(document.getElementById('form'));
+  // Formspree endpoint — replace YOUR_FORM_ID with actual ID from formspree.io
+  const FORMSPREE_ENDPOINT = '/';
+
+  // Save to localStorage regardless of network result
+  const snapshot = {};
+  fd.forEach((v, k) => { if (typeof v === 'string') snapshot[k] = v; });
+  snapshot._submittedAt = new Date().toISOString();
+  const stored = JSON.parse(localStorage.getItem('ican_submissions') || '[]');
+  stored.push(snapshot);
+  localStorage.setItem('ican_submissions', JSON.stringify(stored));
+
+  try {
+    const res = await fetch(FORMSPREE_ENDPOINT, {
+      method: 'POST',
+      body: fd,
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      document.getElementById('modal').classList.add('show');
+    } else {
+      const data = await res.json().catch(() => ({}));
+      const msg = (data.errors || []).map(x => x.message).join(', ') || 'Submission failed. Please try again or email businesschallenge@icanmena.com directly.';
+      showErr('err_submit', msg);
+    }
+  } catch (err) {
+    showErr('err_submit', 'Network error. Your data has been saved locally. Please try again or email businesschallenge@icanmena.com.');
+  } finally {
+    btn.disabled = false; text.style.display = ''; spinner.style.display = 'none';
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+  document.getElementById('form').reset();
+  buildPanels(); switchTab(0);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth' }); }
+  });
+});
+</script>
+</body>
+</html>

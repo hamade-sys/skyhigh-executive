@@ -15,5 +15,13 @@
       "port": 5173,
       "autoPort": true
     }
+  ,
+    {
+      "name": "ican-challenge",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", ".", "-l", "4500", "--no-clipboard"],
+      "cwd": "/Users/mohammadbalkis/Desktop/game airport claude",
+      "port": 4500
+    }
   ]
 }
