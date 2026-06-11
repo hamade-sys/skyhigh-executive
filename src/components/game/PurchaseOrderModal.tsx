@@ -46,6 +46,8 @@ import {
   cargoBellyStandardTonnes,
   AMENITY_PCT,
   AMENITY_SAT_BUMP,
+  AMENITY_AVAILABLE_FROM_YEAR,
+  amenityAvailable,
   CARGO_BELLY_COST_PCT,
 } from "@/lib/aircraft-upgrades";
 import type { CabinAmenities, CargoBellyTier } from "@/types/game";
@@ -195,6 +197,9 @@ function PurchaseOrderBody({
   const preOrders = useGame((g) => g.preOrders);
   const productionCapOverrides = useGame((g) => g.productionCapOverrides);
   const campaignMode = useGame((g) => g.session?.campaignMode);
+  const campaignStartYear = useCampaignStartYear();
+  // Era gating — some amenities (Wi-Fi) didn't exist at the 2000 start.
+  const wifiAvailable = amenityAvailable("wifi", currentQuarter, campaignStartYear);
 
   // For buy the per-plane "due at order" sticker is full price; for
   // lease it's the deposit. Upgrades are always paid in full at order.
@@ -227,11 +232,15 @@ function PurchaseOrderBody({
       customSeats: isCustom && customSeats ? customSeats : undefined,
       engineUpgrade: engine === "none" ? null : engine,
       fuselageUpgrade: fuselage,
-      cabinAmenities:
-        isPassenger && (amenities.wifi || amenities.premiumSeating ||
-                        amenities.entertainment || amenities.foodService)
-          ? amenities
-          : undefined,
+      cabinAmenities: (() => {
+        if (!isPassenger) return undefined;
+        // Defensive: never let an era-locked amenity (Wi-Fi before its
+        // year) land on the order, even if a stale/prefilled state held it.
+        const a = wifiAvailable ? amenities : { ...amenities, wifi: false };
+        return a.wifi || a.premiumSeating || a.entertainment || a.foodService
+          ? a
+          : undefined;
+      })(),
       cargoBelly: isPassenger ? cargoBelly : undefined,
     });
   }
@@ -354,6 +363,8 @@ function PurchaseOrderBody({
                 label="In-flight WiFi"
                 detail={`+${AMENITY_SAT_BUMP.wifi} satisfaction`}
                 cost={spec.buyPriceUsd * AMENITY_PCT.wifi}
+                disabled={!wifiAvailable}
+                lockedHint={`from ${AMENITY_AVAILABLE_FROM_YEAR.wifi}`}
               />
               <AmenityToggle
                 checked={!!amenities.premiumSeating}
@@ -767,36 +778,48 @@ function SummaryRow({ label, value, total }: { label: string; value: string; tot
  *  cost. Visual matches the existing Fuselage coating row pattern
  *  for consistency across the order form. */
 function AmenityToggle({
-  checked, onChange, label, detail, cost,
+  checked, onChange, label, detail, cost, disabled, lockedHint,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
   detail: string;
   cost: number;
+  /** Era-locked (technology not invented yet). Renders non-interactive. */
+  disabled?: boolean;
+  /** Shown in place of the price when locked, e.g. "from 2008". */
+  lockedHint?: string;
 }) {
   return (
     <label
+      title={disabled && lockedHint ? `Not available until ${lockedHint.replace(/^from /, "")}` : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors",
-        checked
-          ? "border-primary bg-[rgba(20,53,94,0.04)]"
-          : "border-line hover:bg-surface-hover",
+        "flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors",
+        disabled
+          ? "border-line bg-surface-2/40 opacity-60 cursor-not-allowed"
+          : "cursor-pointer " + (checked
+            ? "border-primary bg-[rgba(20,53,94,0.04)]"
+            : "border-line hover:bg-surface-hover"),
       )}
     >
       <input
         type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
+        checked={checked && !disabled}
+        disabled={disabled}
+        onChange={(e) => !disabled && onChange(e.target.checked)}
         className="accent-primary"
       />
       <div className="flex-1">
         <div className="font-medium text-ink text-[0.875rem]">{label}</div>
         <div className="text-[0.75rem] text-ink-muted leading-snug">{detail}</div>
       </div>
-      <span className="tabular font-mono text-ink-2 text-[0.875rem]">
-        +{fmtMoney(cost)}
-      </span>
+      {disabled && lockedHint ? (
+        <span className="text-[0.75rem] text-ink-muted italic shrink-0">{lockedHint}</span>
+      ) : (
+        <span className="tabular font-mono text-ink-2 text-[0.875rem]">
+          +{fmtMoney(cost)}
+        </span>
+      )}
     </label>
   );
 }

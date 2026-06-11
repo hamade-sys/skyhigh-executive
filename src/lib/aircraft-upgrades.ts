@@ -63,6 +63,40 @@ export const AMENITY_SAT_BUMP = {
   foodService: 6,
 } as const;
 
+export type AmenityKind = keyof typeof AMENITY_PCT;
+
+// ─── Era gating (historical realism) ────────────────────────────
+// Some amenities didn't exist at the 2000 campaign start. Like aircraft
+// `eisYear`, this is only meaningful in the FULL campaign (starts 2000) —
+// in the HALF campaign (starts 2015) every amenity below had already
+// arrived, so the year check passes automatically. Year 0 = always
+// available. In-flight Wi-Fi launched commercially in 2008; lie-flat
+// premium seats, seatback AVOD/IFE and meal service all predate 2000.
+export const AMENITY_AVAILABLE_FROM_YEAR: Record<AmenityKind, number> = {
+  wifi: 2008,
+  premiumSeating: 0,
+  entertainment: 0,
+  foodService: 0,
+};
+
+/** Calendar year for a campaign quarter (round). round 1 = the campaign's
+ *  first year; each 4 rounds = +1 year. */
+export function campaignYearForQuarter(quarter: number, campaignStartYear: number): number {
+  return campaignStartYear + Math.floor((Math.max(1, quarter) - 1) / 4);
+}
+
+/** Whether an amenity is era-available at `quarter` in a campaign that
+ *  started in `campaignStartYear`. */
+export function amenityAvailable(
+  amenity: AmenityKind,
+  quarter: number,
+  campaignStartYear: number,
+): boolean {
+  const fromYear = AMENITY_AVAILABLE_FROM_YEAR[amenity];
+  if (!fromYear) return true;
+  return campaignYearForQuarter(quarter, campaignStartYear) >= fromYear;
+}
+
 export function amenityCostUsd(
   buyPriceUsd: number,
   amenities: { wifi?: boolean; premiumSeating?: boolean; entertainment?: boolean; foodService?: boolean } | undefined,
