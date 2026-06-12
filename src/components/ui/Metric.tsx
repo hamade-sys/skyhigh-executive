@@ -37,15 +37,15 @@ export function Metric({
 
   return (
     <div className={cn("flex flex-col gap-1.5", className)} {...rest}>
-      <div className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+      <div className="text-label font-medium uppercase tracking-wider text-ink-muted">
         {label}
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="tabular font-display text-[1.75rem] leading-none text-ink">
+        <span className="tabular font-display text-display leading-none text-ink">
           {value}
         </span>
         {unit && (
-          <span className="text-[0.8125rem] text-ink-muted">{unit}</span>
+          <span className="text-body text-ink-muted">{unit}</span>
         )}
       </div>
       {(delta || trend) && (
@@ -53,7 +53,7 @@ export function Metric({
           {delta && (
             <span
               className={cn(
-                "tabular text-[0.75rem] font-medium",
+                "tabular text-body-sm font-medium",
                 deltaTone,
               )}
             >

@@ -46,6 +46,8 @@ import {
   cargoBellyStandardTonnes,
   AMENITY_PCT,
   AMENITY_SAT_BUMP,
+  AMENITY_AVAILABLE_FROM_YEAR,
+  amenityAvailable,
   CARGO_BELLY_COST_PCT,
 } from "@/lib/aircraft-upgrades";
 import type { CabinAmenities, CargoBellyTier } from "@/types/game";
@@ -195,6 +197,9 @@ function PurchaseOrderBody({
   const preOrders = useGame((g) => g.preOrders);
   const productionCapOverrides = useGame((g) => g.productionCapOverrides);
   const campaignMode = useGame((g) => g.session?.campaignMode);
+  const campaignStartYear = useCampaignStartYear();
+  // Era gating — some amenities (Wi-Fi) didn't exist at the 2000 start.
+  const wifiAvailable = amenityAvailable("wifi", currentQuarter, campaignStartYear);
 
   // For buy the per-plane "due at order" sticker is full price; for
   // lease it's the deposit. Upgrades are always paid in full at order.
@@ -227,11 +232,15 @@ function PurchaseOrderBody({
       customSeats: isCustom && customSeats ? customSeats : undefined,
       engineUpgrade: engine === "none" ? null : engine,
       fuselageUpgrade: fuselage,
-      cabinAmenities:
-        isPassenger && (amenities.wifi || amenities.premiumSeating ||
-                        amenities.entertainment || amenities.foodService)
-          ? amenities
-          : undefined,
+      cabinAmenities: (() => {
+        if (!isPassenger) return undefined;
+        // Defensive: never let an era-locked amenity (Wi-Fi before its
+        // year) land on the order, even if a stale/prefilled state held it.
+        const a = wifiAvailable ? amenities : { ...amenities, wifi: false };
+        return a.wifi || a.premiumSeating || a.entertainment || a.foodService
+          ? a
+          : undefined;
+      })(),
       cargoBelly: isPassenger ? cargoBelly : undefined,
     });
   }
@@ -250,7 +259,7 @@ function PurchaseOrderBody({
                 className="max-w-full max-h-full object-contain p-1"
               />
             ) : (
-              <span className="text-ink-muted text-[0.625rem] uppercase tracking-wider">No image</span>
+              <span className="text-ink-muted text-caption uppercase tracking-wider">No image</span>
             )}
           </div>
 
@@ -261,10 +270,10 @@ function PurchaseOrderBody({
                 {acquisitionType === "buy" ? "Buy" : "Lease"}
               </Badge>
             </div>
-            <h2 className="font-display text-[1.5rem] text-ink leading-tight">
+            <h2 className="font-display text-heading-lg text-ink leading-tight">
               {spec.name}
             </h2>
-            <div className="text-ink-muted text-[0.8125rem] mt-1 font-mono">
+            <div className="text-ink-muted text-body mt-1 font-mono">
               {spec.family === "passenger"
                 ? `${spec.seats.first}F / ${spec.seats.business}C / ${spec.seats.economy}Y default`
                 : `${spec.cargoTonnes ?? 0}T cargo`}
@@ -283,7 +292,7 @@ function PurchaseOrderBody({
               type="button"
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
               aria-label="Decrease quantity"
-              className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-[1.125rem] font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-heading-sm font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               disabled={quantity <= 1}
             >
               <span aria-hidden="true">−</span>
@@ -297,17 +306,17 @@ function PurchaseOrderBody({
                 const n = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
                 setQuantity(Number.isFinite(n) && n > 0 ? n : 1);
               }}
-              className="tabular font-mono text-[1.5rem] text-ink font-bold w-20 text-center rounded-md border border-line bg-surface py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="tabular font-mono text-heading-lg text-ink font-bold w-20 text-center rounded-md border border-line bg-surface py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
             <button
               type="button"
               onClick={() => setQuantity(quantity + 1)}
               aria-label="Increase quantity"
-              className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-[1.125rem] font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              className="w-9 h-9 rounded-md border border-line hover:bg-surface-hover text-heading-sm font-semibold disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             >
               <span aria-hidden="true">+</span>
             </button>
-            <div className="flex-1 text-[0.75rem] text-ink-muted leading-relaxed">
+            <div className="flex-1 text-body-sm text-ink-muted leading-relaxed">
               All aircraft in this order are configured identically. Max 20 per order.
             </div>
           </div>
@@ -318,21 +327,21 @@ function PurchaseOrderBody({
               already locked in without a chance to override here. */}
         {(engine !== "none" || fuselage) && (
           <Section title="Already configured (from previous screen)">
-            <div className="rounded-md border border-line bg-surface-2/40 p-3 text-[0.8125rem] flex flex-wrap items-baseline gap-x-4 gap-y-1.5">
+            <div className="rounded-md border border-line bg-surface-2/40 p-3 text-body flex flex-wrap items-baseline gap-x-4 gap-y-1.5">
               {engine !== "none" && (
                 <span className="inline-flex items-baseline gap-1.5">
-                  <span className="text-ink-muted text-[0.6875rem] uppercase tracking-wider">Engine</span>
+                  <span className="text-ink-muted text-label uppercase tracking-wider">Engine</span>
                   <span className="text-ink font-medium capitalize">{engine}</span>
-                  <span className="text-ink-muted text-[0.6875rem] tabular font-mono">
+                  <span className="text-ink-muted text-label tabular font-mono">
                     +{fmtMoney(selectedEngineCost)}/plane
                   </span>
                 </span>
               )}
               {fuselage && (
                 <span className="inline-flex items-baseline gap-1.5">
-                  <span className="text-ink-muted text-[0.6875rem] uppercase tracking-wider">Fuselage</span>
+                  <span className="text-ink-muted text-label uppercase tracking-wider">Fuselage</span>
                   <span className="text-ink font-medium">Anti-drag coating</span>
-                  <span className="text-ink-muted text-[0.6875rem] tabular font-mono">
+                  <span className="text-ink-muted text-label tabular font-mono">
                     +{fmtMoney(fuselageUpgradeCost)}/plane
                   </span>
                 </span>
@@ -354,6 +363,8 @@ function PurchaseOrderBody({
                 label="In-flight WiFi"
                 detail={`+${AMENITY_SAT_BUMP.wifi} satisfaction`}
                 cost={spec.buyPriceUsd * AMENITY_PCT.wifi}
+                disabled={!wifiAvailable}
+                lockedHint={`from ${AMENITY_AVAILABLE_FROM_YEAR.wifi}`}
               />
               <AmenityToggle
                 checked={!!amenities.premiumSeating}
@@ -377,7 +388,7 @@ function PurchaseOrderBody({
                 cost={spec.buyPriceUsd * AMENITY_PCT.foodService}
               />
             </div>
-            <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
+            <div className="text-label text-ink-muted mt-2 leading-relaxed">
               Amenities stack — picking premium seating + entertainment
               on every plane in your fleet earns an additional 3% route
               demand uplift on routes those planes fly.
@@ -423,7 +434,7 @@ function PurchaseOrderBody({
                   onClick={() => setCargoBelly("expanded")}
                 />
               </div>
-              <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
+              <div className="text-label text-ink-muted mt-2 leading-relaxed">
                 Belly tonnage scales with seat count: 100-199 seats = 5T,
                 200-299 = 10T, 300-399 = 20T, 400+ = 25T. Belly cargo
                 consumes from the route&apos;s cargo demand and prices
@@ -437,7 +448,7 @@ function PurchaseOrderBody({
         {isPassenger && customSeats && (
           <Section title="Seat configuration">
             <div className="rounded-md border border-line bg-surface-2/40 p-3 mb-3">
-              <div className="text-[0.6875rem] text-ink-muted leading-relaxed">
+              <div className="text-label text-ink-muted leading-relaxed">
                 Allocate the airframe&apos;s {defaultEquivalents.toLocaleString()} seat-equivalents
                 across cabin classes. <strong>1 First seat</strong> = 3 Economy units.{" "}
                 <strong>1 Business</strong> = 2 Economy units. All-economy fits more passengers;
@@ -476,21 +487,21 @@ function PurchaseOrderBody({
 
             <div className="rounded-md border border-line bg-surface p-3 mt-3 grid grid-cols-3 gap-2 text-center">
               <div>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Total seats</div>
-                <div className="font-mono text-ink text-[1.125rem] font-bold tabular">{totalSeats}</div>
+                <div className="text-label uppercase tracking-wider text-ink-muted">Total seats</div>
+                <div className="font-mono text-ink text-heading-sm font-bold tabular">{totalSeats}</div>
               </div>
               <div>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Equivalents used</div>
+                <div className="text-label uppercase tracking-wider text-ink-muted">Equivalents used</div>
                 <div className={cn(
-                  "font-mono text-[1.125rem] font-bold tabular",
+                  "font-mono text-heading-sm font-bold tabular",
                   customEquivalents > defaultEquivalents ? "text-negative" : "text-ink",
                 )}>
                   {customEquivalents}<span className="text-ink-muted">/{defaultEquivalents}</span>
                 </div>
               </div>
               <div>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Premium %</div>
-                <div className="font-mono text-ink text-[1.125rem] font-bold tabular">
+                <div className="text-label uppercase tracking-wider text-ink-muted">Premium %</div>
+                <div className="font-mono text-ink text-heading-sm font-bold tabular">
                   {Math.round(firstPct + businessPct)}%
                 </div>
               </div>
@@ -501,7 +512,7 @@ function PurchaseOrderBody({
                 setFirstPct(defaultRatios.first);
                 setBusinessPct(defaultRatios.business);
               }}
-              className="mt-2 text-[0.75rem] text-ink-muted hover:text-ink underline"
+              className="mt-2 text-body-sm text-ink-muted hover:text-ink underline"
             >
               Reset to factory default
             </button>
@@ -510,7 +521,7 @@ function PurchaseOrderBody({
         )}
 
         {/* 5 — Order summary */}
-        <div className="rounded-lg border border-line bg-surface-2/50 p-4 space-y-1.5 text-[0.8125rem]">
+        <div className="rounded-lg border border-line bg-surface-2/50 p-4 space-y-1.5 text-body">
           <SummaryRow
             label={`Base ${acquisitionType === "buy" ? "price" : "lease/Q"}`}
             value={`${fmtMoney(basePrice)} × ${quantity}`}
@@ -545,21 +556,21 @@ function PurchaseOrderBody({
             />
           )}
           <div className="flex items-baseline justify-between border-t border-line pt-2 mt-2">
-            <span className="font-semibold text-ink uppercase text-[0.75rem] tracking-wider">
+            <span className="font-semibold text-ink uppercase text-body-sm tracking-wider">
               Total {acquisitionType === "buy" ? "purchase" : "first-quarter"}
             </span>
-            <span className="font-mono tabular text-ink text-[1.25rem] font-bold">
+            <span className="font-mono tabular text-ink text-heading font-bold">
               {fmtMoney(totalCost)}
             </span>
           </div>
           {queuedQty > 0 && (
-            <div className="flex items-baseline justify-between text-[0.75rem] mt-1.5">
-              <span className="uppercase tracking-wider text-[0.625rem] text-ink-muted">
+            <div className="flex items-baseline justify-between text-body-sm mt-1.5">
+              <span className="uppercase tracking-wider text-caption text-ink-muted">
                 Due now
               </span>
               <span className="tabular font-mono text-ink-2">
                 {fmtMoney(cashDueNow)}
-                <span className="ml-2 text-[0.6875rem] text-ink-muted">
+                <span className="ml-2 text-label text-ink-muted">
                   {instantQty > 0 ? `${instantQty} now + ` : ""}
                   {queuedQty} × 20% deposit
                 </span>
@@ -606,9 +617,9 @@ function DeliveryAndRetirementRow({ quantity }: { quantity: number }) {
     Math.max(0, totalRounds - currentQuarter),
   );
   return (
-    <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 mt-2 text-[0.75rem]">
+    <div className="rounded-md border border-line bg-surface-2/40 px-3 py-2 mt-2 text-body-sm">
       <div className="flex items-baseline justify-between gap-3 mb-0.5">
-        <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+        <span className="text-caption uppercase tracking-wider text-ink-muted">
           Delivery
         </span>
         <span className="font-mono tabular text-ink">
@@ -617,7 +628,7 @@ function DeliveryAndRetirementRow({ quantity }: { quantity: number }) {
         </span>
       </div>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+        <span className="text-caption uppercase tracking-wider text-ink-muted">
           Retires
         </span>
         <span className="font-mono tabular text-ink-2">
@@ -625,7 +636,7 @@ function DeliveryAndRetirementRow({ quantity }: { quantity: number }) {
         </span>
       </div>
       {operatingQuartersInThisGame < 28 && (
-        <div className="text-[0.6875rem] text-ink-muted leading-snug mt-1.5">
+        <div className="text-label text-ink-muted leading-snug mt-1.5">
           This game ends at {fmtQuarter(totalRounds, startYear)} — the airframe
           will only operate {operatingQuartersInThisGame} of its 28
           quarters before the campaign closes. Plan ROI accordingly.
@@ -647,13 +658,13 @@ function CashAffordabilityRow({ totalCost }: { totalCost: number }) {
   return (
     <div
       className={cn(
-        "flex items-baseline justify-between text-[0.75rem] mt-1.5 rounded-md px-2 py-1.5",
+        "flex items-baseline justify-between text-body-sm mt-1.5 rounded-md px-2 py-1.5",
         canAfford
           ? "bg-surface-2/40 text-ink-2"
           : "bg-[var(--negative-soft)] text-negative",
       )}
     >
-      <span className="uppercase tracking-wider text-[0.625rem]">
+      <span className="uppercase tracking-wider text-caption">
         Cash on hand
       </span>
       <span className="tabular font-mono">
@@ -704,7 +715,7 @@ function CashAwareOrderButton({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+      <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
         {title}
       </div>
       {children}
@@ -726,12 +737,12 @@ function RatioSlider({
   return (
     <div className="mb-2.5">
       <div className="flex items-baseline justify-between mb-1">
-        <span className="text-[0.75rem] text-ink-2 font-medium">{label}</span>
+        <span className="text-body-sm text-ink-2 font-medium">{label}</span>
         <div className="flex items-baseline gap-2">
-          <span className="font-mono tabular text-[0.8125rem] text-ink font-semibold">
+          <span className="font-mono tabular text-body text-ink font-semibold">
             {seats} seat{seats === 1 ? "" : "s"}
           </span>
-          <span className="text-[0.6875rem] tabular text-ink-muted">
+          <span className="text-label tabular text-ink-muted">
             ({Math.round(percent)}%)
           </span>
         </div>
@@ -753,10 +764,10 @@ function RatioSlider({
 
 function SummaryRow({ label, value, total }: { label: string; value: string; total: string }) {
   return (
-    <div className="flex items-baseline justify-between text-[0.8125rem]">
+    <div className="flex items-baseline justify-between text-body">
       <span className="text-ink-2">{label}</span>
       <div className="flex items-baseline gap-3">
-        <span className="text-ink-muted text-[0.75rem] tabular font-mono">{value}</span>
+        <span className="text-ink-muted text-body-sm tabular font-mono">{value}</span>
         <span className="font-mono tabular text-ink font-medium w-24 text-right">{total}</span>
       </div>
     </div>
@@ -767,36 +778,48 @@ function SummaryRow({ label, value, total }: { label: string; value: string; tot
  *  cost. Visual matches the existing Fuselage coating row pattern
  *  for consistency across the order form. */
 function AmenityToggle({
-  checked, onChange, label, detail, cost,
+  checked, onChange, label, detail, cost, disabled, lockedHint,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
   detail: string;
   cost: number;
+  /** Era-locked (technology not invented yet). Renders non-interactive. */
+  disabled?: boolean;
+  /** Shown in place of the price when locked, e.g. "from 2008". */
+  lockedHint?: string;
 }) {
   return (
     <label
+      title={disabled && lockedHint ? `Not available until ${lockedHint.replace(/^from /, "")}` : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-md border px-3 py-2.5 cursor-pointer transition-colors",
-        checked
-          ? "border-primary bg-[rgba(20,53,94,0.04)]"
-          : "border-line hover:bg-surface-hover",
+        "flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors",
+        disabled
+          ? "border-line bg-surface-2/40 opacity-60 cursor-not-allowed"
+          : "cursor-pointer " + (checked
+            ? "border-primary bg-[rgba(20,53,94,0.04)]"
+            : "border-line hover:bg-surface-hover"),
       )}
     >
       <input
         type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
+        checked={checked && !disabled}
+        disabled={disabled}
+        onChange={(e) => !disabled && onChange(e.target.checked)}
         className="accent-primary"
       />
       <div className="flex-1">
-        <div className="font-medium text-ink text-[0.875rem]">{label}</div>
-        <div className="text-[0.75rem] text-ink-muted leading-snug">{detail}</div>
+        <div className="font-medium text-ink text-body-lg">{label}</div>
+        <div className="text-body-sm text-ink-muted leading-snug">{detail}</div>
       </div>
-      <span className="tabular font-mono text-ink-2 text-[0.875rem]">
-        +{fmtMoney(cost)}
-      </span>
+      {disabled && lockedHint ? (
+        <span className="text-body-sm text-ink-muted italic shrink-0">{lockedHint}</span>
+      ) : (
+        <span className="tabular font-mono text-ink-2 text-body-lg">
+          +{fmtMoney(cost)}
+        </span>
+      )}
     </label>
   );
 }
@@ -824,15 +847,15 @@ function BellyOption({
       )}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-medium text-ink text-[0.875rem]">{label}</span>
+        <span className="font-medium text-ink text-body-lg">{label}</span>
         {tonnes > 0 && (
-          <span className="text-[0.625rem] uppercase tracking-wider font-bold text-warning bg-[var(--warning-soft)] rounded px-1.5 py-0.5">
+          <span className="text-caption uppercase tracking-wider font-bold text-warning bg-[var(--warning-soft)] rounded px-1.5 py-0.5">
             {tonnes}T
           </span>
         )}
       </div>
-      <div className="text-[0.75rem] text-ink-muted mt-1 leading-snug">{detail}</div>
-      <div className="text-[0.75rem] tabular font-mono text-ink-2 mt-1.5">
+      <div className="text-body-sm text-ink-muted mt-1 leading-snug">{detail}</div>
+      <div className="text-body-sm tabular font-mono text-ink-2 mt-1.5">
         {cost > 0 ? `+${fmtMoney(cost)}` : "free"}
       </div>
     </button>

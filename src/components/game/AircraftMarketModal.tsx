@@ -263,8 +263,8 @@ export function AircraftMarketModal({
       <ModalHeader>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <h2 className="font-display text-[1.5rem] text-ink">Aircraft market</h2>
-            <p className="text-ink-muted text-[0.8125rem] mt-1">
+            <h2 className="font-display text-heading-lg text-ink">Aircraft market</h2>
+            <p className="text-ink-muted text-body mt-1">
               New-build orders by manufacturer, plus a secondary market for used aircraft.
             </p>
           </div>
@@ -276,10 +276,10 @@ export function AircraftMarketModal({
             {/* Subtle available-cash readout — sizes an order at a glance
                 without flipping back to the dashboard. Read-only. */}
             <div
-              className="inline-flex items-baseline gap-1.5 rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-[0.75rem]"
+              className="inline-flex items-baseline gap-1.5 rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-body-sm"
               title="Cash available to spend on aircraft right now"
             >
-              <span className="uppercase tracking-wider text-ink-muted text-[0.625rem] font-medium">
+              <span className="uppercase tracking-wider text-ink-muted text-caption font-medium">
                 Available
               </span>
               <span className="tabular font-mono text-ink font-semibold">
@@ -292,7 +292,7 @@ export function AircraftMarketModal({
             <button
               onClick={() => changeTab(inMarketMode ? tab : "boeing")}
               className={cn(
-                "rounded-md px-3 py-1.5 text-[0.75rem] font-medium border transition-colors flex items-center gap-1.5",
+                "rounded-md px-3 py-1.5 text-body-sm font-medium border transition-colors flex items-center gap-1.5",
                 inMarketMode
                   ? "border-accent text-accent bg-[var(--accent-soft)]"
                   : "border-line text-ink-muted hover:bg-surface-hover",
@@ -309,7 +309,7 @@ export function AircraftMarketModal({
                   if (compareMode) setCompareSpecIds([]); // clear on exit
                 }}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-[0.75rem] font-medium border transition-colors flex items-center gap-1.5",
+                  "rounded-md px-3 py-1.5 text-body-sm font-medium border transition-colors flex items-center gap-1.5",
                   compareMode
                     ? "border-accent text-accent bg-[var(--accent-soft)]"
                     : "border-line text-ink-muted hover:bg-surface-hover",
@@ -320,7 +320,7 @@ export function AircraftMarketModal({
                 <GitCompare size={13} />
                 {compareMode ? "Exit compare" : "Compare"}
                 {compareMode && compareSpecIds.length > 0 && (
-                  <span className="text-[0.6875rem] tabular font-mono">
+                  <span className="text-label tabular font-mono">
                     {compareSpecIds.length}
                   </span>
                 )}
@@ -329,7 +329,7 @@ export function AircraftMarketModal({
             <button
               onClick={() => changeTab(tab === "lease" ? "boeing" : "lease")}
               className={cn(
-                "rounded-md px-3 py-1.5 text-[0.75rem] font-medium border transition-colors flex items-center gap-1.5",
+                "rounded-md px-3 py-1.5 text-body-sm font-medium border transition-colors flex items-center gap-1.5",
                 tab === "lease"
                   ? "border-accent text-accent bg-[var(--accent-soft)]"
                   : "border-line text-ink-muted hover:bg-surface-hover",
@@ -337,21 +337,21 @@ export function AircraftMarketModal({
               title="Lease aircraft from a third-party lessor — top-stock specs only"
             >
               Lease
-              <span className="text-[0.6875rem] tabular font-mono opacity-80">
+              <span className="text-label tabular font-mono opacity-80">
                 {LEASE_ELIGIBLE_PASSENGER_TOP_N + LEASE_ELIGIBLE_CARGO_TOP_N}
               </span>
             </button>
             <button
               onClick={() => changeTab(tab === "secondary" ? "boeing" : "secondary")}
               className={cn(
-                "rounded-md px-3 py-1.5 text-[0.75rem] font-medium border transition-colors flex items-center gap-1.5",
+                "rounded-md px-3 py-1.5 text-body-sm font-medium border transition-colors flex items-center gap-1.5",
                 tab === "secondary"
                   ? "border-accent text-accent bg-[var(--accent-soft)]"
                   : "border-line text-ink-muted hover:bg-surface-hover",
               )}
             >
               Secondary market
-              <span className="text-[0.6875rem] tabular font-mono opacity-80">
+              <span className="text-label tabular font-mono opacity-80">
                 {secondHandListings.length}
               </span>
             </button>
@@ -370,7 +370,7 @@ export function AircraftMarketModal({
                   key={m}
                   onClick={() => changeTab(m)}
                   className={cn(
-                    "shrink-0 px-3 py-2 text-[0.8125rem] font-medium border-b-2 -mb-px transition-colors",
+                    "shrink-0 px-3 py-2 text-body font-medium border-b-2 -mb-px transition-colors",
                     active
                       ? "border-primary text-primary"
                       : "border-transparent text-ink-muted hover:text-ink",
@@ -378,7 +378,7 @@ export function AircraftMarketModal({
                 >
                   {MANUFACTURER_LABELS[m]}
                   <span className={cn(
-                    "ml-1.5 text-[0.6875rem] tabular font-mono",
+                    "ml-1.5 text-label tabular font-mono",
                     active ? "text-primary" : "text-ink-muted",
                   )}>
                     {count}
@@ -398,7 +398,7 @@ export function AircraftMarketModal({
               <button
                 onClick={() => changeSubfamily("passenger")}
                 className={cn(
-                  "px-3 py-1 text-[0.75rem] rounded-sm",
+                  "px-3 py-1 text-body-sm rounded-sm",
                   subfamily === "passenger"
                     ? "bg-primary text-primary-fg font-medium"
                     : "text-ink-2 hover:bg-surface-hover",
@@ -409,7 +409,7 @@ export function AircraftMarketModal({
               <button
                 onClick={() => changeSubfamily("cargo")}
                 className={cn(
-                  "px-3 py-1 text-[0.75rem] rounded-sm",
+                  "px-3 py-1 text-body-sm rounded-sm",
                   subfamily === "cargo"
                     ? "bg-primary text-primary-fg font-medium"
                     : "text-ink-2 hover:bg-surface-hover",
@@ -428,8 +428,8 @@ export function AircraftMarketModal({
             {/* Capacity + range filter chips — only meaningful on the
                 passenger sub-tab. Keeps the cargo list uncluttered. */}
             {subfamily === "passenger" && (
-              <div className="flex items-center gap-1.5 flex-wrap text-[0.75rem]">
-                <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Capacity</span>
+              <div className="flex items-center gap-1.5 flex-wrap text-body-sm">
+                <span className="text-caption uppercase tracking-wider text-ink-muted">Capacity</span>
                 {([
                   { k: "all", label: "All" },
                   { k: "regional", label: "Regional <100" },
@@ -449,7 +449,7 @@ export function AircraftMarketModal({
                     {label}
                   </button>
                 ))}
-                <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted ml-2">Range</span>
+                <span className="text-caption uppercase tracking-wider text-ink-muted ml-2">Range</span>
                 {([
                   { k: "any-range", label: "Any" },
                   { k: "short", label: "<4,500 km" },
@@ -473,7 +473,7 @@ export function AircraftMarketModal({
             )}
 
             {list.length === 0 ? (
-              <div className="text-[0.8125rem] text-ink-muted italic py-6 text-center">
+              <div className="text-body text-ink-muted italic py-6 text-center">
                 No {subfamily} aircraft from{" "}
                 {MANUFACTURER_LABELS[tab as ManufacturerTab]}
                 {" "}unlocked yet. More variants unlock later in the simulation.
@@ -522,7 +522,7 @@ export function AircraftMarketModal({
             compete with content; clear CTA to launch the compare modal. */}
         {compareMode && compareSpecIds.length > 0 && (
           <div className="sticky bottom-0 left-0 right-0 mt-2 -mx-1 rounded-md border border-accent bg-surface/95 backdrop-blur-md shadow-[var(--shadow-3)] p-2 flex items-center gap-2 z-10">
-            <span className="text-[0.75rem] text-ink-2 px-1">
+            <span className="text-body-sm text-ink-2 px-1">
               <strong className="text-ink">{compareSpecIds.length}</strong> selected
               {compareSpecIds.length < 2 && (
                 <span className="text-ink-muted ml-1">· pick at least 2 to compare</span>
@@ -535,7 +535,7 @@ export function AircraftMarketModal({
               {compareSpecs.map((s) => (
                 <span
                   key={s.id}
-                  className="inline-flex items-center gap-1 rounded-md bg-[var(--accent-soft)] text-accent px-2 py-0.5 text-[0.6875rem] font-medium"
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--accent-soft)] text-accent px-2 py-0.5 text-label font-medium"
                 >
                   {s.name}
                   <button
@@ -649,7 +649,7 @@ function AircraftRow({
           click-to-expand handler. */}
       {compareMode && (
         <label
-          className="absolute top-2 left-2 z-10 flex items-center gap-1.5 rounded-md bg-surface/90 backdrop-blur-sm border border-line px-1.5 py-1 cursor-pointer hover:bg-surface text-[0.6875rem]"
+          className="absolute top-2 left-2 z-10 flex items-center gap-1.5 rounded-md bg-surface/90 backdrop-blur-sm border border-line px-1.5 py-1 cursor-pointer hover:bg-surface text-label"
           onClick={(e) => e.stopPropagation()}
         >
           <input
@@ -688,38 +688,38 @@ function AircraftRow({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-semibold text-ink text-[0.9375rem]">{spec.name}</span>
+            <span className="font-semibold text-ink text-title-sm">{spec.name}</span>
             {/* Subtle family marker — small lowercase tag instead of the
                 heavier Badge component. The aircraft name already
                 conveys whether it's a freighter (e.g. "Boeing 777F"),
                 so the tag is just a quick scan signal. */}
             <span
               className={cn(
-                "text-[0.5625rem] uppercase tracking-wider font-medium",
+                "text-micro uppercase tracking-wider font-medium",
                 spec.family === "cargo" ? "text-warning" : "text-ink-muted",
               )}
             >
               {spec.family}
             </span>
           </div>
-          <div className="text-[0.75rem] text-ink-muted mt-0.5 font-mono tabular">
+          <div className="text-body-sm text-ink-muted mt-0.5 font-mono tabular">
             {spec.family === "passenger"
               ? `${seats} seats (${spec.seats.first}F/${spec.seats.business}C/${spec.seats.economy}Y)`
               : `${spec.cargoTonnes ?? 0}T cargo`}
             {" · "}{spec.rangeKm.toLocaleString()} km · {spec.fuelBurnPerKm} L/km
           </div>
           {spec.note && !expanded && (
-            <p className="text-[0.8125rem] text-ink-2 mt-1 italic line-clamp-1">
+            <p className="text-body text-ink-2 mt-1 italic line-clamp-1">
               {spec.note}
             </p>
           )}
         </div>
 
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="tabular font-mono text-[0.875rem] font-semibold text-ink">
+          <span className="tabular font-mono text-body-lg font-semibold text-ink">
             {fmtMoney(spec.buyPriceUsd)}
           </span>
-          <span className="text-[0.6875rem] tabular text-ink-muted">
+          <span className="text-label tabular text-ink-muted">
             list price
           </span>
           {/* Inventory + pre-order signal — visible without expanding.
@@ -734,17 +734,17 @@ function AircraftRow({
               line vs. introduces a new aircraft type (which carries
               fleet-variety maintenance + crew training overhead). */}
           {ownedCount > 0 && (
-            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-primary bg-[rgba(20,53,94,0.08)] px-1.5 py-0.5 rounded">
+            <span className="text-caption uppercase tracking-wider font-semibold text-primary bg-[rgba(20,53,94,0.08)] px-1.5 py-0.5 rounded">
               You own {ownedCount}
             </span>
           )}
           {isPreOrderOnly ? (
-            <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
+            <span className="text-caption uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
               Pre-order · unlocks {fmtQuarter(specUnlock, startYear)}
             </span>
           ) : released && (
             <span className={cn(
-              "text-[0.625rem] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded",
+              "text-caption uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded",
               availableNow > 0
                 ? "text-positive bg-[var(--positive-soft)]"
                 : "text-warning bg-[var(--warning-soft)]",
@@ -754,7 +754,7 @@ function AircraftRow({
                 : `Sold out · queue ${queuedThisSpec}`}
             </span>
           )}
-          <span className="mt-1 inline-flex items-center gap-1 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold">
+          <span className="mt-1 inline-flex items-center gap-1 text-label uppercase tracking-wider text-accent font-semibold">
             {expanded ? "Hide" : isPreOrderOnly ? "Pre-order" : "Configure"}
             {expanded
               ? <ChevronUp size={12} />
@@ -889,7 +889,7 @@ function ExpandedConfigurator({
         const burnDelta = effFuelBurn - spec.fuelBurnPerKm;
         const rangeDelta = effRange - spec.rangeKm;
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[0.75rem]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-body-sm">
             <Stat
               label="Range"
               value={`${effRange.toLocaleString()} km`}
@@ -932,41 +932,41 @@ function ExpandedConfigurator({
       })()}
 
       {spec.note && (
-        <p className="text-[0.8125rem] text-ink-2 italic leading-relaxed">
+        <p className="text-body text-ink-2 italic leading-relaxed">
           {spec.note}
         </p>
       )}
 
       {/* Quantity */}
       <div>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
           Quantity
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setQuantity(Math.max(1, quantity - 1))}
             disabled={quantity <= 1}
-            className="w-8 h-8 rounded-md border border-line hover:bg-surface-hover text-[1rem] font-semibold disabled:opacity-40"
+            className="w-8 h-8 rounded-md border border-line hover:bg-surface-hover text-title font-semibold disabled:opacity-40"
           >
             −
           </button>
-          <span className="tabular font-mono text-[1.25rem] text-ink font-bold w-12 text-center">
+          <span className="tabular font-mono text-heading text-ink font-bold w-12 text-center">
             {quantity}
           </span>
           <button
             onClick={() => setQuantity(Math.min(20, quantity + 1))}
             disabled={quantity >= 20}
-            className="w-8 h-8 rounded-md border border-line hover:bg-surface-hover text-[1rem] font-semibold disabled:opacity-40"
+            className="w-8 h-8 rounded-md border border-line hover:bg-surface-hover text-title font-semibold disabled:opacity-40"
           >
             +
           </button>
-          <span className="text-[0.75rem] text-ink-muted">Max 20 per order.</span>
+          <span className="text-body-sm text-ink-muted">Max 20 per order.</span>
         </div>
       </div>
 
       {/* Engine retrofit */}
       <div>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
           Engine retrofit (per aircraft)
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -995,7 +995,7 @@ function ExpandedConfigurator({
 
       {/* Fuselage coating */}
       <div>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
           Fuselage coating
         </div>
         <label
@@ -1013,14 +1013,14 @@ function ExpandedConfigurator({
             className="accent-primary"
           />
           <div className="flex-1">
-            <div className="font-medium text-ink text-[0.875rem]">
+            <div className="font-medium text-ink text-body-lg">
               Anti-drag coating
             </div>
-            <div className="text-[0.75rem] text-ink-muted">
+            <div className="text-body-sm text-ink-muted">
               −10% fuel burn (stacks with engine retrofit)
             </div>
           </div>
-          <span className="tabular font-mono text-ink-2 text-[0.875rem]">
+          <span className="tabular font-mono text-ink-2 text-body-lg">
             +{fmtMoney(fuselageUpgradeCost)}
           </span>
         </label>
@@ -1028,7 +1028,7 @@ function ExpandedConfigurator({
 
       {/* Live totals + advance buttons */}
       <div className="rounded-md border border-line bg-surface px-3 py-2.5 flex items-center justify-between gap-3">
-        <div className="text-[0.75rem] text-ink-muted leading-tight">
+        <div className="text-body-sm text-ink-muted leading-tight">
           {leaseOnly ? (
             <div>
               Lease total{" "}
@@ -1084,16 +1084,16 @@ function Stat({
 }) {
   return (
     <div className="rounded-md bg-surface border border-line/60 px-2.5 py-1.5">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+      <div className="text-caption uppercase tracking-wider text-ink-muted">
         {label}
       </div>
-      <div className="font-mono tabular text-[0.8125rem] text-ink mt-0.5">
+      <div className="font-mono tabular text-body text-ink mt-0.5">
         {value}
       </div>
       {delta && (
         <div
           className={cn(
-            "text-[0.625rem] tabular font-mono mt-0.5 leading-tight",
+            "text-caption tabular font-mono mt-0.5 leading-tight",
             positive ? "text-positive" : "text-negative",
           )}
         >
@@ -1125,12 +1125,12 @@ function UpgradePick({
       )}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-medium text-ink text-[0.8125rem]">{title}</span>
-        <span className="tabular font-mono text-[0.75rem] text-ink-2">
+        <span className="font-medium text-ink text-body">{title}</span>
+        <span className="tabular font-mono text-body-sm text-ink-2">
           {cost === 0 ? "Free" : `+${fmtMoney(cost)}`}
         </span>
       </div>
-      <div className="text-[0.6875rem] text-ink-muted mt-0.5 leading-snug">
+      <div className="text-label text-ink-muted mt-0.5 leading-snug">
         {sub}
       </div>
     </button>
@@ -1200,16 +1200,16 @@ function LeaseMarket({
       <div className="rounded-md border border-accent bg-[var(--accent-soft)] px-3 py-2.5">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <div className="min-w-0">
-            <div className="text-[0.625rem] uppercase tracking-wider text-accent font-semibold">
+            <div className="text-caption uppercase tracking-wider text-accent font-semibold">
               Lease capacity
             </div>
-            <div className="font-display text-[1.5rem] tabular leading-none mt-0.5 text-ink">
+            <div className="font-display text-heading-lg tabular leading-none mt-0.5 text-ink">
               {remainingLeaseCapacity === 0
                 ? "0 — at cap"
                 : `${remainingLeaseCapacity} more plane${remainingLeaseCapacity === 1 ? "" : "s"}`}
             </div>
           </div>
-          <div className="text-[0.6875rem] text-ink-2 leading-snug max-w-[28ch] text-right">
+          <div className="text-label text-ink-2 leading-snug max-w-[28ch] text-right">
             <div>
               {leasedCount} of {totalEligible} fleet leased
               {" "}<span className="tabular font-mono">({currentRatioPct.toFixed(0)}%)</span>
@@ -1223,11 +1223,11 @@ function LeaseMarket({
 
       {/* Passenger section */}
       <div>
-        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+        <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold mb-2">
           Passenger · top {LEASE_ELIGIBLE_PASSENGER_TOP_N} by production stock
         </div>
         {passengerSpecs.length === 0 ? (
-          <div className="text-[0.8125rem] text-ink-muted italic py-3 text-center">
+          <div className="text-body text-ink-muted italic py-3 text-center">
             No passenger specs are leasable yet — production cap rankings
             haven&apos;t resolved.
           </div>
@@ -1248,11 +1248,11 @@ function LeaseMarket({
 
       {/* Cargo section */}
       <div>
-        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 mt-3">
+        <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold mb-2 mt-3">
           Cargo · top {LEASE_ELIGIBLE_CARGO_TOP_N} by production stock
         </div>
         {cargoSpecs.length === 0 ? (
-          <div className="text-[0.8125rem] text-ink-muted italic py-3 text-center">
+          <div className="text-body text-ink-muted italic py-3 text-center">
             No cargo specs are leasable yet.
           </div>
         ) : (
@@ -1270,7 +1270,7 @@ function LeaseMarket({
         )}
       </div>
 
-      <div className="text-[0.6875rem] text-ink-muted leading-relaxed pt-2 border-t border-line">
+      <div className="text-label text-ink-muted leading-relaxed pt-2 border-t border-line">
         Lease terms: {(LEASE_DEPOSIT_PCT * 100).toFixed(0)}% deposit, {(LEASE_PER_QUARTER_PCT * 100).toFixed(1)}% per quarter,
         {" "}{LEASE_TERM_QUARTERS}-quarter term. End of term: aircraft
         returns to lessor unless you exercise the {(LEASE_BUYOUT_RESIDUAL_PCT * 100).toFixed(0)}% buy-out.
@@ -1327,17 +1327,17 @@ function LeaseRow({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-semibold text-ink text-[0.9375rem]">{spec.name}</span>
+            <span className="font-semibold text-ink text-title-sm">{spec.name}</span>
             <span
               className={cn(
-                "text-[0.5625rem] uppercase tracking-wider font-medium",
+                "text-micro uppercase tracking-wider font-medium",
                 spec.family === "cargo" ? "text-warning" : "text-ink-muted",
               )}
             >
               {spec.family}
             </span>
           </div>
-          <div className="text-[0.75rem] text-ink-muted mt-0.5 font-mono tabular">
+          <div className="text-body-sm text-ink-muted mt-0.5 font-mono tabular">
             {spec.family === "passenger"
               ? `${seats} seats · ${spec.rangeKm.toLocaleString()} km`
               : `${spec.cargoTonnes ?? 0}T cargo · ${spec.rangeKm.toLocaleString()} km`}
@@ -1345,13 +1345,13 @@ function LeaseRow({
         </div>
 
         <div className="flex flex-col items-end gap-0.5 shrink-0">
-          <span className="tabular font-mono text-[0.875rem] font-semibold text-ink">
-            {fmtMoney(terms.perQuarterUsd)}<span className="text-ink-muted text-[0.6875rem] font-normal">/Q</span>
+          <span className="tabular font-mono text-body-lg font-semibold text-ink">
+            {fmtMoney(terms.perQuarterUsd)}<span className="text-ink-muted text-label font-normal">/Q</span>
           </span>
-          <span className="text-[0.6875rem] tabular text-ink-muted">
+          <span className="text-label tabular text-ink-muted">
             {fmtMoney(terms.depositUsd)} deposit
           </span>
-          <span className="mt-1 inline-flex items-center gap-1 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold">
+          <span className="mt-1 inline-flex items-center gap-1 text-label uppercase tracking-wider text-accent font-semibold">
             {expanded ? "Hide" : "Configure"}
             {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </span>
@@ -1392,7 +1392,7 @@ function SecondaryMarket({
   const confirmSpec = confirmListing ? AIRCRAFT_BY_ID[confirmListing.specId] : null;
   if (listings.length === 0) {
     return (
-      <div className="text-[0.8125rem] text-ink-muted italic py-8 text-center">
+      <div className="text-body text-ink-muted italic py-8 text-center">
         No used aircraft on the market right now. Check back next quarter —
         retired or decommissioned aircraft from other airlines surface here.
       </div>
@@ -1400,7 +1400,7 @@ function SecondaryMarket({
   }
   return (
     <div className="space-y-2">
-      <p className="text-[0.75rem] text-ink-muted leading-relaxed">
+      <p className="text-body-sm text-ink-muted leading-relaxed">
         Pre-owned aircraft listed by other airlines or by retiring carriers.
         Cheaper than new-build but with less remaining lifespan.
       </p>
@@ -1417,19 +1417,19 @@ function SecondaryMarket({
           >
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-ink text-[0.9375rem]">{spec.name}</span>
+                <span className="font-semibold text-ink text-title-sm">{spec.name}</span>
                 <Badge tone="warning">used</Badge>
                 {l.ecoUpgrade && <Badge tone="positive">eco</Badge>}
-                <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-mono">
+                <span className="text-caption uppercase tracking-wider text-ink-muted font-mono">
                   {spec.id}
                 </span>
               </div>
-              <div className="text-[0.75rem] text-ink-muted mt-0.5 font-mono tabular">
+              <div className="text-body-sm text-ink-muted mt-0.5 font-mono tabular">
                 {spec.family === "passenger" ? `${seats} seats` : `${spec.cargoTonnes ?? 0}T cargo`}
                 {" · "}{spec.rangeKm.toLocaleString()} km
                 {" · "}{fmtAgeYQ(ageQ)} age · {fmtAgeYQ(remainingQ)} remaining
               </div>
-              <div className="text-[0.6875rem] text-ink-muted mt-1">
+              <div className="text-label text-ink-muted mt-1">
                 Listed by{" "}
                 <span className="text-ink-2 font-medium">
                   {sellerName(l.sellerTeamId)}
@@ -1458,10 +1458,10 @@ function SecondaryMarket({
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Buy {confirmSpec.name}?
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   Pre-owned aircraft transfer immediately. The asking price is
                   withdrawn from your cash this quarter; the airframe slots
                   into your fleet at idle and is available for routes from
@@ -1469,7 +1469,7 @@ function SecondaryMarket({
                 </p>
               </ModalHeader>
               <ModalBody>
-                <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+                <div className="rounded-md border border-line bg-surface p-3 text-body space-y-1">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-ink-muted">Asset</span>
                     <span className="text-ink">{confirmSpec.name}</span>

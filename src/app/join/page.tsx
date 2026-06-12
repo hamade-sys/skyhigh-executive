@@ -52,14 +52,14 @@ export default function JoinPage() {
           <h1 className="font-display text-[2rem] text-ink leading-tight mt-3 mb-1">
             Enter your session.
           </h1>
-          <p className="text-ink-2 text-[0.9375rem] mb-6">
+          <p className="text-ink-2 text-title-sm mb-6">
             Get the 4-digit code from your facilitator. Pick a company name
             and your hub airport — you&apos;ll start with $150M seed capital
             and a fresh slate.
           </p>
 
           {sessionActive ? (
-            <div className="rounded-md border border-positive/40 bg-[var(--positive-soft)] px-3 py-2 mb-5 text-[0.8125rem]">
+            <div className="rounded-md border border-positive/40 bg-[var(--positive-soft)] px-3 py-2 mb-5 text-body">
               Session is active.{" "}
               <strong className="font-mono tabular text-positive">
                 {seatsAvailable}
@@ -67,7 +67,7 @@ export default function JoinPage() {
               of {totalSeats} seats still open.
             </div>
           ) : (
-            <div className="rounded-md border border-warning/40 bg-[var(--warning-soft)] px-3 py-2 mb-5 text-[0.8125rem] text-warning">
+            <div className="rounded-md border border-warning/40 bg-[var(--warning-soft)] px-3 py-2 mb-5 text-body text-warning">
               No active session yet. Ask the facilitator to start one and
               share the code, then refresh this page.
             </div>
@@ -75,7 +75,7 @@ export default function JoinPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+              <label className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
                 4-digit code
               </label>
               <Input
@@ -84,12 +84,12 @@ export default function JoinPage() {
                 placeholder="0000"
                 inputMode="numeric"
                 maxLength={4}
-                className="font-mono tabular text-[1.75rem] text-center tracking-[0.4em]"
+                className="font-mono tabular text-display text-center tracking-[0.4em]"
               />
             </div>
 
             <div>
-              <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+              <label className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
                 Company name
               </label>
               <Input
@@ -98,19 +98,19 @@ export default function JoinPage() {
                 placeholder="Northern Aviation"
                 maxLength={40}
               />
-              <div className="text-[0.6875rem] text-ink-muted mt-1">
+              <div className="text-label text-ink-muted mt-1">
                 Used as your airline name throughout the simulation.
               </div>
             </div>
 
             <div>
-              <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+              <label className="block text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
                 Hub airport
               </label>
               <select
                 value={hubCode}
                 onChange={(e) => setHubCode(e.target.value)}
-                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-[0.9375rem] text-ink focus:outline-none focus:border-primary"
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-title-sm text-ink focus:outline-none focus:border-primary"
               >
                 <option value="">Select a hub city…</option>
                 {tier1.map((c) => (
@@ -119,20 +119,20 @@ export default function JoinPage() {
                   </option>
                 ))}
               </select>
-              <div className="text-[0.6875rem] text-ink-muted mt-1">
+              <div className="text-label text-ink-muted mt-1">
                 You start with 50 slots at your hub plus 30 slots at five
                 nearby destinations.
               </div>
             </div>
 
             {error && (
-              <div className="text-[0.875rem] text-negative rounded-md border border-[var(--negative-soft)] bg-[var(--negative-soft)] px-3 py-2">
+              <div className="text-body-lg text-negative rounded-md border border-[var(--negative-soft)] bg-[var(--negative-soft)] px-3 py-2">
                 {error}
               </div>
             )}
 
             <div className="flex items-center justify-between pt-2">
-              <Link href="/" className="text-[0.875rem] text-ink-muted hover:text-ink">
+              <Link href="/" className="text-body-lg text-ink-muted hover:text-ink">
                 ← Back
               </Link>
               <Button

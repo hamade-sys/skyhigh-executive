@@ -88,14 +88,14 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
       <div className="max-w-5xl mx-auto px-6 py-10 md:py-14">
         {/* Header */}
         <div className="text-center mb-10">
-          <div className="text-[0.6875rem] uppercase tracking-[0.28em] text-cyan-300/80 mb-3 font-semibold">
+          <div className="text-label uppercase tracking-[0.28em] text-cyan-300/80 mb-3 font-semibold">
             Starting grid
           </div>
           <h1 className="font-display text-3xl md:text-5xl font-bold leading-tight">
             Meet your{" "}
             <span className="text-cyan-300">cohort</span>
           </h1>
-          <p className="text-slate-400 mt-3 max-w-xl mx-auto text-sm md:text-[0.9375rem] leading-relaxed">
+          <p className="text-slate-400 mt-3 max-w-xl mx-auto text-sm md:text-title-sm leading-relaxed">
             {teams.length} airline{teams.length === 1 ? "" : "s"} on the
             map. Each carrier has chosen its hub and its strategic
             doctrine. The next 40 quarters decide who leads.
@@ -146,17 +146,17 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
                       {team.code}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[0.9375rem] font-semibold text-white truncate">
+                      <div className="text-title-sm font-semibold text-white truncate">
                         {team.name}
                       </div>
-                      <div className="text-[0.6875rem] uppercase tracking-wider text-slate-400 mt-0.5 font-semibold">
+                      <div className="text-label uppercase tracking-wider text-slate-400 mt-0.5 font-semibold">
                         {isHuman ? "Human player" : `AI · ${team.botDifficulty ?? "medium"}`}
                       </div>
                     </div>
                   </div>
 
                   {/* Hub row */}
-                  <div className="flex items-center gap-2 text-[0.8125rem] text-slate-300 mb-2.5">
+                  <div className="flex items-center gap-2 text-body text-slate-300 mb-2.5">
                     <MapPin size={13} className="text-cyan-400 shrink-0" aria-hidden />
                     <span className="font-mono font-semibold text-white">{team.hubCode}</span>
                     <span className="text-slate-400 truncate">
@@ -176,10 +176,10 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
                       <Icon className="w-3.5 h-3.5" />
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[0.8125rem] font-semibold text-white">
+                      <div className="text-body font-semibold text-white">
                         {doctrine.name}
                       </div>
-                      <div className="text-[0.625rem] italic text-slate-400 truncate">
+                      <div className="text-caption italic text-slate-400 truncate">
                         &ldquo;{doctrine.tagline}&rdquo;
                       </div>
                     </div>
@@ -208,7 +208,7 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
             <ArrowRight size={16} />
           </button>
           {!allRevealed && (
-            <p className="text-[0.6875rem] text-slate-500 mt-3 tabular">
+            <p className="text-label text-slate-500 mt-3 tabular">
               Loading airlines… {revealed} / {teams.length}
             </p>
           )}

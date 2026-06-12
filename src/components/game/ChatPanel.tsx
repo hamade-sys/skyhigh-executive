@@ -301,7 +301,7 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
         <header className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
           <div className="flex items-center gap-2">
             <MessageCircle size={16} className="text-ink-muted" aria-hidden />
-            <h2 className="text-[0.9375rem] font-semibold text-ink">
+            <h2 className="text-title-sm font-semibold text-ink">
               Cohort chat
             </h2>
           </div>
@@ -328,10 +328,10 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
               <div className="w-12 h-12 rounded-full bg-[var(--accent-soft)] flex items-center justify-center mb-3">
                 <MessageCircle size={20} className="text-accent" aria-hidden />
               </div>
-              <p className="text-[0.875rem] font-semibold text-ink mb-1">
+              <p className="text-body-lg font-semibold text-ink mb-1">
                 No messages yet
               </p>
-              <p className="text-[0.75rem] text-ink-muted leading-relaxed max-w-[14rem]">
+              <p className="text-body-sm text-ink-muted leading-relaxed max-w-[14rem]">
                 Say hi to your fellow airlines, share a sneaky fare,
                 or ask the room how their Q1 went.
               </p>
@@ -352,7 +352,7 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
         {error && (
           <div
             role="alert"
-            className="mx-3 mb-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[0.8125rem] text-rose-700"
+            className="mx-3 mb-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-body text-rose-700"
           >
             {error}
           </div>
@@ -360,13 +360,13 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
 
         <footer className="border-t border-line p-3 shrink-0">
           {isReadOnly ? (
-            <p className="text-[0.8125rem] text-ink-muted text-center py-2">
+            <p className="text-body text-ink-muted text-center py-2">
               The game has ended. Chat is read-only.
             </p>
           ) : (
             <>
               {isFacilitator && (
-                <label className="flex items-center gap-2 mb-2 text-[0.75rem] text-ink-2 cursor-pointer">
+                <label className="flex items-center gap-2 mb-2 text-body-sm text-ink-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={broadcastMode}
@@ -385,7 +385,7 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
                   rows={2}
                   placeholder="Message your cohort…"
                   aria-label="Chat message"
-                  className="flex-1 min-h-[44px] resize-none rounded-md border border-line bg-surface px-3 py-2 text-[0.875rem] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 min-h-[44px] resize-none rounded-md border border-line bg-surface px-3 py-2 text-body-lg text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <button
                   type="button"
@@ -401,7 +401,7 @@ export function ChatPanel({ open, onClose, onUnreadCountChange }: Props) {
                   )}
                 </button>
               </div>
-              <div className="flex items-center justify-between mt-1.5 text-[0.6875rem] text-ink-muted">
+              <div className="flex items-center justify-between mt-1.5 text-label text-ink-muted">
                 <span>Enter to send · Shift+Enter for newline</span>
                 <span
                   className={cn(
@@ -444,7 +444,7 @@ function ChatMessage({
 
   if (msg.deleted_at) {
     return (
-      <div className="text-[0.75rem] text-ink-muted italic px-3 py-1">
+      <div className="text-body-sm text-ink-muted italic px-3 py-1">
         Message removed by facilitator
       </div>
     );
@@ -467,7 +467,7 @@ function ChatMessage({
           className="inline-block w-3 h-3 rounded-sm shrink-0"
           style={{ background: color.hex }}
         />
-        <span className="text-[0.8125rem] font-semibold text-ink truncate">
+        <span className="text-body font-semibold text-ink truncate">
           {msg.author_display_name}
         </span>
         {msg.is_facilitator_broadcast && (
@@ -476,7 +476,7 @@ function ChatMessage({
             Facilitator
           </span>
         )}
-        <span className="ml-auto text-[0.6875rem] text-ink-muted tabular shrink-0">
+        <span className="ml-auto text-label text-ink-muted tabular shrink-0">
           {timeLabel}
         </span>
         {canDelete && (
@@ -491,7 +491,7 @@ function ChatMessage({
           </button>
         )}
       </div>
-      <p className="text-[0.875rem] text-ink-2 leading-relaxed whitespace-pre-wrap break-words">
+      <p className="text-body-lg text-ink-2 leading-relaxed whitespace-pre-wrap break-words">
         {msg.body}
       </p>
     </div>

@@ -201,7 +201,7 @@ function Hero() {
               <Zap className="w-5 h-5 shrink-0 mt-0.5" />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-semibold">Solo practice</span>
-                <span className="block text-[0.6875rem] text-white/85 mt-0.5">
+                <span className="block text-label text-white/85 mt-0.5">
                   Run a 40-quarter campaign on your own. No sign-in.
                 </span>
               </span>
@@ -214,7 +214,7 @@ function Hero() {
               <Globe2 className="w-5 h-5 shrink-0 mt-0.5 text-cyan-300" />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-semibold">Browse public games</span>
-                <span className="block text-[0.6875rem] text-white/70 mt-0.5">
+                <span className="block text-label text-white/70 mt-0.5">
                   Open lobbies you can join right now.
                 </span>
               </span>
@@ -227,7 +227,7 @@ function Hero() {
               <KeyRound className="w-5 h-5 shrink-0 mt-0.5 text-cyan-300" />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-semibold">Join with code</span>
-                <span className="block text-[0.6875rem] text-white/70 mt-0.5">
+                <span className="block text-label text-white/70 mt-0.5">
                   Have a 6-digit invite from a host? Enter it here.
                 </span>
               </span>
@@ -240,7 +240,7 @@ function Hero() {
               <Users2 className="w-5 h-5 shrink-0 mt-0.5 text-cyan-300" />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-semibold">Facilitate a cohort</span>
-                <span className="block text-[0.6875rem] text-white/70 mt-0.5">
+                <span className="block text-label text-white/70 mt-0.5">
                   Set up a workshop, configure seats, run the room.
                   Sign-in required.
                 </span>

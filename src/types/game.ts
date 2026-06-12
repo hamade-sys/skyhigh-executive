@@ -280,6 +280,13 @@ export interface Route {
   /** True if route carries cargo instead of passengers. */
   isCargo?: boolean;
 
+  /** Direct contribution (revenue − fuel − slot) from the PREVIOUS
+   *  closed quarter, snapshotted at close just before the quarterly
+   *  fields are overwritten. Drives the Routes panel Trend column
+   *  (Δ profit Q/Q) and stays undefined until a route has two closed
+   *  quarters behind it. */
+  prevQuarterProfitUsd?: number;
+
   /** Quarters the route has been operating (for Legacy Bonus E8.1). */
   consecutiveQuartersActive: number;
   /** Quarters in a row this route has been loss-making (for PRD G2 badge). */

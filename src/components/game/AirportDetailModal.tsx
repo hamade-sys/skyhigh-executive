@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer, selectActiveTeam, useCampaignStartYear, useTotalRounds } from "@/store/game";
+import { useUi } from "@/store/ui";
 import { CITIES_BY_CODE, countryForCode } from "@/data/cities";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { newsRoundForQuarter, gameQuarterForNewsRound } from "@/data/world-news";
@@ -98,31 +99,57 @@ export function AirportDetailModal({
           )}
         </div>
         <div className="flex items-baseline gap-3">
-          <h2 className="font-display text-[1.5rem] text-ink leading-tight font-mono">
+          <h2 className="font-display text-heading-lg text-ink leading-tight font-mono">
             {city.code}
           </h2>
-          <span className="font-display text-[1.125rem] text-ink-2">{city.name}</span>
+          <span className="font-display text-heading-sm text-ink-2">{city.name}</span>
         </div>
-        <div className="text-ink-muted text-[0.8125rem] mt-1 flex items-center gap-1.5">
+        <div className="text-ink-muted text-body mt-1 flex items-center gap-1.5">
           <MapPin size={11} /> {city.regionName} · {tierLabel[city.tier] ?? `Tier ${city.tier}`}
         </div>
       </ModalHeader>
 
       <ModalBody className="space-y-4 max-h-[60vh] overflow-auto">
-        {/* Player's slot utilization */}
+        {/* Player's slot utilization — quiet card, same visual weight
+            as the other sections. The "fully utilized" state used to
+            be a heavy outlined box + an amber sentence pointing at the
+            Slot Market; now the pointer is a real button. */}
         {playerEntry && (
           <section>
-            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+            <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
               Your position
             </div>
-            <div className="rounded-md border border-primary bg-[rgba(20,53,94,0.04)] p-3">
-              <div className="flex items-baseline justify-between gap-3 mb-1.5">
-                <span className="text-[0.8125rem] text-ink-2">Slots used / held</span>
-                <span className="font-mono tabular text-ink font-bold text-[1.25rem]">
-                  {playerEntry.used}<span className="text-ink-muted">/{playerEntry.held}</span>
-                </span>
+            <div className="rounded-md border border-line bg-surface-2/40 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-body-sm text-ink-2">Slots used / held</div>
+                  <div className="text-label text-ink-muted mt-0.5">
+                    {playerEntry.held - playerEntry.used > 0
+                      ? `${playerEntry.held - playerEntry.used} free — add routes touching ${city.code} without new bids`
+                      : "Fully utilized — more slots needed to grow here"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="font-mono tabular text-ink font-semibold text-title-lg">
+                    {playerEntry.used}
+                    <span className="text-ink-muted font-normal">/{playerEntry.held}</span>
+                  </span>
+                  {playerEntry.held - playerEntry.used <= 0 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        onClose();
+                        useUi.getState().openPanel("slots");
+                      }}
+                      title="Open the Slot Market to bid for more slots at this airport"
+                    >
+                      Slot Market →
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="h-1.5 rounded bg-line overflow-hidden">
+              <div className="h-1 rounded bg-line overflow-hidden mt-2.5">
                 <div
                   className={cn(
                     "h-full rounded",
@@ -130,71 +157,61 @@ export function AirportDetailModal({
                       ? "bg-line"
                       : playerEntry.used / playerEntry.held > 0.9
                         ? "bg-warning"
-                        : "bg-primary",
+                        : "bg-accent",
                   )}
                   style={{
                     width: `${Math.min(100, (playerEntry.used / Math.max(1, playerEntry.held)) * 100)}%`,
                   }}
                 />
               </div>
-              {playerEntry.held - playerEntry.used > 0 ? (
-                <div className="text-[0.6875rem] text-ink-muted mt-2">
-                  {playerEntry.held - playerEntry.used} slots free at this airport — you can add
-                  routes touching {city.code} without bidding for new slots.
-                </div>
-              ) : (
-                <div className="text-[0.6875rem] text-warning mt-2">
-                  Fully utilized. Bid for more slots in the Slot Market to expand here.
-                </div>
-              )}
             </div>
           </section>
         )}
 
-        {/* Active events at this city — World Cup host, Olympics
-            host, and any active news modifier hitting the city. */}
-        <CityEventsSection cityCode={city.code} quarter={s.currentQuarter} />
-
-        {/* Effective demand at this city, with Q/Q delta. Helps the
-            player decide where to bid and how to price routes. */}
+        {/* Demand — one section that owns its context: the events strip
+            (the WHY behind a demand spike or crash) sits directly above
+            the numbers it explains, and the explainer footnote lives
+            INSIDE the card instead of floating between sections. */}
         <CityDemandSection city={city} quarter={s.currentQuarter} />
 
-        {/* Airport pool */}
+        {/* Airport supply — a slim one-row strip, deliberately a
+            different shape from the demand card so the two number
+            groups don't read as one undifferentiated wall of boxes. */}
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
             Airport supply
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <Stat
-              label="Pool open now"
-              value={data.pool.toLocaleString()}
-              hint="Available to bid"
-            />
-            <Stat
-              label="Next opening"
-              value={data.nextOpening.toLocaleString()}
-              hint="At year tick"
-            />
-            <Stat
-              label="All teams hold"
-              value={data.totalHeldByAllTeams.toLocaleString()}
-              hint="Across the field"
-            />
+          <div className="rounded-md border border-line bg-surface-2/40 grid grid-cols-3 divide-x divide-line/70">
+            {([
+              { label: "Pool open now", value: data.pool, hint: "available to bid" },
+              { label: "Next opening", value: data.nextOpening, hint: "at year tick" },
+              { label: "All teams hold", value: data.totalHeldByAllTeams, hint: "across the field" },
+            ] as const).map((cell) => (
+              <div key={cell.label} className="px-3 py-2 flex items-baseline justify-between gap-2 min-w-0">
+                <div className="min-w-0">
+                  <div className="text-caption uppercase tracking-wider text-ink-muted truncate">{cell.label}</div>
+                  <div className="text-micro text-ink-faint truncate">{cell.hint}</div>
+                </div>
+                <span className="font-mono tabular text-title-sm text-ink font-medium shrink-0">
+                  {cell.value.toLocaleString()}
+                </span>
+              </div>
+            ))}
           </div>
         </section>
 
         {/* Per-team breakdown */}
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
             Airline footprint at {city.code}
           </div>
           <div className="rounded-md border border-line overflow-hidden">
-            <table className="w-full text-[0.8125rem]">
+            <table className="w-full text-body">
               <thead>
                 <tr className="bg-surface-2 border-b border-line">
-                  <th className="text-left px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Airline</th>
-                  <th className="text-right px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Slots held</th>
-                  <th className="text-right px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Used</th>
+                  <th className="text-left px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">Airline</th>
+                  <th className="text-right px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">Slots held</th>
+                  <th className="text-right px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">Used</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,7 +229,7 @@ export function AirportDetailModal({
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
                           <span
-                            className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-[0.5625rem] font-semibold text-primary-fg shrink-0"
+                            className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-micro font-semibold text-primary-fg shrink-0"
                             style={{ background: b.team.color }}
                           >
                             {b.team.code}
@@ -236,7 +253,7 @@ export function AirportDetailModal({
                         {b.team.id === s.playerTeamId ? (
                           <span className="text-ink">{b.used.toLocaleString()}</span>
                         ) : (
-                          <span className="text-ink-muted text-[0.6875rem] italic">private</span>
+                          <span className="text-ink-muted text-label italic">private</span>
                         )}
                       </td>
                     </tr>
@@ -245,7 +262,7 @@ export function AirportDetailModal({
             </table>
           </div>
           {data.breakdown.every((b) => b.held === 0 && !b.isHomeHub) && (
-            <div className="text-[0.75rem] text-ink-muted italic mt-2">
+            <div className="text-body-sm text-ink-muted italic mt-2">
               No airline currently operates at {city.code}.
             </div>
           )}
@@ -261,19 +278,19 @@ export function AirportDetailModal({
           if (playerRoutes.length === 0) return null;
           return (
             <section>
-              <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+              <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
                 Your routes touching {city.code} · {playerRoutes.length}
               </div>
               <div className="space-y-1">
                 {playerRoutes.map((r) => (
                   <div
                     key={r.id}
-                    className="flex items-baseline justify-between rounded-md border border-line bg-surface-2/40 px-3 py-1.5 text-[0.8125rem]"
+                    className="flex items-baseline justify-between rounded-md border border-line bg-surface-2/40 px-3 py-1.5 text-body"
                   >
                     <span className="font-mono text-ink">
                       {r.originCode} → {r.destCode}
                     </span>
-                    <div className="flex items-baseline gap-3 text-[0.75rem]">
+                    <div className="flex items-baseline gap-3 text-body-sm">
                       <span className="tabular text-ink-muted">
                         {Math.round(r.dailyFrequency * 7)}/wk
                       </span>
@@ -405,7 +422,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
     return (
       <>
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
           <Building size={12} className="text-accent" />
           Airport ownership · YOU OWN THIS AIRPORT
         </div>
@@ -416,16 +433,16 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
               the input, which made it look like a hint rather than a
               live setting. */}
           <div className="rounded-md border border-accent bg-surface px-3 py-2.5">
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <div className="text-caption uppercase tracking-wider text-ink-muted">
               Current slot rate
             </div>
             <div className="flex items-baseline gap-2 mt-0.5">
-              <span className="font-display text-[1.75rem] tabular text-ink leading-none">
+              <span className="font-display text-display tabular text-ink leading-none">
                 ${currentRate.toLocaleString()}
               </span>
-              <span className="text-[0.75rem] text-ink-muted">/ slot / week</span>
+              <span className="text-body-sm text-ink-muted">/ slot / week</span>
             </div>
-            <div className="text-[0.6875rem] text-ink-muted mt-1">
+            <div className="text-label text-ink-muted mt-1">
               Charged to all {tenants.length} tenant{tenants.length === 1 ? "" : "s"}
               {" "}holding {totalLeasedSlots.toLocaleString()} slot
               {totalLeasedSlots === 1 ? "" : "s"} at this airport.
@@ -445,26 +462,26 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
             const externalCollections = qRevenue - ownSlotFees;
             return (
               <div className="rounded-md border border-line bg-surface px-3 py-2.5 space-y-1.5">
-                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1">
+                <div className="text-caption uppercase tracking-wider text-ink-muted mb-1">
                   Quarterly revenue · how the math works
                 </div>
-                <div className="flex items-baseline justify-between text-[0.8125rem]">
+                <div className="flex items-baseline justify-between text-body">
                   <span className="text-ink-2">
                     Gross collections
-                    <span className="text-ink-muted ml-1.5 text-[0.6875rem]">(all tenants × rate × 13)</span>
+                    <span className="text-ink-muted ml-1.5 text-label">(all tenants × rate × 13)</span>
                   </span>
                   <span className="tabular font-mono text-ink">{fmtMoney(qRevenue)}</span>
                 </div>
                 {ownSlotFees > 0 && (
-                  <div className="flex items-baseline justify-between text-[0.8125rem]">
+                  <div className="flex items-baseline justify-between text-body">
                     <span className="text-ink-2">
                       − Your own slot fees
-                      <span className="text-ink-muted ml-1.5 text-[0.6875rem]">(refunded — paid to yourself)</span>
+                      <span className="text-ink-muted ml-1.5 text-label">(refunded — paid to yourself)</span>
                     </span>
                     <span className="tabular font-mono text-ink-muted">−{fmtMoney(ownSlotFees)}</span>
                   </div>
                 )}
-                <div className="flex items-baseline justify-between text-[0.8125rem] border-t border-line pt-1.5">
+                <div className="flex items-baseline justify-between text-body border-t border-line pt-1.5">
                   <span className="text-ink-2 font-medium">External revenue</span>
                   <span
                     className={cn(
@@ -475,14 +492,14 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
                     {fmtMoney(externalCollections)}
                   </span>
                 </div>
-                <div className="flex items-baseline justify-between text-[0.8125rem]">
+                <div className="flex items-baseline justify-between text-body">
                   <span className="text-ink-2">
                     − Opex
-                    <span className="text-ink-muted ml-1.5 text-[0.6875rem]">(30% of gross · crew + ATC + upkeep)</span>
+                    <span className="text-ink-muted ml-1.5 text-label">(30% of gross · crew + ATC + upkeep)</span>
                   </span>
                   <span className="tabular font-mono text-ink-muted">−{fmtMoney(opex)}</span>
                 </div>
-                <div className="flex items-baseline justify-between text-[0.875rem] border-t border-line pt-1.5">
+                <div className="flex items-baseline justify-between text-body-lg border-t border-line pt-1.5">
                   <span className="text-ink font-semibold">Net to you / Q</span>
                   <span
                     className={cn(
@@ -494,7 +511,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
                   </span>
                 </div>
                 {externalCollections === 0 && (
-                  <div className="text-[0.6875rem] text-ink-muted leading-snug pt-1 border-t border-line">
+                  <div className="text-label text-ink-muted leading-snug pt-1 border-t border-line">
                     You&apos;re the only tenant — opex still applies even
                     when no rivals are paying. Net flips positive once
                     other airlines lease slots here.
@@ -507,12 +524,12 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           {/* Tenant breakdown — proves the rate IS being charged. */}
           {tenants.length > 0 && (
             <div className="rounded-md border border-line bg-surface overflow-hidden">
-              <div className="px-3 py-2 border-b border-line text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted bg-surface-2/40">
+              <div className="px-3 py-2 border-b border-line text-caption uppercase tracking-wider font-semibold text-ink-muted bg-surface-2/40">
                 Who&rsquo;s paying this rate · {tenants.length} tenant{tenants.length === 1 ? "" : "s"}
               </div>
-              <table className="w-full text-[0.75rem]">
+              <table className="w-full text-body-sm">
                 <thead>
-                  <tr className="border-b border-line text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                  <tr className="border-b border-line text-caption uppercase tracking-wider text-ink-muted">
                     <th className="text-left px-3 py-1.5">Tenant</th>
                     <th className="text-right px-3 py-1.5">Slots</th>
                     <th className="text-right px-3 py-1.5">Weekly</th>
@@ -541,7 +558,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
                             {t.teamName}
                           </span>
                           {t.isPlayer && (
-                            <span className="text-[0.5625rem] uppercase tracking-wider font-bold text-accent">
+                            <span className="text-micro uppercase tracking-wider font-bold text-accent">
                               YOU
                             </span>
                           )}
@@ -561,7 +578,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
                 </tbody>
               </table>
               {tenants.length === 1 && tenants[0].isPlayer && (
-                <div className="px-3 py-1.5 border-t border-line bg-surface-2/30 text-[0.625rem] text-ink-muted leading-snug">
+                <div className="px-3 py-1.5 border-t border-line bg-surface-2/30 text-caption text-ink-muted leading-snug">
                   You&apos;re the only tenant — rivals don&apos;t fly here yet.
                   No external slot revenue while you&apos;re sole tenant.
                 </div>
@@ -572,7 +589,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           {/* Rate setter — formatted with commas. Saved rate echoes
               into the headline display above the moment Apply is hit. */}
           <div>
-            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5">
+            <div className="text-label uppercase tracking-wider text-ink-muted mb-1.5">
               Change slot rate
             </div>
             {(() => {
@@ -589,11 +606,11 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
               return (
                 <>
                   <div className="flex items-baseline justify-between mb-1.5">
-                    <span className="tabular font-mono text-ink text-[1.0625rem] font-bold">
+                    <span className="tabular font-mono text-ink text-title-lg font-bold">
                       {fmtMoney(sliderVal)}
-                      <span className="text-ink-muted text-[0.75rem] font-normal"> /wk · slot</span>
+                      <span className="text-ink-muted text-body-sm font-normal"> /wk · slot</span>
                     </span>
-                    <span className="text-[0.6875rem] text-ink-muted">
+                    <span className="text-label text-ink-muted">
                       ceiling {fmtMoney(maxRate)}
                     </span>
                   </div>
@@ -608,7 +625,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
                     aria-label="Owner slot rate per week"
                   />
                   <div className="flex items-end justify-between gap-3 mt-1.5">
-                    <span className="text-[0.6875rem] text-ink-muted leading-snug flex-1">
+                    <span className="text-label text-ink-muted leading-snug flex-1">
                       Invest in lounges, duty-free and hotels here — and serve busier
                       destinations — to lift the ceiling. Tenants are re-billed next
                       quarter and may release slots if your fee outweighs their route.
@@ -633,7 +650,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           </div>
 
           <div>
-            <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5">
+            <div className="text-label uppercase tracking-wider text-ink-muted mb-1.5">
               Capacity · {capacity}/{maxCap} slots
             </div>
             <div className="flex items-center gap-2">
@@ -664,17 +681,17 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
 
       <Modal open={confirmSell} onClose={() => setConfirmSell(false)} stack>
         <ModalHeader>
-          <h2 className="font-display text-[1.5rem] text-ink">
+          <h2 className="font-display text-heading-lg text-ink">
             Sell {city.name} airport?
           </h2>
-          <p className="text-ink-muted text-[0.8125rem] mt-1">
+          <p className="text-ink-muted text-body mt-1">
             Bidding will resume here at the auction default. Tenant airlines
             will revert to paying the cleared rate, not yours. Your
             subsidiary revenue from this hub stops next quarter.
           </p>
         </ModalHeader>
         <ModalBody className="space-y-2">
-          <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-1">
+          <div className="rounded-md border border-line bg-surface p-3 text-body space-y-1">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-ink-muted">Asking price (mark-to-market)</span>
               <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
@@ -711,20 +728,20 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   if (ownedByRival && ownerTeam) {
     return (
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
           <ShieldAlert size={12} className="text-warning" /> Airport ownership
         </div>
         <div className="rounded-md border border-warning bg-[var(--warning-soft)] p-3">
-          <div className="text-[0.875rem] text-ink">
+          <div className="text-body-lg text-ink">
             <span
-              className="inline-flex w-5 h-5 rounded-sm items-center justify-center font-mono text-[0.5625rem] font-semibold text-primary-fg mr-1.5 align-middle"
+              className="inline-flex w-5 h-5 rounded-sm items-center justify-center font-mono text-micro font-semibold text-primary-fg mr-1.5 align-middle"
               style={{ background: ownerTeam.color }}
             >
               {ownerTeam.code}
             </span>
             <strong>{ownerTeam.name}</strong> owns this airport and sets the slot rate.
           </div>
-          <div className="text-[0.75rem] text-ink-2 mt-1.5 leading-relaxed">
+          <div className="text-body-sm text-ink-2 mt-1.5 leading-relaxed">
             Current rate{" "}
             <span className="tabular font-mono font-semibold text-ink">
               {fmtMoney(slotState?.ownerSlotRatePerWeekUsd ?? 0)} / wk per slot
@@ -754,7 +771,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
   return (
     <>
     <section>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
+      <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
         <Building size={12} /> Airport ownership
       </div>
       <div className="rounded-md border border-line bg-surface p-3 space-y-2">
@@ -770,10 +787,10 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
 
         {pending ? (
           /* ── Pending purchase status ──────────────────────────────── */
-          <div className="rounded-md border border-accent bg-[var(--accent-soft)] p-2.5 text-[0.8125rem]">
+          <div className="rounded-md border border-accent bg-[var(--accent-soft)] p-2.5 text-body">
             <div className="flex items-baseline justify-between gap-2">
               <span className="font-semibold text-accent">Purchase pending</span>
-              <span className="tabular font-mono text-[0.6875rem] text-ink-muted">
+              <span className="tabular font-mono text-label text-ink-muted">
                 completes next quarter
               </span>
             </div>
@@ -790,8 +807,8 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
             const baseUsd = AIRPORT_BASE_PRICE_BY_TIER[tier];
             const capitalisedUsd = askingPrice - baseUsd;
             return (
-              <div className="rounded-md border border-line/60 bg-surface-2/30 p-2.5 text-[0.75rem] space-y-1">
-                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+              <div className="rounded-md border border-line/60 bg-surface-2/30 p-2.5 text-body-sm space-y-1">
+                <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
                   How the buy price is calculated
                 </div>
                 <div className="flex items-baseline justify-between gap-3">
@@ -813,7 +830,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
 
         {/* CTA — buy the airport (disabled while a purchase is pending). */}
         {pending ? (
-          <div className="text-[0.75rem] text-ink-muted leading-relaxed">
+          <div className="text-body-sm text-ink-muted leading-relaxed">
             Purchase pending — it completes at the next quarter close.
           </div>
         ) : (
@@ -829,7 +846,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
           </Button>
         )}
 
-        <p className="text-[0.6875rem] text-ink-muted leading-relaxed">
+        <p className="text-label text-ink-muted leading-relaxed">
           Tier {tier} airport. Buying it transfers ownership at the next
           quarter close — you then collect every airline&apos;s slot fees here
           as Subsidiary revenue (30% opex), set the slot rate, and can fund
@@ -844,10 +861,10 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
     {/* Buy confirm — with optional "offer above asking" to pre-empt rivals */}
     <Modal open={confirmBuy} onClose={() => setConfirmBuy(false)} stack>
       <ModalHeader>
-        <h2 className="font-display text-[1.5rem] text-ink">
+        <h2 className="font-display text-heading-lg text-ink">
           Buy {city.name} airport?
         </h2>
-        <p className="text-ink-muted text-[0.8125rem] mt-1">
+        <p className="text-ink-muted text-body mt-1">
           Your offer is held in escrow now and ownership transfers at the next
           quarter close. If a rival carrier places a higher competing offer
           that same quarter, the higher offer wins and your cash is refunded
@@ -855,7 +872,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
         </p>
       </ModalHeader>
       <ModalBody className="space-y-2">
-        <div className="rounded-md border border-line bg-surface p-3 text-[0.8125rem] space-y-2">
+        <div className="rounded-md border border-line bg-surface p-3 text-body space-y-2">
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-ink-muted">Asking price</span>
             <span className="tabular font-mono text-ink">{fmtMoney(askingPrice)}</span>
@@ -865,7 +882,7 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
             <span className="tabular font-mono text-positive">{fmtMoney(qRevenue)}</span>
           </div>
           <label className="block pt-1">
-            <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+            <span className="text-label uppercase tracking-wider text-ink-muted font-semibold">
               Your offer (≥ asking)
             </span>
             <input
@@ -873,10 +890,10 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
               inputMode="numeric"
               value={raiseInput}
               onChange={(e) => setRaiseInput(e.target.value)}
-              className="mt-1 w-full rounded-md border border-line bg-surface px-2.5 py-1.5 font-mono tabular text-ink text-[0.875rem] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+              className="mt-1 w-full rounded-md border border-line bg-surface px-2.5 py-1.5 font-mono tabular text-ink text-body-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
             />
             {offerAmount > player.cashUsd && (
-              <span className="mt-1 block text-[0.6875rem] text-warning">
+              <span className="mt-1 block text-label text-warning">
                 Need {fmtMoney(offerAmount - player.cashUsd)} more cash for that offer.
               </span>
             )}
@@ -913,14 +930,14 @@ function Stat({
 }) {
   return (
     <div className="rounded-md border border-line bg-surface p-2.5">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+      <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
         {label}
       </div>
-      <div className="font-display text-[1.25rem] text-ink mt-0.5 tabular">
+      <div className="font-display text-heading text-ink mt-0.5 tabular">
         {value}
       </div>
       {hint && (
-        <div className="text-[0.6875rem] text-ink-muted mt-0.5">{hint}</div>
+        <div className="text-label text-ink-muted mt-0.5">{hint}</div>
       )}
     </div>
   );
@@ -959,21 +976,20 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
   );
 
   if (!isWorldCupHost && !isOlympicHost && activeNews.length === 0) {
-    // Nothing to show. Skip the section entirely so the modal stays
+    // Nothing to show. Skip the strip entirely so the modal stays
     // compact for cities with no active events.
     return null;
   }
 
+  // Bare chip strip — no section wrapper or title of its own. It
+  // renders INSIDE the Demand section (June 2026 reorganisation),
+  // directly above the numbers these events explain.
   return (
-    <section>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
-        Active events
-      </div>
-      <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5 mb-2">
         {isWorldCupHost && (
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[0.75rem] font-semibold",
+              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-body-sm font-semibold",
               wcActiveNow
                 ? "bg-[var(--accent-soft)] text-accent border border-accent/40"
                 : "bg-surface-2 text-ink-2 border border-line",
@@ -984,13 +1000,13 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
           >
             <Trophy size={12} aria-hidden="true" />
             World Cup host
-            {wcActiveNow && <span className="text-[0.625rem] uppercase tracking-wider">live</span>}
+            {wcActiveNow && <span className="text-caption uppercase tracking-wider">live</span>}
           </span>
         )}
         {isOlympicHost && (
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[0.75rem] font-semibold",
+              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-body-sm font-semibold",
               olActiveNow
                 ? "bg-[var(--accent-soft)] text-accent border border-accent/40"
                 : "bg-surface-2 text-ink-2 border border-line",
@@ -1001,24 +1017,23 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
           >
             <Trophy size={12} aria-hidden="true" />
             Olympics host
-            {olActiveNow && <span className="text-[0.625rem] uppercase tracking-wider">live</span>}
+            {olActiveNow && <span className="text-caption uppercase tracking-wider">live</span>}
           </span>
         )}
         {activeNews.slice(0, 6).map((n) => (
           <span
             key={n.id}
-            className="inline-flex items-baseline gap-1.5 rounded-md bg-surface-2 border border-line px-2 py-1 text-[0.75rem] text-ink-2 max-w-full"
+            className="inline-flex items-baseline gap-1.5 rounded-md bg-surface-2 border border-line px-2 py-1 text-body-sm text-ink-2 max-w-full"
             title={n.detail || n.headline}
           >
             <Newspaper size={11} aria-hidden="true" className="shrink-0 mt-0.5" />
             <span className="truncate">{n.headline}</span>
-            <span className="text-[0.625rem] tabular text-ink-muted shrink-0">
+            <span className="text-caption tabular text-ink-muted shrink-0">
               {fmtQuarter(gameQuarterForNewsRound(n.quarter, totalRounds), startYear)}
             </span>
           </span>
         ))}
-      </div>
-    </section>
+    </div>
   );
 }
 
@@ -1026,7 +1041,9 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
  *  Player sees the exact same values the route engine works against
  *  (event modifiers + travel index + season all baked in), plus the
  *  signed % change vs the prior quarter so they can spot demand
- *  inflection events ("World Cup boost just kicked in" → +50% Q/Q). */
+ *  inflection events ("World Cup boost just kicked in" → +50% Q/Q).
+ *  Owns the active-events strip too: an event chip directly above the
+ *  numbers it explains beats a stray "Active events" section. */
 function CityDemandSection({ city, quarter }: { city: City; quarter: number }) {
   const startYear = useCampaignStartYear();
   const totalRounds = useTotalRounds();
@@ -1037,18 +1054,20 @@ function CityDemandSection({ city, quarter }: { city: City; quarter: number }) {
 
   return (
     <section>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+      <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
         Demand · {fmtQuarter(quarter, startYear)}
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <DemandStat label="Tourism" value={demand.tourism} deltaPct={demand.tourismDeltaPct} />
-        <DemandStat label="Business" value={demand.business} deltaPct={demand.businessDeltaPct} />
-        <DemandStat label="Cargo" value={demand.cargo} deltaPct={demand.cargoDeltaPct} />
-      </div>
-      <div className="text-[0.6875rem] text-ink-muted mt-1.5 leading-relaxed">
-        Effective daily demand at this city — already includes news
-        modifiers, the global travel index, and seasonal effects. Δ
-        compares this quarter vs last quarter.
+      <CityEventsSection cityCode={city.code} quarter={quarter} />
+      <div className="rounded-md border border-line bg-surface-2/40">
+        <div className="grid grid-cols-3 divide-x divide-line/70">
+          <DemandStat label="Tourism" value={demand.tourism} deltaPct={demand.tourismDeltaPct} />
+          <DemandStat label="Business" value={demand.business} deltaPct={demand.businessDeltaPct} />
+          <DemandStat label="Cargo" value={demand.cargo} deltaPct={demand.cargoDeltaPct} />
+        </div>
+        <div className="text-micro text-ink-muted leading-relaxed border-t border-line/70 px-3 py-1.5">
+          Effective daily demand — news modifiers, the global travel index, and
+          seasonal effects already included. Δ compares vs last quarter.
+        </div>
       </div>
     </section>
   );
@@ -1068,33 +1087,29 @@ function DemandStat({
   const flat = Math.abs(deltaPct) < 0.5;
   const positive = deltaPct > 0;
   const ArrowIcon = positive ? ArrowUp : ArrowDown;
+  // Cell inside the shared demand card (divide-x separators come from
+  // the parent grid) — no border of its own, calmer numeral scale.
   return (
-    <div className="rounded-md border border-line bg-surface p-2.5">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+    <div className="px-3 py-2">
+      <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
         {label}
       </div>
-      <div className="font-display text-[1.25rem] text-ink mt-0.5 tabular">
-        {rounded.toLocaleString()}
-      </div>
-      <div className="text-[0.6875rem] mt-0.5 flex items-center gap-1">
+      <div className="flex items-baseline gap-1.5 mt-0.5 flex-wrap">
+        <span className="font-display text-title-lg text-ink tabular leading-none">
+          {rounded.toLocaleString()}
+        </span>
         {flat ? (
-          <span className="text-ink-muted">flat Q/Q</span>
+          <span className="text-micro text-ink-muted">flat Q/Q</span>
         ) : (
-          <>
-            <ArrowIcon
-              size={11}
-              aria-hidden="true"
-              className={positive ? "text-positive" : "text-negative"}
-            />
-            <span
-              className={cn(
-                "tabular font-mono",
-                positive ? "text-positive" : "text-negative",
-              )}
-            >
-              {positive ? "+" : ""}{deltaPct.toFixed(1)}% Q/Q
-            </span>
-          </>
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 text-micro tabular font-mono",
+              positive ? "text-positive" : "text-negative",
+            )}
+          >
+            <ArrowIcon size={9} aria-hidden="true" />
+            {positive ? "+" : ""}{deltaPct.toFixed(1)}%
+          </span>
         )}
       </div>
     </div>

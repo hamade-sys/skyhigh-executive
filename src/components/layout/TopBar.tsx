@@ -6,6 +6,7 @@ import { useUi } from "@/store/ui";
 import { fmtMoney, fmtQuarter, fmtQuarterShort } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { computeAirlineValue, brandRating } from "@/lib/engine";
+import { ordinal } from "@/lib/quarter-story";
 import { QuarterTimerChip } from "@/components/game/QuarterTimer";
 import { HelpModal } from "@/components/game/HelpModal";
 import { NotificationCenter } from "@/components/game/NotificationCenter";
@@ -88,7 +89,7 @@ export function TopBar() {
           title="Switch view: see your airline or peek into a rival's network"
         >
           <span
-            className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold shadow-[var(--shadow-1)]"
+            className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-label font-semibold shadow-[var(--shadow-1)]"
             style={{
               // Phase 9 — chosen brand color overrides legacy team.color.
               background: airlineColorFor({
@@ -104,14 +105,14 @@ export function TopBar() {
             {displayTeam.code}
           </span>
           <div className="min-w-0 hidden md:block text-left">
-            <div className="font-display text-[1rem] text-ink leading-none truncate flex items-center gap-1">
+            <div className="font-display text-title text-ink leading-none truncate flex items-center gap-1">
               {displayTeam.name}
               {viewingRival && (
                 <Eye size={12} className="text-accent shrink-0" aria-label="View only" />
               )}
               <ChevronDown size={12} className="text-ink-muted opacity-50 group-hover:opacity-100 shrink-0" />
             </div>
-            <div className="text-[0.625rem] text-ink-muted uppercase tracking-wider mt-1 truncate font-medium">
+            <div className="text-caption text-ink-muted uppercase tracking-wider mt-1 truncate font-medium">
               {viewingRival ? "View only · rival network" : (
                 <>Hub {displayTeam.hubCode}
                 {displayTeam.secondaryHubCodes.length > 0 &&
@@ -211,7 +212,7 @@ export function TopBar() {
           <button
             onClick={() => setViewingTeamId(null)}
             aria-label={`Return to ${player.name} (your airline)`}
-            className="ml-auto mr-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[0.75rem] bg-accent/10 text-accent hover:bg-accent/20 font-semibold uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            className="ml-auto mr-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-body-sm bg-accent/10 text-accent hover:bg-accent/20 font-semibold uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             title="Return to your airline"
           >
             <span aria-hidden="true">←</span> Return to {player.name}
@@ -222,7 +223,7 @@ export function TopBar() {
       {/* Join code chip — lets late-joiners see the code without going back to lobby */}
       {joinCode && (
         <div
-          className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-line bg-surface-2 text-ink-muted font-mono text-[0.6875rem] font-semibold tracking-[0.15em] tabular shrink-0"
+          className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-line bg-surface-2 text-ink-muted font-mono text-label font-semibold tracking-[0.15em] tabular shrink-0"
           title="4-digit game code — share this so others can join"
         >
           <Hash size={10} aria-hidden className="shrink-0 opacity-60" />
@@ -234,10 +235,10 @@ export function TopBar() {
       <div className="flex items-center gap-3 shrink-0 pl-4 border-l border-line h-full">
         <div className="hidden md:flex flex-col items-end leading-tight">
           {/* Larger date label up top, "Round X of 20" beneath. */}
-          <span className="font-display text-[1.0625rem] text-ink">
+          <span className="font-display text-title-lg text-ink">
             {fmtQuarter(currentQuarter, startYear)}
           </span>
-          <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mt-0.5 tabular">
+          <span className="text-label uppercase tracking-wider text-ink-muted mt-0.5 tabular">
             {fmtQuarterShort(currentQuarter, totalRounds)}
           </span>
         </div>
@@ -308,26 +309,94 @@ export function TopBar() {
   );
 }
 
+/**
+ * Rank pill (June 2026 audit). Replaces the icon-only Trophy button —
+ * in a 4-10 team cohort, competitive standing is a primary decision
+ * signal every quarter, and an unlabeled 16px icon hid it from
+ * executives unfamiliar with game UI. The pill shows live rank
+ * ("2nd of 6", same airline-value metric the Leaderboard panel
+ * sorts by) plus a movement arrow vs the last quarter close.
+ */
 function LeaderboardButton() {
   const openPanel = useUi((u) => u.openPanel);
   const currentPanel = useUi((u) => u.panel);
   const isOpen = currentPanel === "leaderboard";
+  const teams = useGame(useShallow((s) => s.teams));
+  const activeTeam = useGame(selectActiveTeam);
+  const legacyPlayer = useGame(selectPlayer);
+  const me = activeTeam ?? legacyPlayer;
+
+  // Live rank by airline value — identical sort to LeaderboardPanel so
+  // the pill and the panel never disagree.
+  const ranked = [...teams].sort(
+    (a, b) => computeAirlineValue(b) - computeAirlineValue(a),
+  );
+  const rank = me ? ranked.findIndex((t) => t.id === me.id) + 1 : 0;
+  // Rank at the last quarter close (snapshotted by closeQuarter). The
+  // arrow reads "since last close" — live drift within the quarter
+  // moves the number, the arrow anchors to the last settled standing.
+  const hist = me?.financialsByQuarter ?? [];
+  const lastClosedRank = hist.length > 0 ? hist[hist.length - 1].rank : undefined;
+  const delta = lastClosedRank !== undefined && rank > 0 ? lastClosedRank - rank : 0;
+
+  if (!me || rank === 0 || teams.length < 2) {
+    // Solo sandbox or pre-setup — fall back to the plain icon button.
+    return (
+      <button
+        type="button"
+        onClick={() => openPanel("leaderboard")}
+        aria-label="Open leaderboard"
+        aria-pressed={isOpen}
+        title="Leaderboard"
+        className={cn(
+          "w-8 h-8 min-h-[40px] min-w-[40px] rounded-md flex items-center justify-center transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+          isOpen
+            ? "bg-surface-hover text-ink"
+            : "text-ink-muted hover:text-ink hover:bg-surface-hover",
+        )}
+      >
+        <Trophy size={16} aria-hidden="true" />
+      </button>
+    );
+  }
+
+  const ord = ordinal(rank);
   return (
     <button
       type="button"
       onClick={() => openPanel("leaderboard")}
-      aria-label="Open leaderboard"
+      aria-label={`Open leaderboard — currently ${ord} of ${teams.length}${delta > 0 ? ", up since last close" : delta < 0 ? ", down since last close" : ""}`}
       aria-pressed={isOpen}
-      title="Leaderboard"
+      title={`Leaderboard · ranked by airline value${delta !== 0 ? ` · ${delta > 0 ? "up" : "down"} ${Math.abs(delta)} since last close` : ""}`}
       className={cn(
-        "w-8 h-8 min-h-[40px] min-w-[40px] rounded-md flex items-center justify-center transition-colors",
+        "h-8 min-h-[40px] px-2.5 rounded-md flex items-center gap-1.5 transition-colors shrink-0",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
-        isOpen
-          ? "bg-surface-hover text-ink"
-          : "text-ink-muted hover:text-ink hover:bg-surface-hover",
+        rank === 1
+          ? "text-[var(--gold)] hover:bg-[var(--gold-soft)]"
+          : isOpen
+            ? "bg-surface-hover text-ink"
+            : "text-ink-2 hover:text-ink hover:bg-surface-hover",
       )}
     >
-      <Trophy size={16} aria-hidden="true" />
+      <Trophy size={14} aria-hidden="true" className="shrink-0" />
+      <span className="flex items-baseline gap-1 whitespace-nowrap">
+        <span className="font-display text-title-sm leading-none tabular">{ord}</span>
+        <span className="text-caption uppercase tracking-wider text-ink-muted font-medium">
+          of {teams.length}
+        </span>
+      </span>
+      {delta !== 0 && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "text-label font-bold tabular leading-none",
+            delta > 0 ? "text-positive" : "text-negative",
+          )}
+        >
+          {delta > 0 ? "▲" : "▼"}{Math.abs(delta)}
+        </span>
+      )}
     </button>
   );
 }
@@ -763,15 +832,15 @@ function CloseQuarterButton() {
                       : "border-warning text-warning",
                   )}
                 >
-                  <span className="text-[1.25rem]">{remaining}</span>
+                  <span className="text-heading">{remaining}</span>
                   <span className="text-[0.5rem] font-normal opacity-70">sec</span>
                 </span>
 
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-ink text-[0.9375rem] leading-snug truncate">
+                  <p className="font-semibold text-ink text-title-sm leading-snug truncate">
                     {quarterCloseRequest.byTeamName} ended their quarter
                   </p>
-                  <p className="text-ink-muted text-[0.75rem] mt-0.5">
+                  <p className="text-ink-muted text-body-sm mt-0.5">
                     Quarter closes automatically — or close now to jump in.
                   </p>
                 </div>
@@ -816,10 +885,10 @@ function CloseQuarterButton() {
       {/* Pre-flight readiness modal */}
       <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} className="max-w-xl">
         <ModalHeader>
-          <h2 className="font-display text-[1.5rem] text-ink">
+          <h2 className="font-display text-heading-lg text-ink">
             Close {fmtQuarter(currentQuarter, startYear)}?
           </h2>
-          <p className="text-ink-muted text-[0.8125rem] mt-1">
+          <p className="text-ink-muted text-body mt-1">
             {isMultiplayerSelfGuided
               ? issueCount === 0
                 ? "Pre-flight checks all green. Ending the quarter will give cohort members 30s to close."
@@ -848,7 +917,7 @@ function CloseQuarterButton() {
               <span
                 aria-hidden="true"
                 className={cn(
-                  "shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[0.6875rem] font-bold mt-0.5",
+                  "shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-label font-bold mt-0.5",
                   c.status === "ok" && "bg-positive text-primary-fg",
                   c.status === "warn" && "bg-warning text-primary-fg",
                   c.status === "danger" && "bg-negative text-primary-fg",
@@ -858,8 +927,8 @@ function CloseQuarterButton() {
                 {c.status === "ok" ? "✓" : c.status === "danger" ? "!" : c.status === "warn" ? "⚠" : "i"}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="text-[0.875rem] font-semibold text-ink">{c.label}</div>
-                <div className="text-[0.75rem] text-ink-muted leading-relaxed mt-0.5">
+                <div className="text-body-lg font-semibold text-ink">{c.label}</div>
+                <div className="text-body-sm text-ink-muted leading-relaxed mt-0.5">
                   {c.detail}
                 </div>
               </div>
@@ -971,10 +1040,10 @@ function QuarterCloseLoadingOverlay() {
       <div className="rounded-2xl bg-surface px-8 py-6 shadow-[var(--shadow-4)] flex flex-col items-center gap-3 max-w-[min(360px,calc(100vw-2rem))] text-center">
         <Loader2 className="w-6 h-6 text-accent animate-spin" aria-hidden />
         <div>
-          <div className="text-[0.9375rem] font-semibold text-ink">
+          <div className="text-title-sm font-semibold text-ink">
             Closing the quarter
           </div>
-          <p className="text-[0.75rem] text-ink-2 mt-0.5 leading-snug">
+          <p className="text-body-sm text-ink-2 mt-0.5 leading-snug">
             Running the engine across every airline. The digest opens
             in a moment.
           </p>
@@ -997,12 +1066,12 @@ function Kpi({
 }) {
   return (
     <div className="flex flex-col items-start px-3 py-1 shrink-0">
-      <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-medium whitespace-nowrap">
+      <span className="text-caption uppercase tracking-wider text-ink-muted font-medium whitespace-nowrap">
         {label}
       </span>
       <span
         className={cn(
-          "tabular font-display text-[1rem] leading-none mt-1 whitespace-nowrap",
+          "tabular font-display text-title leading-none mt-1 whitespace-nowrap",
           tone === "neg"
             ? "text-negative"
             : tone === "warn"
@@ -1052,13 +1121,13 @@ function RcfRiskPill({
       title={`RCF balance ${fmtMoney(rcfBalanceUsd)} · auto-drawn at ${rcfRatePct.toFixed(1)}% APR (2× base). Next-quarter interest will be ${fmtMoney(nextQInterest)}. Click to open Financials and consider a cheaper loan.`}
       className="flex flex-col items-start px-4 py-1 min-w-[7.5rem] shrink-0 text-left rounded-md hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning focus-visible:ring-offset-2 focus-visible:ring-offset-surface transition-colors cursor-pointer"
     >
-      <span className="text-[0.625rem] uppercase tracking-wider font-semibold text-warning">
+      <span className="text-caption uppercase tracking-wider font-semibold text-warning">
         RCF risk
       </span>
-      <span className="tabular font-display text-[1rem] leading-none mt-1 text-warning">
+      <span className="tabular font-display text-title leading-none mt-1 text-warning">
         {fmtMoney(rcfBalanceUsd)}
       </span>
-      <span className="text-[0.6875rem] text-warning/80 leading-snug mt-0.5 tabular">
+      <span className="text-label text-warning/80 leading-snug mt-0.5 tabular">
         +{fmtMoney(nextQInterest)}/Q at 2× base
       </span>
     </button>
@@ -1105,7 +1174,7 @@ function DoctrinePill({ doctrineId }: { doctrineId: import("@/types/game").Doctr
   if (!doctrineId) {
     return (
       <div
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-line bg-surface-2/40 text-ink-muted text-[0.75rem] font-medium shrink-0"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-line bg-surface-2/40 text-ink-muted text-body-sm font-medium shrink-0"
         title="Doctrine not yet set. Pick one during onboarding or wait for the host to seed your strategy."
       >
         <span className="inline-block w-2 h-2 rounded-full bg-ink-muted/40 animate-pulse" aria-hidden />
@@ -1137,7 +1206,7 @@ function DoctrinePill({ doctrineId }: { doctrineId: import("@/types/game").Doctr
         aria-expanded={open}
         aria-label={`Doctrine: ${doctrine.name}. Click for benefits.`}
         title={`${doctrine.name} — ${doctrine.tagline}`}
-        className="inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2 rounded-full border text-[0.6875rem] font-semibold hover:brightness-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2 rounded-full border text-label font-semibold hover:brightness-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         style={{ background: tone.bg, color: tone.text, borderColor: tone.border }}
       >
         <Icon size={12} aria-hidden />
@@ -1159,10 +1228,10 @@ function DoctrinePill({ doctrineId }: { doctrineId: import("@/types/game").Doctr
               <Icon size={18} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="font-display text-[0.9375rem] text-ink leading-tight">
+              <div className="font-display text-title-sm text-ink leading-tight">
                 {doctrine.name}
               </div>
-              <div className="text-[0.75rem] text-ink-muted italic mt-0.5">
+              <div className="text-body-sm text-ink-muted italic mt-0.5">
                 {doctrine.tagline}
               </div>
             </div>
@@ -1175,17 +1244,17 @@ function DoctrinePill({ doctrineId }: { doctrineId: import("@/types/game").Doctr
               <X size={14} aria-hidden />
             </button>
           </div>
-          <p className="text-[0.8125rem] text-ink-muted leading-relaxed mb-3">
+          <p className="text-body text-ink-muted leading-relaxed mb-3">
             {doctrine.description}
           </p>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5 font-semibold">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-1.5 font-semibold">
             What you get
           </div>
           <ul className="space-y-1">
             {doctrine.effects.map((eff, i) => (
               <li
                 key={i}
-                className="text-[0.8125rem] text-ink leading-snug flex items-start gap-2 before:content-['•'] before:text-ink-muted before:mt-0"
+                className="text-body text-ink leading-snug flex items-start gap-2 before:content-['•'] before:text-ink-muted before:mt-0"
               >
                 <span>{eff}</span>
               </li>
@@ -1228,8 +1297,8 @@ function AirlineSwitcher({
   return (
     <Modal open={open} onClose={onClose}>
       <ModalHeader>
-        <h2 className="font-display text-[1.5rem] text-ink">Switch view</h2>
-        <p className="text-ink-muted text-[0.8125rem] mt-1">
+        <h2 className="font-display text-heading-lg text-ink">Switch view</h2>
+        <p className="text-ink-muted text-body mt-1">
           Peek into a rival&apos;s network for strategic intel. View-only — you can&apos;t change their state.
         </p>
       </ModalHeader>
@@ -1269,7 +1338,7 @@ function AirlineSwitcher({
                 return (
                   <span
                     aria-hidden="true"
-                    className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-[0.6875rem] font-semibold shrink-0"
+                    className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-label font-semibold shrink-0"
                     style={{
                       background: ac.hex,
                       color: ac.textOn === "white" ? "#ffffff" : "#0f172a",
@@ -1280,13 +1349,13 @@ function AirlineSwitcher({
                 );
               })()}
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-ink text-[0.875rem] truncate">
+                <div className="font-medium text-ink text-body-lg truncate">
                   {t.name}
                   {isYou && (
-                    <span className="ml-2 text-[0.5625rem] uppercase tracking-wider text-accent font-semibold">you</span>
+                    <span className="ml-2 text-micro uppercase tracking-wider text-accent font-semibold">you</span>
                   )}
                 </div>
-                <div className="text-[0.6875rem] text-ink-muted mt-0.5 truncate">
+                <div className="text-label text-ink-muted mt-0.5 truncate">
                   Hub {t.hubCode} · {fleetSize} aircraft · {activeRoutes} routes
                   {(() => {
                     const apts = airportsOwnedByTeam.get(t.id) ?? 0;
@@ -1512,7 +1581,7 @@ function GameMenu() {
                     setOpen(false);
                     setRestartConfirmOpen(true);
                   }}
-                  className="w-full text-left px-3 py-2 text-[0.8125rem] text-ink hover:bg-surface-hover flex items-center gap-2"
+                  className="w-full text-left px-3 py-2 text-body text-ink hover:bg-surface-hover flex items-center gap-2"
                 >
                   <RotateCcw size={13} className="text-ink-muted" />
                   <span>Restart from Q1</span>
@@ -1525,7 +1594,7 @@ function GameMenu() {
                   setOpen(false);
                   setConfirmOpen(true);
                 }}
-                className="w-full text-left px-3 py-2 text-[0.8125rem] text-ink hover:bg-surface-hover flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-body text-ink hover:bg-surface-hover flex items-center gap-2"
               >
                 <RotateCcw size={13} className="text-ink-muted" />
                 <span>
@@ -1544,13 +1613,13 @@ function GameMenu() {
                     setOpen(false);
                     setForceEndConfirmOpen(true);
                   }}
-                  className="w-full text-left px-3 py-2 text-[0.8125rem] text-rose-700 hover:bg-rose-50 flex items-center gap-2"
+                  className="w-full text-left px-3 py-2 text-body text-rose-700 hover:bg-rose-50 flex items-center gap-2"
                 >
                   <X size={13} className="text-rose-500" />
                   <span>End game for everyone</span>
                 </button>
               )}
-              <div className="px-3 py-1.5 text-[0.6875rem] text-ink-muted leading-snug border-t border-line/40 mt-1 pt-2">
+              <div className="px-3 py-1.5 text-label text-ink-muted leading-snug border-t border-line/40 mt-1 pt-2">
                 {phase === "endgame"
                   ? "Resets the saved run and returns to onboarding."
                   : isGameMaster
@@ -1571,13 +1640,13 @@ function GameMenu() {
         <ModalBody>
           {isMultiplayer ? (
             <>
-              <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
+              <p className="text-title-sm text-ink-2 leading-relaxed">
                 A bot will take over your airline for the rest of the
                 game. Your team&rsquo;s state — fleet, routes, cash,
                 brand, milestones — is preserved so the cohort can
                 keep playing.
               </p>
-              <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
+              <p className="text-body text-ink-muted leading-relaxed mt-3">
                 You will return to the home page and can&rsquo;t rejoin
                 this game. If you&rsquo;re the last human and everyone
                 else has forfeited, the game ends.
@@ -1585,13 +1654,13 @@ function GameMenu() {
             </>
           ) : (
             <>
-              <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
+              <p className="text-title-sm text-ink-2 leading-relaxed">
                 This wipes your current run from this browser&rsquo;s
                 saved state and routes you back to the onboarding flow.
                 There&rsquo;s no undo — once you confirm, the saved
                 game is gone.
               </p>
-              <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
+              <p className="text-body text-ink-muted leading-relaxed mt-3">
                 If you&rsquo;re in the middle of an interesting quarter
                 you want to keep, hit Cancel and consider taking a
                 screenshot of the leaderboard first.
@@ -1601,7 +1670,7 @@ function GameMenu() {
           {errorMsg && (
             <div
               role="alert"
-              className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[0.8125rem] text-rose-700"
+              className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-body text-rose-700"
             >
               {errorMsg}
             </div>
@@ -1639,14 +1708,14 @@ function GameMenu() {
       >
         <ModalHeader>End the game for everyone?</ModalHeader>
         <ModalBody>
-          <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
+          <p className="text-title-sm text-ink-2 leading-relaxed">
             This closes the game for every team — your cohort gets
             routed to the endgame summary on their next refresh. The
             game state is preserved for the recap; nobody loses
             history. There&rsquo;s no undo: you can&rsquo;t resume
             from here.
           </p>
-          <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
+          <p className="text-body text-ink-muted leading-relaxed mt-3">
             Use this when the workshop is over, the room ran out of
             time, or the cohort is no longer engaged. For your own
             airline only, use Forfeit & leave above instead.
@@ -1654,7 +1723,7 @@ function GameMenu() {
           {errorMsg && (
             <div
               role="alert"
-              className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[0.8125rem] text-rose-700"
+              className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-body text-rose-700"
             >
               {errorMsg}
             </div>
@@ -1692,13 +1761,13 @@ function GameMenu() {
       >
         <ModalHeader>Restart from Q1?</ModalHeader>
         <ModalBody>
-          <p className="text-[0.9375rem] text-ink-2 leading-relaxed">
+          <p className="text-title-sm text-ink-2 leading-relaxed">
             All airlines reset to their Q1 starting positions —
             starter fleet, $350M onboarding budget, brand/loyalty/ops
             at 50. You and the bot rivals keep your names, colors,
             doctrines, and hubs. Only the simulation rewinds.
           </p>
-          <p className="text-[0.8125rem] text-ink-muted leading-relaxed mt-3">
+          <p className="text-body text-ink-muted leading-relaxed mt-3">
             Use this to retry a tough scenario or experiment with a
             different opening strategy. There&rsquo;s no undo —
             current quarter, fleet, routes, decisions, and financial

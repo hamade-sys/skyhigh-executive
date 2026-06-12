@@ -100,44 +100,44 @@ function RivalInvestmentsReadOnly({ rival }: { rival: import("@/types/game").Tea
   return (
     <div className="space-y-4">
       <div className="rounded-md border border-line bg-surface-2/30 px-3 py-2">
-        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+        <div className="text-caption uppercase tracking-wider text-ink-muted">
           Rival intel · {rival.name}
         </div>
-        <div className="text-[0.75rem] text-ink-muted mt-0.5">
+        <div className="text-body-sm text-ink-muted mt-0.5">
           View-only — financial details (cash, debt, revenue per asset) are private.
         </div>
       </div>
 
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Subsidiary footprint
         </div>
         {subs.length === 0 ? (
-          <div className="rounded-md border border-dashed border-line px-3 py-4 text-center text-[0.75rem] text-ink-muted">
+          <div className="rounded-md border border-dashed border-line px-3 py-4 text-center text-body-sm text-ink-muted">
             No subsidiaries built yet.
           </div>
         ) : (
           <div className="space-y-2">
-            <div className="rounded-md border border-line bg-surface px-3 py-2.5 grid grid-cols-3 gap-2 text-[0.75rem]">
+            <div className="rounded-md border border-line bg-surface px-3 py-2.5 grid grid-cols-3 gap-2 text-body-sm">
               <div>
-                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Total</div>
-                <div className="font-mono tabular text-ink text-[1rem] font-semibold">{subs.length}</div>
+                <div className="text-caption uppercase tracking-wider text-ink-muted">Total</div>
+                <div className="font-mono tabular text-ink text-title font-semibold">{subs.length}</div>
               </div>
               <div>
-                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Best tier</div>
-                <div className="text-ink text-[0.875rem] font-semibold">{tierBest}</div>
+                <div className="text-caption uppercase tracking-wider text-ink-muted">Best tier</div>
+                <div className="text-ink text-body-lg font-semibold">{tierBest}</div>
               </div>
               <div>
-                <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Premium Hubs</div>
-                <div className="text-ink text-[0.875rem] font-semibold">{premiumHubs.length}</div>
+                <div className="text-caption uppercase tracking-wider text-ink-muted">Premium Hubs</div>
+                <div className="text-ink text-body-lg font-semibold">{premiumHubs.length}</div>
               </div>
             </div>
             {premiumHubs.length > 0 && (
-              <div className="text-[0.6875rem] text-positive leading-snug">
+              <div className="text-label text-positive leading-snug">
                 Premium Hubs (3+ subs/city): {premiumHubs.map(([c, n]) => `${c} (${n})`).join(", ")}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-1.5 text-[0.75rem]">
+            <div className="grid grid-cols-2 gap-1.5 text-body-sm">
               {Array.from(typeCount.entries())
                 .sort((a, b) => b[1] - a[1])
                 .map(([type, count]) => {
@@ -145,7 +145,7 @@ function RivalInvestmentsReadOnly({ rival }: { rival: import("@/types/game").Tea
                   return (
                     <div key={type} className="rounded-md border border-line bg-surface px-2 py-1.5">
                       <div className="text-ink-2 capitalize">{type.replace(/-/g, " ")}</div>
-                      <div className="text-[0.625rem] text-ink-muted">
+                      <div className="text-caption text-ink-muted">
                         {count} × at {cities.join(", ")}
                       </div>
                     </div>
@@ -253,7 +253,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
 
       {/* Portfolio summary */}
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Investment portfolio · subsidiaries
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -289,7 +289,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
       {/* Owned subsidiaries — grouped by type */}
       {owned.length > 0 && (
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Owned holdings
           </div>
           <div className="space-y-2">
@@ -300,8 +300,8 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                 <div key={type} className="rounded-md border border-line bg-surface overflow-hidden">
                   <div className="flex items-center gap-2 px-3 py-2 border-b border-line bg-surface-2/40">
                     <SubsidiaryIcon type={type} />
-                    <span className="text-[0.875rem] font-semibold text-ink">{entry.name}</span>
-                    <span className="text-[0.6875rem] text-ink-muted">· {list.length} location{list.length === 1 ? "" : "s"}</span>
+                    <span className="text-body-lg font-semibold text-ink">{entry.name}</span>
+                    <span className="text-label text-ink-muted">· {list.length} location{list.length === 1 ? "" : "s"}</span>
                   </div>
                   <div className="divide-y divide-line">
                     {list.map((sub) => {
@@ -344,29 +344,29 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                         <div key={sub.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex items-baseline gap-2 flex-wrap">
-                              <span className="font-mono tabular text-ink text-[0.8125rem]">{sub.cityCode}</span>
-                              <span className="text-[0.8125rem] text-ink-2 truncate">
+                              <span className="font-mono tabular text-ink text-body">{sub.cityCode}</span>
+                              <span className="text-body text-ink-2 truncate">
                                 {city?.name ?? sub.cityCode}
                               </span>
-                              <span className={`text-[0.5625rem] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${tierToneClass}`}>
+                              <span className={`text-micro uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${tierToneClass}`}>
                                 {tierLabel}
                               </span>
-                              <span className="text-[0.625rem] text-ink-muted">
+                              <span className="text-caption text-ink-muted">
                                 acquired {fmtQuarter(sub.acquiredAtQuarter, startYear)} · {ageQ}Q held
                               </span>
                               {entry.revenuePerQuarterUsd > 0 && (
                                 isPaidBack ? (
-                                  <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
+                                  <span className="text-micro uppercase tracking-wider font-semibold text-positive bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
                                     Paid back
                                   </span>
                                 ) : qToBreakeven < 100 ? (
-                                  <span className="text-[0.5625rem] uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
+                                  <span className="text-micro uppercase tracking-wider font-semibold text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
                                     {qToBreakeven}Q to breakeven
                                   </span>
                                 ) : null
                               )}
                             </div>
-                            <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                            <div className="text-label text-ink-muted mt-0.5">
                               Earns {fmtMoney(ratePerQ)}/Q
                               {entry.revenuePerQuarterUsd > 0 && (
                                 <span className="ml-1.5">
@@ -378,7 +378,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                             {/* Condition bar — drives the Refurbish CTA below.
                                 Pos green ≥85%, amber 50-85%, red <50%. */}
                             <div className="mt-1.5 flex items-center gap-2">
-                              <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted shrink-0 w-[60px]">
+                              <span className="text-micro uppercase tracking-wider text-ink-muted shrink-0 w-[60px]">
                                 Condition
                               </span>
                               <div className="flex-1 h-1 bg-surface-2 rounded-full overflow-hidden">
@@ -390,7 +390,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                                   style={{ width: `${conditionPct}%` }}
                                 />
                               </div>
-                              <span className={`text-[0.625rem] tabular font-mono shrink-0 w-[36px] text-right ${
+                              <span className={`text-caption tabular font-mono shrink-0 w-[36px] text-right ${
                                 conditionTone === "pos" ? "text-positive" :
                                 conditionTone === "warn" ? "text-warning" : "text-negative"
                               }`}>
@@ -403,7 +403,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                                 setup cost. */}
                             {entry.revenuePerQuarterUsd > 0 && !isPaidBack && (
                               <div className="mt-1 flex items-center gap-2">
-                                <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted shrink-0 w-[60px]">
+                                <span className="text-micro uppercase tracking-wider text-ink-muted shrink-0 w-[60px]">
                                   Payback
                                 </span>
                                 <div className="flex-1 h-1 bg-surface-2 rounded-full overflow-hidden">
@@ -412,17 +412,17 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                                     style={{ width: `${(paybackPct * 100).toFixed(0)}%` }}
                                   />
                                 </div>
-                                <span className="text-[0.625rem] tabular font-mono shrink-0 w-[36px] text-right text-ink-muted">
+                                <span className="text-caption tabular font-mono shrink-0 w-[36px] text-right text-ink-muted">
                                   {Math.round(paybackPct * 100)}%
                                 </span>
                               </div>
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="font-mono tabular text-[0.8125rem] text-ink font-semibold">
+                            <div className="font-mono tabular text-body text-ink font-semibold">
                               {fmtMoney(sub.marketValueUsd)}
                             </div>
-                            <div className="text-[0.625rem] text-ink-muted">
+                            <div className="text-caption text-ink-muted">
                               {sub.marketValueUsd > sub.purchaseCostUsd ? "+" : ""}
                               {(((sub.marketValueUsd - sub.purchaseCostUsd) / sub.purchaseCostUsd) * 100).toFixed(0)}% vs cost
                             </div>
@@ -495,16 +495,16 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
       {/* Catalog */}
       <section>
         <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+          <div className="text-label uppercase tracking-wider text-ink-muted">
             Build &amp; operate
           </div>
-          <div className="text-[0.6875rem] text-ink-muted">
+          <div className="text-label text-ink-muted">
             Cash {fmtMoney(player.cashUsd)}
           </div>
         </div>
         {(["operations", "assets"] as const).map((cat) => (
         <div key={cat} className="mb-4 last:mb-0">
-          <div className="flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-wider text-ink-2 font-semibold mb-1.5">
+          <div className="flex items-center gap-1.5 text-label uppercase tracking-wider text-ink-2 font-semibold mb-1.5">
             {cat === "operations" ? "Operations & maintenance" : "Airline assets"}
             <span className="text-ink-muted font-normal normal-case tracking-normal">
               {cat === "operations"
@@ -525,19 +525,19 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                   <SubsidiaryIcon type={entry.type} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="font-semibold text-ink text-[0.875rem]">{entry.name}</span>
+                      <span className="font-semibold text-ink text-body-lg">{entry.name}</span>
                       {ownedAtCount > 0 && (
-                        <span className="text-[0.625rem] uppercase tracking-wider text-positive font-semibold bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
+                        <span className="text-caption uppercase tracking-wider text-positive font-semibold bg-[var(--positive-soft)] px-1.5 py-0.5 rounded">
                           {ownedAtCount} owned
                         </span>
                       )}
                     </div>
-                    <div className="text-[0.75rem] text-ink-2 mt-0.5 leading-snug">
+                    <div className="text-body-sm text-ink-2 mt-0.5 leading-snug">
                       {entry.description}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-baseline justify-between gap-2 mt-1 text-[0.75rem]">
+                <div className="flex items-baseline justify-between gap-2 mt-1 text-body-sm">
                   <div className="text-ink-muted">
                     Setup{" "}
                     <span className="text-ink tabular font-mono font-semibold">
@@ -552,7 +552,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                       </span>
                     </div>
                   ) : (
-                    <div className="text-ink-muted italic text-[0.6875rem]">Operational asset</div>
+                    <div className="text-ink-muted italic text-label">Operational asset</div>
                   )}
                 </div>
 
@@ -579,9 +579,9 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                         ? "medium"
                         : "slow";
                   return (
-                    <div className="rounded-md border border-line bg-surface-2/40 px-2 py-1.5 grid grid-cols-2 gap-2 text-[0.6875rem]">
+                    <div className="rounded-md border border-line bg-surface-2/40 px-2 py-1.5 grid grid-cols-2 gap-2 text-label">
                       <div>
-                        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                        <div className="text-caption uppercase tracking-wider text-ink-muted">
                           Payback
                         </div>
                         <div className="flex items-baseline gap-1">
@@ -590,7 +590,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                           </span>
                           <span
                             className={cn(
-                              "text-[0.5625rem] uppercase tracking-wider font-semibold",
+                              "text-micro uppercase tracking-wider font-semibold",
                               paybackTone === "fast"
                                 ? "text-positive"
                                 : paybackTone === "medium"
@@ -603,7 +603,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                         </div>
                       </div>
                       <div>
-                        <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                        <div className="text-caption uppercase tracking-wider text-ink-muted">
                           5Y net
                         </div>
                         <div
@@ -616,10 +616,10 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                         </div>
                       </div>
                       <div className="col-span-2 pt-1.5 mt-0.5 border-t border-line/40">
-                        <div className="text-[0.625rem] uppercase tracking-wider text-positive">
+                        <div className="text-caption uppercase tracking-wider text-positive">
                           Flagship potential
                         </div>
-                        <div className="text-[0.6875rem] text-ink-2 leading-snug">
+                        <div className="text-label text-ink-2 leading-snug">
                           Pay {fmtMoney(flagshipTotalCost)} total · earn{" "}
                           <span className="tabular font-mono text-positive">{fmtMoney(flagshipRevPerQ)}/Q</span>{" "}
                           · payback {flagshipPaybackQ}Q
@@ -628,8 +628,8 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                     </div>
                   );
                 })() : (
-                  <div className="rounded-md border border-line bg-surface-2/40 px-2 py-1.5 text-[0.6875rem] text-ink-2">
-                    <span className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                  <div className="rounded-md border border-line bg-surface-2/40 px-2 py-1.5 text-label text-ink-2">
+                    <span className="text-caption uppercase tracking-wider text-ink-muted">
                       Strategic value
                     </span>
                     <div className="text-ink-2 leading-snug mt-0.5">
@@ -640,7 +640,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                 )}
 
                 {entry.operationalBonus && (
-                  <div className="text-[0.6875rem] text-accent leading-relaxed">
+                  <div className="text-label text-accent leading-relaxed">
                     {entry.operationalBonus}
                   </div>
                 )}
@@ -669,13 +669,13 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
           airlines, appreciate while held, and can be sold on later. This
           teaser reserves the slot so the category is visible now. */}
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2 flex items-center gap-1.5">
           <TrendingUp size={12} /> Subsidiary M&amp;A
-          <span className="text-[0.5625rem] font-bold tracking-wider text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
+          <span className="text-micro font-bold tracking-wider text-accent bg-[var(--accent-soft)] px-1.5 py-0.5 rounded">
             COMING SOON
           </span>
         </div>
-        <div className="rounded-md border border-dashed border-line bg-surface-2/30 p-4 text-[0.8125rem] text-ink-2 leading-relaxed">
+        <div className="rounded-md border border-dashed border-line bg-surface-2/30 p-4 text-body text-ink-2 leading-relaxed">
           Independent businesses across your network — duty-free operators,
           regional feeders, hotel groups, ground handlers — will appear here as
           time-boxed <strong className="text-ink">acquisition targets</strong>,
@@ -716,8 +716,8 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">Build {entry.name}</h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <h2 className="font-display text-heading-lg text-ink">Build {entry.name}</h2>
+                <p className="text-ink-muted text-body mt-1">
                   {isAcademy
                     ? <>Pick a workforce category to train. {entry.pitch}</>
                     : <>Pick a city in your network. {entry.pitch}</>}
@@ -726,7 +726,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
               <ModalBody className="space-y-3">
                 {isAcademy ? (
                   <>
-                    <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                    <div className="text-label uppercase tracking-wider text-ink-muted">
                       Pick a category (3)
                     </div>
                     <div className="rounded-md border border-line divide-y divide-line/40">
@@ -756,11 +756,11 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                           >
                             <Icon size={18} className="text-accent shrink-0" />
                             <span className="flex flex-col min-w-0 flex-1">
-                              <span className="text-[0.875rem] text-ink font-medium">{label}</span>
-                              <span className="text-[0.6875rem] text-ink-muted truncate">{blurb}</span>
+                              <span className="text-body-lg text-ink font-medium">{label}</span>
+                              <span className="text-label text-ink-muted truncate">{blurb}</span>
                             </span>
                             {owns ? (
-                              <span className="text-[0.625rem] text-ink-muted italic shrink-0">already built</span>
+                              <span className="text-caption text-ink-muted italic shrink-0">already built</span>
                             ) : (
                               <ArrowRight size={12} className="text-ink-muted shrink-0" />
                             )}
@@ -771,7 +771,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                   </>
                 ) : (
                 <>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                <div className="text-label uppercase tracking-wider text-ink-muted">
                   Pick a city ({networkCities.length})
                 </div>
                 <div className="max-h-72 overflow-auto rounded-md border border-line">
@@ -792,7 +792,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                         }}
                         disabled={owns || player.cashUsd < entry.setupCostUsd}
                         className={cn(
-                          "w-full flex items-center justify-between px-3 py-2 text-left text-[0.8125rem] border-b border-line/40 last:border-0 hover:bg-surface-hover disabled:opacity-50",
+                          "w-full flex items-center justify-between px-3 py-2 text-left text-body border-b border-line/40 last:border-0 hover:bg-surface-hover disabled:opacity-50",
                           owns && "bg-surface-2/40",
                         )}
                       >
@@ -800,7 +800,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                           <span className="font-mono tabular text-ink">{code}</span>
                           <span className="text-ink-2 truncate">{city?.name ?? code}</span>
                           {isHub && (
-                            <span className="text-[0.5625rem] uppercase tracking-wider text-accent font-semibold">hub</span>
+                            <span className="text-micro uppercase tracking-wider text-accent font-semibold">hub</span>
                           )}
                         </span>
                         <span className="flex items-center gap-2.5 shrink-0">
@@ -808,7 +808,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                             const n = routeCountByCity[code] ?? 0;
                             return (
                               <span
-                                className="text-[0.625rem] tabular text-ink-muted font-mono"
+                                className="text-caption tabular text-ink-muted font-mono"
                                 title={`${n} active route${n === 1 ? "" : "s"} touch ${code}`}
                               >
                                 {n} {n === 1 ? "route" : "routes"}
@@ -816,7 +816,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                             );
                           })()}
                           {owns ? (
-                            <span className="text-[0.625rem] text-ink-muted italic">already built</span>
+                            <span className="text-caption text-ink-muted italic">already built</span>
                           ) : (
                             <ArrowRight size={12} className="text-ink-muted" />
                           )}
@@ -827,7 +827,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                 </div>
                 </>
                 )}
-                {error && <div className="text-negative text-[0.875rem]">{error}</div>}
+                {error && <div className="text-negative text-body-lg">{error}</div>}
               </ModalBody>
               <ModalFooter>
                 <Button variant="ghost" onClick={() => { setBuildOpen(null); setError(null); }}>
@@ -847,8 +847,8 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">Sell {entry?.name}</h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <h2 className="font-display text-heading-lg text-ink">Sell {entry?.name}</h2>
+                <p className="text-ink-muted text-body mt-1">
                   At {confirmSell.cityCode}. You receive {fmtMoney(proceeds)} (5% broker fee).
                   {entry?.operationalBonus && " Operational bonus removed."}
                 </p>
@@ -889,10 +889,10 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
           return (
             <>
               <ModalHeader>
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Offer {entry?.name} to a rival
                 </h2>
-                <p className="text-ink-muted text-[0.8125rem] mt-1">
+                <p className="text-ink-muted text-body mt-1">
                   Private peer-to-peer trade — no 5% broker fee. Rival accepts
                   iff your price is at most 110% of mark-to-market AND they
                   can afford it.
@@ -903,18 +903,18 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                 <div className="rounded-md border border-line bg-surface-2/30 p-3 flex items-baseline justify-between gap-3">
                   <div>
                     <div className="flex items-baseline gap-2">
-                      <span className="font-mono tabular text-ink text-[0.8125rem]">{offerSub.cityCode}</span>
-                      <span className="text-[0.8125rem] text-ink-2">
+                      <span className="font-mono tabular text-ink text-body">{offerSub.cityCode}</span>
+                      <span className="text-body text-ink-2">
                         {CITIES_BY_CODE[offerSub.cityCode]?.name ?? offerSub.cityCode}
                       </span>
                     </div>
-                    <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                    <div className="text-label text-ink-muted mt-0.5">
                       Mark-to-market {fmtMoney(market)} · 110% ceiling {fmtMoney(ceiling)}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">If sold to market</div>
-                    <div className="font-mono tabular text-[0.75rem] text-ink-muted">
+                    <div className="text-caption uppercase tracking-wider text-ink-muted">If sold to market</div>
+                    <div className="font-mono tabular text-body-sm text-ink-muted">
                       {fmtMoney(Math.round(market * 0.95))} (5% fee)
                     </div>
                   </div>
@@ -922,11 +922,11 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
 
                 {/* Rival picker */}
                 <div>
-                  <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+                  <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
                     Pick a rival airline ({rivals.length})
                   </div>
                   {rivals.length === 0 ? (
-                    <div className="text-[0.8125rem] text-ink-muted italic">
+                    <div className="text-body text-ink-muted italic">
                       No rival airlines in this game session.
                     </div>
                   ) : (
@@ -939,7 +939,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                             key={t.id}
                             onClick={() => setOfferRivalId(t.id)}
                             className={cn(
-                              "w-full flex items-center justify-between px-3 py-2 text-left text-[0.8125rem] hover:bg-surface-hover",
+                              "w-full flex items-center justify-between px-3 py-2 text-left text-body hover:bg-surface-hover",
                               selected && "bg-[var(--accent-soft)]",
                             )}
                           >
@@ -951,11 +951,11 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                                 )}
                               />
                               <span className="font-semibold text-ink">{t.name}</span>
-                              <span className="text-[0.6875rem] text-ink-muted font-mono">{t.code}</span>
+                              <span className="text-label text-ink-muted font-mono">{t.code}</span>
                             </span>
                             <span
                               className={cn(
-                                "font-mono tabular text-[0.6875rem]",
+                                "font-mono tabular text-label",
                                 canPay ? "text-ink-muted" : "text-negative",
                               )}
                             >
@@ -970,7 +970,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
 
                 {/* Asking price */}
                 <div>
-                  <label className="block text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1.5">
+                  <label className="block text-label uppercase tracking-wider text-ink-muted mb-1.5">
                     Asking price (USD)
                   </label>
                   <div className="flex items-center gap-2">
@@ -981,7 +981,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                       min={0}
                       value={offerPriceUsd}
                       onChange={(e) => setOfferPriceUsd(Math.max(0, Number(e.target.value) || 0))}
-                      className="flex-1 px-3 py-2 rounded-md border border-line bg-surface text-ink tabular font-mono text-[0.875rem] focus:outline-none focus:ring-2 focus:ring-accent/50"
+                      className="flex-1 px-3 py-2 rounded-md border border-line bg-surface text-ink tabular font-mono text-body-lg focus:outline-none focus:ring-2 focus:ring-accent/50"
                     />
                     <Button
                       size="sm"
@@ -1000,7 +1000,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                       Max
                     </Button>
                   </div>
-                  <div className="flex items-center justify-between mt-1.5 text-[0.6875rem]">
+                  <div className="flex items-center justify-between mt-1.5 text-label">
                     <span className="text-ink-muted">
                       vs market{" "}
                       <span
@@ -1024,7 +1024,7 @@ function InvestmentsPanelInner({ playerId }: { playerId: string }) {
                 </div>
 
                 {offerError && (
-                  <div className="text-negative text-[0.8125rem] rounded-md bg-[var(--negative-soft)] p-2.5">
+                  <div className="text-negative text-body rounded-md bg-[var(--negative-soft)] p-2.5">
                     {offerError}
                   </div>
                 )}
@@ -1083,11 +1083,11 @@ function SummaryCard({
   const toneCls = tone === "pos" ? "text-positive" : tone === "neg" ? "text-negative" : "text-ink";
   return (
     <div className="rounded-md border border-line bg-surface p-3">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">{label}</div>
+      <div className="text-caption uppercase tracking-wider text-ink-muted">{label}</div>
       <div className={cn("font-display text-[1.375rem] tabular leading-none mt-1", toneCls)}>
         {value}
       </div>
-      {sub && <div className="text-[0.625rem] text-ink-muted mt-1.5">{sub}</div>}
+      {sub && <div className="text-caption text-ink-muted mt-1.5">{sub}</div>}
     </div>
   );
 }
@@ -1169,7 +1169,7 @@ function PortfolioOverview() {
 
   return (
     <section>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+      <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
         Portfolio overview · all assets
       </div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
@@ -1214,7 +1214,7 @@ function PortfolioOverview() {
       {/* Owned airports detail list — actionable rows (open detail) */}
       {ownedAirports.length > 0 && (
         <div className="mt-3">
-          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+          <div className="text-caption uppercase tracking-wider text-ink-muted mb-1.5">
             Owned airports
           </div>
           <div className="space-y-1.5">
@@ -1228,10 +1228,10 @@ function PortfolioOverview() {
                   className="w-full flex items-center justify-between rounded-md border border-line bg-surface px-3 py-2 hover:bg-surface-hover text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                 >
                   <span className="flex items-baseline gap-2 min-w-0">
-                    <span className="font-mono tabular text-ink text-[0.8125rem]">{code}</span>
-                    <span className="text-[0.8125rem] text-ink-2 truncate">{city?.name ?? code}</span>
+                    <span className="font-mono tabular text-ink text-body">{code}</span>
+                    <span className="text-body text-ink-2 truncate">{city?.name ?? code}</span>
                   </span>
-                  <span className="text-[0.6875rem] text-ink-muted tabular font-mono shrink-0">
+                  <span className="text-label text-ink-muted tabular font-mono shrink-0">
                     {state.totalCapacity ?? "—"} cap · {fmtMoney(state.ownerSlotRatePerWeekUsd ?? 0)}/wk slot
                   </span>
                 </button>
@@ -1244,7 +1244,7 @@ function PortfolioOverview() {
       {/* Pending airport purchases detail list */}
       {myAuctions.length > 0 && (
         <div className="mt-3">
-          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+          <div className="text-caption uppercase tracking-wider text-ink-muted mb-1.5">
             Pending airport purchases
           </div>
           <div className="space-y-1.5">
@@ -1264,18 +1264,18 @@ function PortfolioOverview() {
                   )}
                 >
                   <span className="flex items-baseline gap-2 min-w-0">
-                    <span className="font-mono tabular text-ink text-[0.8125rem]">{a.airportCode}</span>
-                    <span className="text-[0.8125rem] text-ink-2 truncate">{city?.name ?? a.airportCode}</span>
+                    <span className="font-mono tabular text-ink text-body">{a.airportCode}</span>
+                    <span className="text-body text-ink-2 truncate">{city?.name ?? a.airportCode}</span>
                     <span
                       className={cn(
-                        "text-[0.625rem] uppercase tracking-wider shrink-0",
+                        "text-caption uppercase tracking-wider shrink-0",
                         leading ? "text-accent" : "text-warning",
                       )}
                     >
                       {leading ? "buying" : "out-bid"} · {closesLabel}
                     </span>
                   </span>
-                  <span className="text-[0.75rem] tabular font-mono text-ink shrink-0">
+                  <span className="text-body-sm tabular font-mono text-ink shrink-0">
                     {fmtMoney(a.highBidUsd)}
                   </span>
                 </button>
@@ -1306,18 +1306,18 @@ function PortfolioCount({
         tone === "warn" ? "border-warning/40 bg-[var(--warning-soft)]/30" : "border-line",
       )}
     >
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">{label}</div>
-      <div className="font-display text-[1.5rem] tabular text-ink leading-none mt-0.5">
+      <div className="text-caption uppercase tracking-wider text-ink-muted">{label}</div>
+      <div className="font-display text-heading-lg tabular text-ink leading-none mt-0.5">
         {value}
       </div>
       {sub && (
-        <div className="text-[0.625rem] text-ink-muted mt-1 leading-snug">{sub}</div>
+        <div className="text-caption text-ink-muted mt-1 leading-snug">{sub}</div>
       )}
       {onClick && ctaLabel && (
         <button
           type="button"
           onClick={onClick}
-          className="mt-1.5 text-[0.6875rem] text-accent hover:underline focus-visible:outline-none focus-visible:underline"
+          className="mt-1.5 text-label text-accent hover:underline focus-visible:outline-none focus-visible:underline"
         >
           {ctaLabel} →
         </button>
@@ -1370,10 +1370,10 @@ function RivalSubsidiaryIntel() {
   if (rivalStats.length === 0) {
     return (
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Rival intel · subsidiary footprint
         </div>
-        <div className="rounded-md border border-line bg-surface-2/30 px-3 py-3 text-[0.75rem] text-ink-muted leading-snug">
+        <div className="rounded-md border border-line bg-surface-2/30 px-3 py-3 text-body-sm text-ink-muted leading-snug">
           No rivals have built subsidiaries yet — first-mover advantage is still open.
           A flagship lounge at your hub city right now will out-yield any rival catching
           up later.
@@ -1384,7 +1384,7 @@ function RivalSubsidiaryIntel() {
 
   return (
     <section>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+      <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
         Rival intel · subsidiary footprint
       </div>
       <div className="rounded-md border border-line bg-surface overflow-hidden">
@@ -1405,10 +1405,10 @@ function RivalSubsidiaryIntel() {
                   aria-hidden
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[0.8125rem] font-semibold text-ink truncate">
+                  <div className="text-body font-semibold text-ink truncate">
                     {rs.team.name}
                   </div>
-                  <div className="text-[0.625rem] text-ink-muted">
+                  <div className="text-caption text-ink-muted">
                     {rs.subCount} subsidiar{rs.subCount === 1 ? "y" : "ies"}
                     {rs.topCity && ` · top: ${rs.topCity.code} (${rs.topCity.count})`}
                     {rs.premiumHubCities.length > 0 && (
@@ -1418,7 +1418,7 @@ function RivalSubsidiaryIntel() {
                     )}
                   </div>
                 </div>
-                <span className={`text-[0.5625rem] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded shrink-0 ${tierClass}`}>
+                <span className={`text-micro uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded shrink-0 ${tierClass}`}>
                   {tierLabel}
                 </span>
               </div>
@@ -1426,7 +1426,7 @@ function RivalSubsidiaryIntel() {
           })}
         </div>
       </div>
-      <div className="text-[0.625rem] text-ink-muted mt-1.5 leading-snug">
+      <div className="text-caption text-ink-muted mt-1.5 leading-snug">
         Premium Hub = a city where the rival owns 3+ subsidiaries.
         Routes through their Premium Hubs collect a brand + loyalty bonus
         that compounds against you on shared OD pairs.
@@ -1489,15 +1489,15 @@ function FuelTanksSection() {
   if (cities.length === 0) {
     return (
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Network fuel tanks · coverage discount
         </div>
         <div className="rounded-lg border border-line bg-surface-2/30 px-4 py-8 text-center">
           <Fuel className="w-8 h-8 mx-auto text-ink-muted mb-2" aria-hidden />
-          <div className="text-[0.875rem] text-ink font-semibold">
+          <div className="text-body-lg text-ink font-semibold">
             No cities yet
           </div>
-          <div className="text-[0.75rem] text-ink-muted mt-1 max-w-sm mx-auto leading-snug">
+          <div className="text-body-sm text-ink-muted mt-1 max-w-sm mx-auto leading-snug">
             Open a route first. Once you operate in a city you can install fuel
             tanks across your network to discount the fuel bill on every route.
           </div>
@@ -1547,10 +1547,10 @@ function FuelTanksSection() {
     <section className="space-y-3">
       {/* Header / explainer */}
       <div className="rounded-lg border border-line bg-surface-2/30 p-3">
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-1">
           Network fuel tanks · coverage discount
         </div>
-        <p className="text-[0.75rem] text-ink-muted leading-snug max-w-2xl">
+        <p className="text-body-sm text-ink-muted leading-snug max-w-2xl">
           Pick a tank tier and how many to place in every city you operate. Each
           tank covers a fixed quarterly fuel volume; when your tanks cover a
           city&apos;s full burn you earn that tier&apos;s maximum fuel discount on
@@ -1587,7 +1587,7 @@ function FuelTanksSection() {
 
       {/* The one control: tier + count → whole network */}
       <div className="rounded-lg border border-line bg-surface p-3 space-y-3">
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+        <div className="text-label uppercase tracking-wider text-ink-muted font-semibold">
           Set tanks for every operated city
         </div>
 
@@ -1598,7 +1598,7 @@ function FuelTanksSection() {
                 key={t}
                 onClick={() => setAllTier(t)}
                 className={cn(
-                  "px-3 py-1.5 text-[0.8125rem] font-medium transition-colors",
+                  "px-3 py-1.5 text-body font-medium transition-colors",
                   allTier === t
                     ? "bg-[var(--accent)] text-white"
                     : "bg-surface text-ink-muted hover:text-ink",
@@ -1608,15 +1608,15 @@ function FuelTanksSection() {
               </button>
             ))}
           </div>
-          <span className="text-[0.75rem] text-ink-muted">×</span>
+          <span className="text-body-sm text-ink-muted">×</span>
           <CountStepper value={allCount} onChange={setAllCount} />
-          <span className="text-[0.75rem] text-ink-muted">
+          <span className="text-body-sm text-ink-muted">
             tank{allCount === 1 ? "" : "s"} per city
           </span>
         </div>
 
         {/* Tier spec line */}
-        <div className="text-[0.6875rem] text-ink-muted">
+        <div className="text-label text-ink-muted">
           {FUEL_TANK_SPECS[allTier].label}: {(selSpec.capacityL / 1_000_000).toFixed(0)}M L/qtr
           per tank · up to {(selSpec.maxDiscount * 100).toFixed(0)}% fuel discount ·
           {" "}{fmtMoney(selSpec.installUsd)} install · {fmtMoney(selSpec.maintUsd)}/qtr upkeep
@@ -1643,7 +1643,7 @@ function FuelTanksSection() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-          <div className="text-[0.6875rem] text-ink-muted">
+          <div className="text-label text-ink-muted">
             {projInstallUsd > 0 ? (
               <>
                 Install cost{" "}
@@ -1656,7 +1656,7 @@ function FuelTanksSection() {
               <span>No new install cost — adjusting in place.</span>
             )}
             {skipped > 0 && (
-              <span className="block text-[0.625rem] mt-0.5">
+              <span className="block text-caption mt-0.5">
                 {skipped} non-Tier-1 cit{skipped === 1 ? "y is" : "ies are"} skipped for Large tanks.
               </span>
             )}
@@ -1668,7 +1668,7 @@ function FuelTanksSection() {
                 if (!r.ok && r.error) toast.warning("Cannot clear", r.error);
                 else toast.info("Tanks cleared", "All fuel tanks removed (no refund).");
               }}
-              className="text-[0.75rem] text-ink-muted hover:text-negative px-1"
+              className="text-body-sm text-ink-muted hover:text-negative px-1"
               disabled={totalTanks === 0}
             >
               Clear all
@@ -1703,12 +1703,12 @@ function FuelKpi({
 }: { label: string; value: string; sub?: string; tone?: "pos" | "neg" }) {
   return (
     <div className="rounded-md border border-line bg-surface p-2.5">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">{label}</div>
+      <div className="text-caption uppercase tracking-wider text-ink-muted">{label}</div>
       <div className={cn(
-        "font-display text-[1.25rem] tabular leading-none mt-0.5",
+        "font-display text-heading tabular leading-none mt-0.5",
         tone === "pos" ? "text-positive" : tone === "neg" ? "text-negative" : "text-ink",
       )}>{value}</div>
-      {sub && <div className="text-[0.625rem] text-ink-muted mt-1 leading-snug">{sub}</div>}
+      {sub && <div className="text-caption text-ink-muted mt-1 leading-snug">{sub}</div>}
     </div>
   );
 }
@@ -1730,7 +1730,7 @@ function CountStepper({
       >
         −
       </button>
-      <span className="px-1 text-[0.75rem] tabular font-mono text-ink font-semibold w-6 text-center">
+      <span className="px-1 text-body-sm tabular font-mono text-ink font-semibold w-6 text-center">
         {value}
       </span>
       <button

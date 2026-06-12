@@ -6,6 +6,7 @@ import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components
 import { fmtMoney, fmtPct, fmtQuarter, getTotalRounds, getCampaignStartYear } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
 import { brandRating, computeAirlineValue, effectiveTravelIndex } from "@/lib/engine";
+import { buildQuarterStory, buildRankLine } from "@/lib/quarter-story";
 import { MILESTONES_BY_ID } from "@/data/milestones";
 import { TrendingUp, TrendingDown, Newspaper, Plane, Award, Users, FileBarChart, NotebookPen } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -13,12 +14,17 @@ import { getGamePreference, setGamePreference } from "@/lib/client-preferences";
 
 type Tab = "overview" | "news" | "routes" | "people" | "pnl" | "notes";
 
+/** Tab order is narrative-first: Headline answers "what happened and
+ *  why", Routes and P&L are the natural follow-ups ("which routes" /
+ *  "which lines"), News/People/Notes are supporting color. Routes and
+ *  P&L were previously buried behind News, which players rarely
+ *  clicked through. */
 const TABS: Array<{ id: Tab; label: string; Icon: typeof TrendingUp }> = [
   { id: "overview", label: "Headline",   Icon: TrendingUp },
-  { id: "news",     label: "News",       Icon: Newspaper },
   { id: "routes",   label: "Routes",     Icon: Plane },
-  { id: "people",   label: "People",     Icon: Users },
   { id: "pnl",      label: "P&L",        Icon: FileBarChart },
+  { id: "news",     label: "News",       Icon: Newspaper },
+  { id: "people",   label: "People",     Icon: Users },
   { id: "notes",    label: "Notes",      Icon: NotebookPen },
 ];
 
@@ -127,6 +133,45 @@ export function QuarterCloseModal() {
     };
   }, [result]);
 
+  // ── Quarter story — the one-sentence "why" for the Headline tab.
+  //    Diffs this close's P&L lines against the prior quarter's
+  //    financialsByQuarter snapshot and names the 1-2 biggest drivers.
+  //    Without it players had to mentally diff six tabs to learn why
+  //    profit moved (verified audit finding, June 2026).
+  const story = useMemo(() => {
+    if (!result || !player) return null;
+    const prev =
+      player.financialsByQuarter.find((f) => f.quarter === result.quarter - 1) ??
+      null;
+    const newRouteIds = new Set(
+      (result.newRoutesActivatedThisQuarter ?? []).map((r) => r.routeId),
+    );
+    const newRouteRevenue = result.routeBreakdown
+      .filter((r) => newRouteIds.has(r.routeId))
+      .reduce((sum, r) => sum + r.revenue, 0);
+    return buildQuarterStory({
+      cur: result,
+      prev,
+      newRouteCount: newRouteIds.size,
+      newRouteRevenue,
+    });
+  }, [result, player]);
+
+  // Rank movement vs the prior close. Ranks are snapshotted into
+  // financialsByQuarter by closeQuarter (sorted by airline value),
+  // so both ends of the comparison use the same metric the
+  // Leaderboard panel shows.
+  const teamCount = s.teams.length;
+  const rankLine = useMemo(() => {
+    if (!result || !player) return null;
+    const hist = player.financialsByQuarter;
+    return buildRankLine({
+      prevRank: hist.find((f) => f.quarter === result.quarter - 1)?.rank,
+      newRank: hist.find((f) => f.quarter === result.quarter)?.rank,
+      teamCount,
+    });
+  }, [result, player, teamCount]);
+
   if (!result || !player) return null;
 
   const cashDelta = result.newCashUsd - result.prevCashUsd;
@@ -145,10 +190,10 @@ export function QuarterCloseModal() {
       <ModalHeader>
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
+            <span className="text-label uppercase tracking-[0.2em] text-accent">
               {fmtQuarter(result.quarter, startYear)} · Quarter closed
             </span>
-            <h2 className="font-display text-[1.75rem] text-ink leading-tight mt-1">
+            <h2 className="font-display text-display text-ink leading-tight mt-1">
               {result.netProfit >= 0
                 ? "A profitable quarter."
                 : result.netProfit > -5_000_000
@@ -158,14 +203,14 @@ export function QuarterCloseModal() {
           </div>
           <span
             className={cn(
-              "rounded-md px-3 py-1.5 text-[0.75rem] font-semibold tabular tracking-wider",
+              "rounded-md px-3 py-1.5 text-body-sm font-semibold tabular tracking-wider",
               "border",
               "flex flex-col items-center min-w-[64px]",
             )}
             style={{ borderColor: grade.color, color: grade.color }}
           >
-            <span className="text-[0.625rem] uppercase tracking-wider opacity-70">Brand</span>
-            <span className="font-display text-[1.25rem] leading-none">{grade.grade}</span>
+            <span className="text-caption uppercase tracking-wider opacity-70">Brand</span>
+            <span className="font-display text-heading leading-none">{grade.grade}</span>
           </span>
         </div>
 
@@ -206,7 +251,7 @@ export function QuarterCloseModal() {
                   el?.focus();
                 }}
                 className={cn(
-                  "px-3 py-2 text-[0.75rem] font-medium flex items-center gap-1.5",
+                  "px-3 py-2 text-body-sm font-medium flex items-center gap-1.5",
                   "border-b-2 -mb-px transition-colors duration-[var(--dur-fast)]",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-t",
                   active
@@ -238,6 +283,78 @@ export function QuarterCloseModal() {
                 tone={result.netProfit >= 0 ? "positive" : "negative"}
               />
             </div>
+
+            {/* The quarter in one line — auto-generated "why" so the
+                player doesn't have to diff six tabs to learn what
+                moved profit. Rank movement sits with it because
+                standing is the other thing every team asks first. */}
+            {story && (
+              <div className="rounded-md border border-[var(--accent-soft-2)] bg-[var(--accent-soft)]/60 p-3">
+                <div className="text-caption uppercase tracking-wider text-accent font-semibold">
+                  The quarter in one line
+                </div>
+                <p className="text-body-lg text-ink leading-relaxed mt-1">
+                  {story}
+                </p>
+                {rankLine && (
+                  <div
+                    className={cn(
+                      "mt-1.5 inline-flex items-center gap-1 text-body-sm font-semibold tabular",
+                      rankLine.tone === "up"
+                        ? "text-positive"
+                        : rankLine.tone === "down"
+                          ? "text-negative"
+                          : "text-ink-2",
+                    )}
+                  >
+                    {rankLine.tone === "up" ? (
+                      <TrendingUp size={12} aria-hidden="true" />
+                    ) : rankLine.tone === "down" ? (
+                      <TrendingDown size={12} aria-hidden="true" />
+                    ) : null}
+                    {rankLine.text}
+                  </div>
+                )}
+                {/* First-close coaching (First Flight bundle) — one
+                    concrete next move so a brand-new player leaves
+                    their first digest knowing exactly what to do. */}
+                {result.quarter === 1 && (() => {
+                  const idle = player.fleet.filter(
+                    (f) => f.status === "active" && !f.routeId,
+                  ).length;
+                  return (
+                    <div className="mt-1.5 text-body-sm text-ink-2 leading-snug">
+                      <span className="font-semibold text-ink">Next move:</span>{" "}
+                      {idle > 0
+                        ? `you have ${idle} idle aircraft — open ${idle === 1 ? "a route" : "routes"} from ${player.hubCode} to put ${idle === 1 ? "it" : "them"} to work.`
+                        : "every aircraft is flying. Consider ordering more from the Fleet panel to keep growing."}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Route pulse — best + worst routes inline so a bleeding
+                route can't hide behind the Routes tab. Click-through
+                jumps to the full breakdown. */}
+            {(topWinners.length > 0 || topLosers.length > 0) && (
+              <div className="grid grid-cols-2 gap-3">
+                <RoutePulseCard
+                  title="Top routes"
+                  tone="positive"
+                  entries={topWinners.slice(0, 2)}
+                  routes={player.routes}
+                  onAll={() => setTab("routes")}
+                />
+                <RoutePulseCard
+                  title="Needs attention"
+                  tone="negative"
+                  entries={topLosers.slice(0, 2)}
+                  routes={player.routes}
+                  onAll={() => setTab("routes")}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <DeltaRow
@@ -285,53 +402,53 @@ export function QuarterCloseModal() {
                 : null;
               const travDelta = travPrev != null ? travCur - travPrev : null;
               return (
-                <div className="rounded-md border border-line bg-surface-2/40 p-3 grid grid-cols-3 gap-3 text-[0.75rem]">
+                <div className="rounded-md border border-line bg-surface-2/40 p-3 grid grid-cols-3 gap-3 text-body-sm">
                   <div>
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                    <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
                       Fuel index
                     </div>
-                    <div className="font-display text-[1.125rem] tabular text-ink mt-0.5">
+                    <div className="font-display text-heading-sm tabular text-ink mt-0.5">
                       {cur}
                       {fuelDelta != null && fuelDelta !== 0 && (
-                        <span className={`ml-1.5 text-[0.75rem] tabular font-mono ${fuelDelta > 0 ? "text-negative" : "text-positive"}`}>
+                        <span className={`ml-1.5 text-body-sm tabular font-mono ${fuelDelta > 0 ? "text-negative" : "text-positive"}`}>
                           {fuelDelta > 0 ? "↑" : "↓"}
                           {Math.abs(fuelDelta)}
                         </span>
                       )}
                     </div>
-                    <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                    <div className="text-caption text-ink-muted mt-0.5">
                       {cur > 110 ? "Above baseline — bad for unhedged" :
                        cur < 90 ? "Below baseline — bulk-buy window" :
                        "Around baseline (100)"}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                    <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
                       Travellers index
                     </div>
-                    <div className="font-display text-[1.125rem] tabular text-ink mt-0.5">
+                    <div className="font-display text-heading-sm tabular text-ink mt-0.5">
                       {travCur}
                       {travDelta != null && travDelta !== 0 && (
-                        <span className={`ml-1.5 text-[0.75rem] tabular font-mono ${travDelta > 0 ? "text-positive" : "text-negative"}`}>
+                        <span className={`ml-1.5 text-body-sm tabular font-mono ${travDelta > 0 ? "text-positive" : "text-negative"}`}>
                           {travDelta > 0 ? "↑" : "↓"}
                           {Math.abs(travDelta)}
                         </span>
                       )}
                     </div>
-                    <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                    <div className="text-caption text-ink-muted mt-0.5">
                       {travCur > 110 ? "Travel boom — demand tailwind" :
                        travCur < 90 ? "Soft demand — fill seats carefully" :
                        "Around baseline (100)"}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                    <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
                       Base interest rate
                     </div>
-                    <div className="font-display text-[1.125rem] tabular text-ink mt-0.5">
+                    <div className="font-display text-heading-sm tabular text-ink mt-0.5">
                       {baseRate.toFixed(1)}%
                     </div>
-                    <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                    <div className="text-caption text-ink-muted mt-0.5">
                       RCF rate at 2× = {(baseRate * 2).toFixed(1)}%
                     </div>
                   </div>
@@ -374,8 +491,8 @@ export function QuarterCloseModal() {
               if (!hasDepreciation && !hasInsurance && !hasRcf && !hasResidual)
                 return null;
               return (
-                <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-1.5 text-[0.75rem]">
-                  <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold">
+                <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-1.5 text-body-sm">
+                  <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
                     How cash changed
                   </div>
                   <ReconRow
@@ -444,24 +561,24 @@ export function QuarterCloseModal() {
 
             {result.newRoutesActivatedThisQuarter && result.newRoutesActivatedThisQuarter.length > 0 && (
               <div className="rounded-md border border-[var(--positive-soft)] bg-surface px-3 py-2">
-                <div className="flex items-center gap-2 text-positive text-[0.6875rem] uppercase tracking-wider font-semibold">
+                <div className="flex items-center gap-2 text-positive text-label uppercase tracking-wider font-semibold">
                   <Plane size={13} /> New routes opened this quarter · {result.newRoutesActivatedThisQuarter.length}
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {result.newRoutesActivatedThisQuarter.map((r) => (
                     <span
                       key={r.routeId}
-                      className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-[0.75rem] text-ink"
+                      className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-body-sm text-ink"
                       title={`${r.originName} → ${r.destName}${r.isCargo ? " (cargo)" : ""}`}
                     >
-                      <span className="font-mono tabular text-[0.6875rem] text-ink-muted">{r.originCode}</span>
+                      <span className="font-mono tabular text-label text-ink-muted">{r.originCode}</span>
                       <span className="text-ink-muted">→</span>
-                      <span className="font-mono tabular text-[0.6875rem] text-ink-muted">{r.destCode}</span>
-                      <span className="text-[0.6875rem] text-ink-2">
+                      <span className="font-mono tabular text-label text-ink-muted">{r.destCode}</span>
+                      <span className="text-label text-ink-2">
                         {r.originName} – {r.destName}
                       </span>
                       {r.isCargo && (
-                        <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted">cargo</span>
+                        <span className="text-micro uppercase tracking-wider text-ink-muted">cargo</span>
                       )}
                     </span>
                   ))}
@@ -471,10 +588,10 @@ export function QuarterCloseModal() {
 
             {milestonesActuallyNew.length > 0 && (
               <div className="rounded-md border border-[var(--accent-soft-2)] bg-[var(--accent-soft)] px-3 py-2">
-                <div className="flex items-center gap-2 text-accent text-[0.6875rem] uppercase tracking-wider font-semibold">
+                <div className="flex items-center gap-2 text-accent text-label uppercase tracking-wider font-semibold">
                   <Award size={13} /> Milestones earned this quarter
                 </div>
-                <div className="mt-1 text-[0.8125rem] text-ink">
+                <div className="mt-1 text-body text-ink">
                   {milestonesActuallyNew
                     .map((id) => MILESTONES_BY_ID[id]?.title ?? id)
                     .join(" · ")}
@@ -489,11 +606,11 @@ export function QuarterCloseModal() {
                 ones still show so the player knows the dice rolled. */}
             {result.triggeredEvents.length > 0 && (
               <div className="rounded-md border border-warning bg-[var(--warning-soft)] px-3 py-2 space-y-1.5">
-                <div className="flex items-center gap-2 text-warning text-[0.6875rem] uppercase tracking-wider font-semibold">
+                <div className="flex items-center gap-2 text-warning text-label uppercase tracking-wider font-semibold">
                   Earlier decision · resolved this quarter
                 </div>
                 {result.triggeredEvents.map((e) => (
-                  <div key={e.id} className="text-[0.8125rem] text-ink-2">
+                  <div key={e.id} className="text-body text-ink-2">
                     <span className="font-mono text-primary mr-2">{e.scenario}</span>
                     {e.note}
                     <span
@@ -524,7 +641,7 @@ export function QuarterCloseModal() {
             )}
 
             {result.newRcfBalance > 0 && (
-              <div className="text-[0.8125rem] rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)] text-warning px-3 py-2">
+              <div className="text-body rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)] text-warning px-3 py-2">
                 Revolving Credit Facility drawn: <span className="tabular font-mono font-semibold">{fmtMoney(result.newRcfBalance)}</span>. Interest at 2× base rate applies next quarter.
               </div>
             )}
@@ -537,7 +654,7 @@ export function QuarterCloseModal() {
               const dormantCount = result.routeBreakdown.filter((r) => r.noOperatingAircraft).length;
               if (dormantCount === 0) return null;
               return (
-                <div className="text-[0.8125rem] rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)] text-warning px-3 py-2">
+                <div className="text-body rounded-md border border-[var(--warning-soft)] bg-[var(--warning-soft)] text-warning px-3 py-2">
                   <span className="font-semibold">⚠ {dormantCount} active route{dormantCount === 1 ? "" : "s"} with no aircraft assigned.</span>{" "}
                   Slots are leased but no flights are operating. Either
                   assign aircraft from the Routes panel or close the route
@@ -553,8 +670,8 @@ export function QuarterCloseModal() {
             {result.newsImpacts.length === 0 ? (
               <div className="rounded-md border border-line bg-surface-2 p-6 text-center">
                 <Newspaper size={20} className="mx-auto text-ink-muted mb-2" />
-                <div className="text-[0.875rem] font-medium text-ink">No headlines hit your network</div>
-                <div className="text-[0.75rem] text-ink-muted mt-0.5">
+                <div className="text-body-lg font-medium text-ink">No headlines hit your network</div>
+                <div className="text-body-sm text-ink-muted mt-0.5">
                   This quarter&apos;s news didn&apos;t materially affect any of your cities.
                 </div>
               </div>
@@ -611,14 +728,14 @@ export function QuarterCloseModal() {
                     className="rounded-md border border-line bg-surface px-4 py-3"
                   >
                     <div className="flex items-baseline justify-between mb-1.5">
-                      <span className="text-[0.625rem] uppercase tracking-[0.18em] font-bold text-accent">
+                      <span className="text-caption uppercase tracking-[0.18em] font-bold text-accent">
                         {n.outlet}
                       </span>
-                      <span className="text-[0.625rem] tabular text-ink-muted font-mono">
+                      <span className="text-caption tabular text-ink-muted font-mono">
                         {fmtQuarter(n.quarter, startYear)}
                       </span>
                     </div>
-                    <h3 className="text-[0.9375rem] font-medium text-ink leading-snug">
+                    <h3 className="text-title-sm font-medium text-ink leading-snug">
                       {n.headline}
                     </h3>
                     <div className="mt-2 flex flex-wrap gap-1.5 items-baseline">
@@ -626,7 +743,7 @@ export function QuarterCloseModal() {
                         <span
                           key={c.code}
                           className={cn(
-                            "text-[0.6875rem] tabular px-1.5 py-0.5 rounded font-mono",
+                            "text-label tabular px-1.5 py-0.5 rounded font-mono",
                             c.pct >= 0
                               ? "bg-[var(--positive-soft)] text-positive"
                               : "bg-[var(--negative-soft)] text-negative",
@@ -642,7 +759,7 @@ export function QuarterCloseModal() {
                       ))}
                       <span
                         className={cn(
-                          "ml-auto text-[0.6875rem] uppercase tracking-wider font-semibold",
+                          "ml-auto text-label uppercase tracking-wider font-semibold",
                           positive ? "text-positive" : "text-negative",
                         )}
                       >
@@ -704,22 +821,22 @@ export function QuarterCloseModal() {
               </Section>
             )}
             {topWinners.length === 0 && topLosers.length === 0 && (
-              <div className="rounded-md border border-line bg-surface-2 p-6 text-center text-ink-muted text-[0.8125rem]">
+              <div className="rounded-md border border-line bg-surface-2 p-6 text-center text-ink-muted text-body">
                 No active routes this quarter.
               </div>
             )}
 
             {/* Full breakdown collapsible */}
             <details className="rounded-md border border-line">
-              <summary className="px-3 py-2 cursor-pointer text-[0.75rem] font-semibold uppercase tracking-wider text-ink-2 hover:bg-surface-hover">
+              <summary className="px-3 py-2 cursor-pointer text-body-sm font-semibold uppercase tracking-wider text-ink-2 hover:bg-surface-hover">
                 All routes ({result.routeBreakdown.length})
               </summary>
-              <table className="w-full text-[0.8125rem]">
+              <table className="w-full text-body">
                 <thead>
                   <tr className="bg-surface-2">
-                    <th className="text-left font-semibold text-ink-muted uppercase tracking-wider text-[0.625rem] py-2 px-3">Route</th>
-                    <th className="text-right font-semibold text-ink-muted uppercase tracking-wider text-[0.625rem] py-2 px-3">Occupancy</th>
-                    <th className="text-right font-semibold text-ink-muted uppercase tracking-wider text-[0.625rem] py-2 px-3">Profit</th>
+                    <th className="text-left font-semibold text-ink-muted uppercase tracking-wider text-caption py-2 px-3">Route</th>
+                    <th className="text-right font-semibold text-ink-muted uppercase tracking-wider text-caption py-2 px-3">Occupancy</th>
+                    <th className="text-right font-semibold text-ink-muted uppercase tracking-wider text-caption py-2 px-3">Profit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -740,13 +857,13 @@ export function QuarterCloseModal() {
                               {route ? `${route.originCode} → ${route.destCode}` : r.routeId}
                             </span>
                             {route?.isCargo && (
-                              <span className="text-[0.5625rem] uppercase tracking-wider font-bold text-ink-muted">
+                              <span className="text-micro uppercase tracking-wider font-bold text-ink-muted">
                                 cargo
                               </span>
                             )}
                             {dormant && (
                               <span
-                                className="text-[0.5625rem] uppercase tracking-wider font-bold text-warning"
+                                className="text-micro uppercase tracking-wider font-bold text-warning"
                                 title="Active route with no operating aircraft assigned. Slots are leased but no flights are scheduled. Assign aircraft from Routes panel or close the route."
                               >
                                 no aircraft
@@ -805,7 +922,7 @@ export function QuarterCloseModal() {
               max={100}
               fmt={(n) => n.toFixed(0)}
             />
-            <div className="text-[0.75rem] text-ink-muted leading-relaxed">
+            <div className="text-body-sm text-ink-muted leading-relaxed">
               Brand and Ops drive your <strong>Brand multiplier</strong> on top of net equity.
               The current grade is <strong style={{ color: grade.color }}>{grade.grade}</strong>.
             </div>
@@ -814,7 +931,7 @@ export function QuarterCloseModal() {
 
         {tab === "pnl" && (
           <div className="rounded-md border border-line overflow-hidden">
-            <table className="w-full text-[0.8125rem]">
+            <table className="w-full text-body">
               <tbody>
                 <Row k="Revenue" v={fmtMoney(result.revenue)} tone="positive" />
                 <Row k="Fuel cost" v={fmtMoney(result.fuelCost)} />
@@ -844,7 +961,7 @@ export function QuarterCloseModal() {
           <div className="space-y-3">
             {result.triggeredEvents.length > 0 && (
               <div>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+                <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
                   Deferred events resolved
                 </div>
                 <div className="space-y-1.5">
@@ -852,7 +969,7 @@ export function QuarterCloseModal() {
                     <div
                       key={e.id}
                       className={cn(
-                        "rounded-md border px-3 py-2 text-[0.8125rem]",
+                        "rounded-md border px-3 py-2 text-body",
                         e.outcome === "triggered"
                           ? "border-[var(--negative-soft)] bg-[var(--negative-soft)]"
                           : "border-[var(--positive-soft)] bg-[var(--positive-soft)]",
@@ -876,15 +993,15 @@ export function QuarterCloseModal() {
 
             {result.notes.length > 0 ? (
               <div>
-                <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+                <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
                   Engine log
                 </div>
-                <div className="text-[0.75rem] text-ink-2 space-y-1 font-mono">
+                <div className="text-body-sm text-ink-2 space-y-1 font-mono">
                   {result.notes.map((n, i) => <div key={i}>· {n}</div>)}
                 </div>
               </div>
             ) : (
-              <div className="text-[0.8125rem] text-ink-muted">No additional notes this quarter.</div>
+              <div className="text-body text-ink-muted">No additional notes this quarter.</div>
             )}
           </div>
         )}
@@ -901,10 +1018,10 @@ export function QuarterCloseModal() {
 function BigStat({ label, value, tone }: { label: string; value: string; tone: "positive" | "negative" }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+      <span className="text-label uppercase tracking-wider text-ink-muted">
         {label}
       </span>
-      <span className={cn("tabular font-display text-[1.5rem] leading-none mt-1", tone === "positive" ? "text-positive" : "text-negative")}>
+      <span className={cn("tabular font-display text-heading-lg leading-none mt-1", tone === "positive" ? "text-positive" : "text-negative")}>
         {value}
       </span>
     </div>
@@ -927,17 +1044,17 @@ function DeltaRow({
   const positive = delta >= 0;
   return (
     <div className="rounded-md border border-line p-3">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">{label}</div>
+      <div className="text-caption uppercase tracking-wider text-ink-muted">{label}</div>
       <div className="flex items-baseline gap-2 mt-1">
-        <span className="tabular font-display text-[1.125rem] text-ink leading-none">
+        <span className="tabular font-display text-heading-sm text-ink leading-none">
           {fmt(to)}
         </span>
-        <span className={cn("text-[0.6875rem] tabular font-mono inline-flex items-center gap-0.5", positive ? "text-positive" : "text-negative")}>
+        <span className={cn("text-label tabular font-mono inline-flex items-center gap-0.5", positive ? "text-positive" : "text-negative")}>
           {positive ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
           {positive ? "+" : ""}{fmt(delta)}
         </span>
       </div>
-      <div className="text-[0.625rem] tabular text-ink-muted mt-1">
+      <div className="text-caption tabular text-ink-muted mt-1">
         from {fmt(from)}
       </div>
     </div>
@@ -968,7 +1085,7 @@ function ReconRow({
         </span>
       </div>
       {hint && (
-        <div className="text-[0.6875rem] text-ink-muted leading-snug">
+        <div className="text-label text-ink-muted leading-snug">
           {hint}
         </div>
       )}
@@ -980,15 +1097,15 @@ function Mini({ label, value, delta, deltaSuffix = "" }: { label: string; value:
   const positive = (delta ?? 0) >= 0;
   return (
     <div className="rounded-md border border-line bg-surface p-3">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+      <div className="text-caption uppercase tracking-wider text-ink-muted">
         {label}
       </div>
       <div className="flex items-baseline gap-2 mt-1">
-        <span className="tabular font-display text-[1.125rem] text-ink leading-none">
+        <span className="tabular font-display text-heading-sm text-ink leading-none">
           {value}
         </span>
         {delta !== undefined && Math.abs(delta) > 0.05 && (
-          <span className={cn("text-[0.6875rem] tabular font-mono", positive ? "text-positive" : "text-negative")}>
+          <span className={cn("text-label tabular font-mono", positive ? "text-positive" : "text-negative")}>
             {positive ? "+" : ""}{delta.toFixed(1)}{deltaSuffix}
           </span>
         )}
@@ -1012,11 +1129,80 @@ function Row({ k, v, tone, bold }: { k: string; v: string; tone?: "positive" | "
   );
 }
 
+/**
+ * Compact best/worst route strip for the Headline tab. Shows up to two
+ * routes ranked by DIRECT contribution (same metric as the Routes tab
+ * winners/losers) with a click-through to the full breakdown. An empty
+ * "Needs attention" card renders as a clean-sheet confirmation rather
+ * than disappearing — no losers is news worth showing.
+ */
+function RoutePulseCard({
+  title, tone, entries, routes, onAll,
+}: {
+  title: string;
+  tone: "positive" | "negative";
+  entries: Array<{ routeId: string; direct: number }>;
+  routes: Array<{ id: string; originCode: string; destCode: string; isCargo?: boolean }>;
+  onAll: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-line p-3 flex flex-col">
+      <div
+        className={cn(
+          "text-caption uppercase tracking-wider font-semibold",
+          tone === "positive" ? "text-positive" : "text-negative",
+        )}
+      >
+        {title}
+      </div>
+      {entries.length === 0 ? (
+        <div className="text-body-sm text-ink-muted mt-1.5 flex-1">
+          {tone === "positive"
+            ? "No route covered its direct costs this quarter."
+            : "No routes losing money — clean sheet."}
+        </div>
+      ) : (
+        <div className="mt-1.5 space-y-1 flex-1">
+          {entries.map((e) => {
+            const route = routes.find((x) => x.id === e.routeId);
+            const label = route
+              ? `${route.originCode} → ${route.destCode}${route.isCargo ? " · cargo" : ""}`
+              : e.routeId;
+            return (
+              <div
+                key={e.routeId}
+                className="flex items-baseline justify-between gap-2 text-body-sm"
+              >
+                <span className="font-mono text-ink truncate">{label}</span>
+                <span
+                  className={cn(
+                    "tabular font-mono font-semibold shrink-0",
+                    e.direct >= 0 ? "text-positive" : "text-negative",
+                  )}
+                >
+                  {e.direct >= 0 ? "+" : ""}{fmtMoney(e.direct)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onAll}
+        className="mt-2 self-start text-label uppercase tracking-wider text-ink-muted hover:text-ink font-semibold rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+      >
+        All routes →
+      </button>
+    </div>
+  );
+}
+
 function Section({ title, tone, children }: { title: string; tone: "positive" | "negative"; children: React.ReactNode }) {
   return (
     <div>
       <div className={cn(
-        "text-[0.6875rem] uppercase tracking-wider font-semibold mb-2",
+        "text-label uppercase tracking-wider font-semibold mb-2",
         tone === "positive" ? "text-positive" : "text-negative",
       )}>
         {title}
@@ -1028,9 +1214,9 @@ function Section({ title, tone, children }: { title: string; tone: "positive" | 
 
 function RouteRow({ label, occupancy, profit }: { label: string; occupancy: number; profit: number }) {
   return (
-    <div className="flex items-center justify-between border-b border-line last:border-0 px-3 py-2 text-[0.8125rem]">
+    <div className="flex items-center justify-between border-b border-line last:border-0 px-3 py-2 text-body">
       <span className="font-mono text-ink">{label}</span>
-      <span className="tabular text-ink-muted text-[0.75rem]">
+      <span className="tabular text-ink-muted text-body-sm">
         {fmtPct(occupancy * 100, 0)} occupancy
       </span>
       <span className={cn(
@@ -1050,11 +1236,11 @@ function PersonRow({ label, prev, next, max, fmt }: { label: string; prev: numbe
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1.5">
-        <span className="text-[0.8125rem] font-medium text-ink">{label}</span>
-        <span className="text-[0.75rem] tabular text-ink-2">
+        <span className="text-body font-medium text-ink">{label}</span>
+        <span className="text-body-sm tabular text-ink-2">
           {fmt(next)}
           {Math.abs(delta) > 0.05 && (
-            <span className={cn("ml-2 text-[0.6875rem]", positive ? "text-positive" : "text-negative")}>
+            <span className={cn("ml-2 text-label", positive ? "text-positive" : "text-negative")}>
               {positive ? "+" : ""}{delta.toFixed(1)}
             </span>
           )}

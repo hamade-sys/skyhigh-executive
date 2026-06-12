@@ -44,6 +44,47 @@ import type { Team, FleetAircraft, PricingTier, Route } from "@/types/game";
 export type BotDifficulty = "easy" | "medium" | "hard";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Stance ladder + player threat (Living Rivals, June 2026)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How hard the bot is pushing, derived from its airline value relative
+ * to the current leader. Replaces the old flat "+30% when bottom half"
+ * rule with a ladder the room can narrate:
+ *   cruise     ≥ 70% of leader — plays its scripted book
+ *   aggressive < 70% — +50% route quota, bigger fleet orders
+ *   desperate  < 40% — +80% quota, gambles, prunes losers after 1 Q
+ */
+export type BotStance = "cruise" | "aggressive" | "desperate";
+
+export function botStance(
+  myAirlineValue: number,
+  leaderAirlineValue: number,
+): BotStance {
+  if (leaderAirlineValue <= 0) return "cruise";
+  const ratio = myAirlineValue / leaderAirlineValue;
+  if (ratio < 0.40) return "desperate";
+  if (ratio < 0.70) return "aggressive";
+  return "cruise";
+}
+
+/**
+ * What the human(s) did that this bot should react to. Computed once
+ * per close in the store and passed into the planners so bots respond
+ * to the player's actual quarter instead of replaying a static book.
+ */
+export interface PlayerThreat {
+  /** Routes humans opened during the quarter being closed. ≥5 reads
+   *  as an expansion blitz — non-easy bots add +1 quota to keep pace. */
+  humanRoutesOpenedThisQ: number;
+  /** 0..1 — share of slot leases at this bot's primary hub held by
+   *  human teams (scaled up when a human owns the airport outright).
+   *  ≥0.5 flips the bot into hub-defense: new routes from home score
+   *  higher so the bot reinforces the base it's being squeezed out of. */
+  hubPressure: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Phase helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -167,10 +208,17 @@ export function botPickScenarioOption(difficulty: BotDifficulty, scenarioId: str
  * for 3+ quarters (bot opened and forgot about it — shouldn't happen but
  * defensive cleanup).
  */
-export function pruneBotRoutes(team: Team, difficulty: BotDifficulty): string[] {
+export function pruneBotRoutes(
+  team: Team,
+  difficulty: BotDifficulty,
+  stance: BotStance = "cruise",
+): string[] {
   if (difficulty === "easy") return []; // easy bots don't prune
 
-  const threshold = difficulty === "hard" ? 2 : 3;
+  // Desperate bots cut losers after a single bad quarter — reckless
+  // capital recycling that reads as "they're throwing everything at
+  // the wall" from across the room.
+  const threshold = stance === "desperate" ? 1 : difficulty === "hard" ? 2 : 3;
   const toClose: string[] = [];
 
   for (const r of team.routes) {
@@ -197,6 +245,10 @@ export function pruneBotRoutes(team: Team, difficulty: BotDifficulty): string[] 
  *                         a +30 % quota bonus to simulate desperation.
  * @param fuelIndex   Current fuel index (100 = baseline). Above 140 bots
  *                    scale back openings.
+ * @param stance      Ladder from relative airline value (see botStance).
+ *                    aggressive/desperate override the rank quota rule.
+ * @param threat      What the human(s) did this quarter — drives the
+ *                    counter-tempo quota bump and hub defense.
  */
 export function planBotRoutes(
   team: Team,
@@ -207,6 +259,8 @@ export function planBotRoutes(
   claimedODs: Set<string> = new Set(),
   leaderboardRank = 1,
   fuelIndex = 100,
+  stance: BotStance = "cruise",
+  threat?: PlayerThreat,
 ): Array<{
   origin: string;
   dest: string;
@@ -220,12 +274,27 @@ export function planBotRoutes(
   // Base quota from the scripted table
   let quota = _RQ[difficulty][phase];
 
-  // Leaderboard awareness: trailing bots push harder
-  const totalBots = rivals.filter(r => r.botDifficulty).length + 1;
-  if (leaderboardRank > Math.ceil(totalBots / 2)) {
-    quota = Math.ceil(quota * 1.3); // +30% when in the bottom half
-  } else if (leaderboardRank === 1 && phase !== "startup") {
-    quota = Math.max(1, quota - 1); // leader plays slightly safer
+  // Stance ladder beats the coarse rank rule when active: a badly
+  // trailing bot blitzes routes instead of nudging +30%.
+  if (stance === "desperate") {
+    quota = Math.ceil(quota * 1.8);
+  } else if (stance === "aggressive") {
+    quota = Math.ceil(quota * 1.5);
+  } else {
+    // Leaderboard awareness: trailing bots push harder
+    const totalBots = rivals.filter(r => r.botDifficulty).length + 1;
+    if (leaderboardRank > Math.ceil(totalBots / 2)) {
+      quota = Math.ceil(quota * 1.3); // +30% when in the bottom half
+    } else if (leaderboardRank === 1 && phase !== "startup") {
+      quota = Math.max(1, quota - 1); // leader plays slightly safer
+    }
+  }
+
+  // Counter-tempo: a human expansion blitz (5+ routes in one quarter)
+  // pulls non-easy bots into the race rather than letting the player
+  // grab every corridor uncontested.
+  if (difficulty !== "easy" && (threat?.humanRoutesOpenedThisQ ?? 0) >= 5) {
+    quota += 1;
   }
 
   // Fuel spike: high fuel = fewer new routes (thinner margins)
@@ -262,9 +331,15 @@ export function planBotRoutes(
     }
   }
 
-  // Hard bot: human OD bonus — compete directly on profitable human routes
+  // Human OD revenue map — compete directly on profitable human routes.
+  // Hard bots always counter-compete; medium bots join in (at half
+  // strength, see counterBonus) once their stance escalates, so a
+  // runaway player feels pressure from the whole field, not just the
+  // hardest bot.
   const humanOdRevenue: Record<string, number> = {};
-  if (difficulty === "hard") {
+  const countersHumans =
+    difficulty === "hard" || (difficulty === "medium" && stance !== "cruise");
+  if (countersHumans) {
     for (const rv of rivals) {
       if (rv.controlledBy !== "human") continue;
       for (const r of rv.routes) {
@@ -274,6 +349,11 @@ export function planBotRoutes(
       }
     }
   }
+
+  // Hub defense: when humans hold most of the slots at this bot's home
+  // base, routes FROM home score higher — the bot visibly reinforces
+  // the hub it's being squeezed out of instead of drifting elsewhere.
+  const defendingHub = (threat?.hubPressure ?? 0) >= 0.5;
 
   // Easy bot mistake mode: deterministic per (team+quarter) so replays
   // and GM advances produce identical decisions rather than re-rolling.
@@ -357,19 +437,24 @@ export function planBotRoutes(
         // pick it but it scores much lower).
         const alreadyClaimed = claimedODs.has(odSorted(origin, dest.code)) ? 0.2 : 1.0;
 
-        // Hard bot counter-compete bonus
+        // Counter-compete bonus on human corridors. Hard bots at full
+        // strength; escalated medium bots at half (cap 1.5×).
         const odKey = odSorted(origin, dest.code);
-        const counterBonus =
-          difficulty === "hard" && humanOdRevenue[odKey]
+        const counterBonus = humanOdRevenue[odKey]
+          ? difficulty === "hard"
             ? Math.min(2.0, 1 + humanOdRevenue[odKey] / 5_000_000)
-            : 1.0;
+            : Math.min(1.5, 1 + humanOdRevenue[odKey] / 10_000_000)
+          : 1.0;
+
+        // Hub-defense boost — reinforce home base under slot pressure.
+        const defenseBonus = defendingHub && origin === team.hubCode ? 1.35 : 1.0;
 
         // Easy mistake: invert demand scoring 30% of the time
         const demandScore = easyMistakeMode
           ? 1 / Math.max(1, baseDemand)
           : baseDemand * tierBonus;
 
-        const score = demandScore * distFit * satPenalty * alreadyClaimed * counterBonus;
+        const score = demandScore * distFit * satPenalty * alreadyClaimed * counterBonus * defenseBonus;
         candidates.push({ origin, dest: dest.code, aircraft: plane, score });
       }
     }
@@ -398,13 +483,16 @@ export function planBotRoutes(
       }]) * 7),
     );
 
-    // Utilisation: hard bots maximise frequency; easy underfly
-    const util = difficulty === "hard" ? 0.9 : difficulty === "easy" ? 0.5 : 0.7;
+    // Utilisation: hard bots maximise frequency; easy underfly.
+    // Desperate bots run everything at 95% — all-in on volume.
+    const util = stance === "desperate" ? 0.95
+      : difficulty === "hard" ? 0.9
+      : difficulty === "easy" ? 0.5 : 0.7;
     const weeklyFreq = Math.max(1, Math.round(maxWeeklyFreq * util));
 
     // Pricing by doctrine + difficulty
     let tier: PricingTier = "standard";
-    if (difficulty === "hard") {
+    if (difficulty === "hard" || (difficulty === "medium" && stance !== "cruise" && humanOdRevenue[odSorted(p.origin, p.dest)])) {
       const odKey = odSorted(p.origin, p.dest);
       // Undercut humans on their profitable routes; premium everywhere else
       tier = humanOdRevenue[odKey] ? "budget" : "premium";
@@ -434,10 +522,18 @@ export function planBotAircraftOrder(
   currentQuarter: number,
   totalRounds = 20,
   campaignMode: "half" | "full" = "half",
+  stance: BotStance = "cruise",
 ): { specId: string; quantity: number; acquisitionType: "buy" | "lease" } | null {
   const profile = PROFILES[difficulty];
   const phase = gamePhase(currentQuarter, totalRounds);
-  const targetQty = ORDER_QTY[difficulty][phase];
+  // Stance scales the order book: trailing bots build capacity to fund
+  // the route blitz their elevated quota wants to fly.
+  const baseQty = ORDER_QTY[difficulty][phase];
+  const targetQty = stance === "desperate"
+    ? Math.ceil(Math.max(1, baseQty) * 2)
+    : stance === "aggressive"
+      ? Math.ceil(Math.max(1, baseQty) * 1.5)
+      : baseQty;
   if (targetQty === 0) return null;
 
   // Era-gating: in the full campaign bots can't order an airframe before its
@@ -463,6 +559,12 @@ export function planBotAircraftOrder(
   const cargoThreshold = difficulty === "hard" ? 3 : 5;
   const wantsCargo = fleetCount >= cargoThreshold && cargoCount === 0;
 
+  // Desperate bots drop the cash cushion entirely — buy at sticker the
+  // moment the money exists. Risky on purpose; that's the gamble.
+  const cashRatioGuard = stance === "desperate"
+    ? Math.min(profile.orderAircraftCashRatio, 1.0)
+    : profile.orderAircraftCashRatio;
+
   const candidates = availableSpecs.filter(spec => {
     if (wantsCargo && spec.family !== "cargo") return false;
     if (!wantsCargo && spec.family !== "passenger") return false;
@@ -470,7 +572,7 @@ export function planBotAircraftOrder(
       const isWide = spec.seats.first + spec.seats.business + spec.seats.economy > 250;
       if (wantsWide !== isWide && fleetCount > 0) return false;
     }
-    const canBuy   = team.cashUsd >= spec.buyPriceUsd * profile.orderAircraftCashRatio;
+    const canBuy   = team.cashUsd >= spec.buyPriceUsd * cashRatioGuard;
     const canLease = canLeaseSpec(spec, AIRCRAFT, currentQuarter, campaignMode)
       && team.cashUsd >= leaseTermsFor(spec).depositUsd;
     return canBuy || canLease;

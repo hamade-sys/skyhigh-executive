@@ -178,7 +178,7 @@ export default function Endgame() {
       <header className="sticky top-0 z-10 px-8 py-5 border-b border-line bg-bg/95 backdrop-blur-md flex items-center justify-between">
         <div className="flex items-baseline gap-3">
           <span className="font-display text-xl text-ink">ICAN Simulations</span>
-          <span className="text-[0.6875rem] uppercase tracking-[0.18em] text-ink-muted">
+          <span className="text-label uppercase tracking-[0.18em] text-ink-muted">
             {isObserver ? "Game Master · Final Results" : `Final scoring · ${finalQuarterLabel} closed`}
           </span>
         </div>
@@ -271,31 +271,31 @@ export default function Endgame() {
             <Card className="mb-8">
               <CardBody>
                 <div className="flex items-baseline justify-between mb-5">
-                  <h2 className="font-display text-[1.5rem] text-ink">Head-to-head</h2>
-                  <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">Final stats · both airlines</span>
+                  <h2 className="font-display text-heading-lg text-ink">Head-to-head</h2>
+                  <span className="text-label uppercase tracking-wider text-ink-muted">Final stats · both airlines</span>
                 </div>
                 {/* Team name headers */}
                 <div className="grid grid-cols-[1fr_6rem_1fr] gap-3 mb-1 pb-3 border-b border-line">
                   <div className="flex items-center gap-2">
                     <span
-                      className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded font-mono text-[0.625rem] font-semibold"
+                      className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded font-mono text-caption font-semibold"
                       style={{ background: wCol.hex, color: wCol.textOn === "white" ? "#fff" : "#0f172a" }}
                     >
                       {w.code}
                     </span>
                     <div className="min-w-0">
-                      <div className="text-[0.9375rem] font-semibold text-ink truncate">{w.name}</div>
-                      <div className="text-[0.625rem] uppercase tracking-wide text-positive font-semibold mt-0.5">🥇 Winner</div>
+                      <div className="text-title-sm font-semibold text-ink truncate">{w.name}</div>
+                      <div className="text-caption uppercase tracking-wide text-positive font-semibold mt-0.5">🥇 Winner</div>
                     </div>
                   </div>
-                  <div className="text-center self-center text-[0.75rem] font-display text-ink-muted">vs</div>
+                  <div className="text-center self-center text-body-sm font-display text-ink-muted">vs</div>
                   <div className="flex items-center gap-2 justify-end text-right">
                     <div className="min-w-0">
-                      <div className="text-[0.9375rem] font-semibold text-ink truncate">{l.name}</div>
-                      <div className="text-[0.625rem] uppercase tracking-wide text-ink-muted font-semibold mt-0.5">🥈 Runner-up</div>
+                      <div className="text-title-sm font-semibold text-ink truncate">{l.name}</div>
+                      <div className="text-caption uppercase tracking-wide text-ink-muted font-semibold mt-0.5">🥈 Runner-up</div>
                     </div>
                     <span
-                      className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded font-mono text-[0.625rem] font-semibold"
+                      className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded font-mono text-caption font-semibold"
                       style={{ background: lCol.hex, color: lCol.textOn === "white" ? "#fff" : "#0f172a" }}
                     >
                       {l.code}
@@ -315,22 +315,22 @@ export default function Endgame() {
                       >
                         {/* Winner side value */}
                         <div className={cn(
-                          "tabular font-mono text-[0.9375rem] flex items-center gap-1.5",
+                          "tabular font-mono text-title-sm flex items-center gap-1.5",
                           wWins ? "text-ink font-semibold" : "text-ink-2",
                         )}>
                           {row.wVal}
-                          {wWins && <span className="text-[0.5625rem] text-positive">▲</span>}
+                          {wWins && <span className="text-micro text-positive">▲</span>}
                         </div>
                         {/* Metric label */}
-                        <div className="text-center text-[0.625rem] uppercase tracking-wider text-ink-muted leading-snug">
+                        <div className="text-center text-caption uppercase tracking-wider text-ink-muted leading-snug">
                           {row.label}
                         </div>
                         {/* Runner-up side value */}
                         <div className={cn(
-                          "tabular font-mono text-[0.9375rem] flex items-center gap-1.5 justify-end",
+                          "tabular font-mono text-title-sm flex items-center gap-1.5 justify-end",
                           lWins ? "text-ink font-semibold" : "text-ink-2",
                         )}>
-                          {lWins && <span className="text-[0.5625rem] text-positive">▲</span>}
+                          {lWins && <span className="text-micro text-positive">▲</span>}
                           {row.lVal}
                         </div>
                       </div>
@@ -350,7 +350,7 @@ export default function Endgame() {
         <h1 className="font-display text-[clamp(3rem,7vw,5rem)] leading-[1.04] text-ink mt-4 mb-3">
           {isObserver ? `${ranked[0]?.name ?? "Winner"} wins!` : `${title}.`}
         </h1>
-        <p className="text-ink-2 text-[1.125rem] leading-relaxed max-w-[52ch] mb-10">
+        <p className="text-ink-2 text-heading-sm leading-relaxed max-w-[52ch] mb-10">
           {isObserver
             ? `${ranked[0]?.name ?? "The winner"} finished with the highest airline value. Full standings below.`
             : sub}
@@ -370,14 +370,14 @@ export default function Endgame() {
             <Card className="mb-6">
               <CardBody>
                 <div className="flex items-baseline justify-between mb-3">
-                  <h2 className="font-display text-[1.5rem] text-ink">
+                  <h2 className="font-display text-heading-lg text-ink">
                     Brand Value composition
                   </h2>
-                  <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                  <span className="text-label uppercase tracking-wider text-ink-muted">
                     {bv.composite.toFixed(1)} composite
                   </span>
                 </div>
-                <p className="text-[0.875rem] text-ink-2 leading-relaxed mb-4">
+                <p className="text-body-lg text-ink-2 leading-relaxed mb-4">
                   Three weighted health scores combine into the final Brand
                   Value: financial discipline, brand stewardship, and operational
                   rigor.
@@ -420,7 +420,7 @@ export default function Endgame() {
         {focusAwards.length > 0 && (
           <Card className="mb-6">
             <CardBody>
-              <h2 className="font-display text-[1.5rem] text-ink mb-3">
+              <h2 className="font-display text-heading-lg text-ink mb-3">
                 End-game awards earned{isObserver ? ` · ${focusTeam.name}` : ""}
               </h2>
               <div className="space-y-2">
@@ -430,14 +430,14 @@ export default function Endgame() {
                     className="flex items-baseline justify-between py-2 border-b border-line last:border-0"
                   >
                     <div className="flex items-baseline gap-3">
-                      <span className="font-semibold text-ink text-[0.9375rem]">
+                      <span className="font-semibold text-ink text-title-sm">
                         {a.card}
                       </span>
-                      <span className="text-[0.75rem] text-ink-muted">
+                      <span className="text-body-sm text-ink-muted">
                         {a.source}
                       </span>
                     </div>
-                    <span className="text-[0.8125rem] text-ink-2 tabular font-mono">
+                    <span className="text-body text-ink-2 tabular font-mono">
                       {a.effect}
                     </span>
                   </div>
@@ -457,10 +457,10 @@ export default function Endgame() {
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
-                <h2 className="font-display text-[1.5rem] text-ink">
+                <h2 className="font-display text-heading-lg text-ink">
                   Cohort analytics · {fmtQuarter(1, startYear)} → {fmtQuarter(getTotalRounds(stateForUtils), startYear)}
                 </h2>
-                <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                <span className="text-label uppercase tracking-wider text-ink-muted">
                   All teams · {ranked.length}
                 </span>
               </div>
@@ -479,7 +479,7 @@ export default function Endgame() {
         {ranked.length > 1 && (
           <Card className="mb-6">
             <CardBody>
-              <h2 className="font-display text-[1.5rem] text-ink mb-3">
+              <h2 className="font-display text-heading-lg text-ink mb-3">
                 Final standings
               </h2>
               <div className="space-y-1.5">
@@ -492,32 +492,32 @@ export default function Endgame() {
                         : "border-line bg-surface"
                     }`}
                   >
-                    <span className="font-mono text-[0.875rem] text-ink-muted w-6 tabular text-center">
+                    <span className="font-mono text-body-lg text-ink-muted w-6 tabular text-center">
                       #{i + 1}
                     </span>
                     <span
-                      className="inline-block w-7 h-7 rounded flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg shrink-0"
+                      className="inline-block w-7 h-7 rounded flex items-center justify-center font-mono text-caption font-semibold text-primary-fg shrink-0"
                       style={{ background: airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).hex }}
                     >
                       {t.code}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[0.9375rem] truncate ${!isObserver && t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}`}>
+                        <span className={`text-title-sm truncate ${!isObserver && t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}`}>
                           {t.name}
                         </span>
                         {!isObserver && t.id === player.id && <Badge tone="primary">You</Badge>}
                         {i === 0 && <Badge tone="accent">Winner</Badge>}
                       </div>
-                      <div className="text-[0.6875rem] text-ink-muted font-mono">
+                      <div className="text-label text-ink-muted font-mono">
                         Hub {t.hubCode} · {t.routes.filter((r) => r.status === "active").length} routes · {t.fleet.filter((f) => f.status === "active").length} aircraft
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="font-display text-[1.125rem] text-ink leading-none tabular">
+                      <div className="font-display text-heading-sm text-ink leading-none tabular">
                         {fmtMoney(t.finalAirlineValue)}
                       </div>
-                      <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                      <div className="text-label text-ink-muted mt-0.5">
                         Brand {brandRating(t).grade}
                       </div>
                     </div>
@@ -597,14 +597,14 @@ export default function Endgame() {
           return (
             <Card className="mb-6">
               <CardBody>
-                <h2 className="font-display text-[1.5rem] text-ink mb-3">
+                <h2 className="font-display text-heading-lg text-ink mb-3">
                   Fun facts
                 </h2>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   {facts.map((f) => (
                     <div key={f.label} className="flex items-baseline justify-between border-b border-line py-1.5">
-                      <span className="text-[0.8125rem] text-ink-muted">{f.label}</span>
-                      <span className="text-[0.875rem] tabular font-mono text-ink font-medium">{f.value}</span>
+                      <span className="text-body text-ink-muted">{f.label}</span>
+                      <span className="text-body-lg tabular font-mono text-ink font-medium">{f.value}</span>
                     </div>
                   ))}
                 </div>
@@ -624,8 +624,8 @@ export default function Endgame() {
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
-                <h2 className="font-display text-[1.5rem] text-ink">Career arc</h2>
-                <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                <h2 className="font-display text-heading-lg text-ink">Career arc</h2>
+                <span className="text-label uppercase tracking-wider text-ink-muted">
                   {fmtQuarter(1, startYear)} → {finalQuarterLabel} · brand value trajectory
                 </span>
               </div>
@@ -648,7 +648,7 @@ export default function Endgame() {
                       {ranked.length === 2 && (
                         <div className="flex items-center gap-2 mb-3">
                           <span
-                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded font-mono text-[0.5625rem] font-semibold"
+                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded font-mono text-micro font-semibold"
                             style={{
                               background: arcCol.hex,
                               color: arcCol.textOn === "white" ? "#fff" : "#0f172a",
@@ -656,9 +656,9 @@ export default function Endgame() {
                           >
                             {arcTeam.code}
                           </span>
-                          <span className="text-[0.875rem] font-semibold text-ink">{arcTeam.name}</span>
+                          <span className="text-body-lg font-semibold text-ink">{arcTeam.name}</span>
                           {teamIdx === 0 && <Badge tone="accent">Winner</Badge>}
-                          {teamIdx === 1 && <span className="text-[0.6875rem] text-ink-muted uppercase tracking-wide">Runner-up</span>}
+                          {teamIdx === 1 && <span className="text-label text-ink-muted uppercase tracking-wide">Runner-up</span>}
                         </div>
                       )}
                       <div className="grid grid-cols-3 gap-4 mb-4">
@@ -826,10 +826,10 @@ export default function Endgame() {
             <Card className="mb-6">
               <CardBody>
                 <div className="flex items-baseline justify-between mb-3">
-                  <h2 className="font-display text-[1.5rem] text-ink flex items-center gap-2">
+                  <h2 className="font-display text-heading-lg text-ink flex items-center gap-2">
                     <Sparkles size={20} /> Highlights
                   </h2>
-                  <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                  <span className="text-label uppercase tracking-wider text-ink-muted">
                     Pivotal moments
                   </span>
                 </div>
@@ -839,7 +839,7 @@ export default function Endgame() {
                   <div className="space-y-3">
                     {highlights.map((h, i) => (
                       <div key={`${h.kind}-${h.quarter}-${i}`} className="relative flex items-baseline gap-3">
-                        <div className="font-mono tabular text-[0.6875rem] text-ink-muted w-20 text-right shrink-0 pt-1">
+                        <div className="font-mono tabular text-label text-ink-muted w-20 text-right shrink-0 pt-1">
                           {fmtQuarter(h.quarter, startYear)}
                         </div>
                         <div
@@ -852,10 +852,10 @@ export default function Endgame() {
                           aria-hidden
                         />
                         <div className="flex-1 min-w-0 pt-0.5">
-                          <div className="text-[0.875rem] text-ink font-medium">
+                          <div className="text-body-lg text-ink font-medium">
                             {h.title}
                           </div>
-                          <div className="text-[0.75rem] text-ink-muted leading-snug">
+                          <div className="text-body-sm text-ink-muted leading-snug">
                             {h.detail}
                           </div>
                         </div>
@@ -872,7 +872,7 @@ export default function Endgame() {
         {focusTeam.decisions.length > 0 && (
           <Card className="mb-6">
             <CardBody>
-              <h2 className="font-display text-[1.5rem] text-ink mb-3">
+              <h2 className="font-display text-heading-lg text-ink mb-3">
                 Boardroom decisions · {focusTeam.decisions.length}
               </h2>
               <div className="space-y-1.5">
@@ -886,13 +886,13 @@ export default function Endgame() {
                     const scenario = SCENARIOS_BY_ID[d.scenarioId];
                     const opt = scenario?.options.find((o) => o.id === d.optionId);
                     return (
-                      <div key={`${d.scenarioId}-${d.quarter}`} className="flex items-baseline justify-between gap-3 py-1.5 border-b border-line last:border-0 text-[0.875rem]">
+                      <div key={`${d.scenarioId}-${d.quarter}`} className="flex items-baseline justify-between gap-3 py-1.5 border-b border-line last:border-0 text-body-lg">
                         <div className="flex items-baseline gap-2 min-w-0">
-                          <span className="font-mono text-[0.6875rem] text-primary tabular w-12 shrink-0">Q{d.quarter}</span>
-                          <span className="font-mono text-[0.6875rem] text-ink-muted shrink-0">{d.scenarioId}</span>
+                          <span className="font-mono text-label text-primary tabular w-12 shrink-0">Q{d.quarter}</span>
+                          <span className="font-mono text-label text-ink-muted shrink-0">{d.scenarioId}</span>
                           <span className="text-ink-2 truncate">{scenario?.title ?? "Unknown"}</span>
                         </div>
-                        <span className="text-accent font-mono text-[0.75rem] shrink-0">
+                        <span className="text-accent font-mono text-body-sm shrink-0">
                           {d.optionId} · {opt?.label}
                         </span>
                       </div>
@@ -908,10 +908,10 @@ export default function Endgame() {
           <Card className="mb-6">
             <CardBody>
               <div className="flex items-baseline justify-between mb-3">
-                <h2 className="font-display text-[1.5rem] text-ink flex items-center gap-2">
+                <h2 className="font-display text-heading-lg text-ink flex items-center gap-2">
                   <Award size={20} /> Milestones unlocked
                 </h2>
-                <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                <span className="text-label uppercase tracking-wider text-ink-muted">
                   {focusTeam.milestones.length} of {MILESTONES.length}
                 </span>
               </div>
@@ -922,12 +922,12 @@ export default function Endgame() {
                   return (
                     <div key={id} className="rounded-md border border-line bg-[var(--positive-soft)]/40 px-3 py-2">
                       <div className="flex items-baseline justify-between mb-0.5">
-                        <span className="text-[0.875rem] font-semibold text-ink">{m.title}</span>
-                        <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted">
+                        <span className="text-body-lg font-semibold text-ink">{m.title}</span>
+                        <span className="text-micro uppercase tracking-wider text-ink-muted">
                           {m.category}
                         </span>
                       </div>
-                      <div className="text-[0.75rem] text-ink-muted leading-relaxed">{m.description}</div>
+                      <div className="text-body-sm text-ink-muted leading-relaxed">{m.description}</div>
                     </div>
                   );
                 })}
@@ -939,14 +939,14 @@ export default function Endgame() {
         <Card className="mb-6">
           <CardBody>
             <div className="flex items-baseline justify-between mb-4">
-              <h2 className="font-display text-[1.5rem] text-ink">Final leaderboard</h2>
-              <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+              <h2 className="font-display text-heading-lg text-ink">Final leaderboard</h2>
+              <span className="text-label uppercase tracking-wider text-ink-muted">
                 Sorted by airline value · ties broken by cash → debt → brand → loyalty
               </span>
             </div>
-            <table className="w-full text-[0.9375rem]">
+            <table className="w-full text-title-sm">
               <thead>
-                <tr className="border-b border-line text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                <tr className="border-b border-line text-caption uppercase tracking-wider text-ink-muted">
                   <th className="text-left py-2 w-10">#</th>
                   <th className="text-left py-2">Airline</th>
                   <th className="text-right py-2">Airline value</th>
@@ -963,7 +963,7 @@ export default function Endgame() {
                     <td className="py-3">
                       <div className="flex items-center gap-2.5">
                         <span
-                          className="inline-block w-6 h-6 rounded flex items-center justify-center font-mono text-[0.625rem] font-semibold text-primary-fg"
+                          className="inline-block w-6 h-6 rounded flex items-center justify-center font-mono text-caption font-semibold text-primary-fg"
                           style={{ background: airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).hex }}
                         >
                           {t.code}
@@ -974,11 +974,11 @@ export default function Endgame() {
                         {!isObserver && t.id === player.id && <Badge tone="primary">You</Badge>}
                       </div>
                     </td>
-                    <td className="py-3 text-right tabular font-display text-[1.125rem]">{fmtMoney(t.finalAirlineValue)}</td>
-                    <td className="py-3 text-right tabular font-mono text-[0.8125rem] text-ink-2 hidden md:table-cell">{fmtMoney(t.cashUsd)}</td>
-                    <td className="py-3 text-right tabular font-mono text-[0.8125rem] text-ink-2 hidden md:table-cell">{t.totalDebtUsd > 0 ? fmtMoney(t.totalDebtUsd) : "—"}</td>
-                    <td className="py-3 text-right tabular font-mono text-[0.8125rem] text-ink-2 hidden md:table-cell">{Math.round(t.brandPts)}</td>
-                    <td className="py-3 text-right tabular font-mono text-[0.8125rem] text-ink-2 hidden md:table-cell">{Math.round(t.customerLoyaltyPct)}%</td>
+                    <td className="py-3 text-right tabular font-display text-heading-sm">{fmtMoney(t.finalAirlineValue)}</td>
+                    <td className="py-3 text-right tabular font-mono text-body text-ink-2 hidden md:table-cell">{fmtMoney(t.cashUsd)}</td>
+                    <td className="py-3 text-right tabular font-mono text-body text-ink-2 hidden md:table-cell">{t.totalDebtUsd > 0 ? fmtMoney(t.totalDebtUsd) : "—"}</td>
+                    <td className="py-3 text-right tabular font-mono text-body text-ink-2 hidden md:table-cell">{Math.round(t.brandPts)}</td>
+                    <td className="py-3 text-right tabular font-mono text-body text-ink-2 hidden md:table-cell">{Math.round(t.customerLoyaltyPct)}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -999,39 +999,39 @@ export default function Endgame() {
             <Card className="mb-10">
               <CardBody>
                 <div className="flex items-baseline justify-between mb-4">
-                  <h2 className="font-display text-[1.5rem] text-ink">MVP award</h2>
-                  <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+                  <h2 className="font-display text-heading-lg text-ink">MVP award</h2>
+                  <span className="text-label uppercase tracking-wider text-ink-muted">
                     Highest individual score
                   </span>
                 </div>
                 <div className="flex items-center gap-3 p-3 rounded-md border border-accent bg-[var(--accent-soft)] mb-3">
                   <span
-                    className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-[0.6875rem] font-semibold text-primary-fg shrink-0"
+                    className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-label font-semibold text-primary-fg shrink-0"
                     style={{ background: winner.teamColor }}
                   >
                     {winner.teamCode}
                   </span>
                   <div className="flex-1">
-                    <div className="font-display text-[1.25rem] text-ink leading-tight">
+                    <div className="font-display text-heading text-ink leading-tight">
                       {winner.member.name}
                     </div>
-                    <div className="text-[0.75rem] text-ink-muted">
+                    <div className="text-body-sm text-ink-muted">
                       {winner.member.role} · {winner.teamName}
                       {winner.member.cards.length > 0 && ` · ${winner.member.cards.join(", ")}`}
                     </div>
                   </div>
-                  <span className="tabular font-display text-[1.75rem] text-accent">
+                  <span className="tabular font-display text-display text-accent">
                     {winner.member.mvpPts}
                   </span>
                 </div>
-                <table className="w-full text-[0.8125rem]">
+                <table className="w-full text-body">
                   <tbody>
                     {ranked.slice(1, 8).map((c, i) => (
                       <tr key={`${c.teamCode}-${c.member.role}`} className="border-b border-line last:border-0">
                         <td className="py-1.5 w-10 font-mono text-ink-muted">{i + 2}</td>
                         <td className="py-1.5 text-ink-2">
                           {c.member.name}
-                          <span className="ml-2 text-[0.6875rem] text-ink-muted">
+                          <span className="ml-2 text-label text-ink-muted">
                             {c.member.role} · {c.teamCode}
                           </span>
                         </td>
@@ -1110,7 +1110,7 @@ function PodiumStep({
           {medal.emoji}
         </div>
         <div
-          className="inline-flex items-center justify-center w-9 h-9 rounded mb-1.5 font-mono text-[0.6875rem] font-semibold shrink-0"
+          className="inline-flex items-center justify-center w-9 h-9 rounded mb-1.5 font-mono text-label font-semibold shrink-0"
           style={{
             background: airlineColorFor({
               colorId: team.airlineColorId,
@@ -1124,7 +1124,7 @@ function PodiumStep({
         >
           {team.code}
         </div>
-        <div className="font-display text-[1rem] text-ink leading-tight">
+        <div className="font-display text-title text-ink leading-tight">
           {team.name}
         </div>
         {isPlayer && (
@@ -1132,7 +1132,7 @@ function PodiumStep({
             <Badge tone="primary">You</Badge>
           </div>
         )}
-        <div className="font-mono tabular text-[0.875rem] text-ink-2 mt-1.5">
+        <div className="font-mono tabular text-body-lg text-ink-2 mt-1.5">
           {fmtMoney(team.finalAirlineValue)}
         </div>
       </div>
@@ -1157,10 +1157,10 @@ function Stat({ label, value, tone = "default" }: {
   const colorClass = tone === "accent" ? "text-accent" : tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
   return (
     <div className="rounded-lg border border-line bg-surface p-4">
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+      <div className="text-label uppercase tracking-wider text-ink-muted">
         {label}
       </div>
-      <div className={`tabular font-display text-[1.75rem] leading-none mt-1 ${colorClass}`}>
+      <div className={`tabular font-display text-display leading-none mt-1 ${colorClass}`}>
         {value}
       </div>
     </div>
@@ -1175,10 +1175,10 @@ function ArcStat({
   const colorClass = tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-ink";
   return (
     <div className="rounded-md border border-line bg-surface-2/40 p-3">
-      <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1">
+      <div className="flex items-center gap-1.5 text-caption uppercase tracking-wider text-ink-muted mb-1">
         {icon} {label}
       </div>
-      <div className={`tabular font-mono text-[0.9375rem] font-semibold ${colorClass}`}>
+      <div className={`tabular font-mono text-title-sm font-semibold ${colorClass}`}>
         {value}
       </div>
     </div>
@@ -1188,9 +1188,9 @@ function ArcStat({
 function ArcSpark({ label, values, color }: { label: string; values: number[]; color: string }) {
   return (
     <div className="flex items-center gap-3 py-1">
-      <span className="text-[0.75rem] text-ink-muted w-32 shrink-0">{label}</span>
+      <span className="text-body-sm text-ink-muted w-32 shrink-0">{label}</span>
       <Sparkline values={values} color={color} width={400} height={24} />
-      <span className="tabular font-mono text-[0.75rem] text-ink ml-auto shrink-0 w-24 text-right">
+      <span className="tabular font-mono text-body-sm text-ink ml-auto shrink-0 w-24 text-right">
         {values[values.length - 1] !== undefined
           ? (Math.abs(values[values.length - 1]) > 1_000_000
               ? `${(values[values.length - 1] / 1_000_000).toFixed(1)}M`
@@ -1214,13 +1214,13 @@ function BVPillar({
 }) {
   return (
     <div className="rounded-md border border-line bg-surface-2/40 p-3">
-      <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-1">
+      <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold mb-1">
         {label}
       </div>
       <div className="font-display text-[1.625rem] text-ink leading-none mb-2 tabular">
         {score.toFixed(1)}
       </div>
-      <div className="space-y-0.5 text-[0.75rem] tabular">
+      <div className="space-y-0.5 text-body-sm tabular">
         {rows.map((r) => (
           <div key={r.k} className="flex items-baseline justify-between">
             <span className="text-ink-muted">{r.k}</span>

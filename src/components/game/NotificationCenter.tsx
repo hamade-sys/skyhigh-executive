@@ -119,7 +119,7 @@ export function NotificationCenter() {
         <Bell size={16} />
         {unreadCount > 0 && (
           <span
-            className="absolute -top-0.5 -right-0.5 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-negative text-white text-[0.625rem] font-semibold tabular flex items-center justify-center"
+            className="absolute -top-0.5 -right-0.5 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-negative text-white text-caption font-semibold tabular flex items-center justify-center"
             aria-hidden
           >
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -150,10 +150,10 @@ export function NotificationCenter() {
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-surface-2/40">
               <div>
-                <h3 className="font-display text-[1rem] text-ink leading-none">
+                <h3 className="font-display text-title text-ink leading-none">
                   Notifications
                 </h3>
-                <p className="text-[0.6875rem] text-ink-muted mt-1">
+                <p className="text-label text-ink-muted mt-1">
                   {history.length === 0
                     ? "No notifications yet."
                     : `${history.length} total · ${unreadCount} unread`}
@@ -185,7 +185,7 @@ export function NotificationCenter() {
 
             <div className="flex-1 overflow-y-auto">
               {history.length === 0 ? (
-                <div className="py-12 text-center text-[0.8125rem] text-ink-muted">
+                <div className="py-12 text-center text-body text-ink-muted">
                   Nothing to show yet. Quarter-close events, board decisions,
                   and other updates will land here.
                 </div>
@@ -212,10 +212,10 @@ export function NotificationCenter() {
           spell out the consequence and keep it on-brand. */}
       <Modal open={confirmClear} onClose={() => setConfirmClear(false)}>
         <ModalHeader>
-          <h2 className="font-display text-[1.5rem] text-ink">
+          <h2 className="font-display text-heading-lg text-ink">
             Clear all notifications?
           </h2>
-          <p className="text-ink-muted text-[0.8125rem] mt-1">
+          <p className="text-ink-muted text-body mt-1">
             All {history.length} notification{history.length === 1 ? "" : "s"} in
             your history will be removed permanently. New notifications will
             still appear normally going forward.
@@ -250,7 +250,7 @@ function Group({
 }) {
   return (
     <section>
-      <div className="sticky top-0 px-4 py-1.5 bg-surface-2/80 backdrop-blur-sm text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold border-b border-line">
+      <div className="sticky top-0 px-4 py-1.5 bg-surface-2/80 backdrop-blur-sm text-caption uppercase tracking-wider text-ink-muted font-semibold border-b border-line">
         {label}
       </div>
       <ul className="divide-y divide-line">
@@ -262,7 +262,7 @@ function Group({
             <li
               key={t.id}
               className={cn(
-                "px-4 py-2.5 flex items-start gap-3 text-[0.8125rem]",
+                "px-4 py-2.5 flex items-start gap-3 text-body",
                 unread && "bg-[rgba(20,53,94,0.04)]",
               )}
             >
@@ -272,12 +272,12 @@ function Group({
                   <span className={cn("text-ink leading-tight", unread && "font-semibold")}>
                     {t.title}
                   </span>
-                  <span className="text-[0.6875rem] text-ink-muted tabular shrink-0">
+                  <span className="text-label text-ink-muted tabular shrink-0">
                     {quarterTag(t.quarter, startYear)}
                   </span>
                 </div>
                 {t.detail && (
-                  <div className="text-[0.75rem] text-ink-2 mt-0.5 leading-relaxed">
+                  <div className="text-body-sm text-ink-2 mt-0.5 leading-relaxed">
                     {t.detail}
                   </div>
                 )}

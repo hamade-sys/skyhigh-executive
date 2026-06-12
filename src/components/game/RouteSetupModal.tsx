@@ -532,11 +532,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
         <div className="flex items-center gap-2 mb-1.5">
           <Badge tone="accent">New route</Badge>
         </div>
-        <h2 className="font-display text-[1.5rem] text-ink leading-tight">
+        <h2 className="font-display text-heading-lg text-ink leading-tight">
           {origin} → {dest}
         </h2>
         {originCity && destCity && (
-          <div className="text-ink-muted text-[0.8125rem] mt-1 tabular font-mono">
+          <div className="text-ink-muted text-body mt-1 tabular font-mono">
             {originCity.name} → {destCity.name} · {Math.round(dist).toLocaleString()} km
           </div>
         )}
@@ -547,7 +547,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
           through the configuration steps below, so the cause→effect
           loop (tweak → projection updates) is right above the action.
           Empty stats render as em-dashes until the prerequisite is set. */}
-      <div className="border-y border-line bg-surface-2/60 px-4 py-2 grid grid-cols-4 gap-3 text-[0.75rem]">
+      <div className="border-y border-line bg-surface-2/60 px-4 py-2 grid grid-cols-4 gap-3 text-body-sm">
         <CockpitStat
           label="Aircraft"
           value={
@@ -603,7 +603,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
             const groundedCount = player.fleet.filter((f) => f.status === "grounded").length;
             const totalNonRetired = orderedCount + assignedCount + groundedCount;
             return (
-              <div className="rounded-md border border-warning/40 bg-[var(--warning-soft)]/40 px-3 py-3 text-[0.8125rem] space-y-2">
+              <div className="rounded-md border border-warning/40 bg-[var(--warning-soft)]/40 px-3 py-3 text-body space-y-2">
                 <div className="font-semibold text-warning">
                   No idle aircraft available
                 </div>
@@ -616,7 +616,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                     <div className="text-ink-2">
                       Your aircraft are accounted for elsewhere:
                     </div>
-                    <ul className="text-[0.75rem] text-ink-2 space-y-0.5 ml-3 list-disc">
+                    <ul className="text-body-sm text-ink-2 space-y-0.5 ml-3 list-disc">
                       {orderedCount > 0 && (
                         <li>
                           <strong className="text-ink">{orderedCount}</strong> on order — arriving next quarter or queued for delivery
@@ -705,13 +705,13 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                       className="accent-primary"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-ink text-[0.875rem]">
+                      <div className="text-ink text-body-lg">
                         {spec.name}
                         {p.customSeats && (
-                          <span className="ml-1.5 text-[0.6875rem] text-accent">· custom cabin</span>
+                          <span className="ml-1.5 text-label text-accent">· custom cabin</span>
                         )}
                       </div>
-                      <div className="text-[0.6875rem] text-ink-muted font-mono">
+                      <div className="text-label text-ink-muted font-mono">
                         {/* Effective range — includes engine-upgrade
                             range extension (+10% for fuel/super
                             engine). The spec's base range is what
@@ -747,7 +747,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
             </div>
           )}
           {hasAircraft && scheduleNote && (
-            <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-2">
+            <div className="text-label text-ink-muted leading-relaxed mt-2">
               Schedule math: {Math.round(dist).toLocaleString()} km ÷ {scheduleNote.slowestSpeed} km/h
               + 2 × {scheduleNote.turnaround.toFixed(0)} hr ground time = {scheduleNote.roundTripHrs.toFixed(1)} hr round-trip per
               aircraft · floor(168 / round-trip) = <strong className="text-ink">{scheduleNote.perPlaneWeekly} flights/week per plane</strong>.
@@ -758,7 +758,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
         {/* Step 2 — Schedules per week (capped by aircraft physics) */}
         <Section step={2} title="Schedules per week" disabled={!hasAircraft}>
           {!hasAircraft ? (
-            <div className="text-[0.75rem] text-ink-muted italic">
+            <div className="text-body-sm text-ink-muted italic">
               Pick at least one aircraft above to set frequency.
             </div>
           ) : (
@@ -776,11 +776,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                   className="flex-1 accent-primary"
                   disabled={maxWeeklyFreq < 1}
                 />
-                <span className="tabular font-mono text-ink text-[0.9375rem] w-20 text-right">
+                <span className="tabular font-mono text-ink text-title-sm w-20 text-right">
                   {weeklyFreq}/wk
                 </span>
               </div>
-              <div className="flex items-baseline justify-between text-[0.6875rem] text-ink-muted mt-1">
+              <div className="flex items-baseline justify-between text-label text-ink-muted mt-1">
                 <span>1/wk</span>
                 <span>
                   Cap: <strong className="text-ink">{maxWeeklyFreq}/week</strong> with {selectedPlaneIds.length} aircraft
@@ -795,7 +795,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
         {!isCargo && (
           <Section step={3} title="Per-class fares" disabled={!hasAircraft}>
             {!hasAircraft ? (
-              <div className="text-[0.75rem] text-ink-muted italic">
+              <div className="text-body-sm text-ink-muted italic">
                 Cabin classes are determined by the aircraft you pick.
               </div>
             ) : (
@@ -806,21 +806,34 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                     <button
                       key={t}
                       onClick={() => applyTier(t)}
+                      // One-line strategy explainer per tier (June 2026
+                      // First Flight bundle) — first-time players had no
+                      // way to learn what each tier trades off without
+                      // losing several quarters finding out the hard way.
+                      title={
+                        t === "budget"
+                          ? "Half-price fares fill seats fast — high volume, thin margins. Strong on short, busy routes."
+                          : t === "standard"
+                            ? "Market-rate fares — balanced load factor and yield. The safe default."
+                            : t === "premium"
+                              ? "1.5× fares, fewer takers — needs strong demand or a good brand to keep seats filled."
+                              : "2× fares — load factor caps hard at this tier; only routes with deep premium demand sustain it."
+                      }
                       className={cn(
-                        "rounded-md border px-2.5 py-1.5 text-[0.75rem] capitalize transition-colors",
+                        "rounded-md border px-2.5 py-1.5 text-body-sm capitalize transition-colors",
                         tier === t
                           ? "border-primary bg-[rgba(20,53,94,0.06)] text-ink font-medium"
                           : "border-line text-ink-2 hover:bg-surface-hover",
                       )}
                     >
                       {t}
-                      <div className="text-[0.5625rem] text-ink-muted">
+                      <div className="text-micro text-ink-muted">
                         {t === "budget" ? "0.5×" : t === "standard" ? "1.0×" : t === "premium" ? "1.5×" : "2.0×"} base
                       </div>
                     </button>
                   ))}
                 </div>
-                <div className="text-[0.625rem] text-ink-muted mb-2 leading-relaxed">
+                <div className="text-caption text-ink-muted mb-2 leading-relaxed">
                   Tier preset scales all classes at once. Each slider below
                   can fine-tune one class against demand sensitivity.
                 </div>
@@ -856,7 +869,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                   />
                 )}
                 {!hasBusiness && !hasFirst && (
-                  <div className="text-[0.6875rem] text-ink-muted italic">
+                  <div className="text-label text-ink-muted italic">
                     Selected aircraft is all-economy — no business or first
                     class to price.
                   </div>
@@ -879,7 +892,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
             }
           >
             {!hasAircraft ? (
-              <div className="text-[0.75rem] text-ink-muted italic">
+              <div className="text-body-sm text-ink-muted italic">
                 Pick a freighter to set the cargo rate.
               </div>
             ) : (() => {
@@ -894,7 +907,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
               const effective = cargoRate ?? baseRate;
               return (
                 <div className="rounded-md border border-line bg-surface-2/40 p-3 space-y-3">
-                  <div className="flex items-baseline justify-between text-[0.8125rem]">
+                  <div className="flex items-baseline justify-between text-body">
                     <span className="text-ink-2">
                       Base ${baseRate.toFixed(2)}/T
                       <span className="text-ink-muted"> · {dist < 3000 ? "short-haul" : "long-haul"}</span>
@@ -913,7 +926,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                     className="w-full accent-primary block"
                     aria-label="Cargo rate per tonne"
                   />
-                  <div className="flex items-baseline justify-between text-[0.6875rem] text-ink-muted">
+                  <div className="flex items-baseline justify-between text-label text-ink-muted">
                     <span>Min ${minRate.toFixed(2)}</span>
                     {cargoRate !== null && (
                       <button
@@ -926,7 +939,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                     )}
                     <span>Max ${maxRate.toFixed(2)}</span>
                   </div>
-                  <p className="text-[0.625rem] text-ink-muted leading-relaxed">
+                  <p className="text-caption text-ink-muted leading-relaxed">
                     Slot bids on the next step if you don&apos;t hold enough
                     capacity at either airport.
                   </p>
@@ -939,7 +952,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
         {/* Step 4 — Slot shortfall: inline bid form (only when needed) */}
         {hasAircraft && hasShortfall && (
           <Section step={4} title="Slot bidding (required)">
-            <div className="rounded-md border border-warning/50 bg-[var(--warning-soft)] px-3 py-2 mb-3 text-[0.8125rem] text-ink-2">
+            <div className="rounded-md border border-warning/50 bg-[var(--warning-soft)] px-3 py-2 mb-3 text-body text-ink-2">
               You don&apos;t have enough slots at{" "}
               {shortfall.atOrigin > 0 && <strong className="font-mono">{origin}</strong>}
               {shortfall.atOrigin > 0 && shortfall.atDest > 0 && " / "}
@@ -1002,44 +1015,44 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
           const capUnit = projection.kind === "cargo" ? "T" : "seats";
           return (
             <div className={cn(
-              "rounded-md border px-3 py-2.5 text-[0.8125rem]",
+              "rounded-md border px-3 py-2.5 text-body",
               projection.tone === "neg" && "border-negative bg-[var(--negative-soft)] text-negative",
               projection.tone === "warn" && "border-warning bg-[var(--warning-soft)] text-warning",
               projection.tone === "pos" && "border-positive bg-[var(--positive-soft)] text-positive",
             )}>
-              <div className="font-semibold uppercase tracking-wider text-[0.6875rem] mb-1.5">
+              <div className="font-semibold uppercase tracking-wider text-label mb-1.5">
                 Projected occupancy · {(projection.occupancy * 100).toFixed(0)}%
               </div>
-              <div className="text-[0.625rem] text-ink-muted mb-1.5 leading-snug">
+              <div className="text-caption text-ink-muted mb-1.5 leading-snug">
                 Baseline forecast — typical-quarter demand at the cities&apos; current population &amp; growth.
                 Actual occupancy each quarter shifts with seasonality (±20%), news events, and rivals on the same OD.
               </div>
               {/* Two-column daily/weekly breakdown so units are explicit. */}
-              <div className="grid grid-cols-2 gap-2 text-[0.75rem] mb-1.5">
+              <div className="grid grid-cols-2 gap-2 text-body-sm mb-1.5">
                 <div className="rounded-md bg-surface/50 px-2 py-1.5">
-                  <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                  <div className="text-caption uppercase tracking-wider text-ink-muted">
                     Per day
                   </div>
                   <div className="tabular font-mono text-ink mt-0.5">
                     {Math.round(projection.demand).toLocaleString()} {unitShort} demand
                   </div>
-                  <div className="tabular font-mono text-ink-2 text-[0.6875rem]">
+                  <div className="tabular font-mono text-ink-2 text-label">
                     {Math.round(projection.capacity).toLocaleString()} {capUnit} capacity
                   </div>
                 </div>
                 <div className="rounded-md bg-surface/50 px-2 py-1.5">
-                  <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                  <div className="text-caption uppercase tracking-wider text-ink-muted">
                     Per week
                   </div>
                   <div className="tabular font-mono text-ink mt-0.5">
                     {Math.round(weeklyDemand).toLocaleString()} {unitShort} demand
                   </div>
-                  <div className="tabular font-mono text-ink-2 text-[0.6875rem]">
+                  <div className="tabular font-mono text-ink-2 text-label">
                     {Math.round(weeklyCapacity).toLocaleString()} {capUnit} capacity
                   </div>
                 </div>
               </div>
-              <div className="text-[0.6875rem] text-ink-2 leading-snug">
+              <div className="text-label text-ink-2 leading-snug">
                 {projection.kind === "cargo" && "Cargo demand before market-focus + news modifiers. "}
                 {projection.tone === "neg" && "Route is unlikely to be profitable at this configuration."}
                 {projection.tone === "warn" && "Consider lowering frequency or adjusting fares."}
@@ -1092,7 +1105,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                 }
                 if (why.length === 0) return null;
                 return (
-                  <ul className="mt-2 pt-2 border-t border-current/15 space-y-1 text-[0.6875rem] leading-snug">
+                  <ul className="mt-2 pt-2 border-t border-current/15 space-y-1 text-label leading-snug">
                     {why.map((w, i) => (
                       <li key={i} className="flex items-start gap-1.5">
                         <span aria-hidden className="shrink-0">
@@ -1109,7 +1122,7 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
         })()}
 
         {error && (
-          <div className="text-negative text-[0.875rem] rounded-md border border-[var(--negative-soft)] bg-[var(--negative-soft)] px-3 py-2">
+          <div className="text-negative text-body-lg rounded-md border border-[var(--negative-soft)] bg-[var(--negative-soft)] px-3 py-2">
             {error}
           </div>
         )}
@@ -1188,28 +1201,28 @@ export function BidRow({
       <div className="flex items-center justify-between gap-3 mb-2.5">
         <div className="min-w-0">
           <span className="font-mono text-ink font-semibold">{airportCode}</span>
-          <span className="text-ink-muted text-[0.75rem] ml-1.5">
+          <span className="text-ink-muted text-body-sm ml-1.5">
             {city?.name}
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <span className="text-[0.6875rem] text-ink-muted mr-1">Slots</span>
+          <span className="text-label text-ink-muted mr-1">Slots</span>
           <button
             onClick={() => onSlotsChange(Math.max(slotsNeeded, slots - 1))}
             disabled={slots <= slotsNeeded}
             aria-label="Decrease slots"
-            className="w-6 h-6 rounded border border-line text-ink-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed text-[0.875rem]"
+            className="w-6 h-6 rounded border border-line text-ink-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed text-body-lg"
           >
             −
           </button>
-          <span className="font-mono text-ink font-semibold tabular w-8 text-center text-[0.875rem]">
+          <span className="font-mono text-ink font-semibold tabular w-8 text-center text-body-lg">
             {slots}
           </span>
           <button
             onClick={() => onSlotsChange(Math.min(maxSlots, slots + 1))}
             disabled={slots >= maxSlots}
             aria-label="Increase slots"
-            className="w-6 h-6 rounded border border-line text-ink-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed text-[0.875rem]"
+            className="w-6 h-6 rounded border border-line text-ink-2 hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed text-body-lg"
           >
             +
           </button>
@@ -1220,8 +1233,8 @@ export function BidRow({
           row. Defaulted to min on mount so the player can submit
           without dragging. */}
       <div className="flex items-baseline justify-between mb-1">
-        <span className="text-[0.75rem] text-ink-2">Bid / slot / week</span>
-        <span className="tabular font-mono text-[0.875rem] font-semibold text-ink">
+        <span className="text-body-sm text-ink-2">Bid / slot / week</span>
+        <span className="tabular font-mono text-body-lg font-semibold text-ink">
           ${displayPrice.toLocaleString()}
         </span>
       </div>
@@ -1234,13 +1247,13 @@ export function BidRow({
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
         className="w-full accent-primary"
       />
-      <div className="flex justify-between text-[0.625rem] text-ink-muted tabular">
+      <div className="flex justify-between text-caption text-ink-muted tabular">
         <span>${minPrice.toLocaleString()}</span>
         <span>${maxPrice.toLocaleString()}</span>
       </div>
 
       {/* Cost summary — single line, weekly + quarterly. */}
-      <div className="flex items-baseline justify-between gap-2 mt-2 pt-2 border-t border-line text-[0.75rem]">
+      <div className="flex items-baseline justify-between gap-2 mt-2 pt-2 border-t border-line text-body-sm">
         <span className="text-ink-muted">If won:</span>
         <span className="tabular font-mono text-ink">
           ${weeklyCost.toLocaleString()}/wk
@@ -1255,12 +1268,12 @@ export function BidRow({
           can still submit; we just warn that they're financing the
           slot pool on overdraft. */}
       {cashShortfall > 0 && (
-        <div className="mt-2 rounded-md border border-warning bg-[var(--warning-soft)] px-2.5 py-1.5 text-[0.75rem]">
+        <div className="mt-2 rounded-md border border-warning bg-[var(--warning-soft)] px-2.5 py-1.5 text-body-sm">
           <div className="flex items-baseline justify-between gap-2">
             <span className="font-semibold text-warning">
               {isOverdraft ? "Will run on overdraft" : "Cash short"} · ${(cashShortfall / 1_000_000).toFixed(2)}M
             </span>
-            <span className="text-[0.625rem] text-ink-muted">
+            <span className="text-caption text-ink-muted">
               Funded via RCF at 2× base rate if you win
             </span>
           </div>
@@ -1287,18 +1300,18 @@ function Section({
       <div className="flex items-center gap-2 mb-2">
         <span
           className={cn(
-            "inline-flex w-5 h-5 rounded-full items-center justify-center text-[0.625rem] font-semibold",
+            "inline-flex w-5 h-5 rounded-full items-center justify-center text-caption font-semibold",
             disabled ? "bg-surface-2 text-ink-muted" : "bg-primary text-primary-fg",
           )}
         >
           {step}
         </span>
-        <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+        <span className="text-label uppercase tracking-wider text-ink-muted font-semibold">
           {title}
         </span>
         {help && (
           <span
-            className="ml-auto inline-flex w-4 h-4 rounded-full items-center justify-center text-[0.625rem] font-semibold text-ink-muted bg-surface-2 cursor-help"
+            className="ml-auto inline-flex w-4 h-4 rounded-full items-center justify-center text-caption font-semibold text-ink-muted bg-surface-2 cursor-help"
             title={help}
             aria-label="Help"
           >
@@ -1333,12 +1346,12 @@ function CockpitStat({
     "text-ink";
   return (
     <div className="min-w-0">
-      <div className="text-[0.5625rem] uppercase tracking-wider text-ink-muted leading-tight">
+      <div className="text-micro uppercase tracking-wider text-ink-muted leading-tight">
         {label}
       </div>
       <div
         className={cn(
-          "tabular text-[0.875rem] font-semibold leading-tight mt-0.5 truncate",
+          "tabular text-body-lg font-semibold leading-tight mt-0.5 truncate",
           mono && "font-mono",
           capitalize && "capitalize",
           valueClass,
@@ -1363,15 +1376,15 @@ function FareSlider({
   return (
     <div className="mb-3">
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[0.75rem] text-ink-2 font-medium">{label}</span>
+        <span className="text-body-sm text-ink-2 font-medium">{label}</span>
         <div className="flex items-center gap-2">
-          <span className="tabular font-mono text-[0.8125rem] text-ink font-semibold">
+          <span className="tabular font-mono text-body text-ink font-semibold">
             ${Math.round(value).toLocaleString()}
           </span>
           {isOverride && (
             <button
               onClick={onReset}
-              className="text-[0.6875rem] text-ink-muted hover:text-ink underline"
+              className="text-label text-ink-muted hover:text-ink underline"
             >
               reset
             </button>
@@ -1394,7 +1407,7 @@ function FareSlider({
           style={{ boxSizing: "border-box" }}
         />
       </div>
-      <div className="flex justify-between text-[0.6875rem] text-ink-muted tabular">
+      <div className="flex justify-between text-label text-ink-muted tabular">
         <span>${range.min.toLocaleString()}</span>
         <span>base ${range.base.toLocaleString()}</span>
         <span>${range.max.toLocaleString()}</span>

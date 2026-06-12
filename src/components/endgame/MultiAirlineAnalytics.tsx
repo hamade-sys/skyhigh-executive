@@ -304,7 +304,7 @@ export function MultiAirlineAnalytics({
             aria-selected={metric === m.key}
             onClick={() => setMetric(m.key)}
             className={cn(
-              "shrink-0 px-3 py-1.5 rounded-full text-[0.8125rem] font-medium transition-colors",
+              "shrink-0 px-3 py-1.5 rounded-full text-body font-medium transition-colors",
               "min-h-[36px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
               metric === m.key
                 ? "bg-primary text-primary-fg"
@@ -316,12 +316,12 @@ export function MultiAirlineAnalytics({
         ))}
       </div>
 
-      <p className="text-[0.75rem] text-ink-muted mb-2">
+      <p className="text-body-sm text-ink-muted mb-2">
         {config.description}
       </p>
 
       {allValues.length === 0 ? (
-        <div className="rounded-md border border-dashed border-line p-8 text-center text-[0.8125rem] text-ink-muted">
+        <div className="rounded-md border border-dashed border-line p-8 text-center text-body text-ink-muted">
           No data for this metric — quarters may not have closed yet,
           or the metric isn&rsquo;t recorded on this run.
         </div>
@@ -437,7 +437,7 @@ export function MultiAirlineAnalytics({
               className="absolute top-2 right-2 rounded-md border border-line bg-surface/95 backdrop-blur-sm shadow-[var(--shadow-2)] p-2 pointer-events-none"
               style={{ minWidth: 160, maxWidth: 240 }}
             >
-              <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-1.5">
+              <div className="text-caption uppercase tracking-wider text-ink-muted mb-1.5">
                 {fmtQuarter(hoverQuarter, startYear)} · {config.label}
               </div>
               <div className="space-y-0.5">
@@ -447,7 +447,7 @@ export function MultiAirlineAnalytics({
                     fallbackKey: row.team.id,
                   }).hex;
                   return (
-                    <div key={row.team.id} className="flex items-center gap-2 text-[0.75rem]">
+                    <div key={row.team.id} className="flex items-center gap-2 text-body-sm">
                       <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
                         style={{ background: teamColor }} />
                       <span className="font-mono text-ink-2 shrink-0">{row.team.code}</span>
@@ -467,14 +467,14 @@ export function MultiAirlineAnalytics({
             <div className="flex items-center gap-2 mt-2">
               <button
                 onClick={() => setShowAllLines((v) => !v)}
-                className="text-[0.75rem] text-primary hover:underline focus-visible:outline-none"
+                className="text-body-sm text-primary hover:underline focus-visible:outline-none"
               >
                 {showAllLines
                   ? `Show top ${MAX_CHART_LINES} only`
                   : `Show all ${teams.length} teams`}
               </button>
               {!showAllLines && (
-                <span className="text-[0.6875rem] text-ink-muted">
+                <span className="text-label text-ink-muted">
                   · {fadedSeries.length} team{fadedSeries.length !== 1 ? "s" : ""} faded
                 </span>
               )}
@@ -495,7 +495,7 @@ export function MultiAirlineAnalytics({
           return (
             <div key={t.id}
               className={cn(
-                "flex items-center gap-1.5 text-[0.75rem]",
+                "flex items-center gap-1.5 text-body-sm",
                 !isProminent && hasHiddenLines && "opacity-40",
               )}
             >
@@ -512,7 +512,7 @@ export function MultiAirlineAnalytics({
           );
         })}
         {legendOverflow > 0 && (
-          <span className="text-[0.75rem] text-ink-muted italic">
+          <span className="text-body-sm text-ink-muted italic">
             +{legendOverflow} more team{legendOverflow !== 1 ? "s" : ""}
           </span>
         )}

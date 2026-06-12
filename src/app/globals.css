@@ -174,6 +174,29 @@ dialog:not([open]) {
   --radius-md: var(--r-4);
   --radius-lg: var(--r-5);
   --radius-xl: var(--r-6);
+
+  /* ── Semantic type scale (June 2026 design-system hardening) ──
+     Replaces 1,600+ scattered arbitrary sizes (text-[0.6875rem] etc)
+     with named steps so hierarchy is consistent and globally tunable.
+     Font-size ONLY — no --text-*--line-height companions on purpose:
+     the arbitrary values these replace never set line-height either,
+     so the sweep is pixel-identical. Ladder (px): micro 9 · caption 10
+     · label 11 · body-sm 12 · body 13 · body-lg 14 · title-sm 15 ·
+     title 16 · title-lg 17 · heading-sm 18 · heading 20 ·
+     heading-lg 24 · display 28. */
+  --text-micro: 0.5625rem;
+  --text-caption: 0.625rem;
+  --text-label: 0.6875rem;
+  --text-body-sm: 0.75rem;
+  --text-body: 0.8125rem;
+  --text-body-lg: 0.875rem;
+  --text-title-sm: 0.9375rem;
+  --text-title: 1rem;
+  --text-title-lg: 1.0625rem;
+  --text-heading-sm: 1.125rem;
+  --text-heading: 1.25rem;
+  --text-heading-lg: 1.5rem;
+  --text-display: 1.75rem;
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -309,9 +332,26 @@ dialog:not([open]) {
    Leaflet basemap + city label styling
    ─────────────────────────────────────────────────────────────── */
 
-/* Tone the satellite imagery so it reads as "satellite, but quiet" */
+/* Tone the satellite imagery. June 2026 polish: retuned from the
+   washed-flat "quiet satellite" (sat .55 / bri 1.06 / con .92) to a
+   slightly richer, deeper grade — oceans read darker, land keeps its
+   color, edges crisp. Deltas kept small on purpose. */
 .sf-tone-tile img {
-  filter: saturate(0.55) brightness(1.06) contrast(0.92);
+  filter: saturate(0.62) brightness(0.97) contrast(1.04);
+}
+
+/* Cinematic vignette — a soft inset darkening at the map edges. The
+   ::after is a SIBLING of the Leaflet container inside the isolated
+   map wrapper, so any positive z-index paints above every Leaflet
+   pane while staying below the in-map chrome pills (legend / profit
+   lens, z-400). pointer-events: none keeps the map fully interactive. */
+.sf-map-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 380;
+  pointer-events: none;
+  box-shadow: inset 0 0 110px 18px rgba(8, 18, 32, 0.32);
 }
 
 /* Slightly fade the place-label overlay */
@@ -337,6 +377,26 @@ dialog:not([open]) {
 .leaflet-tooltip.sf-city-tt::before {
   display: none; /* kill the arrow */
 }
+
+/* Route hover P&L tooltip (June 2026 Map Command Center) — small dark
+   chip that follows the cursor along a route arc. Dark on purpose:
+   it floats over the satellite map, not an app surface. */
+.leaflet-tooltip.sf-route-tt {
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.leaflet-tooltip.sf-route-tt::before {
+  display: none;
+}
+.sf-route-tt .sf-tt-pos { color: #34d399; font-weight: 600; }
+.sf-route-tt .sf-tt-neg { color: #f87171; font-weight: 600; }
 
 .sf-city-label {
   display: flex;
@@ -453,19 +513,41 @@ dialog:not([open]) {
    icon below is a divIcon container; we control rotation + scale here
    to stay snappy without re-rendering React on every frame. */
 .sf-plane-marker {
-  width: 18px;
-  height: 18px;
+  /* Size comes from Leaflet's inline iconSize (14/17/20px by aircraft
+     class — see planeIconFor in WorldMap.tsx); no fixed size here. */
   pointer-events: none;
-  /* The marker itself is centered — Leaflet positions by anchor (9,9).
-     We paint the SVG inside via .sf-plane-glyph. */
-  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.45));
+  /* Two-layer shadow: a tight contact shadow + a soft offset one so the
+     sprite reads as flying ABOVE the terrain rather than printed on it. */
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4)) drop-shadow(0 2px 3px rgba(0,0,0,0.25));
 }
 .sf-plane-glyph {
+  position: relative;
   width: 100%;
   height: 100%;
   /* The bearing rotation comes from inline style; this base transform
      keeps the SVG's nose pointing along the path. */
   transform-origin: center center;
+}
+.sf-plane-glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Contrail — a short vapor line streaming behind the tail. The glyph
+   carries the bearing rotation, so the trail automatically points
+   opposite the direction of travel. Static relative to the sprite:
+   zero per-frame cost, nothing extra to disable for reduced motion. */
+.sf-plane-glyph::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 96%;
+  width: 1.5px;
+  height: 11px;
+  transform: translateX(-50%);
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0));
+  border-radius: 1px;
+  pointer-events: none;
 }
 /* Cargo plane variant — overrides the SVG fill via CSS so we keep one
    shared SVG payload but paint freight aircraft yellow on the map. */

@@ -60,7 +60,7 @@ export function DashboardPanel() {
     <div className="space-y-5">
       {/* ── 1. Snapshot ── */}
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Company snapshot · Q{currentQuarter}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -95,7 +95,7 @@ export function DashboardPanel() {
       {/* ── 2. Trajectory ── */}
       {series.length >= 2 && (
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Trajectory · {fmtQuarter(1, startYear)} → {fmtQuarter(Math.max(1, currentQuarter - 1), startYear)}
           </div>
           <div className="rounded-md border border-line bg-surface p-3 space-y-2.5">
@@ -110,17 +110,17 @@ export function DashboardPanel() {
       {/* ── 3. Period P&L comparison ── */}
       {periods && (periods.quarter || periods.ytd || periods.allTime) && (
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Profit & loss · period comparison
           </div>
           <div className="rounded-md border border-line overflow-hidden">
-            <table className="w-full text-[0.8125rem]">
+            <table className="w-full text-body">
               <thead>
                 <tr className="bg-surface-2 border-b border-line">
-                  <th className="text-left px-3 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">Line</th>
-                  <th className="text-right px-2 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">This quarter</th>
-                  <th className="text-right px-2 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">YTD ({Math.ceil(currentQuarter / 4)})</th>
-                  <th className="text-right px-2 py-2 text-[0.625rem] uppercase tracking-wider font-semibold text-ink-muted">All-time</th>
+                  <th className="text-left px-3 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">Line</th>
+                  <th className="text-right px-2 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">This quarter</th>
+                  <th className="text-right px-2 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">YTD ({Math.ceil(currentQuarter / 4)})</th>
+                  <th className="text-right px-2 py-2 text-caption uppercase tracking-wider font-semibold text-ink-muted">All-time</th>
                 </tr>
               </thead>
               <tbody>
@@ -134,7 +134,7 @@ export function DashboardPanel() {
               </tbody>
             </table>
           </div>
-          <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
+          <div className="text-label text-ink-muted mt-2 leading-relaxed">
             Each calendar year spans 4 quarters. YTD aggregates the current
             4-quarter cycle; all-time covers Q1 through the last close.
           </div>
@@ -143,13 +143,13 @@ export function DashboardPanel() {
 
       {/* ── 4. Operations breakdown ── */}
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Operations breakdown
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Fleet by status */}
           <div className="rounded-md border border-line bg-surface p-3">
-            <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+            <div className="flex items-center gap-1.5 text-caption uppercase tracking-wider text-ink-muted font-semibold mb-2">
               <Plane size={11} /> Fleet by status
             </div>
             {(() => {
@@ -174,7 +174,7 @@ export function DashboardPanel() {
 
           {/* Network by tier */}
           <div className="rounded-md border border-line bg-surface p-3">
-            <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted font-semibold mb-2">
+            <div className="flex items-center gap-1.5 text-caption uppercase tracking-wider text-ink-muted font-semibold mb-2">
               <BarChart3 size={11} /> Active routes by destination tier
             </div>
             {(() => {
@@ -186,10 +186,10 @@ export function DashboardPanel() {
               const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
               return (
                 <div className="space-y-1">
-                  <div className="text-[0.75rem] text-ink-2">
+                  <div className="text-body-sm text-ink-2">
                     Total active: <strong className="text-ink">{activeRoutes.length}</strong>
                   </div>
-                  <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-1">
+                  <div className="text-label text-ink-muted leading-relaxed mt-1">
                     Avg occupancy:{" "}
                     <strong className={cn(
                       activeRoutes.length > 0 && (activeRoutes.reduce((s, r) => s + r.avgOccupancy, 0) / activeRoutes.length) >= 0.7
@@ -203,14 +203,14 @@ export function DashboardPanel() {
                       )}
                     </strong>
                   </div>
-                  <div className="text-[0.6875rem] text-ink-muted">
+                  <div className="text-label text-ink-muted">
                     Total weekly schedules:{" "}
                     <strong className="text-ink">
                       {activeRoutes.reduce((s, r) => s + Math.round(r.dailyFrequency * 7), 0)}
                     </strong>
                   </div>
                   {Object.keys(tierCounts).length > 0 && (
-                    <div className="text-[0.625rem] text-ink-muted mt-2">
+                    <div className="text-caption text-ink-muted mt-2">
                       (Per-tier breakdown coming in V2 alongside airport ownership.)
                     </div>
                   )}
@@ -224,7 +224,7 @@ export function DashboardPanel() {
       {/* ── 5. Slots owned ── */}
       {Object.keys(player.slotsByAirport ?? {}).filter((c) => (player.slotsByAirport[c] ?? 0) > 0).length > 0 && (
         <section>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Airport slots owned
           </div>
           <div className="rounded-md border border-line bg-surface p-3">
@@ -233,7 +233,7 @@ export function DashboardPanel() {
                 .filter(([, n]) => n > 0)
                 .sort((a, b) => b[1] - a[1])
                 .map(([code, n]) => (
-                  <span key={code} className="inline-flex items-center gap-1 text-[0.6875rem] tabular font-mono px-1.5 py-0.5 rounded bg-[var(--positive-soft)] text-positive">
+                  <span key={code} className="inline-flex items-center gap-1 text-label tabular font-mono px-1.5 py-0.5 rounded bg-[var(--positive-soft)] text-positive">
                     <strong className="text-ink">{code}</strong> × {n}
                   </span>
                 ))}
@@ -244,7 +244,7 @@ export function DashboardPanel() {
 
       {/* ── 6. Market vitals ── */}
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Market vitals
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -310,51 +310,51 @@ export function DashboardPanel() {
           return (
             <div className="mt-3 rounded-md border border-line bg-surface p-3">
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted">
+                <div className="flex items-center gap-1.5 text-caption uppercase tracking-wider text-ink-muted">
                   <Fuel size={12} />
                   Fuel tanks
                 </div>
-                <span className="text-[0.625rem] text-ink-muted">
+                <span className="text-caption text-ink-muted">
                   Manage in Investments
                 </span>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[0.75rem]">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-body-sm">
                 <div>
-                  <div className="text-[0.625rem] text-ink-muted">Tanks</div>
+                  <div className="text-caption text-ink-muted">Tanks</div>
                   <div className="tabular font-mono text-ink font-medium">
                     {totalTanks}
                   </div>
-                  <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                  <div className="text-caption text-ink-muted mt-0.5">
                     across {cities.length} {cities.length === 1 ? "city" : "cities"}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[0.625rem] text-ink-muted">Capacity</div>
+                  <div className="text-caption text-ink-muted">Capacity</div>
                   <div className="tabular font-mono text-ink font-medium">
                     {(totalCapacityL / 1_000_000).toFixed(0)}M L
                   </div>
-                  <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                  <div className="text-caption text-ink-muted mt-0.5">
                     per quarter
                   </div>
                 </div>
                 <div>
-                  <div className="text-[0.625rem] text-ink-muted">Coverage</div>
+                  <div className="text-caption text-ink-muted">Coverage</div>
                   <div className="tabular font-mono text-ink font-medium">
                     {blendedCoveragePct.toFixed(0)}%
                   </div>
-                  <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                  <div className="text-caption text-ink-muted mt-0.5">
                     {blendedDiscountPct.toFixed(1)}% blended discount
                   </div>
                 </div>
                 <div>
-                  <div className="text-[0.625rem] text-ink-muted">Saved last qtr</div>
+                  <div className="text-caption text-ink-muted">Saved last qtr</div>
                   <div className={cn(
                     "tabular font-mono font-medium",
                     lastQtrSavings > 0 ? "text-positive" : "text-ink",
                   )}>
                     {lastQtrSavings > 0 ? fmtMoney(lastQtrSavings) : "—"}
                   </div>
-                  <div className="text-[0.625rem] text-ink-muted mt-0.5">
+                  <div className="text-caption text-ink-muted mt-0.5">
                     fuel discount
                   </div>
                 </div>
@@ -432,10 +432,10 @@ function ActiveModifiersSection({
   if (rows.length === 0) {
     return (
       <section>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Active demand modifiers
         </div>
-        <div className="rounded-md border border-line bg-surface p-3 text-[0.75rem] text-ink-muted italic">
+        <div className="rounded-md border border-line bg-surface p-3 text-body-sm text-ink-muted italic">
           No structured news is shifting demand on your current network this round.
           {" "}
           {activeNews.length > 0 && (
@@ -448,15 +448,15 @@ function ActiveModifiersSection({
 
   return (
     <section>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2 flex items-center gap-2">
+      <div className="text-label uppercase tracking-wider text-ink-muted mb-2 flex items-center gap-2">
         <span>Active demand modifiers · {fmtQuarter(currentQuarter, startYear)}</span>
         <span className="h-px flex-1 bg-line" />
         <span className="tabular text-ink-muted">{rows.length} cit{rows.length === 1 ? "y" : "ies"}</span>
       </div>
       <div className="rounded-md border border-line bg-surface overflow-hidden">
-        <table className="w-full text-[0.75rem]">
+        <table className="w-full text-body-sm">
           <thead>
-            <tr className="bg-surface-2 text-[0.625rem] uppercase tracking-wider text-ink-muted">
+            <tr className="bg-surface-2 text-caption uppercase tracking-wider text-ink-muted">
               <th className="text-left px-3 py-1.5 font-semibold">City</th>
               <th className="text-right px-2 py-1.5 font-semibold">Tourism</th>
               <th className="text-right px-2 py-1.5 font-semibold">Business</th>
@@ -485,7 +485,7 @@ function ActiveModifiersSection({
           </tbody>
         </table>
       </div>
-      <p className="text-[0.625rem] text-ink-muted italic mt-1.5">
+      <p className="text-caption text-ink-muted italic mt-1.5">
         Per-city demand shift driven by world news (current + back-dated multi-round events).
         Dashes mean no modifier in that category.
       </p>
@@ -521,7 +521,7 @@ function SnapCard({
 }) {
   return (
     <div className="rounded-md border border-line bg-surface p-3">
-      <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted">
+      <div className="flex items-center gap-1.5 text-caption uppercase tracking-wider text-ink-muted">
         {icon}
         {label}
       </div>
@@ -531,7 +531,7 @@ function SnapCard({
       >
         {value}
       </div>
-      {sub && <div className="text-[0.625rem] text-ink-muted mt-1.5">{sub}</div>}
+      {sub && <div className="text-caption text-ink-muted mt-1.5">{sub}</div>}
     </div>
   );
 }
@@ -550,15 +550,15 @@ function TrajectoryRow({
   const positive = delta >= 0;
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[0.75rem] text-ink-muted w-28 shrink-0">{label}</span>
+      <span className="text-body-sm text-ink-muted w-28 shrink-0">{label}</span>
       <Sparkline values={series} color={color} width={300} height={24} />
       <div className="flex flex-col items-end shrink-0 w-28">
-        <span className="tabular font-mono text-[0.875rem] text-ink">
+        <span className="tabular font-mono text-body-lg text-ink">
           {fmt(last)}
         </span>
         {Math.abs(delta) > 0.001 && (
           <span className={cn(
-            "tabular text-[0.6875rem] font-mono inline-flex items-center gap-0.5",
+            "tabular text-label font-mono inline-flex items-center gap-0.5",
             positive ? "text-positive" : "text-negative",
           )}>
             {positive ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
@@ -610,7 +610,7 @@ function FleetStatusRow({
     tone === "info" ? "text-info" :
     tone === "warn" ? "text-warning" : "text-ink-muted";
   return (
-    <div className="flex items-baseline justify-between text-[0.75rem]">
+    <div className="flex items-baseline justify-between text-body-sm">
       <span className="text-ink-2">{label}</span>
       <span className={cn("tabular font-mono", cls, value > 0 && "font-semibold")}>
         {value}
@@ -642,7 +642,7 @@ function MarketHistorySection() {
   const sorted = [...history].sort((a, b) => a.quarter - b.quarter);
   return (
     <section>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+      <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
         Market vitals · {sorted[0].quarter === sorted[sorted.length - 1].quarter ? "this quarter" : `${fmtQuarter(sorted[0].quarter, startYear)} – ${fmtQuarter(sorted[sorted.length - 1].quarter, startYear)}`}
       </div>
       <div className="rounded-md border border-line bg-surface p-3 space-y-3">
@@ -706,7 +706,7 @@ function MarketHistoryLine({
   const tickPts = tickIdx.map((i) => px(series[i].v, i));
   return (
     <div className="flex items-start gap-3">
-      <span className="w-22 text-[0.75rem] text-ink-2 shrink-0 pt-1">{label}</span>
+      <span className="w-22 text-body-sm text-ink-2 shrink-0 pt-1">{label}</span>
       <div className="flex-1 min-w-0">
         <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-9">
           {baselineY !== null && (
@@ -717,12 +717,12 @@ function MarketHistoryLine({
             <line key={i} x1={p.x} y1={h - 1} x2={p.x} y2={h - 4} stroke="currentColor" className="text-ink-muted" strokeWidth={1} />
           ))}
         </svg>
-        <div className="flex justify-between text-[0.5625rem] text-ink-muted tabular font-mono mt-0.5">
+        <div className="flex justify-between text-micro text-ink-muted tabular font-mono mt-0.5">
           {tickIdx.map((i) => (<span key={i}>{fmtQuarter(series[i].q, startYear)}</span>))}
         </div>
       </div>
-      <span className="tabular font-mono text-[0.8125rem] text-ink shrink-0 w-14 text-right pt-1">{fmt(current)}</span>
-      <span className={cn("tabular font-mono text-[0.6875rem] w-16 text-right pt-1", deltaTone)}>
+      <span className="tabular font-mono text-body text-ink shrink-0 w-14 text-right pt-1">{fmt(current)}</span>
+      <span className={cn("tabular font-mono text-label w-16 text-right pt-1", deltaTone)}>
         {delta >= 0 ? "+" : ""}{fmt(delta)}
       </span>
     </div>

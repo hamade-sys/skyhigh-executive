@@ -82,7 +82,7 @@ export function OpsPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="text-[0.8125rem] text-ink-2">
+      <div className="text-body text-ink-2">
         Q{s.currentQuarter} spend levels. Compound every 3 and 6 quarters at the same level.
       </div>
 
@@ -91,41 +91,41 @@ export function OpsPanel() {
           tradeoffs (push marketing high → +brand but cuts ops). */}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-md border border-line bg-surface p-2.5">
-          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Brand Δ</div>
+          <div className="text-caption uppercase tracking-wider text-ink-muted">Brand Δ</div>
           <div
             className={cn(
-              "font-display text-[1.25rem] tabular leading-none mt-0.5",
+              "font-display text-heading tabular leading-none mt-0.5",
               totalBrandPerQ > 0 ? "text-positive" : totalBrandPerQ < 0 ? "text-negative" : "text-ink",
             )}
           >
             {totalBrandPerQ > 0 ? "+" : ""}{totalBrandPerQ.toFixed(1)}/Q
           </div>
-          <div className="text-[0.625rem] text-ink-muted mt-1 leading-snug">
+          <div className="text-caption text-ink-muted mt-1 leading-snug">
             Sum across slider effects + streak mults
           </div>
         </div>
         <div className="rounded-md border border-line bg-surface p-2.5">
-          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Ops Δ</div>
+          <div className="text-caption uppercase tracking-wider text-ink-muted">Ops Δ</div>
           <div
             className={cn(
-              "font-display text-[1.25rem] tabular leading-none mt-0.5",
+              "font-display text-heading tabular leading-none mt-0.5",
               totalOpsPerQ > 0 ? "text-positive" : totalOpsPerQ < 0 ? "text-negative" : "text-ink",
             )}
           >
             {totalOpsPerQ > 0 ? "+" : ""}{totalOpsPerQ.toFixed(1)}/Q
           </div>
-          <div className="text-[0.625rem] text-ink-muted mt-1 leading-snug">
+          <div className="text-caption text-ink-muted mt-1 leading-snug">
             Maintenance + customer-service combined
           </div>
         </div>
         <div className="rounded-md border border-line bg-surface p-2.5">
-          <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted">Last close</div>
-          <div className="font-display text-[1.25rem] tabular leading-none mt-0.5 text-ink">
+          <div className="text-caption uppercase tracking-wider text-ink-muted">Last close</div>
+          <div className="font-display text-heading tabular leading-none mt-0.5 text-ink">
             {lastClose
               ? `Brand ${lastClose.brandPts.toFixed(0)}`
               : "—"}
           </div>
-          <div className="text-[0.625rem] text-ink-muted mt-1 leading-snug">
+          <div className="text-caption text-ink-muted mt-1 leading-snug">
             {lastClose
               ? `Ops ${lastClose.opsPts.toFixed(0)} · revenue ${(lastClose.revenue / 1e6).toFixed(1)}M`
               : "Submit a quarter to see comparisons"}
@@ -159,12 +159,12 @@ export function OpsPanel() {
           <div key={key} className="rounded-md border border-line bg-surface p-3">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <div className="font-semibold text-ink text-[0.9375rem]">{label}</div>
-                <div className="text-[0.75rem] text-ink-muted">{sub}</div>
+                <div className="font-semibold text-ink text-title-sm">{label}</div>
+                <div className="text-body-sm text-ink-muted">{sub}</div>
               </div>
               <div className="text-right">
-                <div className="font-display text-[1.25rem] text-ink leading-none">{SLIDER_LABELS[level]}</div>
-                <div className="text-[0.6875rem] text-ink-muted tabular mt-0.5">
+                <div className="font-display text-heading text-ink leading-none">{SLIDER_LABELS[level]}</div>
+                <div className="text-label text-ink-muted tabular mt-0.5">
                   {key === "staff"
                     ? `×${[0.5, 0.75, 1.0, 1.1, 1.2, 1.5][level]} staff`
                     : `${(pctRev * 100).toFixed(0)}% of rev`}
@@ -184,7 +184,7 @@ export function OpsPanel() {
                     onClick={() => setSliders({ [key]: i as SliderLevel })}
                     title={`${SLIDER_LABELS[i as SliderLevel]} · ~$${(projected / 1_000_000).toFixed(1)}M/Q`}
                     className={cn(
-                      "flex-1 h-12 rounded-md text-[0.6875rem] font-medium transition-colors flex flex-col items-center justify-center gap-0.5",
+                      "flex-1 h-12 rounded-md text-label font-medium transition-colors flex flex-col items-center justify-center gap-0.5",
                       i === level
                         ? "bg-primary text-primary-fg"
                         : "bg-surface-2 text-ink-2 hover:bg-surface-hover",
@@ -192,7 +192,7 @@ export function OpsPanel() {
                   >
                     <span>{SLIDER_LABELS[i as SliderLevel].split(" ")[0]}</span>
                     <span className={cn(
-                      "text-[0.5625rem] tabular font-mono opacity-80",
+                      "text-micro tabular font-mono opacity-80",
                     )}>
                       ${(projected / 1_000_000).toFixed(1)}M
                     </span>
@@ -200,7 +200,7 @@ export function OpsPanel() {
                 );
               })}
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.6875rem] text-ink-2">
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-label text-ink-2">
               <span>Brand <span className={e.brandPts >= 0 ? "text-positive" : "text-negative"}>{e.brandPts >= 0 ? "+" : ""}{e.brandPts}/Q</span></span>
               {e.opsPts !== undefined && <span>Ops <span className={e.opsPts >= 0 ? "text-positive" : "text-negative"}>{e.opsPts >= 0 ? "+" : ""}{e.opsPts}/Q</span></span>}
               {streak.level === level && streak.quarters > 0 && (
@@ -212,7 +212,7 @@ export function OpsPanel() {
       })}
 
       {dissonance && (
-        <div className="rounded-md border border-warning bg-[var(--warning-soft)] p-3 text-[0.8125rem]">
+        <div className="rounded-md border border-warning bg-[var(--warning-soft)] p-3 text-body">
           <div className="font-medium text-warning mb-0.5">⚠ Service dissonance detected</div>
           <div className="text-ink-2">{dissonance} Gap of {gap} slider levels between Staff & In-Flight Service costs −2 to −3 Brand Pts and loyalty this quarter.</div>
         </div>
@@ -226,7 +226,7 @@ export function OpsPanel() {
       <InsurancePicker />
 
       {pendingDecisions.length > 0 && (
-        <div className="rounded-md border border-line bg-surface-2/50 p-3 text-[0.8125rem] text-ink-2">
+        <div className="rounded-md border border-line bg-surface-2/50 p-3 text-body text-ink-2">
           {pendingDecisions.length} board decision{pendingDecisions.length > 1 ? "s" : ""} still open this quarter — handle them in the
           {" "}<button className="text-accent underline hover:no-underline" onClick={() => useUi.getState().openPanel("decisions")}>Decisions panel</button>.
         </div>
@@ -238,11 +238,11 @@ export function OpsPanel() {
 
       <Modal open={confirmClose} onClose={() => setConfirmClose(false)}>
         <ModalHeader>
-          <h2 className="font-display text-[1.5rem] text-ink">
+          <h2 className="font-display text-heading-lg text-ink">
             Close quarter with {pendingDecisions.length} decision
             {pendingDecisions.length === 1 ? "" : "s"} still open?
           </h2>
-          <p className="text-ink-muted text-[0.8125rem] mt-1">
+          <p className="text-ink-muted text-body mt-1">
             Any pending scenario will auto-resolve to a sensible default
             at close — usually the first listed option, skipping anything
             blocked by current cash, fleet or PR state.
@@ -253,10 +253,10 @@ export function OpsPanel() {
             {pendingDecisions.map((sc) => (
               <li
                 key={sc.id}
-                className="rounded-md border border-line bg-surface px-3 py-2 text-[0.8125rem]"
+                className="rounded-md border border-line bg-surface px-3 py-2 text-body"
               >
                 <div className="font-semibold text-ink">{sc.title}</div>
-                <div className="text-[0.6875rem] text-ink-muted mt-0.5">
+                <div className="text-label text-ink-muted mt-0.5">
                   Will auto-submit at quarter close.
                 </div>
               </li>
@@ -290,8 +290,8 @@ function InsurancePicker() {
     <div className="rounded-md border border-line bg-surface p-3">
       <div className="flex items-baseline justify-between mb-2">
         <div>
-          <div className="font-semibold text-ink text-[0.9375rem]">Aircraft insurance</div>
-          <div className="text-[0.75rem] text-ink-muted">
+          <div className="font-semibold text-ink text-title-sm">Aircraft insurance</div>
+          <div className="text-body-sm text-ink-muted">
             Premium paid quarterly as % of fleet market value
           </div>
         </div>
@@ -311,15 +311,15 @@ function InsurancePicker() {
                   : "border-line text-ink-2 hover:bg-surface-hover",
               )}
             >
-              <div className="text-[0.75rem] font-medium">{lvl}</div>
-              <div className="text-[0.625rem] text-ink-muted">
+              <div className="text-body-sm font-medium">{lvl}</div>
+              <div className="text-caption text-ink-muted">
                 {m.premium} · {m.coverage}
               </div>
             </button>
           );
         })}
       </div>
-      <div className="text-[0.6875rem] text-ink-muted mt-2 leading-relaxed">
+      <div className="text-label text-ink-muted mt-2 leading-relaxed">
         On mandatory retirement, insurance pays out coverage × 75% of book value.
       </div>
     </div>

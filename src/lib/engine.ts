@@ -3408,6 +3408,11 @@ export interface QuarterCloseContext {
   baseInterestRatePct: number;
   fuelIndex: number;
   quarter: number;
+  /** Campaign mode → calendar mapping. "full" starts Q1 2000, anything else
+   *  (the half campaign + short cohorts) starts Q1 2015. Used for era-gated
+   *  costs like the carbon levy (real EU ETS aviation pricing began 2012).
+   *  Defaults to "half" for back-compat with older callers. */
+  campaignMode?: "half" | "full";
   /** Other teams (rivals) — used by route economics for competitor pressure. */
   rivals?: Team[];
   /** Global cargo contracts active this quarter for this team (PRD E8.6). */
@@ -3633,6 +3638,14 @@ export function runQuarterClose(
         occupancy: econ.occupancy,
         noOperatingAircraft: !hasOperatingAircraft,
       });
+      // Snapshot LAST quarter's direct contribution before this close
+      // overwrites the quarterly fields — feeds the Routes panel Trend
+      // column (Δ profit Q/Q). Undefined until the route has a real
+      // prior quarter (first close would otherwise diff against zeros
+      // and read as a huge fake improvement).
+      r.prevQuarterProfitUsd = (r.consecutiveQuartersActive ?? 0) > 0
+        ? (r.quarterlyRevenue ?? 0) - (r.quarterlyFuelCost ?? 0) - (r.quarterlySlotCost ?? 0)
+        : undefined;
       r.avgOccupancy = econ.occupancy;
       r.quarterlyRevenue = boostedRevenue;
       r.quarterlyFuelCost = econ.quarterlyFuelCost;
@@ -4067,36 +4080,26 @@ export function runQuarterClose(
   const passengerTax = totalPassengers * 16;
   // Fuel excise: 8% of fuel cost
   const fuelExcise = fuelCost * 0.08;
-  // Carbon levy (PRD S17): activated by the player's S17 decision
-  // outcome, NOT by quarter alone. The engine only applies the levy
-  // when the team holds the carbon_levy_active flag — this flag is set
-  // when:
-  //   - Player picks S17 option A (comply) at Q17, OR
-  //   - Player picks S17 option D (legal challenge) and the deferred
-  //     event fails (70% chance)
-  // S17 option C (lead green transition) earns green_leader → 40%
-  //   reduced rate from Q19.
-  // S17 option B (absorb) earns sustainability_signal → 5% reduction.
-  // Without the flag (e.g. challenge-success or scenario not yet
-  // resolved), no levy is charged.
+  // Carbon levy — a REAL environmental cost on the P&L (not gated behind a
+  // player decision). Mirrors EU ETS aviation carbon pricing, which began
+  // phasing in for airlines in 2012, so it applies to every carrier from
+  // calendar-year 2012 onward — it's simply a regulatory cost of flying.
+  // Going green REDUCES the bill: an SAF / green-transition leader pays 40%
+  // less; a carrier that signalled sustainability pays 5% less. Campaign-
+  // aware: the full campaign starts 2000 (levy from quarter ~49) and the
+  // half campaign starts 2015 (levy active from the first quarter).
   let carbonLevy = 0;
-  const levyActive =
-    next.flags.has("carbon_levy_active") ||
-    next.flags.has("green_leader") ||
-    next.flags.has("sustainability_signal");
-  // PRD §5.11 / S17 — carbon levy active from PRD-Q17 = round 33 onward.
-  if (ctx.quarter >= 33 && levyActive) {
+  const carbonStartYear = ctx.campaignMode === "full" ? 2000 : 2015;
+  const calendarYear = carbonStartYear + Math.floor(Math.max(0, ctx.quarter - 1) / 4);
+  if (calendarYear >= 2012) {
     const pricePerL = (ctx.fuelIndex / 100) * FUEL_BASELINE_USD_PER_L;
     const totalLiters = pricePerL > 0 ? fuelCost / pricePerL : 0;
-    const tonnesCO2 = (totalLiters * 0.12) / 1000;
+    // Jet A-1 emits ~2.52 kg CO2 per litre burned (3.16 kg CO2 per kg of
+    // fuel × ~0.8 kg/L). Priced at ~$45/tonne (a mid-range carbon price).
+    const tonnesCO2 = (totalLiters * 2.52) / 1000;
     carbonLevy = tonnesCO2 * 45;
-    // SAF investment (S17-C) earns 40% reduced levy from PRD-Q19 = round 37
-    if (next.flags.has("green_leader") && ctx.quarter >= 37) {
-      carbonLevy *= 0.6;
-    }
-    if (next.flags.has("sustainability_signal")) {
-      carbonLevy *= 0.95;
-    }
+    if (next.flags.has("green_leader")) carbonLevy *= 0.6;        // SAF / green leader
+    if (next.flags.has("sustainability_signal")) carbonLevy *= 0.95;
   }
 
   // ─ Pre-tax profit ───────────────────────────────────────

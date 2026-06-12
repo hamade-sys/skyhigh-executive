@@ -13,10 +13,12 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Info, X } from "lucide-react";
+import { Info, TrendingUp, X } from "lucide-react";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
+import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import type { City, Team, Route } from "@/types/game";
 import { cn } from "@/lib/cn";
+import { fmtMoney } from "@/lib/format";
 import {
   airlineColorFor,
   type AirlineColorId,
@@ -30,6 +32,26 @@ import { useGame } from "@/store/game";
 // any time with the pill click. When signed in, the dismissal lives in
 // the database rather than browser storage.
 const LEGEND_DISMISSED_KEY = "skyforce:mapLegendDismissed:v1";
+// Profit lens (June 2026 Map Command Center) — per-game persisted toggle.
+const PROFIT_LENS_KEY = "skyforce:mapProfitLens:v1";
+
+/** Profit-lens tone for a route from its last closed quarter. null =
+ *  no close data yet (just opened) — the lens leaves it white. Uses
+ *  the same DIRECT-contribution basis as the Routes panel rows. */
+export type ProfitTone = "green" | "amber" | "red" | null;
+function profitToneFor(profitUsd: number | null): ProfitTone {
+  if (profitUsd === null) return null;
+  if (profitUsd > 1_000_000) return "green";
+  if (profitUsd >= -250_000) return "amber";
+  return "red";
+}
+// Brighter-than-token variants — these sit on the dark satellite map
+// where the standard semantic tokens are too muted to read.
+const PROFIT_LENS_COLOR: Record<Exclude<ProfitTone, null>, string> = {
+  green: "#34D399",
+  amber: "#FBBF24",
+  red: "#F87171",
+};
 
 // Phase 7 P2 — gold accent for the in-flight pending-route ribbon.
 // Slightly brighter than the leaderboard's --gold token (#d4a017)
@@ -209,38 +231,62 @@ function bearingDeg(
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-/** Tiny SVG plane glyph used inside the divIcon. Outlined in white so
- *  it stays legible on any basemap background. The transform-origin
- *  keeps the rotation centred on the body. */
+/** SVG airliner glyph used inside the divIcon (June 2026 polish pass).
+ *  Replaces the old geometric dart with a proper top-view jet
+ *  silhouette: tapered nose, swept-back wings, swept horizontal
+ *  stabilizers, tail cone. Same nose-up orientation and 24×24 viewBox
+ *  as before, so the bearing rotation pipeline is untouched. Outlined
+ *  so it stays legible over any satellite background; the cargo
+ *  variant repaints fill/stroke via CSS. */
 const PLANE_SVG = `
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path
-    d="M12 1.5 L13.6 9.5 L22 13 L22 14.7 L13.6 12.5 L13.4 18 L16 19.5 L16 21
-       L12 20 L8 21 L8 19.5 L10.6 18 L10.4 12.5 L2 14.7 L2 13 L10.4 9.5 Z"
+    d="M12 1.3
+       C12.6 1.3 13 2.3 13.1 3.6
+       L13.2 8.8
+       L22.3 13.6 L22.3 15 L13.25 12.9
+       L13.05 17.6
+       L16.1 19.7 L16.1 20.9 L12.7 20.1
+       L12.45 21.6 C12.3 21.95 11.7 21.95 11.55 21.6
+       L11.3 20.1 L7.9 20.9 L7.9 19.7
+       L10.95 17.6
+       L10.75 12.9 L1.7 15 L1.7 13.6
+       L10.8 8.8
+       L10.9 3.6
+       C11 2.3 11.4 1.3 12 1.3 Z"
     fill="#ffffff"
     stroke="#0c1624"
-    stroke-width="1"
+    stroke-width="0.9"
     stroke-linejoin="round"
   />
 </svg>
 `;
 
-/** Static divIcon — size + html identical for every plane, only the
- *  inline rotation transform changes per-frame. Cached at module scope
- *  so we don't allocate on every render. Two variants: default (pax)
- *  and cargo (yellow tint via class) so freight reads visually distinct. */
-const planeIcon = L.divIcon({
-  className: "sf-plane-marker",
-  html: `<div class="sf-plane-glyph" data-plane>${PLANE_SVG}</div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-});
-const cargoPlaneIcon = L.divIcon({
-  className: "sf-plane-marker sf-plane-marker--cargo",
-  html: `<div class="sf-plane-glyph" data-plane>${PLANE_SVG}</div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-});
+/** Sprite size scales with the biggest airframe actually flying the
+ *  route — a widebody reads bigger than a regional hop, which makes
+ *  the network's fleet mix visible from the world view. */
+export type PlaneSizeClass = "regional" | "narrow" | "wide";
+const PLANE_PX: Record<PlaneSizeClass, number> = { regional: 14, narrow: 17, wide: 20 };
+
+/** Cached divIcons — one per (kind × size). Leaflet applies iconSize as
+ *  inline width/height on the marker element, so the variants scale
+ *  without touching the shared CSS class. */
+const planeIconCache = new Map<string, L.DivIcon>();
+function planeIconFor(cargo: boolean, size: PlaneSizeClass): L.DivIcon {
+  const key = `${cargo ? "c" : "p"}-${size}`;
+  let icon = planeIconCache.get(key);
+  if (!icon) {
+    const px = PLANE_PX[size];
+    icon = L.divIcon({
+      className: cargo ? "sf-plane-marker sf-plane-marker--cargo" : "sf-plane-marker",
+      html: `<div class="sf-plane-glyph" data-plane>${PLANE_SVG}</div>`,
+      iconSize: [px, px],
+      iconAnchor: [px / 2, px / 2],
+    });
+    planeIconCache.set(key, icon);
+  }
+  return icon;
+}
 
 /**
  * One animated plane flying back-and-forth along a great-circle path.
@@ -255,6 +301,7 @@ function FlyingPlane({
   durationMs,
   phase,
   cargo = false,
+  sizeClass = "narrow",
 }: {
   positions: [number, number][];
   /** Time in ms for one one-way traversal (origin → destination). */
@@ -264,6 +311,8 @@ function FlyingPlane({
   /** Cargo flights render with a yellow-tinted glyph so the player
    *  can tell freight traffic from passenger traffic at any zoom. */
   cargo?: boolean;
+  /** Sprite size by the biggest airframe on the route (14/17/20 px). */
+  sizeClass?: PlaneSizeClass;
 }) {
   const markerRef = useRef<L.Marker | null>(null);
   // Pre-compute bearings between consecutive points so the glyph nose
@@ -359,7 +408,7 @@ function FlyingPlane({
   return (
     <Marker
       position={initial}
-      icon={cargo ? cargoPlaneIcon : planeIcon}
+      icon={planeIconFor(cargo, sizeClass)}
       ref={(m) => { markerRef.current = m; }}
       // No interaction — these are decorative.
       interactive={false}
@@ -423,13 +472,20 @@ function phaseFromId(id: string): number {
  *  function compares only the fields that affect this route's render,
  *  so unrelated route changes don't bubble in. */
 const ActiveRouteArc = memo(function ActiveRouteArc({
-  route, isNew, hasAircraft, isLosing, isCompetitive,
+  route, isNew, hasAircraft, isLosing, isCompetitive, profitTone, profitUsd, planeSize,
 }: {
   route: Route;
   isNew: boolean;
   hasAircraft: boolean;
   isLosing: boolean;
   isCompetitive: boolean;
+  /** Profit-lens tone — null when the lens is OFF or the route has no
+   *  closed quarter yet (renders the normal white/red scheme). */
+  profitTone: ProfitTone;
+  /** Last-quarter direct profit for the hover tooltip. null = no data. */
+  profitUsd: number | null;
+  /** Sprite size class from the biggest airframe flying this route. */
+  planeSize: PlaneSizeClass;
 }) {
   const a = CITIES_BY_CODE[route.originCode];
   const b = CITIES_BY_CODE[route.destCode];
@@ -456,9 +512,15 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
   //                     a separate line color or dash pattern.
   //   • Red           — unserved / losing
   //   • Slow pulse    — competitive (rival flies same OD)
-  const baseColor = isProblem
+  // Profit lens overrides the white/red scheme when active: line color
+  // comes from last quarter's direct profit (green→amber→red ramp) so
+  // a 15-second map scan answers "which routes fund the business".
+  // Routes with no close data yet keep the normal scheme.
+  const lensColor = profitTone ? PROFIT_LENS_COLOR[profitTone] : null;
+  const baseColor = lensColor ?? (isProblem
     ? "#DC2626"                       // red-600
-    : "#FFFFFF";                      // white for passenger + cargo
+    : "#FFFFFF");                     // white for passenger + cargo
+  const mainWeight = lensColor ? 1.4 : 0.85;
   const dur = flightDurationMs(route.distanceKm, route.dailyFrequency);
   const phase = phaseFromId(route.id);
   const showSecondPlane = route.dailyFrequency >= 3;
@@ -477,14 +539,17 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
         const bandPositions = shiftPolyline(positions, lonOffset);
         return (
           <Fragment key={lonOffset}>
-            {/* Soft glow underlayer — slightly wider than the main
-                stroke so the line reads as a luminescent ribbon.
-                Kept deliberately thin (play-test ask, May 2026:
-                "routes should be thinner, they are very bulky"). */}
+            {/* Soft glow underlayer — wider than the main stroke so the
+                line reads as a luminescent ribbon. The MAIN stroke stays
+                at 0.85px (play-test ask, May 2026: "routes should be
+                thinner, they are very bulky") — only this soft halo
+                carries the glow, bumped in the June 2026 polish pass
+                from 1.8 @ 0.10 (effectively invisible) to a visible
+                ribbon-of-light. */}
             <Polyline
               positions={bandPositions}
               pathOptions={{
-                color: baseColor, weight: 1.8, opacity: 0.1, lineCap: "round", interactive: false,
+                color: baseColor, weight: 2.6, opacity: 0.16, lineCap: "round", interactive: false,
               }}
             />
             {isNew && (
@@ -500,17 +565,40 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
               positions={bandPositions}
               pathOptions={{
                 color: baseColor,
-                weight: 0.85,
+                weight: mainWeight,
                 opacity: 0.9,
                 lineCap: "round",
                 className: competitiveClass,
               }}
-            />
+            >
+              {/* Hover P&L — answers "is this route paying" without
+                  leaving the map. sticky = follows the cursor along
+                  the arc. */}
+              <Tooltip sticky direction="top" className="sf-route-tt" opacity={1}>
+                <span className="font-mono font-semibold">
+                  {route.originCode}–{route.destCode}
+                </span>
+                {route.isCargo ? " · cargo" : ""}
+                {profitUsd !== null ? (
+                  <>
+                    {" · "}
+                    <span className={profitUsd >= 0 ? "sf-tt-pos" : "sf-tt-neg"}>
+                      {profitUsd >= 0 ? "+" : ""}{fmtMoney(profitUsd)}/Q
+                    </span>
+                    {` · ${Math.round((route.avgOccupancy ?? 0) * 100)}% load`}
+                  </>
+                ) : (
+                  " · awaiting first close"
+                )}
+                {isCompetitive ? " · contested" : ""}
+              </Tooltip>
+            </Polyline>
             <FlyingPlane
               positions={bandPositions}
               durationMs={dur}
               phase={phase}
               cargo={!!route.isCargo}
+              sizeClass={planeSize}
             />
             {showSecondPlane && (
               <FlyingPlane
@@ -518,6 +606,7 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
                 durationMs={dur}
                 phase={(phase + 0.5) % 1}
                 cargo={!!route.isCargo}
+                sizeClass={planeSize}
               />
             )}
           </Fragment>
@@ -531,6 +620,9 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
   if (prev.hasAircraft !== next.hasAircraft) return false;
   if (prev.isLosing !== next.isLosing) return false;
   if (prev.isCompetitive !== next.isCompetitive) return false;
+  if (prev.profitTone !== next.profitTone) return false;
+  if (prev.profitUsd !== next.profitUsd) return false;
+  if (prev.planeSize !== next.planeSize) return false;
   const a = prev.route;
   const b = next.route;
   return (
@@ -678,6 +770,60 @@ export function WorldMap({
     // Don't clear the dismissed flag — opening is treated as a
     // one-shot peek; next quarter advance still respects "user
     // dismissed it once."
+  }
+
+  // ── Profit lens (June 2026 Map Command Center) ──────────────
+  // Off by default; per-game persisted so it survives reloads. When
+  // on, route lines tint green/amber/red from last quarter's direct
+  // profit instead of the white/red status scheme.
+  const [profitLens, setProfitLens] = useState(false);
+  useEffect(() => {
+    if (!gameId) return;
+    let cancelled = false;
+    void getGamePreference(gameId, PROFIT_LENS_KEY).then((value) => {
+      if (cancelled) return;
+      // Intentional state-sync against a persisted preference on mount
+      // (runs after a microtask, so not synchronous-in-effect).
+      setProfitLens(value === true);
+    });
+    return () => { cancelled = true; };
+  }, [gameId]);
+  function toggleProfitLens() {
+    setProfitLens((v) => {
+      if (gameId) void setGamePreference(gameId, PROFIT_LENS_KEY, !v);
+      return !v;
+    });
+  }
+
+  /** Last-quarter DIRECT profit for a route (same basis as the Routes
+   *  panel rows). null until the route has at least one closed quarter
+   *  of data. */
+  function routeProfitUsd(r: Route): number | null {
+    if ((r.consecutiveQuartersActive ?? 0) === 0) return null;
+    return (r.quarterlyRevenue ?? 0) - (r.quarterlyFuelCost ?? 0) - (r.quarterlySlotCost ?? 0);
+  }
+
+  /** Sprite size class from the biggest airframe actually flying the
+   *  route — widebodies (>250 seats / ≥60t freighters) render at 20px,
+   *  narrowbodies at 17px, regional jets at 14px. */
+  function planeSizeFor(r: Route): PlaneSizeClass {
+    let best: PlaneSizeClass = "regional";
+    for (const id of r.aircraftIds ?? []) {
+      const f = team.fleet.find((x) => x.id === id && x.status === "active");
+      if (!f) continue;
+      const spec = AIRCRAFT_BY_ID[f.specId];
+      if (!spec) continue;
+      let cls: PlaneSizeClass;
+      if (spec.family === "cargo") {
+        cls = (spec.cargoTonnes ?? 0) >= 60 ? "wide" : "narrow";
+      } else {
+        const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
+        cls = seats > 250 ? "wide" : seats > 100 ? "narrow" : "regional";
+      }
+      if (cls === "wide") return "wide";
+      if (cls === "narrow") best = "narrow";
+    }
+    return best;
   }
 
   const flightsByCity = useMemo(() => dailyFlightsByCity(team), [team]);
@@ -848,6 +994,7 @@ export function WorldMap({
             "flicker every once in a while" the user reported. */}
         {activeRoutes.map((r) => {
           const { hasAircraft, isLosing, isCompetitive } = routeFlagsFor(r);
+          const profitUsd = routeProfitUsd(r);
           return (
             <ActiveRouteArc
               key={r.id}
@@ -856,6 +1003,9 @@ export function WorldMap({
               hasAircraft={hasAircraft}
               isLosing={isLosing}
               isCompetitive={isCompetitive}
+              profitTone={profitLens ? profitToneFor(profitUsd) : null}
+              profitUsd={profitUsd}
+              planeSize={planeSizeFor(r)}
             />
           );
         })}
@@ -1221,20 +1371,45 @@ export function WorldMap({
         })}
       </MapContainer>
 
+      {/* Bottom-left map controls: Profit-lens toggle + Legend. One
+          flex group so the two pills never overlap regardless of
+          which legend state is active. */}
+      <div className="absolute bottom-3 left-3 z-[400] flex items-end gap-2 max-w-[calc(100vw-1.5rem)] flex-wrap">
+      {/* Profit lens toggle — tints route lines by last quarter's
+          direct profit so network health reads in one map scan. */}
+      {activeRoutes.length > 0 && (
+        <button
+          type="button"
+          onClick={toggleProfitLens}
+          aria-pressed={profitLens}
+          aria-label={profitLens ? "Turn profit lens off" : "Turn profit lens on — color routes by last quarter's profit"}
+          title="Color route lines by last quarter's profit (green = earning, amber = breakeven, red = losing)"
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-body-sm transition shadow-sm shrink-0",
+            profitLens
+              ? "border-accent bg-accent text-white font-medium"
+              : "border-line bg-surface/90 backdrop-blur text-ink-2 hover:bg-surface hover:text-ink",
+          )}
+        >
+          <TrendingUp size={12} aria-hidden="true" />
+          <span className="font-medium">Profit lens</span>
+        </button>
+      )}
+
       {/* Legend — collapsed pill until clicked. Auto-hides after Q1. */}
       {!legendOpen && (
         <button
           type="button"
           onClick={openLegend}
           aria-label="Show map legend"
-          className="absolute bottom-3 left-3 z-[400] flex items-center gap-1.5 rounded-full border border-line bg-surface/90 backdrop-blur px-3 py-1.5 text-[0.75rem] text-ink-2 hover:bg-surface hover:text-ink transition shadow-sm"
+          className="flex items-center gap-1.5 rounded-full border border-line bg-surface/90 backdrop-blur px-3 py-1.5 text-body-sm text-ink-2 hover:bg-surface hover:text-ink transition shadow-sm shrink-0"
         >
           <Info size={12} />
           <span className="font-medium">Legend</span>
         </button>
       )}
       {legendOpen && (
-      <div className="absolute bottom-3 left-3 z-[400] flex items-center gap-3 rounded-md border border-line bg-surface/90 backdrop-blur pl-3 pr-1.5 py-2 text-[0.75rem] flex-wrap max-w-[calc(100vw-2rem)]">
+      <div className="flex items-center gap-3 rounded-md border border-line bg-surface/90 backdrop-blur pl-3 pr-1.5 py-2 text-body-sm flex-wrap">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full border-2 border-white" style={{ background: teamColor }} />
           <span className="text-ink font-medium">Hub</span>
@@ -1247,27 +1422,57 @@ export function WorldMap({
           <span className="w-1.5 h-1.5 rounded-full bg-ink-muted" />
           <span className="text-ink-2">Cities</span>
         </span>
-        {/* Route line colour key (May 30 workshop spec):
-            • White = passenger AND cargo (same line; cargo is told apart
-              by its flying-plane sprite, not a separate color/dash)
-            • Red = unserved (no plane) or losing money
-            • Slow pulse = competitive (rival on same OD) */}
-        <span className="flex items-center gap-1.5 border-l border-line pl-3">
-          <svg width="20" height="6" aria-hidden>
-            <line x1="0" y1="3" x2="20" y2="3" stroke="#FFFFFF" strokeWidth="2" />
-          </svg>
-          <span className="text-ink-2" title="Passenger and cargo routes">
-            Routes
-          </span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <svg width="20" height="6" aria-hidden>
-            <line x1="0" y1="3" x2="20" y2="3" stroke="#DC2626" strokeWidth="2" />
-          </svg>
-          <span className="text-ink-2" title="Route with no aircraft assigned, or losing money (load below 50% past Q2)">
-            Unserved / losing
-          </span>
-        </span>
+        {/* Route line colour key. With the profit lens ON, the line
+            colors mean profit bands; otherwise the May 30 status
+            scheme (white routes / red problems) applies. The legend
+            swaps to match so it never lies about the active scheme. */}
+        {profitLens ? (
+          <>
+            <span className="flex items-center gap-1.5 border-l border-line pl-3">
+              <svg width="20" height="6" aria-hidden>
+                <line x1="0" y1="3" x2="20" y2="3" stroke={PROFIT_LENS_COLOR.green} strokeWidth="2.4" />
+              </svg>
+              <span className="text-ink-2" title="Direct profit above $1M last quarter">Earning</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg width="20" height="6" aria-hidden>
+                <line x1="0" y1="3" x2="20" y2="3" stroke={PROFIT_LENS_COLOR.amber} strokeWidth="2.4" />
+              </svg>
+              <span className="text-ink-2" title="Roughly breakeven last quarter">Breakeven</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg width="20" height="6" aria-hidden>
+                <line x1="0" y1="3" x2="20" y2="3" stroke={PROFIT_LENS_COLOR.red} strokeWidth="2.4" />
+              </svg>
+              <span className="text-ink-2" title="Losing money last quarter (below −$250K direct)">Losing</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg width="20" height="6" aria-hidden>
+                <line x1="0" y1="3" x2="20" y2="3" stroke="#FFFFFF" strokeWidth="2" />
+              </svg>
+              <span className="text-ink-2" title="Opened this quarter — no closed quarter of data yet">No data yet</span>
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="flex items-center gap-1.5 border-l border-line pl-3">
+              <svg width="20" height="6" aria-hidden>
+                <line x1="0" y1="3" x2="20" y2="3" stroke="#FFFFFF" strokeWidth="2" />
+              </svg>
+              <span className="text-ink-2" title="Passenger and cargo routes">
+                Routes
+              </span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg width="20" height="6" aria-hidden>
+                <line x1="0" y1="3" x2="20" y2="3" stroke="#DC2626" strokeWidth="2" />
+              </svg>
+              <span className="text-ink-2" title="Route with no aircraft assigned, or losing money (load below 50% past Q2)">
+                Unserved / losing
+              </span>
+            </span>
+          </>
+        )}
         {/* Unified competitive indicator (May 28 workshop note):
             "rival" and "competitive" used to be two legend entries —
             one for rival route lines and one for the pulse on your
@@ -1315,6 +1520,7 @@ export function WorldMap({
         </button>
       </div>
       )}
+      </div>
     </div>
   );
 }

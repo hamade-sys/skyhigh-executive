@@ -649,16 +649,16 @@ export default function GameLobbyPage({
                     if (!selected) return null;
                     return (
                       <div className="flex items-center gap-2 mt-2">
-                        <span className="text-[0.6875rem] font-mono tabular text-slate-700">
+                        <span className="text-label font-mono tabular text-slate-700">
                           {fmtHubPrice(hubPriceUsd(selected))} hub fee
                         </span>
-                        <span className="text-[0.6875rem] text-slate-500">
+                        <span className="text-label text-slate-500">
                           · {selected.regionName}
                         </span>
                       </div>
                     );
                   })()}
-                  <p className="text-[0.6875rem] text-slate-500 mt-1">
+                  <p className="text-label text-slate-500 mt-1">
                     All {pickableHubs.length} playable cities — bigger hubs cost more upfront but seed brand and slot advantages.
                   </p>
                 </div>
@@ -692,17 +692,17 @@ export default function GameLobbyPage({
                             <Icon className="w-4 h-4" />
                           </span>
                           <span className="flex-1 min-w-0">
-                            <span className="block text-[0.8125rem] font-semibold text-slate-900 leading-tight">
+                            <span className="block text-body font-semibold text-slate-900 leading-tight">
                               {d.name}
                             </span>
-                            <span className="block text-[0.6875rem] italic text-slate-500 mt-0.5 leading-snug">
+                            <span className="block text-label italic text-slate-500 mt-0.5 leading-snug">
                               &ldquo;{d.tagline}&rdquo;
                             </span>
                             <span className="mt-1.5 flex flex-wrap gap-1">
                               {d.primaryEffects.map((eff) => (
                                 <span
                                   key={eff}
-                                  className="inline-block text-[0.625rem] uppercase tracking-wide font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded"
+                                  className="inline-block text-caption uppercase tracking-wide font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded"
                                 >
                                   {eff}
                                 </span>
@@ -737,7 +737,7 @@ export default function GameLobbyPage({
                     airlineName={airlineName.trim() || undefined}
                   />
                   {airlineColorId && (
-                    <p className="text-[0.6875rem] text-slate-500 mt-1.5">
+                    <p className="text-label text-slate-500 mt-1.5">
                       Chosen: <span className="font-medium text-slate-700">{AIRLINE_COLOR_BY_ID[airlineColorId].label}</span>
                     </p>
                   )}

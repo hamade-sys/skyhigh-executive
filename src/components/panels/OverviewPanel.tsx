@@ -179,7 +179,7 @@ export function OverviewPanel() {
       </div>
 
       <div>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Airline
         </div>
         <div className="flex items-center gap-3">
@@ -191,7 +191,7 @@ export function OverviewPanel() {
             });
             return (
               <span
-                className="inline-block w-9 h-9 rounded-md flex items-center justify-center font-mono text-[0.75rem] font-semibold"
+                className="inline-block w-9 h-9 rounded-md flex items-center justify-center font-mono text-body-sm font-semibold"
                 style={{
                   background: ac.hex,
                   color: ac.textOn === "white" ? "#ffffff" : "#0f172a",
@@ -202,10 +202,10 @@ export function OverviewPanel() {
             );
           })()}
           <div>
-            <div className="font-display text-[1.25rem] text-ink leading-tight">
+            <div className="font-display text-heading text-ink leading-tight">
               {player.name}
             </div>
-            <div className="text-[0.8125rem] text-ink-muted">
+            <div className="text-body text-ink-muted">
               {doctrineMeta.name} · Hub {player.hubCode}
             </div>
           </div>
@@ -227,7 +227,7 @@ export function OverviewPanel() {
       </div>
 
       <div>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Financial health
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -251,7 +251,7 @@ export function OverviewPanel() {
       </div>
 
       <div>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Brand health
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -276,7 +276,7 @@ export function OverviewPanel() {
       />
 
       <div>
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Operations
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -298,10 +298,10 @@ export function OverviewPanel() {
       </div>
 
       <div className="rounded-md border border-line bg-surface-2 p-4">
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+        <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
           Pending this quarter
         </div>
-        <ul className="space-y-1.5 text-[0.875rem]">
+        <ul className="space-y-1.5 text-body-lg">
           {pendingDecisions.length > 0 && (
             <li>
               <button
@@ -342,10 +342,10 @@ export function OverviewPanel() {
       {/* Cargo contracts */}
       {s.cargoContracts.filter((c) => c.teamId === player.id).length > 0 && (
         <div className="rounded-md border border-[var(--positive-soft)] bg-[var(--positive-soft)]/30 p-3">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-positive mb-1">
+          <div className="text-label uppercase tracking-wider text-positive mb-1">
             Active cargo contracts
           </div>
-          <div className="space-y-1 text-[0.75rem]">
+          <div className="space-y-1 text-body-sm">
             {s.cargoContracts
               .filter((c) => c.teamId === player.id)
               .map((c) => (
@@ -365,10 +365,10 @@ export function OverviewPanel() {
       {/* Milestones — earned + remaining (PRD E8.9) */}
       <div>
         <div className="flex items-baseline justify-between mb-2">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
+          <div className="text-label uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
             <Award size={11} /> Milestones
           </div>
-          <span className="text-[0.6875rem] tabular font-mono text-ink-muted">
+          <span className="text-label tabular font-mono text-ink-muted">
             {player.milestones.length} / {MILESTONES.length}
           </span>
         </div>
@@ -399,16 +399,16 @@ export function OverviewPanel() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className={cn(
-                        "text-[0.8125rem] font-semibold",
+                        "text-body font-semibold",
                         earned ? "text-ink" : "text-ink-2",
                       )}>
                         {m.title}
                       </span>
-                      <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted shrink-0">
+                      <span className="text-micro uppercase tracking-wider text-ink-muted shrink-0">
                         {m.category}
                       </span>
                     </div>
-                    <div className="text-[0.6875rem] text-ink-muted leading-relaxed mt-0.5">
+                    <div className="text-label text-ink-muted leading-relaxed mt-0.5">
                       {earned ? m.description : m.hint}
                     </div>
                   </div>
@@ -421,10 +421,10 @@ export function OverviewPanel() {
       {/* Profit-streak counter (visible if you've ever turned a profit) */}
       {player.consecutiveProfitableQuarters > 0 && (
         <div className="rounded-md border border-line bg-[var(--positive-soft)]/30 px-3 py-2 flex items-baseline justify-between">
-          <span className="text-[0.6875rem] uppercase tracking-wider text-positive font-semibold">
+          <span className="text-label uppercase tracking-wider text-positive font-semibold">
             Profitability streak
           </span>
-          <span className="text-[0.875rem] tabular font-mono text-positive font-bold">
+          <span className="text-body-lg tabular font-mono text-positive font-bold">
             {player.consecutiveProfitableQuarters} Q
           </span>
         </div>
@@ -433,10 +433,10 @@ export function OverviewPanel() {
       {/* Labour Relations Score (PRD E8.3) */}
       <div className="rounded-md border border-line bg-surface-2/60 p-3">
         <div className="flex items-baseline justify-between mb-1">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+          <div className="text-label uppercase tracking-wider text-ink-muted">
             Labour relations
           </div>
-          <span className={`tabular font-mono text-[0.75rem] ${
+          <span className={`tabular font-mono text-body-sm ${
             player.labourRelationsScore >= 75 ? "text-positive" :
             player.labourRelationsScore <= 30 ? "text-negative" : "text-ink-muted"
           }`}>
@@ -453,7 +453,7 @@ export function OverviewPanel() {
             }}
           />
         </div>
-        <div className="text-[0.6875rem] text-ink-muted mt-1.5 leading-relaxed">
+        <div className="text-label text-ink-muted mt-1.5 leading-relaxed">
           {player.labourRelationsScore >= 75
             ? "Strong rapport: +3% loyalty/Q, labour scenarios soften."
             : player.labourRelationsScore <= 30
@@ -465,7 +465,7 @@ export function OverviewPanel() {
       {/* Fleet efficiency (PRD E8.7) */}
       {player.fleet.filter((f) => f.status === "active").length > 0 && (
         <div className="rounded-md border border-line bg-surface-2/60 p-3">
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-1">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-1">
             Fleet efficiency
           </div>
           {(() => {
@@ -490,10 +490,10 @@ export function OverviewPanel() {
             return (
               <>
                 <div className="flex items-baseline justify-between">
-                  <span className="tabular font-display text-[1.25rem] text-ink">{avg.toFixed(2)}</span>
-                  <span className="text-[0.75rem] text-ink-muted">L/km fleet avg</span>
+                  <span className="tabular font-display text-heading text-ink">{avg.toFixed(2)}</span>
+                  <span className="text-body-sm text-ink-muted">L/km fleet avg</span>
                 </div>
-                <div className="flex items-baseline justify-between mt-1 text-[0.75rem]">
+                <div className="flex items-baseline justify-between mt-1 text-body-sm">
                   <span className="text-ink-muted">Market avg {marketAvg.toFixed(1)} L/km</span>
                   <span
                     className={`tabular font-mono ${
@@ -512,7 +512,7 @@ export function OverviewPanel() {
       {/* Pending deferred events */}
       {player.deferredEvents && player.deferredEvents.filter((e) => !e.resolved).length > 0 && (
         <div>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
             Pending risk events
           </div>
           <div className="space-y-1.5">
@@ -522,14 +522,14 @@ export function OverviewPanel() {
               .map((e) => (
                 <div
                   key={e.id}
-                  className="flex items-baseline justify-between rounded-md border border-line bg-surface-2/60 px-3 py-2 text-[0.8125rem]"
+                  className="flex items-baseline justify-between rounded-md border border-line bg-surface-2/60 px-3 py-2 text-body"
                 >
                   <div className="min-w-0">
-                    <span className="font-mono text-primary text-[0.75rem] mr-2">{e.sourceScenario}</span>
+                    <span className="font-mono text-primary text-body-sm mr-2">{e.sourceScenario}</span>
                     <span className="text-ink-2">{e.noteAtQueue}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="tabular font-mono text-[0.6875rem] text-ink">
+                    <span className="tabular font-mono text-label text-ink">
                       Q{e.targetQuarter}
                     </span>
                     <Badge tone={e.probability >= 0.5 ? "negative" : "warning"}>
@@ -564,11 +564,11 @@ export function OverviewPanel() {
         className="w-[44rem]"
       >
         <ModalHeader>
-          <div className="text-[0.6875rem] uppercase tracking-wider text-accent mb-1">
+          <div className="text-label uppercase tracking-wider text-accent mb-1">
             Mid-campaign doctrine review
           </div>
           <h2 className="font-display text-2xl text-ink">Revise operating doctrine</h2>
-          <p className="text-[0.8125rem] text-ink-muted mt-1">
+          <p className="text-body text-ink-muted mt-1">
             One strategic reset is unlocked. The new doctrine applies immediately and persists for the rest of the campaign.
           </p>
         </ModalHeader>
@@ -604,8 +604,8 @@ export function OverviewPanel() {
                   </span>
                   <div className="min-w-0">
                     <div className="font-semibold text-ink">{d.name}</div>
-                    <div className="text-[0.75rem] italic text-ink-muted">{d.tagline}</div>
-                    <p className="mt-2 text-[0.8125rem] leading-relaxed text-ink-2">
+                    <div className="text-body-sm italic text-ink-muted">{d.tagline}</div>
+                    <p className="mt-2 text-body leading-relaxed text-ink-2">
                       {d.description}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -621,7 +621,7 @@ export function OverviewPanel() {
             );
           })}
           {doctrineError && (
-            <div className="rounded-md border border-negative bg-[var(--negative-soft)] px-3 py-2 text-[0.8125rem] text-negative">
+            <div className="rounded-md border border-negative bg-[var(--negative-soft)] px-3 py-2 text-body text-negative">
               {doctrineError}
             </div>
           )}
@@ -714,14 +714,14 @@ function NetworkOverviewSection({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-2">
-        <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted">
+        <div className="text-label uppercase tracking-wider text-ink-muted">
           Network
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onInvest}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-label uppercase tracking-wider text-accent font-semibold hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <Layers size={12} /> Invest
           </button>
@@ -730,7 +730,7 @@ function NetworkOverviewSection({
             onClick={onAddSecondary}
             disabled={secondaryLocked}
             title={secondaryLocked ? "Secondary hubs unlock Q3" : undefined}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold hover:bg-surface-hover disabled:text-ink-muted disabled:hover:bg-transparent disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-label uppercase tracking-wider text-accent font-semibold hover:bg-surface-hover disabled:text-ink-muted disabled:hover:bg-transparent disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <Plus size={12} /> Add secondary
           </button>
@@ -784,7 +784,7 @@ function NetworkOverviewSection({
               </NetworkPill>
             ))}
             {player.secondaryHubCodes.length === 0 && (
-              <span className="text-[0.75rem] text-ink-muted">
+              <span className="text-body-sm text-ink-muted">
                 {secondaryLocked
                   ? "Secondary hubs unlock in Q3."
                   : "No secondary hubs yet. Add one to unlock non-spoke expansion."}
@@ -826,7 +826,7 @@ function NetworkOverviewSection({
 
         <div className="grid grid-cols-1 md:grid-cols-[1.15fr_0.85fr] border-t border-line divide-y md:divide-x md:divide-y-0 divide-line">
           <div className="p-3">
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2">
+            <div className="text-caption uppercase tracking-wider text-ink-muted mb-2">
               Key corridors
             </div>
             {corridors.length > 0 ? (
@@ -834,7 +834,7 @@ function NetworkOverviewSection({
                 {corridors.map((r) => (
                   <span
                     key={r.id}
-                    className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-[0.6875rem] text-ink-2"
+                    className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-label text-ink-2"
                   >
                     <span className="font-mono text-ink">{r.originCode}-{r.destCode}</span>
                     <span>{Math.round(r.dailyFrequency * 7)}/wk</span>
@@ -842,17 +842,17 @@ function NetworkOverviewSection({
                 ))}
               </div>
             ) : (
-              <div className="text-[0.75rem] text-ink-muted">No active corridors yet.</div>
+              <div className="text-body-sm text-ink-muted">No active corridors yet.</div>
             )}
           </div>
           <div className="p-3">
-            <div className="text-[0.625rem] uppercase tracking-wider text-ink-muted mb-2">
+            <div className="text-caption uppercase tracking-wider text-ink-muted mb-2">
               Tightest airports
             </div>
             {slotPressure.length > 0 ? (
               <div className="space-y-1.5">
                 {slotPressure.map((row) => (
-                  <div key={row.code} className="grid grid-cols-[3rem_1fr_4.25rem] items-center gap-2 text-[0.6875rem]">
+                  <div key={row.code} className="grid grid-cols-[3rem_1fr_4.25rem] items-center gap-2 text-label">
                     <span className="font-mono font-semibold text-ink">{row.code}</span>
                     <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
                       <div
@@ -870,7 +870,7 @@ function NetworkOverviewSection({
                 ))}
               </div>
             ) : (
-              <div className="text-[0.75rem] text-ink-muted">No slot usage yet.</div>
+              <div className="text-body-sm text-ink-muted">No slot usage yet.</div>
             )}
           </div>
         </div>
@@ -894,14 +894,14 @@ function NetworkStatCell({
 }) {
   return (
     <div className={cn("min-w-0 p-3", compact ? "space-y-1" : "space-y-1.5")}>
-      <div className="flex items-center gap-1.5 text-[0.625rem] uppercase tracking-wider text-ink-muted">
+      <div className="flex items-center gap-1.5 text-caption uppercase tracking-wider text-ink-muted">
         <span className="text-accent">{icon}</span>
         <span>{label}</span>
       </div>
-      <div className={cn("truncate font-display text-ink", compact ? "text-[1.25rem]" : "text-[1.5rem]")}>
+      <div className={cn("truncate font-display text-ink", compact ? "text-heading" : "text-heading-lg")}>
         {value}
       </div>
-      <div className="truncate text-[0.75rem] text-ink-muted">
+      <div className="truncate text-body-sm text-ink-muted">
         {detail}
       </div>
     </div>
@@ -920,7 +920,7 @@ function NetworkPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.75rem] font-mono font-semibold",
+        "inline-flex items-center gap-1 rounded-md px-2 py-1 text-body-sm font-mono font-semibold",
         tone === "primary"
           ? "text-primary-fg"
           : "border border-dashed border-line-strong text-ink-2",
@@ -1039,7 +1039,7 @@ function StrategicInsights({
 
   return (
     <div>
-      <div className="text-[0.6875rem] uppercase tracking-wider text-ink-muted mb-2">
+      <div className="text-label uppercase tracking-wider text-ink-muted mb-2">
         Strategic signals
       </div>
       <div className="space-y-1.5">
@@ -1053,19 +1053,19 @@ function StrategicInsights({
           return (
             <div key={idx} className={cn("rounded-md border px-3 py-2", cls)}>
               <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                <span className="text-[0.75rem] font-semibold uppercase tracking-wider">
+                <span className="text-body-sm font-semibold uppercase tracking-wider">
                   {i.title}
                 </span>
                 {i.action && (
                   <button
                     onClick={i.action.onClick}
-                    className="text-[0.6875rem] underline hover:no-underline shrink-0"
+                    className="text-label underline hover:no-underline shrink-0"
                   >
                     {i.action.label}
                   </button>
                 )}
               </div>
-              <div className="text-[0.75rem] text-ink-2 leading-relaxed">{i.detail}</div>
+              <div className="text-body-sm text-ink-2 leading-relaxed">{i.detail}</div>
             </div>
           );
         })}
@@ -1078,7 +1078,7 @@ function BrandValueBreakdown({ player }: { player: Parameters<typeof computeBran
   const b = computeBrandValueBreakdown(player);
   return (
     <details className="mt-3 rounded-md border border-line">
-      <summary className="px-3 py-2 cursor-pointer text-[0.6875rem] uppercase tracking-wider font-semibold text-ink-2 hover:bg-surface-hover flex items-center justify-between">
+      <summary className="px-3 py-2 cursor-pointer text-label uppercase tracking-wider font-semibold text-ink-2 hover:bg-surface-hover flex items-center justify-between">
         <span>Brand Value formula</span>
         <span className="tabular font-mono text-ink">{b.composite.toFixed(1)}</span>
       </summary>
@@ -1127,10 +1127,10 @@ function BrandSection({
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1.5">
-        <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+        <span className="text-label uppercase tracking-wider text-ink-muted font-semibold">
           {title}
         </span>
-        <span className="text-[0.875rem] tabular font-mono font-semibold text-ink">
+        <span className="text-body-lg tabular font-mono font-semibold text-ink">
           {composite.toFixed(1)}
         </span>
       </div>
@@ -1138,7 +1138,7 @@ function BrandSection({
         {rows.map((r) => {
           const pct = Math.max(0, Math.min(100, r.value));
           return (
-            <div key={r.label} className="flex items-center gap-2 text-[0.6875rem]">
+            <div key={r.label} className="flex items-center gap-2 text-label">
               <span className="text-ink-2 w-32 shrink-0">{r.label}</span>
               <div className="flex-1 h-1 rounded-full bg-surface-2 overflow-hidden">
                 <div
@@ -1149,7 +1149,7 @@ function BrandSection({
               <span className="tabular font-mono text-ink w-10 text-right">
                 {r.value.toFixed(0)}
               </span>
-              <span className="text-[0.5625rem] uppercase tracking-wider text-ink-muted w-8 text-right">
+              <span className="text-micro uppercase tracking-wider text-ink-muted w-8 text-right">
                 {r.weight}%
               </span>
             </div>
@@ -1175,11 +1175,11 @@ function MetricWithSpark({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+      <div className="text-label font-medium uppercase tracking-wider text-ink-muted">
         {label}
       </div>
       <div className="flex items-end justify-between gap-2">
-        <span className="tabular font-display text-[1.5rem] leading-none text-ink">
+        <span className="tabular font-display text-heading-lg leading-none text-ink">
           {value}
         </span>
         {series.length >= 2 && (
@@ -1188,7 +1188,7 @@ function MetricWithSpark({
       </div>
       {delta && (
         <span
-          className={`tabular text-[0.75rem] font-medium ${
+          className={`tabular text-body-sm font-medium ${
             delta.value > 0 ? "text-positive" : delta.value < 0 ? "text-negative" : "text-ink-muted"
           }`}
         >
@@ -1224,12 +1224,12 @@ function ExecCard({
       )}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[0.6875rem] uppercase tracking-wider text-ink-muted font-semibold">
+        <span className="text-label uppercase tracking-wider text-ink-muted font-semibold">
           {label}
         </span>
         <span
           className={cn(
-            "text-[0.5625rem] uppercase tracking-wider font-bold rounded px-1.5 py-0.5",
+            "text-micro uppercase tracking-wider font-bold rounded px-1.5 py-0.5",
             status === "ok" && "text-positive bg-[var(--positive-soft)]",
             status === "warn" && "text-warning bg-[var(--warning-soft)]",
             status === "danger" && "text-negative bg-[var(--negative-soft)]",
@@ -1239,10 +1239,10 @@ function ExecCard({
         </span>
       </div>
       <div>
-        <div className="font-display text-[1.5rem] tabular text-ink leading-none">
+        <div className="font-display text-heading-lg tabular text-ink leading-none">
           {headline}
         </div>
-        <div className="text-[0.75rem] text-ink-muted leading-relaxed mt-1.5">
+        <div className="text-body-sm text-ink-muted leading-relaxed mt-1.5">
           {detail}
         </div>
       </div>

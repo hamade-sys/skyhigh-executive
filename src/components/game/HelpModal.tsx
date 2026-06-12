@@ -113,10 +113,10 @@ export function HelpModal({ open, onClose }: Props) {
       >
         <header className="flex items-start justify-between gap-3 px-5 py-4 border-b border-line shrink-0">
           <div className="min-w-0">
-            <span className="text-[0.6875rem] uppercase tracking-[0.2em] text-accent">
+            <span className="text-label uppercase tracking-[0.2em] text-accent">
               ICAN Simulations reference
             </span>
-            <h2 className="font-display text-[1.25rem] text-ink leading-tight mt-0.5 truncate">
+            <h2 className="font-display text-heading text-ink leading-tight mt-0.5 truncate">
               Quick-reference cheat sheet
             </h2>
           </div>
@@ -176,7 +176,7 @@ export function HelpModal({ open, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-primary text-primary-fg text-[0.875rem] font-semibold hover:bg-primary-hover transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="px-4 py-2 rounded-lg bg-primary text-primary-fg text-body-lg font-semibold hover:bg-primary-hover transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             Got it
           </button>
@@ -196,7 +196,7 @@ function Section({
 }) {
   return (
     <section>
-      <div className="flex items-center gap-1.5 text-[0.6875rem] uppercase tracking-wider text-accent font-semibold mb-2">
+      <div className="flex items-center gap-1.5 text-label uppercase tracking-wider text-accent font-semibold mb-2">
         {icon} {title}
       </div>
       <div className="space-y-1.5">{children}</div>
@@ -206,7 +206,7 @@ function Section({
 
 function Row({ label, detail }: { label: string; detail: string }) {
   return (
-    <div className="flex items-baseline gap-3 text-[0.8125rem]">
+    <div className="flex items-baseline gap-3 text-body">
       <span className="font-mono font-semibold text-ink shrink-0 w-44 truncate">{label}</span>
       <span className="text-ink-2 leading-relaxed">{detail}</span>
     </div>
