@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Badge, Button, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { useGame, selectPlayer, selectActiveTeam, useCampaignStartYear, useTotalRounds } from "@/store/game";
+import { useUi } from "@/store/ui";
 import { CITIES_BY_CODE, countryForCode } from "@/data/cities";
 import { fmtMoney, fmtQuarter } from "@/lib/format";
 import { newsRoundForQuarter, gameQuarterForNewsRound } from "@/data/world-news";
@@ -109,20 +110,46 @@ export function AirportDetailModal({
       </ModalHeader>
 
       <ModalBody className="space-y-4 max-h-[60vh] overflow-auto">
-        {/* Player's slot utilization */}
+        {/* Player's slot utilization — quiet card, same visual weight
+            as the other sections. The "fully utilized" state used to
+            be a heavy outlined box + an amber sentence pointing at the
+            Slot Market; now the pointer is a real button. */}
         {playerEntry && (
           <section>
-            <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
+            <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
               Your position
             </div>
-            <div className="rounded-md border border-primary bg-[rgba(20,53,94,0.04)] p-3">
-              <div className="flex items-baseline justify-between gap-3 mb-1.5">
-                <span className="text-body text-ink-2">Slots used / held</span>
-                <span className="font-mono tabular text-ink font-bold text-heading">
-                  {playerEntry.used}<span className="text-ink-muted">/{playerEntry.held}</span>
-                </span>
+            <div className="rounded-md border border-line bg-surface-2/40 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-body-sm text-ink-2">Slots used / held</div>
+                  <div className="text-label text-ink-muted mt-0.5">
+                    {playerEntry.held - playerEntry.used > 0
+                      ? `${playerEntry.held - playerEntry.used} free — add routes touching ${city.code} without new bids`
+                      : "Fully utilized — more slots needed to grow here"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="font-mono tabular text-ink font-semibold text-title-lg">
+                    {playerEntry.used}
+                    <span className="text-ink-muted font-normal">/{playerEntry.held}</span>
+                  </span>
+                  {playerEntry.held - playerEntry.used <= 0 && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        onClose();
+                        useUi.getState().openPanel("slots");
+                      }}
+                      title="Open the Slot Market to bid for more slots at this airport"
+                    >
+                      Slot Market →
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="h-1.5 rounded bg-line overflow-hidden">
+              <div className="h-1 rounded bg-line overflow-hidden mt-2.5">
                 <div
                   className={cn(
                     "h-full rounded",
@@ -130,56 +157,46 @@ export function AirportDetailModal({
                       ? "bg-line"
                       : playerEntry.used / playerEntry.held > 0.9
                         ? "bg-warning"
-                        : "bg-primary",
+                        : "bg-accent",
                   )}
                   style={{
                     width: `${Math.min(100, (playerEntry.used / Math.max(1, playerEntry.held)) * 100)}%`,
                   }}
                 />
               </div>
-              {playerEntry.held - playerEntry.used > 0 ? (
-                <div className="text-label text-ink-muted mt-2">
-                  {playerEntry.held - playerEntry.used} slots free at this airport — you can add
-                  routes touching {city.code} without bidding for new slots.
-                </div>
-              ) : (
-                <div className="text-label text-warning mt-2">
-                  Fully utilized. Bid for more slots in the Slot Market to expand here.
-                </div>
-              )}
             </div>
           </section>
         )}
 
-        {/* Active events at this city — World Cup host, Olympics
-            host, and any active news modifier hitting the city. */}
-        <CityEventsSection cityCode={city.code} quarter={s.currentQuarter} />
-
-        {/* Effective demand at this city, with Q/Q delta. Helps the
-            player decide where to bid and how to price routes. */}
+        {/* Demand — one section that owns its context: the events strip
+            (the WHY behind a demand spike or crash) sits directly above
+            the numbers it explains, and the explainer footnote lives
+            INSIDE the card instead of floating between sections. */}
         <CityDemandSection city={city} quarter={s.currentQuarter} />
 
-        {/* Airport pool */}
+        {/* Airport supply — a slim one-row strip, deliberately a
+            different shape from the demand card so the two number
+            groups don't read as one undifferentiated wall of boxes. */}
         <section>
-          <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
+          <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
             Airport supply
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <Stat
-              label="Pool open now"
-              value={data.pool.toLocaleString()}
-              hint="Available to bid"
-            />
-            <Stat
-              label="Next opening"
-              value={data.nextOpening.toLocaleString()}
-              hint="At year tick"
-            />
-            <Stat
-              label="All teams hold"
-              value={data.totalHeldByAllTeams.toLocaleString()}
-              hint="Across the field"
-            />
+          <div className="rounded-md border border-line bg-surface-2/40 grid grid-cols-3 divide-x divide-line/70">
+            {([
+              { label: "Pool open now", value: data.pool, hint: "available to bid" },
+              { label: "Next opening", value: data.nextOpening, hint: "at year tick" },
+              { label: "All teams hold", value: data.totalHeldByAllTeams, hint: "across the field" },
+            ] as const).map((cell) => (
+              <div key={cell.label} className="px-3 py-2 flex items-baseline justify-between gap-2 min-w-0">
+                <div className="min-w-0">
+                  <div className="text-caption uppercase tracking-wider text-ink-muted truncate">{cell.label}</div>
+                  <div className="text-micro text-ink-faint truncate">{cell.hint}</div>
+                </div>
+                <span className="font-mono tabular text-title-sm text-ink font-medium shrink-0">
+                  {cell.value.toLocaleString()}
+                </span>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -959,17 +976,16 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
   );
 
   if (!isWorldCupHost && !isOlympicHost && activeNews.length === 0) {
-    // Nothing to show. Skip the section entirely so the modal stays
+    // Nothing to show. Skip the strip entirely so the modal stays
     // compact for cities with no active events.
     return null;
   }
 
+  // Bare chip strip — no section wrapper or title of its own. It
+  // renders INSIDE the Demand section (June 2026 reorganisation),
+  // directly above the numbers these events explain.
   return (
-    <section>
-      <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
-        Active events
-      </div>
-      <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1.5 mb-2">
         {isWorldCupHost && (
           <span
             className={cn(
@@ -1017,8 +1033,7 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
             </span>
           </span>
         ))}
-      </div>
-    </section>
+    </div>
   );
 }
 
@@ -1026,7 +1041,9 @@ function CityEventsSection({ cityCode, quarter }: { cityCode: string; quarter: n
  *  Player sees the exact same values the route engine works against
  *  (event modifiers + travel index + season all baked in), plus the
  *  signed % change vs the prior quarter so they can spot demand
- *  inflection events ("World Cup boost just kicked in" → +50% Q/Q). */
+ *  inflection events ("World Cup boost just kicked in" → +50% Q/Q).
+ *  Owns the active-events strip too: an event chip directly above the
+ *  numbers it explains beats a stray "Active events" section. */
 function CityDemandSection({ city, quarter }: { city: City; quarter: number }) {
   const startYear = useCampaignStartYear();
   const totalRounds = useTotalRounds();
@@ -1037,18 +1054,20 @@ function CityDemandSection({ city, quarter }: { city: City; quarter: number }) {
 
   return (
     <section>
-      <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-2">
+      <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
         Demand · {fmtQuarter(quarter, startYear)}
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        <DemandStat label="Tourism" value={demand.tourism} deltaPct={demand.tourismDeltaPct} />
-        <DemandStat label="Business" value={demand.business} deltaPct={demand.businessDeltaPct} />
-        <DemandStat label="Cargo" value={demand.cargo} deltaPct={demand.cargoDeltaPct} />
-      </div>
-      <div className="text-label text-ink-muted mt-1.5 leading-relaxed">
-        Effective daily demand at this city — already includes news
-        modifiers, the global travel index, and seasonal effects. Δ
-        compares this quarter vs last quarter.
+      <CityEventsSection cityCode={city.code} quarter={quarter} />
+      <div className="rounded-md border border-line bg-surface-2/40">
+        <div className="grid grid-cols-3 divide-x divide-line/70">
+          <DemandStat label="Tourism" value={demand.tourism} deltaPct={demand.tourismDeltaPct} />
+          <DemandStat label="Business" value={demand.business} deltaPct={demand.businessDeltaPct} />
+          <DemandStat label="Cargo" value={demand.cargo} deltaPct={demand.cargoDeltaPct} />
+        </div>
+        <div className="text-micro text-ink-muted leading-relaxed border-t border-line/70 px-3 py-1.5">
+          Effective daily demand — news modifiers, the global travel index, and
+          seasonal effects already included. Δ compares vs last quarter.
+        </div>
       </div>
     </section>
   );
@@ -1068,33 +1087,29 @@ function DemandStat({
   const flat = Math.abs(deltaPct) < 0.5;
   const positive = deltaPct > 0;
   const ArrowIcon = positive ? ArrowUp : ArrowDown;
+  // Cell inside the shared demand card (divide-x separators come from
+  // the parent grid) — no border of its own, calmer numeral scale.
   return (
-    <div className="rounded-md border border-line bg-surface p-2.5">
+    <div className="px-3 py-2">
       <div className="text-caption uppercase tracking-wider text-ink-muted font-semibold">
         {label}
       </div>
-      <div className="font-display text-heading text-ink mt-0.5 tabular">
-        {rounded.toLocaleString()}
-      </div>
-      <div className="text-label mt-0.5 flex items-center gap-1">
+      <div className="flex items-baseline gap-1.5 mt-0.5 flex-wrap">
+        <span className="font-display text-title-lg text-ink tabular leading-none">
+          {rounded.toLocaleString()}
+        </span>
         {flat ? (
-          <span className="text-ink-muted">flat Q/Q</span>
+          <span className="text-micro text-ink-muted">flat Q/Q</span>
         ) : (
-          <>
-            <ArrowIcon
-              size={11}
-              aria-hidden="true"
-              className={positive ? "text-positive" : "text-negative"}
-            />
-            <span
-              className={cn(
-                "tabular font-mono",
-                positive ? "text-positive" : "text-negative",
-              )}
-            >
-              {positive ? "+" : ""}{deltaPct.toFixed(1)}% Q/Q
-            </span>
-          </>
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 text-micro tabular font-mono",
+              positive ? "text-positive" : "text-negative",
+            )}
+          >
+            <ArrowIcon size={9} aria-hidden="true" />
+            {positive ? "+" : ""}{deltaPct.toFixed(1)}%
+          </span>
         )}
       </div>
     </div>
