@@ -1,9 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, lazy, Suspense } from "react";
 import { Badge, Button, Input, Modal, ModalBody, ModalFooter, ModalHeader } from "@/components/ui";
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { planeImagePath } from "@/lib/aircraft-images";
+
+// Dynamic import keeps Three.js (~1 MB) out of the initial bundle.
+// It only loads when the user expands an aircraft card.
+const Aircraft3DViewer = lazy(() =>
+  import("@/components/game/Aircraft3DViewer").then((m) => ({
+    default: m.Aircraft3DViewer,
+  })),
+);
 import { fmtMoney, fmtAgeYQ, fmtQuarter } from "@/lib/format";
 import {
   effectiveProductionCap,
@@ -778,6 +786,7 @@ function ExpandedConfigurator({
   const [quantity, setQuantity] = useState(1);
   const [engine, setEngine] = useState<EngineKind>("none");
   const [fuselage, setFuselage] = useState(false);
+  const [view3d, setView3d] = useState(true);
 
   const fuelUpgradeCost = engineCost(spec.buyPriceUsd, "fuel");
   const powerUpgradeCost = engineCost(spec.buyPriceUsd, "power");
@@ -803,17 +812,60 @@ function ExpandedConfigurator({
 
   return (
     <div className="border-t border-line bg-surface-2/30 px-4 pt-3 pb-4 space-y-3">
-      {/* Hero photo across the card */}
-      <div className="rounded-md bg-surface border border-line/60 h-44 sm:h-52 flex items-center justify-center overflow-hidden">
-        {imgSrc ? (
+      {/* Hero viewer — 3-D by default, toggle to 2-D flat image */}
+      <div className="relative rounded-md bg-surface border border-line/60 h-52 sm:h-64 overflow-hidden">
+
+        {/* 2D / 3D toggle pill — top-right corner */}
+        <div className="absolute top-2 right-2 z-10 flex rounded-full border border-line bg-surface/90 backdrop-blur-sm text-[0.6875rem] font-medium overflow-hidden shadow-sm">
+          <button
+            onClick={() => setView3d(false)}
+            className={cn(
+              "px-2.5 py-1 transition-colors",
+              !view3d ? "bg-primary text-white" : "text-ink-2 hover:text-ink",
+            )}
+          >
+            2D
+          </button>
+          <button
+            onClick={() => setView3d(true)}
+            className={cn(
+              "px-2.5 py-1 transition-colors",
+              view3d ? "bg-primary text-white" : "text-ink-2 hover:text-ink",
+            )}
+          >
+            3D
+          </button>
+        </div>
+
+        {view3d ? (
+          /* 3-D interactive viewer */
+          <>
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-ink-muted text-[0.75rem] animate-pulse">
+                  Loading 3D…
+                </div>
+              }
+            >
+              <Aircraft3DViewer specId={spec.id} className="w-full h-full" />
+            </Suspense>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none">
+              <span className="text-[0.6rem] text-ink-muted bg-surface/70 backdrop-blur-sm px-2 py-0.5 rounded-full border border-line/40">
+                Drag to rotate · Scroll to zoom
+              </span>
+            </div>
+          </>
+        ) : imgSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imgSrc}
             alt={`${spec.name} 3-view illustration`}
-            className="max-w-full max-h-full object-contain p-3"
+            className="w-full h-full object-contain p-4"
           />
         ) : (
-          <Plane size={64} className="text-ink-muted" strokeWidth={1.0} />
+          <div className="w-full h-full flex items-center justify-center">
+            <Plane size={64} className="text-ink-muted" strokeWidth={1.0} />
+          </div>
         )}
       </div>
 
