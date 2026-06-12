@@ -1,654 +1,714 @@
 "use client";
 
 /**
- * Interactive 3-D aircraft viewer — v2
+ * Interactive 3-D aircraft viewer — v3 "realistic procedural"
  *
- * All aircraft lie correctly along the Z-axis (nose → +Z, tail → -Z).
- * Seven visually distinct aircraft families:
- *   narrow_body   A319–A321, B737 variants, B757, C919, B797
- *   wide_body     A330, A350, B767, B777 series, B787
- *   jumbo_a380    A380 — massive 4-engine double-deck
- *   jumbo_b747    B747 — 4 engines + iconic upper-deck hump
- *   regional      E-jets, A220 — smaller, lower-sweep
- *   regional_crj  CRJ-700/900 — tail-mounted engines
- *   turboprop     ATR, Dash8 — high wing + propeller discs
- *   supersonic    Boom Overture — needle nose + delta wing
+ * Every aircraft is generated from REAL dimensions (length, wingspan,
+ * fuselage diameter, engine count/placement) so an A380 is visibly a
+ * double-deck giant, a 747 has its hump, a CRJ has tail engines and a
+ * T-tail, an ATR is a high-wing turboprop with spinning props, and the
+ * Boom Overture is a needle-nosed delta.
  *
- * When a real GLB file exists in /public/plane-models/<specId>.glb it
- * takes precedence. Otherwise the procedural mesh renders.
+ * Geometry quality:
+ *  - Fuselage: LatheGeometry with a smooth curved profile (round nose,
+ *    constant section, tapered upswept tail) — no visible cylinder caps.
+ *  - Wings/fin/stabs: lofted airfoil sections (rounded leading edge,
+ *    sharp trailing edge) with real sweep, taper and dihedral.
+ *  - Engines: profiled nacelles with inlet lip, dark fan disc, spinner
+ *    cone and pylon.
+ *  - Passenger windows strip + cockpit windscreen; freighters get none.
+ *  - In-flight pose (gear up) over a soft contact shadow.
+ *
+ * A real GLB in /public/plane-models/<id>.glb (mapped in
+ * aircraft-models.ts) always takes precedence over the procedural mesh.
  */
 
-import { Suspense, useRef, useMemo, useCallback } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, Environment, Html, PerspectiveCamera } from "@react-three/drei";
+import { Suspense, useRef, useMemo } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import {
+  OrbitControls,
+  Environment,
+  Html,
+  PerspectiveCamera,
+  ContactShadows,
+  useGLTF,
+} from "@react-three/drei";
 import * as THREE from "three";
 import { planeModelPath } from "@/lib/aircraft-models";
 
-// ─── Family detection ─────────────────────────────────────────────────────────
+/* ───────────────────────── Per-aircraft real dimensions ─────────────────── */
 
-type Family =
-  | "narrow_body"
-  | "wide_body"
-  | "jumbo_a380"
-  | "jumbo_b747"
-  | "regional"
-  | "regional_crj"
-  | "turboprop"
-  | "supersonic";
-
-function detectFamily(id: string): Family {
-  if (/^A380/.test(id)) return "jumbo_a380";
-  if (/^B747/.test(id)) return "jumbo_b747";
-  if (/^(ATR|Dash|ATR-EVO)/.test(id)) return "turboprop";
-  if (/^Boom/.test(id)) return "supersonic";
-  if (/^CRJ/.test(id)) return "regional_crj";
-  if (/^(E1[679]\d|E195|A220|B797)/.test(id)) return "regional";
-  if (/^(A330|A350|B767|B777|B787|A300)/.test(id)) return "wide_body";
-  return "narrow_body";
+interface Dim {
+  len: number;   // overall length (m)
+  span: number;  // wingspan (m)
+  dia: number;   // fuselage diameter (m)
+  eng: 2 | 4;
+  sweep: number; // wing quarter-chord sweep (deg)
+  wing?: "low" | "high";
+  tailEng?: boolean;   // engines on aft fuselage (CRJ)
+  tTail?: boolean;
+  props?: boolean;     // turboprop
+  hump?: boolean;      // 747 upper deck
+  doubleDeck?: boolean;// A380 ovoid full-length double deck
+  delta?: boolean;     // Boom Overture
+  bigEng?: boolean;    // neo / MAX / widebody-style large fans
 }
 
-// ─── Per-family geometry parameters ──────────────────────────────────────────
+const D = (
+  len: number, span: number, dia: number, eng: 2 | 4, sweep: number,
+  extra: Partial<Dim> = {},
+): Dim => ({ len, span, dia, eng, sweep, ...extra });
 
-interface Cfg {
-  // Fuselage (lies along Z: nose=+Z, tail=–Z)
-  fHalf: number;    // half-length of cylindrical body
-  fR: number;       // radius
-  noseL: number;    // nose cone length
-  tailL: number;    // tail cone length
-  // Wings (low-wing unless highWing=true)
-  wHalfSpan: number;   // root to tip
-  wChordRoot: number;  // chord at fuselage
-  wChordTip: number;   // chord at wingtip
-  wSweepZ: number;     // how far the tip LE is swept aft vs root LE (positive = swept back)
-  wY: number;          // wing attachment Y (negative = under fuselage)
-  wDihedral: number;   // how much higher the tip is vs root
-  wRootZ: number;      // fuselage Z at wing root mid-chord
-  // Engines
-  eCount: 2 | 4;
-  eR: number;       // nacelle radius
-  eL: number;       // nacelle length
-  eXratio: number[];// spanwise position as fraction of wHalfSpan for each pair
-  eYdrop: number;   // how far below the wing the nacelle hangs
-  tailEng: boolean; // CRJ: engines on the tail, not wings
-  highWing: boolean;
-  propeller: boolean;
-  deltaWing: boolean;
-  b747Hump: boolean;
-  // Tail
-  vFinH: number;
-  vFinC: number;  // chord
-  vFinZ: number;  // Z position
-  hStabHalf: number;
-  hStabChord: number;
-  hStabZ: number;
-}
-
-const CFG: Record<Family, Cfg> = {
-  narrow_body: {
-    fHalf: 1.65, fR: 0.185, noseL: 0.48, tailL: 0.28,
-    wHalfSpan: 1.90, wChordRoot: 0.56, wChordTip: 0.20, wSweepZ: 0.72,
-    wY: -0.155, wDihedral: 0.14, wRootZ: 0.20,
-    eCount: 2, eR: 0.085, eL: 0.52, eXratio: [0.42], eYdrop: 0.11,
-    tailEng: false, highWing: false, propeller: false, deltaWing: false, b747Hump: false,
-    vFinH: 0.56, vFinC: 0.44, vFinZ: -1.55,
-    hStabHalf: 0.74, hStabChord: 0.24, hStabZ: -1.72,
-  },
-  wide_body: {
-    fHalf: 2.05, fR: 0.245, noseL: 0.62, tailL: 0.34,
-    wHalfSpan: 2.55, wChordRoot: 0.74, wChordTip: 0.24, wSweepZ: 1.15,
-    wY: -0.19, wDihedral: 0.20, wRootZ: 0.25,
-    eCount: 2, eR: 0.110, eL: 0.66, eXratio: [0.37], eYdrop: 0.13,
-    tailEng: false, highWing: false, propeller: false, deltaWing: false, b747Hump: false,
-    vFinH: 0.70, vFinC: 0.55, vFinZ: -1.92,
-    hStabHalf: 0.92, hStabChord: 0.30, hStabZ: -2.10,
-  },
-  jumbo_a380: {
-    fHalf: 2.55, fR: 0.34, noseL: 0.72, tailL: 0.38,
-    wHalfSpan: 3.20, wChordRoot: 0.92, wChordTip: 0.28, wSweepZ: 1.45,
-    wY: -0.24, wDihedral: 0.22, wRootZ: 0.25,
-    eCount: 4, eR: 0.110, eL: 0.65, eXratio: [0.31, 0.60], eYdrop: 0.12,
-    tailEng: false, highWing: false, propeller: false, deltaWing: false, b747Hump: false,
-    vFinH: 0.84, vFinC: 0.65, vFinZ: -2.45,
-    hStabHalf: 1.08, hStabChord: 0.34, hStabZ: -2.58,
-  },
-  jumbo_b747: {
-    fHalf: 2.25, fR: 0.258, noseL: 0.55, tailL: 0.32,
-    wHalfSpan: 2.85, wChordRoot: 0.82, wChordTip: 0.26, wSweepZ: 1.30,
-    wY: -0.20, wDihedral: 0.25, wRootZ: 0.15,
-    eCount: 4, eR: 0.100, eL: 0.60, eXratio: [0.30, 0.60], eYdrop: 0.12,
-    tailEng: false, highWing: false, propeller: false, deltaWing: false, b747Hump: true,
-    vFinH: 0.76, vFinC: 0.56, vFinZ: -2.18,
-    hStabHalf: 0.90, hStabChord: 0.28, hStabZ: -2.30,
-  },
-  regional: {
-    fHalf: 1.45, fR: 0.155, noseL: 0.36, tailL: 0.22,
-    wHalfSpan: 1.50, wChordRoot: 0.46, wChordTip: 0.18, wSweepZ: 0.46,
-    wY: -0.12, wDihedral: 0.09, wRootZ: 0.15,
-    eCount: 2, eR: 0.072, eL: 0.42, eXratio: [0.40], eYdrop: 0.10,
-    tailEng: false, highWing: false, propeller: false, deltaWing: false, b747Hump: false,
-    vFinH: 0.46, vFinC: 0.36, vFinZ: -1.38,
-    hStabHalf: 0.60, hStabChord: 0.20, hStabZ: -1.50,
-  },
-  regional_crj: {
-    fHalf: 1.45, fR: 0.145, noseL: 0.34, tailL: 0.22,
-    wHalfSpan: 1.40, wChordRoot: 0.42, wChordTip: 0.16, wSweepZ: 0.55,
-    wY: -0.08, wDihedral: 0.10, wRootZ: 0.10,
-    eCount: 2, eR: 0.068, eL: 0.40, eXratio: [], eYdrop: 0,
-    tailEng: true, highWing: false, propeller: false, deltaWing: false, b747Hump: false,
-    vFinH: 0.48, vFinC: 0.36, vFinZ: -1.38,
-    hStabHalf: 0.58, hStabChord: 0.19, hStabZ: -1.42,
-  },
-  turboprop: {
-    fHalf: 1.30, fR: 0.162, noseL: 0.28, tailL: 0.22,
-    wHalfSpan: 1.55, wChordRoot: 0.44, wChordTip: 0.20, wSweepZ: 0.08,
-    wY: 0.14, wDihedral: 0.04, wRootZ: 0.05,   // HIGH WING → positive Y
-    eCount: 2, eR: 0.09, eL: 0.36, eXratio: [0.42], eYdrop: 0,
-    tailEng: false, highWing: true, propeller: true, deltaWing: false, b747Hump: false,
-    vFinH: 0.48, vFinC: 0.34, vFinZ: -1.28,
-    hStabHalf: 0.58, hStabChord: 0.20, hStabZ: -1.35,
-  },
-  supersonic: {
-    fHalf: 2.30, fR: 0.130, noseL: 1.10, tailL: 0.12,
-    wHalfSpan: 2.00, wChordRoot: 2.50, wChordTip: 0.06, wSweepZ: 2.60,
-    wY: -0.06, wDihedral: 0.02, wRootZ: 0.85,
-    eCount: 4, eR: 0.068, eL: 0.52, eXratio: [0.34, 0.60], eYdrop: 0.04,
-    tailEng: false, highWing: false, propeller: false, deltaWing: true, b747Hump: false,
-    vFinH: 0.32, vFinC: 0.50, vFinZ: -2.32,
-    hStabHalf: 0, hStabChord: 0, hStabZ: 0,  // no separate h-stab (delta)
-  },
+const DIMS: Record<string, Dim> = {
+  // Airbus narrow
+  "A319":        D(33.8, 35.8, 3.95, 2, 25),
+  "A320":        D(37.6, 35.8, 3.95, 2, 25),
+  "A321":        D(44.5, 35.8, 3.95, 2, 25),
+  "A319neo":     D(33.8, 35.8, 3.95, 2, 25, { bigEng: true }),
+  "A320neo":     D(37.6, 35.8, 3.95, 2, 25, { bigEng: true }),
+  "A321neo":     D(44.5, 35.8, 3.95, 2, 25, { bigEng: true }),
+  "A321XLR":     D(44.5, 35.8, 3.95, 2, 25, { bigEng: true }),
+  "A321P2F":     D(44.5, 35.8, 3.95, 2, 25),
+  "A220-300":    D(38.7, 35.1, 3.70, 2, 25, { bigEng: true }),
+  "A220-500":    D(42.0, 35.1, 3.70, 2, 25, { bigEng: true }),
+  "A220-500F":   D(42.0, 35.1, 3.70, 2, 25, { bigEng: true }),
+  // Airbus wide
+  "A300-600F":   D(54.1, 44.8, 5.64, 2, 28),
+  "A330-200":    D(58.8, 60.3, 5.64, 2, 30),
+  "A330-300":    D(63.7, 60.3, 5.64, 2, 30),
+  "A330-200F":   D(58.8, 60.3, 5.64, 2, 30),
+  "A330-300P2F": D(63.7, 60.3, 5.64, 2, 30),
+  "A330-900neo": D(63.7, 64.0, 5.64, 2, 30, { bigEng: true }),
+  "A350-900":    D(66.8, 64.8, 5.96, 2, 32, { bigEng: true }),
+  "A350-1000":   D(73.8, 64.8, 5.96, 2, 32, { bigEng: true }),
+  "A380-800":    D(72.7, 79.8, 7.14, 4, 33, { doubleDeck: true }),
+  "A380F":       D(72.7, 79.8, 7.14, 4, 33, { doubleDeck: true }),
+  // Boeing narrow
+  "B737-300":    D(33.4, 28.9, 3.76, 2, 25),
+  "B737-400":    D(36.4, 28.9, 3.76, 2, 25),
+  "B737-500":    D(31.0, 28.9, 3.76, 2, 25),
+  "B737-600":    D(31.2, 34.3, 3.76, 2, 25),
+  "B737-700":    D(33.6, 34.3, 3.76, 2, 25),
+  "B737-800":    D(39.5, 34.3, 3.76, 2, 25),
+  "B737-900":    D(42.1, 34.3, 3.76, 2, 25),
+  "B737-300F":   D(33.4, 28.9, 3.76, 2, 25),
+  "B737-800BCF": D(39.5, 34.3, 3.76, 2, 25),
+  "B737-MAX-8":  D(39.5, 35.9, 3.76, 2, 25, { bigEng: true }),
+  "B737-MAX-9":  D(42.2, 35.9, 3.76, 2, 25, { bigEng: true }),
+  "B737-MAX-10": D(43.8, 35.9, 3.76, 2, 25, { bigEng: true }),
+  "B757-200":    D(47.3, 38.0, 3.76, 2, 25),
+  "B757-200F":   D(47.3, 38.0, 3.76, 2, 25),
+  "B797":        D(43.0, 45.0, 4.60, 2, 30, { bigEng: true }),
+  "B797F":       D(43.0, 45.0, 4.60, 2, 30, { bigEng: true }),
+  // Boeing wide
+  "B767-300ER":  D(54.9, 47.6, 5.03, 2, 31),
+  "B767-300F":   D(54.9, 47.6, 5.03, 2, 31),
+  "B777-200":    D(63.7, 60.9, 6.20, 2, 31, { bigEng: true }),
+  "B777-200ER":  D(63.7, 60.9, 6.20, 2, 31, { bigEng: true }),
+  "B777-200LR":  D(63.7, 64.8, 6.20, 2, 31, { bigEng: true }),
+  "B777-300ER":  D(73.9, 64.8, 6.20, 2, 31, { bigEng: true }),
+  "B777F":       D(63.7, 64.8, 6.20, 2, 31, { bigEng: true }),
+  "B777X-8":     D(69.8, 71.8, 6.20, 2, 33, { bigEng: true }),
+  "B777X-9":     D(76.7, 71.8, 6.20, 2, 33, { bigEng: true }),
+  "B777-8F":     D(70.9, 71.8, 6.20, 2, 33, { bigEng: true }),
+  "B787-8":      D(56.7, 60.1, 5.77, 2, 32, { bigEng: true }),
+  "B787-9":      D(62.8, 60.1, 5.77, 2, 32, { bigEng: true }),
+  "B787-10":     D(68.3, 60.1, 5.77, 2, 32, { bigEng: true }),
+  "B747-400":    D(70.7, 64.4, 6.50, 4, 37, { hump: true }),
+  "B747-400F":   D(70.7, 64.4, 6.50, 4, 37, { hump: true }),
+  "B747-8":      D(76.3, 68.4, 6.50, 4, 37, { hump: true }),
+  "B747-8F":     D(76.3, 68.4, 6.50, 4, 37, { hump: true }),
+  // Embraer
+  "E170":        D(29.9, 26.0, 3.00, 2, 23),
+  "E175":        D(31.7, 28.7, 3.00, 2, 23),
+  "E190":        D(36.2, 28.7, 3.00, 2, 23),
+  "E195":        D(38.7, 28.7, 3.00, 2, 23),
+  "E175-E2":     D(32.4, 31.0, 3.00, 2, 24, { bigEng: true }),
+  "E190-E2":     D(36.2, 33.7, 3.00, 2, 24, { bigEng: true }),
+  "E195-E2":     D(41.5, 35.1, 3.00, 2, 24, { bigEng: true }),
+  // Bombardier
+  "CRJ-700":     D(32.3, 23.2, 2.70, 2, 26, { tailEng: true, tTail: true }),
+  "CRJ-900":     D(36.2, 24.9, 2.70, 2, 26, { tailEng: true, tTail: true }),
+  "Dash-8-400":  D(32.8, 28.4, 2.70, 2, 4,  { props: true, wing: "high", tTail: true }),
+  // ATR
+  "ATR-72-500":  D(27.2, 27.1, 2.80, 2, 3,  { props: true, wing: "high", tTail: true }),
+  "ATR-72-600":  D(27.2, 27.1, 2.80, 2, 3,  { props: true, wing: "high", tTail: true }),
+  "ATR-72-600F": D(27.2, 27.1, 2.80, 2, 3,  { props: true, wing: "high", tTail: true }),
+  "ATR-EVO":     D(27.2, 27.1, 2.80, 2, 3,  { props: true, wing: "high", tTail: true }),
+  // COMAC
+  "C919":        D(38.9, 35.8, 3.96, 2, 25, { bigEng: true }),
+  // Boom
+  "BoomO":       D(61.0, 32.0, 3.20, 4, 55, { delta: true }),
 };
 
-// ─── Shared materials ─────────────────────────────────────────────────────────
+const FALLBACK_DIM: Dim = D(38, 34, 3.8, 2, 25);
 
-const MAT_FUSELAGE = { color: "#e8ecf0", metalness: 0.55, roughness: 0.22 };
-const MAT_WING     = { color: "#dde3ea", metalness: 0.50, roughness: 0.25 };
-const MAT_NACELLE  = { color: "#b8c0c8", metalness: 0.70, roughness: 0.18 };
-const MAT_GLASS    = { color: "#1a2e42", metalness: 0.20, roughness: 0.08 };
-const MAT_RUBBER   = { color: "#2a2a2a", roughness: 0.92, metalness: 0.0  };
-const MAT_PROP     = { color: "#555e66", metalness: 0.65, roughness: 0.30 };
+const isFreighter = (id: string) => /(\dF|F)$|P2F|BCF/.test(id);
 
-// ─── Wing geometry builder ────────────────────────────────────────────────────
+/* ───────────────────────── Materials ────────────────────────────────────── */
 
-function buildWingGeo(cfg: Cfg, side: 1 | -1): THREE.BufferGeometry {
-  const s = side;
-  const rootX  = s * cfg.fR;
-  const tipX   = s * cfg.wHalfSpan;
-  const rootY  = cfg.wY;
-  const tipY   = cfg.wY + cfg.wDihedral;
+function useMats() {
+  return useMemo(() => {
+    const fuselage = new THREE.MeshStandardMaterial({
+      color: "#f2f5f8", metalness: 0.25, roughness: 0.32,
+      envMapIntensity: 0.9,
+    });
+    const belly = new THREE.MeshStandardMaterial({
+      color: "#cfd6dd", metalness: 0.35, roughness: 0.30,
+    });
+    const wing = new THREE.MeshStandardMaterial({
+      color: "#dfe5ea", metalness: 0.30, roughness: 0.34,
+      side: THREE.DoubleSide, envMapIntensity: 0.8,
+    });
+    const nacelle = new THREE.MeshStandardMaterial({
+      color: "#aeb8c2", metalness: 0.75, roughness: 0.22,
+      envMapIntensity: 1.1,
+    });
+    const dark = new THREE.MeshStandardMaterial({
+      color: "#10161d", metalness: 0.1, roughness: 0.35,
+    });
+    const glass = new THREE.MeshStandardMaterial({
+      color: "#16273a", metalness: 0.2, roughness: 0.08,
+      envMapIntensity: 1.4,
+    });
+    const blade = new THREE.MeshStandardMaterial({
+      color: "#3c444c", metalness: 0.5, roughness: 0.4,
+      side: THREE.DoubleSide,
+    });
+    return { fuselage, belly, wing, nacelle, dark, glass, blade };
+  }, []);
+}
+type Mats = ReturnType<typeof useMats>;
 
-  // Leading edge Z positions (positive Z = forward/nose)
-  const rootLEZ = cfg.wRootZ + cfg.wChordRoot / 2;
-  const rootTEZ = cfg.wRootZ - cfg.wChordRoot / 2;
-  const tipLEZ  = cfg.wRootZ + cfg.wChordTip / 2  - cfg.wSweepZ;
-  const tipTEZ  = cfg.wRootZ - cfg.wChordTip / 2  - cfg.wSweepZ;
+/* ───────────────────────── Fuselage (smooth lathe) ──────────────────────── */
 
-  const th  = 0.026;   // half-thickness at root
-  const thT = 0.012;   // half-thickness at tip
-
-  // 8 vertices: 4 top (index 0-3) + 4 bottom (4-7)
-  // order: rootLE, rootTE, tipLE, tipTE
-  /* eslint-disable prettier/prettier */
-  const verts = new Float32Array([
-    // Top
-    rootX, rootY + th,  rootLEZ,   // 0 root-LE-top
-    rootX, rootY + th,  rootTEZ,   // 1 root-TE-top
-    tipX,  tipY  + thT, tipLEZ,    // 2 tip-LE-top
-    tipX,  tipY  + thT, tipTEZ,    // 3 tip-TE-top
-    // Bottom
-    rootX, rootY - th,  rootLEZ,   // 4 root-LE-bot
-    rootX, rootY - th,  rootTEZ,   // 5 root-TE-bot
-    tipX,  tipY  - thT, tipLEZ,    // 6 tip-LE-bot
-    tipX,  tipY  - thT, tipTEZ,    // 7 tip-TE-bot
-  ]);
-  /* eslint-enable prettier/prettier */
-
-  // Consistent CCW winding for each face
-  const idx = new Uint16Array([
-    // top face
-    0, 2, 1,   1, 2, 3,
-    // bottom face (flipped)
-    4, 5, 6,   5, 7, 6,
-    // leading edge
-    0, 4, 2,   4, 6, 2,
-    // trailing edge
-    1, 3, 5,   3, 7, 5,
-    // root cap
-    0, 1, 4,   1, 5, 4,
-    // tip cap
-    2, 6, 3,   6, 7, 3,
-  ]);
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(verts, 3));
-  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+function buildFuselageGeo(d: Dim, S: number): THREE.BufferGeometry {
+  const len = d.len * S;
+  const r   = (d.dia * S) / 2;
+  // Profile from tail tip (t=0) to nose tip (t=1).
+  const pts: THREE.Vector2[] = [];
+  const N = 48;
+  // For supersonic: long needle nose + slim body.
+  const noseFrac = d.delta ? 0.30 : 0.14;  // fraction of length that is nose
+  const tailFrac = d.delta ? 0.10 : 0.16;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    let radius: number;
+    if (t < tailFrac) {
+      // tail cone: smooth power curve from a small tip
+      const u = t / tailFrac;
+      radius = r * (0.06 + 0.94 * Math.pow(u, 0.72));
+    } else if (t > 1 - noseFrac) {
+      // nose: superellipse rounding
+      const u = (1 - t) / noseFrac; // 1 at body, 0 at tip
+      radius = r * Math.pow(Math.max(u, 0), d.delta ? 0.9 : 0.52);
+    } else {
+      radius = r;
+    }
+    pts.push(new THREE.Vector2(Math.max(radius, 0.001), t * len));
+  }
+  const geo = new THREE.LatheGeometry(pts, 40);
+  geo.translate(0, -len / 2, 0);
+  geo.rotateX(Math.PI / 2);          // axis → Z, nose at +Z
+  // Upswept tail: lift the underside of the rear fuselage.
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const tailStart = -len * 0.24;
+  for (let i = 0; i < pos.count; i++) {
+    const z = pos.getZ(i);
+    if (z < tailStart) {
+      const u = Math.min((tailStart - z) / (len * 0.26), 1);
+      pos.setY(i, pos.getY(i) + Math.pow(u, 1.6) * r * 0.55);
+    }
+  }
+  if (d.doubleDeck) geo.scale(1, 1.16, 1); // taller ovoid section
   geo.computeVertexNormals();
   return geo;
 }
 
-// Delta wing (for Boom Overture): one huge swept triangle each side
-function buildDeltaWingGeo(cfg: Cfg, side: 1 | -1): THREE.BufferGeometry {
-  const s   = side;
-  const rootX = s * cfg.fR;
-  const tipX  = s * cfg.wHalfSpan;
-  const rootY = cfg.wY;
-  const tipY  = cfg.wY + cfg.wDihedral;
+/* ───────────────────────── Airfoil loft (wings, fin, stabs) ─────────────── */
 
-  const rootLEZ = cfg.wRootZ + cfg.wChordRoot / 2;
-  const rootTEZ = cfg.wRootZ - cfg.wChordRoot / 2;
-  const tipZ    = cfg.wRootZ + cfg.wChordTip / 2 - cfg.wSweepZ; // tip is just a point
+// Closed airfoil outline, unit chord. x: 0=LE → 1=TE. y: thickness.
+const AIRFOIL: [number, number][] = [
+  [1.00,  0.000], [0.80,  0.022], [0.60,  0.042], [0.40,  0.056],
+  [0.25,  0.058], [0.12,  0.048], [0.05,  0.032], [0.00,  0.000],
+  [0.05, -0.020], [0.12, -0.028], [0.25, -0.032], [0.40, -0.030],
+  [0.60, -0.022], [0.80, -0.010],
+];
 
-  const th  = 0.020;
-  const thT = 0.006;
+interface LoftStation {
+  // Origin of the section's leading edge in 3-D, plus chord & thickness.
+  le: THREE.Vector3;
+  chord: number;
+  thick: number;     // thickness multiplier
+  spanDir: THREE.Vector3; // not used for placement; kept for clarity
+}
 
-  /* eslint-disable prettier/prettier */
-  const verts = new Float32Array([
-    // top: root-LE (0), root-TE (1), tip (2)
-    rootX, rootY + th,  rootLEZ,
-    rootX, rootY + th,  rootTEZ,
-    tipX,  tipY  + thT, tipZ,
-    // bottom: root-LE (3), root-TE (4), tip (5)
-    rootX, rootY - th,  rootLEZ,
-    rootX, rootY - th,  rootTEZ,
-    tipX,  tipY  - thT, tipZ,
-  ]);
-  /* eslint-enable prettier/prettier */
-
-  const idx = new Uint16Array([
-    0, 2, 1,  // top
-    3, 4, 5,  // bottom
-    0, 3, 2,  3, 5, 2,  // LE
-    1, 2, 4,  2, 5, 4,  // TE
-    0, 1, 3,  1, 4, 3,  // root
-  ]);
-
+/**
+ * Lofts the airfoil through 2+ stations. The airfoil plane:
+ * chordwise → -spanAxisCross (z for wings), thickness → perpendicular.
+ * For a horizontal wing: chord runs along -Z from the LE, thickness +Y.
+ * For a vertical fin: chord runs along -Z, thickness +X.
+ */
+function loftAirfoil(
+  stations: { le: THREE.Vector3; chord: number; thick: number }[],
+  vertical = false,
+): THREE.BufferGeometry {
+  const n = AIRFOIL.length;
+  const verts: number[] = [];
+  for (const st of stations) {
+    for (const [cx, cy] of AIRFOIL) {
+      const chordOff = -cx * st.chord;             // along -Z
+      const thickOff = cy * st.chord * st.thick * 3.4;
+      if (vertical) {
+        verts.push(st.le.x + thickOff, st.le.y, st.le.z + chordOff);
+      } else {
+        verts.push(st.le.x, st.le.y + thickOff, st.le.z + chordOff);
+      }
+    }
+  }
+  const idx: number[] = [];
+  for (let s = 0; s < stations.length - 1; s++) {
+    const a = s * n, b = (s + 1) * n;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      idx.push(a + i, b + i, a + j, a + j, b + i, b + j);
+    }
+  }
+  // Tip cap — fan from vertex 0 of the tip section
+  const last = (stations.length - 1) * n;
+  for (let i = 1; i < n - 1; i++) {
+    idx.push(last, last + i, last + i + 1);
+  }
+  // Root cap
+  for (let i = 1; i < n - 1; i++) {
+    idx.push(0, i + 1, i);
+  }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(verts, 3));
-  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+  geo.setIndex(idx);
   geo.computeVertexNormals();
   return geo;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+/* ───────────────────────── Wing assembly ────────────────────────────────── */
 
-function FuselageGroup({ cfg }: { cfg: Cfg }) {
-  // Main cylindrical body — CylinderGeometry is along Y; rotate –90° on X → Z-axis
-  const bodyH = cfg.fHalf * 2;
+function buildWingGeos(d: Dim, S: number) {
+  const len = d.len * S;
+  const half = (d.span * S) / 2;
+  const r = (d.dia * S) / 2;
+  const sweepRad = (d.sweep * Math.PI) / 180;
+
+  const wingY = d.wing === "high" ? r * 0.62 : -r * 0.42;
+  const dihedral = d.wing === "high" ? -0.035 : (d.props ? 0.02 : 0.085);
+
+  const rootChord = d.delta ? len * 0.46 : len * (d.props ? 0.13 : 0.155);
+  const tipChord  = d.delta ? rootChord * 0.06 : rootChord * 0.28;
+  const rootLEz   = d.delta ? len * 0.17 : len * 0.085 + rootChord * 0.5;
+  const sweepBack = d.delta
+    ? len * 0.40
+    : Math.tan(sweepRad) * half * 0.92;
+
+  const mkSide = (side: 1 | -1) => {
+    const stations = [
+      { le: new THREE.Vector3(side * r * 0.55, wingY, rootLEz), chord: rootChord, thick: 1.0 },
+      {
+        le: new THREE.Vector3(
+          side * (r * 0.55 + (half - r * 0.55) * 0.45),
+          wingY + dihedral * half * 0.45,
+          rootLEz - sweepBack * 0.45 - (rootChord - tipChord) * 0.18,
+        ),
+        chord: rootChord - (rootChord - tipChord) * 0.5,
+        thick: 0.8,
+      },
+      {
+        le: new THREE.Vector3(
+          side * half,
+          wingY + dihedral * half,
+          rootLEz - sweepBack,
+        ),
+        chord: tipChord,
+        thick: 0.55,
+      },
+    ];
+    return loftAirfoil(stations);
+  };
+
+  // Winglet (skip props & delta)
+  const mkWinglet = (side: 1 | -1) => {
+    const tipLE = new THREE.Vector3(side * half, wingY + dihedral * half, rootLEz - sweepBack);
+    const h = half * 0.07;
+    const stations = [
+      { le: tipLE.clone(), chord: tipChord * 0.9, thick: 0.4 },
+      {
+        le: new THREE.Vector3(
+          tipLE.x + side * h * 0.35,
+          tipLE.y + h,
+          tipLE.z - tipChord * 0.35,
+        ),
+        chord: tipChord * 0.42,
+        thick: 0.3,
+      },
+    ];
+    return loftAirfoil(stations);
+  };
+
+  return {
+    left: mkSide(-1), right: mkSide(1),
+    wingletL: d.props || d.delta ? null : mkWinglet(-1),
+    wingletR: d.props || d.delta ? null : mkWinglet(1),
+    wingY, rootLEz, sweepBack, rootChord, tipChord, half,
+  };
+}
+
+function buildTailGeos(d: Dim, S: number) {
+  const len = d.len * S;
+  const r = (d.dia * S) / 2;
+  const tailZ = -len * 0.40;
+
+  // Vertical fin
+  const finH = len * (d.delta ? 0.10 : 0.155);
+  const finRoot = len * 0.155;
+  const finTip = finRoot * 0.42;
+  const finSweep = finRoot * 0.78;
+  const finBaseY = d.doubleDeck ? r * 1.05 : r * 0.75;
+  const fin = loftAirfoil(
+    [
+      { le: new THREE.Vector3(0, finBaseY, tailZ + finRoot * 0.85), chord: finRoot, thick: 0.55 },
+      { le: new THREE.Vector3(0, finBaseY + finH, tailZ + finRoot * 0.85 - finSweep), chord: finTip, thick: 0.4 },
+    ],
+    true,
+  );
+
+  // Horizontal stabilizers
+  let stabs: THREE.BufferGeometry | null = null;
+  if (!d.delta) {
+    const stHalf = (d.span * S) * 0.19;
+    const stRoot = len * 0.085;
+    const stTip = stRoot * 0.45;
+    const stSweep = stRoot * 0.9;
+    const stY = d.tTail ? finBaseY + finH * 0.94 : r * 0.30;
+    const stZ = d.tTail ? tailZ + finRoot * 0.85 - finSweep + stRoot * 0.4 : tailZ + stRoot * 0.7;
+    const mk = (side: 1 | -1) =>
+      loftAirfoil([
+        { le: new THREE.Vector3(side * 0.02, stY, stZ), chord: stRoot, thick: 0.5 },
+        { le: new THREE.Vector3(side * stHalf, stY + 0.02 * stHalf, stZ - stSweep), chord: stTip, thick: 0.35 },
+      ]);
+    const l = mk(-1), rg = mk(1);
+    // merge manually
+    stabs = mergeGeos([l, rg]);
+  }
+  return { fin, stabs };
+}
+
+function mergeGeos(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  // Minimal merge (positions + index)
+  let vCount = 0;
+  const verts: number[] = [];
+  const idx: number[] = [];
+  for (const g of geos) {
+    const p = g.attributes.position as THREE.BufferAttribute;
+    const gi = g.index!;
+    for (let i = 0; i < p.count; i++) verts.push(p.getX(i), p.getY(i), p.getZ(i));
+    for (let i = 0; i < gi.count; i++) idx.push(gi.getX(i) + vCount);
+    vCount += p.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+  out.setIndex(idx);
+  out.computeVertexNormals();
+  return out;
+}
+
+/* ───────────────────────── Engine nacelle ───────────────────────────────── */
+
+function buildNacelleGeo(R: number, L: number): THREE.BufferGeometry {
+  const pts: THREE.Vector2[] = [];
+  const prof: [number, number][] = [
+    [0.78, 0.00], [1.00, 0.06], [1.04, 0.16], [1.02, 0.40],
+    [0.95, 0.66], [0.80, 0.86], [0.55, 1.00],
+  ];
+  for (const [pr, pz] of prof) pts.push(new THREE.Vector2(pr * R, pz * L));
+  const geo = new THREE.LatheGeometry(pts, 28);
+  geo.translate(0, -L / 2, 0);
+  geo.rotateX(-Math.PI / 2); // open end (inlet) faces +Z
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function Engine({ pos, R, L, mats }: { pos: [number, number, number]; R: number; L: number; mats: Mats }) {
+  const nacelle = useMemo(() => buildNacelleGeo(R, L), [R, L]);
   return (
-    <group>
-      {/* Main body */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[cfg.fR, cfg.fR, bodyH, 32, 1, false]} />
-        <meshStandardMaterial {...MAT_FUSELAGE} />
+    <group position={pos}>
+      <mesh geometry={nacelle} material={mats.nacelle} />
+      {/* fan disc */}
+      <mesh position={[0, 0, L * 0.42]}>
+        <circleGeometry args={[R * 0.94, 24]} />
+        <meshStandardMaterial color="#14181d" roughness={0.5} />
       </mesh>
-
-      {/* Nose cone — ConeGeometry points +Y; rotate +90° on X → nose points +Z */}
-      <mesh position={[0, 0, cfg.fHalf]} rotation={[-Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[cfg.fR, cfg.noseL, 32]} />
-        <meshStandardMaterial {...MAT_FUSELAGE} color="#dde2e8" />
+      {/* spinner */}
+      <mesh position={[0, 0, L * 0.46]} rotation={[Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[R * 0.22, R * 0.5, 16]} />
+        <meshStandardMaterial color="#5a626a" metalness={0.7} roughness={0.25} />
       </mesh>
-
-      {/* Tail cone — points –Z */}
-      <mesh position={[0, 0, -cfg.fHalf]} rotation={[Math.PI / 2, 0, 0]}>
-        <coneGeometry args={[cfg.fR, cfg.tailL, 24]} />
-        <meshStandardMaterial {...MAT_FUSELAGE} color="#dde2e8" />
+      {/* exhaust cone */}
+      <mesh position={[0, 0, -L * 0.52]} rotation={[-Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[R * 0.34, R * 0.8, 16]} />
+        <meshStandardMaterial color="#6e767e" metalness={0.85} roughness={0.3} />
       </mesh>
-
-      {/* Cockpit windows band — just forward of nose junction */}
-      {[-1, 1].map((sx) => (
-        <mesh
-          key={sx}
-          position={[
-            sx * cfg.fR * 0.85,
-            cfg.fR * 0.22,
-            cfg.fHalf - 0.04,
-          ]}
-          rotation={[0, 0, 0]}
-        >
-          <boxGeometry args={[0.04, cfg.fR * 0.32, 0.22]} />
-          <meshStandardMaterial {...MAT_GLASS} />
-        </mesh>
-      ))}
     </group>
   );
 }
 
-function B747HumpGroup({ cfg }: { cfg: Cfg }) {
-  // The iconic 747 upper-deck hump runs from about +fHalf back to about –0.4
-  const humpL = cfg.fHalf * 0.88;
-  return (
-    <mesh position={[0, cfg.fR * 0.72, cfg.fHalf * 0.44 - humpL / 2]}>
-      {/* Rough half-cylinder that tapers */}
-      <cylinderGeometry args={[cfg.fR * 0.52, cfg.fR * 0.52, humpL, 16, 1, false, 0, Math.PI]} />
-      <meshStandardMaterial {...MAT_FUSELAGE} color="#dfe4ea" />
-    </mesh>
-  );
-}
+/* ───────────────────────── Propeller ────────────────────────────────────── */
 
-function WingPair({ cfg }: { cfg: Cfg }) {
-  const geoL = useMemo(() => buildWingGeo(cfg, -1), [cfg]);
-  const geoR = useMemo(() => buildWingGeo(cfg, 1), [cfg]);
+function Propeller({ pos, R, mats }: { pos: [number, number, number]; R: number; mats: Mats }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((_, dt) => { if (ref.current) ref.current.rotation.z += dt * 14; });
+  const blades = 6;
   return (
-    <>
-      <mesh geometry={geoL}>
-        <meshStandardMaterial {...MAT_WING} side={THREE.DoubleSide} />
+    <group position={pos}>
+      {/* engine cowl */}
+      <mesh position={[0, 0, -R * 1.1]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[R * 0.42, R * 0.34, R * 2.2, 18]} />
+        <primitive object={mats.nacelle} attach="material" />
       </mesh>
-      <mesh geometry={geoR}>
-        <meshStandardMaterial {...MAT_WING} side={THREE.DoubleSide} />
-      </mesh>
-      {/* Winglets — small angled fin at each tip */}
-      {[-1, 1].map((s) => (
-        <mesh
-          key={s}
-          position={[
-            s * cfg.wHalfSpan,
-            cfg.wY + cfg.wDihedral + 0.12,
-            cfg.wRootZ - cfg.wSweepZ,
-          ]}
-          rotation={[0, 0, s * -1.2]}
-        >
-          <boxGeometry args={[0.04, 0.22, cfg.wChordTip * 0.6]} />
-          <meshStandardMaterial {...MAT_WING} />
-        </mesh>
-      ))}
-    </>
-  );
-}
-
-function DeltaWingPair({ cfg }: { cfg: Cfg }) {
-  const geoL = useMemo(() => buildDeltaWingGeo(cfg, -1), [cfg]);
-  const geoR = useMemo(() => buildDeltaWingGeo(cfg, 1), [cfg]);
-  return (
-    <>
-      <mesh geometry={geoL}><meshStandardMaterial {...MAT_WING} side={THREE.DoubleSide} /></mesh>
-      <mesh geometry={geoR}><meshStandardMaterial {...MAT_WING} side={THREE.DoubleSide} /></mesh>
-    </>
-  );
-}
-
-function TailGroup({ cfg }: { cfg: Cfg }) {
-  const sweepOffset = cfg.vFinC * 0.38; // leading edge swept forward at base
-  return (
-    <group>
-      {/* Vertical stabilizer */}
-      <mesh
-        position={[0, cfg.fR + cfg.vFinH / 2, cfg.vFinZ + sweepOffset / 2]}
-        rotation={[0.18, 0, 0]}
-      >
-        <boxGeometry args={[0.04, cfg.vFinH, cfg.vFinC]} />
-        <meshStandardMaterial {...MAT_WING} />
-      </mesh>
-
-      {/* Horizontal stabilizers */}
-      {cfg.hStabHalf > 0 &&
-        [-1, 1].map((s) => (
-          <mesh
-            key={s}
-            position={[
-              s * (cfg.hStabHalf / 2 + cfg.fR * 0.1),
-              cfg.fR * 0.12,
-              cfg.hStabZ,
-            ]}
-          >
-            <boxGeometry args={[cfg.hStabHalf, 0.03, cfg.hStabChord]} />
-            <meshStandardMaterial {...MAT_WING} />
+      <group ref={ref}>
+        {Array.from({ length: blades }, (_, i) => (
+          <mesh key={i} rotation={[0, 0, (i / blades) * Math.PI * 2]} position={[0, 0, 0]}>
+            <boxGeometry args={[0.035 * R * 10, R * 2.0, 0.012 * R * 10]} />
+            <primitive object={mats.blade} attach="material" />
           </mesh>
         ))}
+        {/* blur disc */}
+        <mesh>
+          <circleGeometry args={[R, 28]} />
+          <meshBasicMaterial color="#8a929a" transparent opacity={0.10} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+      {/* spinner */}
+      <mesh position={[0, 0, R * 0.18]} rotation={[Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[R * 0.16, R * 0.42, 14]} />
+        <meshStandardMaterial color="#444b52" metalness={0.6} roughness={0.3} />
+      </mesh>
     </group>
   );
 }
 
-function EngineGroup({ cfg }: { cfg: Cfg }) {
-  if (cfg.tailEng) {
-    // CRJ: two engines mounted on aft fuselage, one per side
-    return (
-      <>
-        {[-1, 1].map((s) => {
-          const ex = s * (cfg.fR + cfg.eR * 1.3);
-          const ey = cfg.fR * 0.55;
-          const ez = -cfg.fHalf * 0.65;
-          return (
-            <group key={s} position={[ex, ey, ez]}>
-              {/* Nacelle */}
-              <mesh rotation={[Math.PI / 2, 0, 0]}>
-                <cylinderGeometry args={[cfg.eR, cfg.eR * 0.85, cfg.eL, 20]} />
-                <meshStandardMaterial {...MAT_NACELLE} />
-              </mesh>
-              {/* Intake lip */}
-              <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, cfg.eL / 2]}>
-                <torusGeometry args={[cfg.eR, 0.014, 10, 24]} />
-                <meshStandardMaterial color="#888" metalness={0.8} roughness={0.15} />
-              </mesh>
-              {/* Fan face dark disc */}
-              <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, cfg.eL / 2 - 0.04]}>
-                <circleGeometry args={[cfg.eR * 0.85, 20]} />
-                <meshStandardMaterial color="#1a1a1a" roughness={0.6} />
-              </mesh>
-            </group>
-          );
-        })}
-      </>
-    );
-  }
+/* ───────────────────────── Aircraft assembly ────────────────────────────── */
 
-  // Under-wing (or over-wing) engines
-  return (
-    <>
-      {cfg.eXratio.map((ratio, i) =>
-        [-1, 1].map((s) => {
-          const ex  = s * cfg.wHalfSpan * ratio;
-          // wing Y at this spanwise position (linear interpolation)
-          const t   = ratio;
-          const wingYAtX = cfg.wY + cfg.wDihedral * t;
-          const ey  = wingYAtX - cfg.eYdrop - cfg.eR;
-          // wing Z at this position (swept)
-          const ez  = cfg.wRootZ - cfg.wSweepZ * t;
-          return (
-            <group key={`${i}-${s}`} position={[ex, ey, ez]}>
-              {/* Pylon connecting wing to nacelle */}
-              <mesh>
-                <boxGeometry args={[0.03, cfg.eYdrop * 0.85, 0.10]} />
-                <meshStandardMaterial color="#ccc" metalness={0.4} roughness={0.4} />
-              </mesh>
-              {/* Nacelle body */}
-              <mesh rotation={[Math.PI / 2, 0, 0]}>
-                <cylinderGeometry args={[cfg.eR, cfg.eR * 0.82, cfg.eL, 22]} />
-                <meshStandardMaterial {...MAT_NACELLE} />
-              </mesh>
-              {/* Intake rim */}
-              <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, cfg.eL / 2]}>
-                <torusGeometry args={[cfg.eR, 0.013, 10, 24]} />
-                <meshStandardMaterial color="#7a8490" metalness={0.85} roughness={0.12} />
-              </mesh>
-              {/* Fan face */}
-              <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, cfg.eL / 2 - 0.04]}>
-                <circleGeometry args={[cfg.eR * 0.82, 22]} />
-                <meshStandardMaterial color="#1c1c1c" roughness={0.55} />
-              </mesh>
-              {/* Exhaust nozzle */}
-              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -(cfg.eL / 2 + 0.04)]}>
-                <coneGeometry args={[cfg.eR * 0.7, 0.15, 16]} />
-                <meshStandardMaterial color="#999" metalness={0.7} roughness={0.3} />
-              </mesh>
-            </group>
-          );
-        })
-      )}
-    </>
-  );
-}
+function ProceduralAircraft({ specId }: { specId: string }) {
+  const d = DIMS[specId] ?? FALLBACK_DIM;
+  const mats = useMats();
+  const groupRef = useRef<THREE.Group>(null);
+  const grabbed = useRef(false);
 
-function PropellerGroup({ cfg }: { cfg: Cfg }) {
-  const propRef1 = useRef<THREE.Group>(null);
-  const propRef2 = useRef<THREE.Group>(null);
+  // Normalize: longest dimension → ~4.4 world units
+  const S = 4.4 / Math.max(d.len, d.span);
+  const len = d.len * S;
+  const r = (d.dia * S) / 2;
+
+  const fuselage = useMemo(() => buildFuselageGeo(d, S), [d, S]);
+  const wings = useMemo(() => buildWingGeos(d, S), [d, S]);
+  const tail = useMemo(() => buildTailGeos(d, S), [d, S]);
+
   useFrame((_, dt) => {
-    if (propRef1.current) propRef1.current.rotation.z += dt * 6;
-    if (propRef2.current) propRef2.current.rotation.z += dt * 6;
+    if (groupRef.current && !grabbed.current) {
+      groupRef.current.rotation.y += dt * 0.25;
+    }
   });
 
+  // Engine layout
+  const engR = r * (d.bigEng ? 0.62 : d.eng === 4 ? 0.46 : 0.52) * (d.delta ? 0.55 : 1);
+  const engL = engR * 2.5;
+  const enginePositions: [number, number, number][] = [];
+  if (!d.props && !d.tailEng) {
+    const fractions = d.eng === 4 ? [0.36, 0.62] : [0.34];
+    for (const f of fractions) {
+      const x = wings.half * f;
+      const yWing = wings.wingY + (d.wing === "high" ? -0.03 : 0.085) * wings.half * f;
+      const zLE = wings.rootLEz - wings.sweepBack * f;
+      const y = d.delta ? yWing - engR * 0.9 : yWing - engR * 1.05;
+      const z = d.delta ? zLE - len * 0.30 : zLE + engL * 0.18;
+      enginePositions.push([x, y, z], [-x, y, z]);
+    }
+  }
+  if (d.tailEng) {
+    const x = r + engR * 1.05;
+    enginePositions.push([x, r * 0.42, -len * 0.30], [-x, r * 0.42, -len * 0.30]);
+  }
+
+  // Prop engines on wing LE
+  const propPositions: [number, number, number][] = [];
+  if (d.props) {
+    const f = 0.40;
+    const x = wings.half * f;
+    const y = wings.wingY - r * 0.10;
+    const z = wings.rootLEz - wings.sweepBack * f + r * 0.9;
+    propPositions.push([x, y, z], [-x, y, z]);
+  }
+
+  const freight = isFreighter(specId);
+
   return (
-    <>
-      {([-1, 1] as const).map((s, i) => {
-        const ex = s * cfg.wHalfSpan * cfg.eXratio[0];
-        const t  = cfg.eXratio[0];
-        const ey = cfg.wY + cfg.wDihedral * t;
-        const ez = cfg.wRootZ - cfg.wSweepZ * t + cfg.eL / 2 + 0.12;
-        const ref = i === 0 ? propRef1 : propRef2;
-        return (
-          <group key={s}>
-            {/* Engine housing */}
-            <mesh position={[ex, ey, ez - cfg.eL / 2 - 0.06]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[cfg.eR, cfg.eR * 0.8, cfg.eL, 18]} />
-              <meshStandardMaterial {...MAT_NACELLE} />
+    <group
+      ref={groupRef}
+      rotation={[0.05, Math.PI * 0.22, 0]}
+      onPointerDown={() => { grabbed.current = true; }}
+      onPointerUp={() => { grabbed.current = false; }}
+    >
+      {/* Fuselage */}
+      <mesh geometry={fuselage} material={mats.fuselage} />
+
+      {/* 747 hump */}
+      {d.hump && (
+        <mesh position={[0, r * 0.78, len * 0.255]} scale={[r * 0.78, r * 0.62, len * 0.21]}>
+          <sphereGeometry args={[1, 24, 16]} />
+          <primitive object={mats.fuselage} attach="material" />
+        </mesh>
+      )}
+
+      {/* Cockpit windscreen */}
+      <mesh
+        position={[0, r * 0.38, len / 2 - len * (d.delta ? 0.30 : 0.115)]}
+        rotation={[-0.45, 0, 0]}
+      >
+        <boxGeometry args={[r * 1.05, r * 0.30, r * 0.55]} />
+        <primitive object={mats.glass} attach="material" />
+      </mesh>
+
+      {/* Passenger window strips */}
+      {!freight && !d.delta && (
+        [-1, 1].map((s) => (
+          <mesh key={s} position={[s * r * 0.965, r * 0.18, len * 0.02]}>
+            <boxGeometry args={[r * 0.06, r * 0.085, len * 0.58]} />
+            <primitive object={mats.dark} attach="material" />
+          </mesh>
+        ))
+      )}
+      {/* Upper-deck windows for A380 */}
+      {d.doubleDeck && !freight && (
+        [-1, 1].map((s) => (
+          <mesh key={`u${s}`} position={[s * r * 0.88, r * 0.62, len * 0.02]}>
+            <boxGeometry args={[r * 0.06, r * 0.075, len * 0.52]} />
+            <primitive object={mats.dark} attach="material" />
+          </mesh>
+        ))
+      )}
+
+      {/* Wings */}
+      <mesh geometry={wings.left} material={mats.wing} />
+      <mesh geometry={wings.right} material={mats.wing} />
+      {wings.wingletL && <mesh geometry={wings.wingletL} material={mats.wing} />}
+      {wings.wingletR && <mesh geometry={wings.wingletR} material={mats.wing} />}
+
+      {/* Wing-body fairing */}
+      {!d.delta && (
+        <mesh
+          position={[0, wings.wingY * 0.85, wings.rootLEz - wings.rootChord * 0.45]}
+          scale={[r * 1.12, r * 0.55, wings.rootChord * 0.75]}
+        >
+          <sphereGeometry args={[1, 20, 14]} />
+          <primitive object={mats.belly} attach="material" />
+        </mesh>
+      )}
+
+      {/* Tail */}
+      <mesh geometry={tail.fin} material={mats.wing} />
+      {tail.stabs && <mesh geometry={tail.stabs} material={mats.wing} />}
+
+      {/* Engines */}
+      {enginePositions.map((p, i) => (
+        <group key={i}>
+          {/* pylon */}
+          {!d.tailEng && !d.delta && (
+            <mesh position={[p[0], p[1] + engR * 0.9, p[2] - engL * 0.1]}>
+              <boxGeometry args={[engR * 0.22, engR * 1.1, engL * 0.55]} />
+              <primitive object={mats.belly} attach="material" />
             </mesh>
-            {/* Spinning props */}
-            <group ref={ref} position={[ex, ey, ez]}>
-              {[0, 1].map((b) => (
-                <mesh key={b} rotation={[0, 0, (b * Math.PI) / 1]}>
-                  <boxGeometry args={[0.84, 0.055, 0.07]} />
-                  <meshStandardMaterial {...MAT_PROP} />
-                </mesh>
-              ))}
-              {/* Spinner nose */}
-              <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <coneGeometry args={[0.065, 0.14, 16]} />
-                <meshStandardMaterial color="#444" metalness={0.6} roughness={0.3} />
-              </mesh>
-            </group>
-          </group>
-        );
-      })}
-    </>
-  );
-}
-
-function LandingGearGroup({ cfg }: { cfg: Cfg }) {
-  const noseGearY = -cfg.fR;
-  const mainGearY = cfg.wY - cfg.eYdrop - 0.04;
-  return (
-    <group>
-      {/* Nose gear */}
-      <mesh position={[0, noseGearY - 0.09, cfg.fHalf * 0.62]}>
-        <cylinderGeometry args={[0.02, 0.02, 0.18, 8]} />
-        <meshStandardMaterial color="#555" metalness={0.6} roughness={0.4} />
-      </mesh>
-      <mesh position={[0, noseGearY - 0.19, cfg.fHalf * 0.62]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.038, 0.038, 0.10, 12]} />
-        <meshStandardMaterial {...MAT_RUBBER} />
-      </mesh>
-
-      {/* Main gear (2 bogies) */}
-      {[-1, 1].map((s) => (
-        <group key={s} position={[s * cfg.fR * 0.85, mainGearY - 0.09, cfg.wRootZ - 0.15]}>
-          <mesh>
-            <cylinderGeometry args={[0.024, 0.024, 0.20, 8]} />
-            <meshStandardMaterial color="#555" metalness={0.6} roughness={0.4} />
-          </mesh>
-          <mesh position={[0, -0.11, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.044, 0.044, 0.22, 12]} />
-            <meshStandardMaterial {...MAT_RUBBER} />
-          </mesh>
+          )}
+          {d.tailEng && (
+            <mesh position={[p[0] * 0.82, p[1], p[2]]}>
+              <boxGeometry args={[engR * 1.3, engR * 0.25, engL * 0.5]} />
+              <primitive object={mats.belly} attach="material" />
+            </mesh>
+          )}
+          <Engine pos={p} R={engR} L={engL} mats={mats} />
         </group>
+      ))}
+
+      {/* Propellers */}
+      {propPositions.map((p, i) => (
+        <Propeller key={i} pos={p} R={r * 1.5} mats={mats} />
       ))}
     </group>
   );
 }
 
-// ─── Auto-rotate with pause on user interaction ───────────────────────────────
-
-function AutoRotate({ groupRef }: { groupRef: React.RefObject<THREE.Group | null> }) {
-  const rotating = useRef(true);
-  const { gl } = useThree();
-
-  const pause = useCallback(() => { rotating.current = false; }, []);
-  const resume = useCallback(() => { rotating.current = true; }, []);
-
-  // pause when user grabs the canvas
-  useRef(() => {
-    gl.domElement.addEventListener("pointerdown", pause);
-    gl.domElement.addEventListener("pointerup", resume);
-    return () => {
-      gl.domElement.removeEventListener("pointerdown", pause);
-      gl.domElement.removeEventListener("pointerup", resume);
-    };
-  });
-
-  useFrame((_, dt) => {
-    if (rotating.current && groupRef.current) {
-      groupRef.current.rotation.y += dt * 0.30;
-    }
-  });
-  return null;
-}
-
-// ─── Procedural aircraft assembly ─────────────────────────────────────────────
-
-function ProceduralAircraft({ specId }: { specId: string }) {
-  const family = detectFamily(specId);
-  const cfg    = CFG[family];
-  const groupRef = useRef<THREE.Group>(null);
-
-  return (
-    <>
-      <AutoRotate groupRef={groupRef} />
-      <group ref={groupRef} rotation={[0.04, Math.PI / 5, 0]}>
-        <FuselageGroup cfg={cfg} />
-        {cfg.b747Hump && <B747HumpGroup cfg={cfg} />}
-
-        {cfg.deltaWing
-          ? <DeltaWingPair cfg={cfg} />
-          : <WingPair cfg={cfg} />}
-
-        {!cfg.deltaWing && <TailGroup cfg={cfg} />}
-
-        {cfg.propeller
-          ? <PropellerGroup cfg={cfg} />
-          : <EngineGroup cfg={cfg} />}
-
-        <LandingGearGroup cfg={cfg} />
-      </group>
-    </>
-  );
-}
-
-// ─── GLB model (when a real file is available) ────────────────────────────────
+/* ───────────────────────── GLB path (real models) ───────────────────────── */
 
 function GlbModel({ path }: { path: string }) {
-  // Lazy import so this module isn't included unless GLB models are used
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { useGLTF } = require("@react-three/drei");
-  const { scene } = useGLTF(path) as { scene: THREE.Object3D };
+  const { scene } = useGLTF(path);
+  const groupRef = useRef<THREE.Group>(null);
+  const grabbed = useRef(false);
 
+  // Normalise: center at origin and scale longest axis to ~4.4 units so
+  // every model — from a CRJ to an A380 — frames identically.
   const normalised = useMemo(() => {
     const clone = scene.clone(true);
-    const box   = new THREE.Box3().setFromObject(clone);
-    const ctr   = new THREE.Vector3();
-    const size  = new THREE.Vector3();
+    clone.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+    });
+    const box = new THREE.Box3().setFromObject(clone);
+    const ctr = new THREE.Vector3();
+    const size = new THREE.Vector3();
     box.getCenter(ctr);
     box.getSize(size);
-    const scale = 3.5 / Math.max(size.x, size.y, size.z);
+    const scale = 4.4 / Math.max(size.x, size.y, size.z);
     clone.scale.setScalar(scale);
     clone.position.sub(ctr.multiplyScalar(scale));
     return clone;
   }, [scene]);
 
-  return <primitive object={normalised} />;
+  // Gentle auto-rotate (pauses while the user is dragging) so the model
+  // shows all sides on its own, matching the procedural viewer.
+  useFrame((_, dt) => {
+    if (groupRef.current && !grabbed.current) {
+      groupRef.current.rotation.y += dt * 0.3;
+    }
+  });
+
+  return (
+    <group
+      ref={groupRef}
+      rotation={[0.08, Math.PI * 0.18, 0]}
+      onPointerDown={() => { grabbed.current = true; }}
+      onPointerUp={() => { grabbed.current = false; }}
+    >
+      <primitive object={normalised} />
+    </group>
+  );
 }
 
-// ─── Scene ────────────────────────────────────────────────────────────────────
+/* ───────────────────────── Scene + canvas ───────────────────────────────── */
 
-function Scene({ specId }: { specId: string }) {
+function SceneContent({ specId }: { specId: string }) {
   const modelPath = planeModelPath(specId);
   if (modelPath) {
     return (
-      <Suspense fallback={<Html center><span className="text-[0.7rem] text-ink-muted animate-pulse">Loading…</span></Html>}>
+      <Suspense
+        fallback={
+          <Html center>
+            <span className="text-[0.7rem] text-ink-muted animate-pulse">Loading…</span>
+          </Html>
+        }
+      >
         <GlbModel path={modelPath} />
       </Suspense>
     );
   }
   return <ProceduralAircraft specId={specId} />;
 }
-
-// ─── Public component ─────────────────────────────────────────────────────────
 
 interface Props { specId: string; className?: string }
 
@@ -659,19 +719,27 @@ export function Aircraft3DViewer({ specId, className }: Props) {
         gl={{ antialias: true, alpha: true }}
         dpr={[1, 2]}
         style={{ background: "transparent" }}
+        shadows
       >
-        <PerspectiveCamera makeDefault position={[0, 1.4, 6.2]} fov={36} />
-        <ambientLight intensity={0.55} />
-        <directionalLight position={[5, 8, 6]} intensity={1.5} castShadow />
-        <directionalLight position={[-4, 2, -3]} intensity={0.45} />
-        <directionalLight position={[0, -4, -5]} intensity={0.25} color="#a8c8e0" />
+        <PerspectiveCamera makeDefault position={[3.4, 1.5, 5.6]} fov={32} />
+        <ambientLight intensity={0.35} />
+        <directionalLight position={[6, 9, 7]} intensity={1.6} castShadow />
+        <directionalLight position={[-5, 3, -4]} intensity={0.5} />
+        <directionalLight position={[0, -4, 2]} intensity={0.22} color="#bcd4ea" />
         <Environment preset="city" />
-        <Scene specId={specId} />
+        <SceneContent specId={specId} />
+        <ContactShadows
+          position={[0, -1.45, 0]}
+          opacity={0.34}
+          scale={9}
+          blur={2.6}
+          far={3}
+        />
         <OrbitControls
           enablePan={false}
           enableZoom
           enableRotate
-          minDistance={3.5}
+          minDistance={3.4}
           maxDistance={11}
           makeDefault
         />
