@@ -15,6 +15,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Info, TrendingUp, X } from "lucide-react";
 import { CITIES, CITIES_BY_CODE } from "@/data/cities";
+import { AIRCRAFT_BY_ID } from "@/data/aircraft";
 import type { City, Team, Route } from "@/types/game";
 import { cn } from "@/lib/cn";
 import { fmtMoney } from "@/lib/format";
@@ -230,38 +231,62 @@ function bearingDeg(
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
-/** Tiny SVG plane glyph used inside the divIcon. Outlined in white so
- *  it stays legible on any basemap background. The transform-origin
- *  keeps the rotation centred on the body. */
+/** SVG airliner glyph used inside the divIcon (June 2026 polish pass).
+ *  Replaces the old geometric dart with a proper top-view jet
+ *  silhouette: tapered nose, swept-back wings, swept horizontal
+ *  stabilizers, tail cone. Same nose-up orientation and 24×24 viewBox
+ *  as before, so the bearing rotation pipeline is untouched. Outlined
+ *  so it stays legible over any satellite background; the cargo
+ *  variant repaints fill/stroke via CSS. */
 const PLANE_SVG = `
 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <path
-    d="M12 1.5 L13.6 9.5 L22 13 L22 14.7 L13.6 12.5 L13.4 18 L16 19.5 L16 21
-       L12 20 L8 21 L8 19.5 L10.6 18 L10.4 12.5 L2 14.7 L2 13 L10.4 9.5 Z"
+    d="M12 1.3
+       C12.6 1.3 13 2.3 13.1 3.6
+       L13.2 8.8
+       L22.3 13.6 L22.3 15 L13.25 12.9
+       L13.05 17.6
+       L16.1 19.7 L16.1 20.9 L12.7 20.1
+       L12.45 21.6 C12.3 21.95 11.7 21.95 11.55 21.6
+       L11.3 20.1 L7.9 20.9 L7.9 19.7
+       L10.95 17.6
+       L10.75 12.9 L1.7 15 L1.7 13.6
+       L10.8 8.8
+       L10.9 3.6
+       C11 2.3 11.4 1.3 12 1.3 Z"
     fill="#ffffff"
     stroke="#0c1624"
-    stroke-width="1"
+    stroke-width="0.9"
     stroke-linejoin="round"
   />
 </svg>
 `;
 
-/** Static divIcon — size + html identical for every plane, only the
- *  inline rotation transform changes per-frame. Cached at module scope
- *  so we don't allocate on every render. Two variants: default (pax)
- *  and cargo (yellow tint via class) so freight reads visually distinct. */
-const planeIcon = L.divIcon({
-  className: "sf-plane-marker",
-  html: `<div class="sf-plane-glyph" data-plane>${PLANE_SVG}</div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-});
-const cargoPlaneIcon = L.divIcon({
-  className: "sf-plane-marker sf-plane-marker--cargo",
-  html: `<div class="sf-plane-glyph" data-plane>${PLANE_SVG}</div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-});
+/** Sprite size scales with the biggest airframe actually flying the
+ *  route — a widebody reads bigger than a regional hop, which makes
+ *  the network's fleet mix visible from the world view. */
+export type PlaneSizeClass = "regional" | "narrow" | "wide";
+const PLANE_PX: Record<PlaneSizeClass, number> = { regional: 14, narrow: 17, wide: 20 };
+
+/** Cached divIcons — one per (kind × size). Leaflet applies iconSize as
+ *  inline width/height on the marker element, so the variants scale
+ *  without touching the shared CSS class. */
+const planeIconCache = new Map<string, L.DivIcon>();
+function planeIconFor(cargo: boolean, size: PlaneSizeClass): L.DivIcon {
+  const key = `${cargo ? "c" : "p"}-${size}`;
+  let icon = planeIconCache.get(key);
+  if (!icon) {
+    const px = PLANE_PX[size];
+    icon = L.divIcon({
+      className: cargo ? "sf-plane-marker sf-plane-marker--cargo" : "sf-plane-marker",
+      html: `<div class="sf-plane-glyph" data-plane>${PLANE_SVG}</div>`,
+      iconSize: [px, px],
+      iconAnchor: [px / 2, px / 2],
+    });
+    planeIconCache.set(key, icon);
+  }
+  return icon;
+}
 
 /**
  * One animated plane flying back-and-forth along a great-circle path.
@@ -276,6 +301,7 @@ function FlyingPlane({
   durationMs,
   phase,
   cargo = false,
+  sizeClass = "narrow",
 }: {
   positions: [number, number][];
   /** Time in ms for one one-way traversal (origin → destination). */
@@ -285,6 +311,8 @@ function FlyingPlane({
   /** Cargo flights render with a yellow-tinted glyph so the player
    *  can tell freight traffic from passenger traffic at any zoom. */
   cargo?: boolean;
+  /** Sprite size by the biggest airframe on the route (14/17/20 px). */
+  sizeClass?: PlaneSizeClass;
 }) {
   const markerRef = useRef<L.Marker | null>(null);
   // Pre-compute bearings between consecutive points so the glyph nose
@@ -380,7 +408,7 @@ function FlyingPlane({
   return (
     <Marker
       position={initial}
-      icon={cargo ? cargoPlaneIcon : planeIcon}
+      icon={planeIconFor(cargo, sizeClass)}
       ref={(m) => { markerRef.current = m; }}
       // No interaction — these are decorative.
       interactive={false}
@@ -444,7 +472,7 @@ function phaseFromId(id: string): number {
  *  function compares only the fields that affect this route's render,
  *  so unrelated route changes don't bubble in. */
 const ActiveRouteArc = memo(function ActiveRouteArc({
-  route, isNew, hasAircraft, isLosing, isCompetitive, profitTone, profitUsd,
+  route, isNew, hasAircraft, isLosing, isCompetitive, profitTone, profitUsd, planeSize,
 }: {
   route: Route;
   isNew: boolean;
@@ -456,6 +484,8 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
   profitTone: ProfitTone;
   /** Last-quarter direct profit for the hover tooltip. null = no data. */
   profitUsd: number | null;
+  /** Sprite size class from the biggest airframe flying this route. */
+  planeSize: PlaneSizeClass;
 }) {
   const a = CITIES_BY_CODE[route.originCode];
   const b = CITIES_BY_CODE[route.destCode];
@@ -509,14 +539,17 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
         const bandPositions = shiftPolyline(positions, lonOffset);
         return (
           <Fragment key={lonOffset}>
-            {/* Soft glow underlayer — slightly wider than the main
-                stroke so the line reads as a luminescent ribbon.
-                Kept deliberately thin (play-test ask, May 2026:
-                "routes should be thinner, they are very bulky"). */}
+            {/* Soft glow underlayer — wider than the main stroke so the
+                line reads as a luminescent ribbon. The MAIN stroke stays
+                at 0.85px (play-test ask, May 2026: "routes should be
+                thinner, they are very bulky") — only this soft halo
+                carries the glow, bumped in the June 2026 polish pass
+                from 1.8 @ 0.10 (effectively invisible) to a visible
+                ribbon-of-light. */}
             <Polyline
               positions={bandPositions}
               pathOptions={{
-                color: baseColor, weight: 1.8, opacity: 0.1, lineCap: "round", interactive: false,
+                color: baseColor, weight: 2.6, opacity: 0.16, lineCap: "round", interactive: false,
               }}
             />
             {isNew && (
@@ -565,6 +598,7 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
               durationMs={dur}
               phase={phase}
               cargo={!!route.isCargo}
+              sizeClass={planeSize}
             />
             {showSecondPlane && (
               <FlyingPlane
@@ -572,6 +606,7 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
                 durationMs={dur}
                 phase={(phase + 0.5) % 1}
                 cargo={!!route.isCargo}
+                sizeClass={planeSize}
               />
             )}
           </Fragment>
@@ -587,6 +622,7 @@ const ActiveRouteArc = memo(function ActiveRouteArc({
   if (prev.isCompetitive !== next.isCompetitive) return false;
   if (prev.profitTone !== next.profitTone) return false;
   if (prev.profitUsd !== next.profitUsd) return false;
+  if (prev.planeSize !== next.planeSize) return false;
   const a = prev.route;
   const b = next.route;
   return (
@@ -765,6 +801,29 @@ export function WorldMap({
   function routeProfitUsd(r: Route): number | null {
     if ((r.consecutiveQuartersActive ?? 0) === 0) return null;
     return (r.quarterlyRevenue ?? 0) - (r.quarterlyFuelCost ?? 0) - (r.quarterlySlotCost ?? 0);
+  }
+
+  /** Sprite size class from the biggest airframe actually flying the
+   *  route — widebodies (>250 seats / ≥60t freighters) render at 20px,
+   *  narrowbodies at 17px, regional jets at 14px. */
+  function planeSizeFor(r: Route): PlaneSizeClass {
+    let best: PlaneSizeClass = "regional";
+    for (const id of r.aircraftIds ?? []) {
+      const f = team.fleet.find((x) => x.id === id && x.status === "active");
+      if (!f) continue;
+      const spec = AIRCRAFT_BY_ID[f.specId];
+      if (!spec) continue;
+      let cls: PlaneSizeClass;
+      if (spec.family === "cargo") {
+        cls = (spec.cargoTonnes ?? 0) >= 60 ? "wide" : "narrow";
+      } else {
+        const seats = spec.seats.first + spec.seats.business + spec.seats.economy;
+        cls = seats > 250 ? "wide" : seats > 100 ? "narrow" : "regional";
+      }
+      if (cls === "wide") return "wide";
+      if (cls === "narrow") best = "narrow";
+    }
+    return best;
   }
 
   const flightsByCity = useMemo(() => dailyFlightsByCity(team), [team]);
@@ -946,6 +1005,7 @@ export function WorldMap({
               isCompetitive={isCompetitive}
               profitTone={profitLens ? profitToneFor(profitUsd) : null}
               profitUsd={profitUsd}
+              planeSize={planeSizeFor(r)}
             />
           );
         })}
