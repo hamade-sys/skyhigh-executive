@@ -10,7 +10,7 @@ import { toast } from "@/store/toasts";
 import { fmtMoney, fmtPct, fmtAgeYQ, fmtQuarter } from "@/lib/format";
 import { planeImagePath } from "@/lib/aircraft-images";
 import { cn } from "@/lib/cn";
-import { Plane, AlertTriangle, Clock, X, ChevronRight, Copy, Wrench, Tag, Trash2, type LucideIcon } from "lucide-react";
+import { Plane, AlertTriangle, Banknote, Clock, RefreshCw, X, ChevronRight, Copy, Wrench, Tag, Trash2, type LucideIcon } from "lucide-react";
 import { discontinuedMaintenanceBracket, effectiveUnlockQuarter, effectiveCutoffRound, brokerResaleQuoteUsd, salvageQuoteUsd } from "@/lib/engine";
 import {
   effectiveProductionCap,
@@ -18,6 +18,7 @@ import {
   queuePosition,
 } from "@/lib/pre-orders";
 import { engineUpgradeCostUsd, fuselageUpgradeCostUsd } from "@/lib/aircraft-upgrades";
+import { LEASE_BUYOUT_RESIDUAL_PCT, LEASE_TERM_QUARTERS, leaseTermsFor } from "@/lib/lease";
 import { PREORDER_CANCEL_PENALTY_PCT } from "@/lib/pre-orders";
 
 /** Group aircraft by spec id, count quantity, and aggregate utilisation. */
@@ -101,6 +102,16 @@ export function FleetPanel() {
   } | null>(null);
   /** Retire confirmation modal — replaces native confirm(). */
   const [retireState, setRetireState] = useState<{
+    aircraftId: string;
+    name: string;
+    tail: string;
+  } | null>(null);
+  /** Lease end-of-term decision (June 2026 Capital Structure bundle):
+   *  buy out at the 25% residual, or renew for another 12Q term.
+   *  Without this surface, the close-time "negotiate buyouts now"
+   *  warning pointed at actions that didn't exist in the UI. */
+  const [leaseDecision, setLeaseDecision] = useState<{
+    kind: "buyout" | "renew";
     aircraftId: string;
     name: string;
     tail: string;
@@ -650,6 +661,23 @@ export function FleetPanel() {
                       {route?.status === "suspended" && <FlagChip tone="muted" title="Route suspended — reserved but not flying.">Susp</FlagChip>}
                       {f.status === "active" && remainingQ > 0 && remainingQ <= 4 && <FlagChip tone="warning" title={`Retires in ${remainingQ}Q (Q${f.retirementQuarter}).`}>Aging</FlagChip>}
                       {f.status === "active" && remainingQ === 0 && <FlagChip tone="negative" title="Retires at this quarter close.">Retiring</FlagChip>}
+                      {/* Lease term countdown — the decision window opens at
+                          4Q left (renew or buy out from the drawer actions);
+                          at 0 the airframe returns to the lessor at close. */}
+                      {f.acquisitionType === "lease" && f.status !== "retired" && typeof f.leaseTermEndsAtQuarter === "number" && (() => {
+                        const leaseLeft = f.leaseTermEndsAtQuarter - s.currentQuarter;
+                        if (leaseLeft < 0) return null;
+                        return (
+                          <FlagChip
+                            tone={leaseLeft <= 1 ? "negative" : leaseLeft <= 4 ? "warning" : "muted"}
+                            title={leaseLeft <= 4
+                              ? `Lease ends in ${leaseLeft}Q (round ${f.leaseTermEndsAtQuarter}). Expand the row to renew or buy out — otherwise it returns to the lessor.`
+                              : `Leased · term runs to round ${f.leaseTermEndsAtQuarter}.`}
+                          >
+                            Lease {leaseLeft}Q
+                          </FlagChip>
+                        );
+                      })()}
                       {f.ecoUpgrade && <FlagChip tone="positive" title="Eco engine retrofit">Eco</FlagChip>}
                       {f.engineUpgrade && (
                         <FlagChip tone="info" title={`Engine retrofit: ${f.engineUpgrade}`}>
@@ -688,6 +716,11 @@ export function FleetPanel() {
                     <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
                       <div className="text-caption uppercase tracking-wider text-ink-muted">Acquisition</div>
                       <div className="font-mono tabular text-ink mt-0.5 capitalize">{f.acquisitionType}</div>
+                      {f.acquisitionType === "lease" && typeof f.leaseTermEndsAtQuarter === "number" && (
+                        <div className="text-micro text-ink-muted mt-0.5 tabular">
+                          {fmtMoney(f.leaseQuarterly ?? 0)}/Q · ends R{f.leaseTermEndsAtQuarter}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -866,6 +899,45 @@ export function FleetPanel() {
                           })}
                         />
                       )}
+                      {/* Lease end-of-term decisions. Buy-out is open any
+                          time during the term; renewal opens in the final
+                          4 quarters (the lessor's renegotiation window). */}
+                      {f.acquisitionType === "lease" && (f.status === "active" || f.status === "grounded") && (() => {
+                        const basis = f.leaseBuyoutBasisUsd ?? expanded.buyPriceUsd;
+                        const buyoutCost = Math.round(basis * LEASE_BUYOUT_RESIDUAL_PCT);
+                        const leaseLeft = typeof f.leaseTermEndsAtQuarter === "number"
+                          ? f.leaseTermEndsAtQuarter - s.currentQuarter
+                          : null;
+                        return (
+                          <>
+                            <RowAction
+                              icon={Banknote}
+                              label={`Buy out · ${fmtMoney(buyoutCost)}`}
+                              tone="accent"
+                              title={`Exercise the 25% residual buy-out (${fmtMoney(buyoutCost)}). Lease fees stop; the airframe is yours outright.`}
+                              onClick={() => setLeaseDecision({
+                                kind: "buyout",
+                                aircraftId: f.id,
+                                name: expanded.name,
+                                tail,
+                              })}
+                            />
+                            {leaseLeft !== null && leaseLeft >= 0 && leaseLeft <= 4 && (
+                              <RowAction
+                                icon={RefreshCw}
+                                label={`Renew +${LEASE_TERM_QUARTERS}Q`}
+                                title={`Extend the lease ${LEASE_TERM_QUARTERS} quarters at the current catalogue rate (${fmtMoney(leaseTermsFor(expanded).perQuarterUsd)}/Q). No new deposit.`}
+                                onClick={() => setLeaseDecision({
+                                  kind: "renew",
+                                  aircraftId: f.id,
+                                  name: expanded.name,
+                                  tail,
+                                })}
+                              />
+                            )}
+                          </>
+                        );
+                      })()}
                       <RowAction
                         icon={Trash2}
                         label="Retire"
@@ -1020,6 +1092,93 @@ export function FleetPanel() {
           </ModalFooter>
         </Modal>
       )}
+
+      {/* ── Lease decision confirm (Capital Structure bundle) ───────
+          One modal handles both end-of-term paths. The body shows the
+          actual trade-off math (residual ≈ 3.3 quarters of lease fees)
+          so the choice is a finance decision, not a guess. */}
+      {leaseDecision && (() => {
+        const plane = player.fleet.find((f) => f.id === leaseDecision.aircraftId);
+        const spec = plane ? AIRCRAFT_BY_ID[plane.specId] : undefined;
+        if (!plane || !spec) return null;
+        const basis = plane.leaseBuyoutBasisUsd ?? spec.buyPriceUsd;
+        const buyoutCost = Math.round(basis * LEASE_BUYOUT_RESIDUAL_PCT);
+        const renewFee = leaseTermsFor(spec).perQuarterUsd;
+        const curEnd = plane.leaseTermEndsAtQuarter ?? s.currentQuarter;
+        const newEnd = curEnd + LEASE_TERM_QUARTERS;
+        const isBuyout = leaseDecision.kind === "buyout";
+        const feeQuartersEquiv = renewFee > 0 ? (buyoutCost / renewFee).toFixed(1) : "—";
+        return (
+          <Modal open onClose={() => setLeaseDecision(null)} className="w-[min(520px,calc(100vw-3rem))]">
+            <ModalHeader>
+              <h2 className="font-display text-heading text-ink leading-tight">
+                {isBuyout ? "Buy out the lease?" : "Renew the lease?"}
+              </h2>
+              <p className="text-body text-ink-muted mt-1">
+                {spec.name} · tail <span className="font-mono text-ink">{leaseDecision.tail}</span>
+                {" · "}current term ends round {curEnd}
+              </p>
+            </ModalHeader>
+            <ModalBody className="space-y-2.5">
+              <div className={cn(
+                "rounded-md border p-3.5",
+                isBuyout ? "border-primary bg-[var(--accent-soft)]" : "border-line bg-surface-2/40",
+              )}>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-caption uppercase tracking-wider font-semibold text-ink-2">
+                    Buy out now
+                  </span>
+                  <span className="font-mono tabular text-ink font-semibold">{fmtMoney(buyoutCost)}</span>
+                </div>
+                <p className="text-body-sm text-ink-muted mt-1 leading-relaxed">
+                  25% residual, one payment. Lease fees stop and the airframe is owned outright
+                  — that&apos;s ≈{feeQuartersEquiv} quarters of lease fees, so ownership pays for
+                  itself in under a year of continued flying.
+                </p>
+              </div>
+              <div className={cn(
+                "rounded-md border p-3.5",
+                !isBuyout ? "border-primary bg-[var(--accent-soft)]" : "border-line bg-surface-2/40",
+              )}>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-caption uppercase tracking-wider font-semibold text-ink-2">
+                    Renew +{LEASE_TERM_QUARTERS}Q
+                  </span>
+                  <span className="font-mono tabular text-ink font-semibold">{fmtMoney(renewFee)}/Q</span>
+                </div>
+                <p className="text-body-sm text-ink-muted mt-1 leading-relaxed">
+                  No new deposit, term runs to round {newEnd}. Keeps cash free for routes and
+                  fleet — the cash-poor airline&apos;s path. Doing nothing returns the airframe
+                  to the lessor at the end of the term.
+                </p>
+              </div>
+              <p className="text-body-sm text-ink-muted">
+                Cash on hand: <span className="font-mono tabular text-ink">{fmtMoney(player.cashUsd)}</span>
+              </p>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="ghost" onClick={() => setLeaseDecision(null)}>Cancel</Button>
+              <Button
+                variant="primary"
+                disabled={isBuyout && player.cashUsd < buyoutCost}
+                title={isBuyout && player.cashUsd < buyoutCost ? `Need ${fmtMoney(buyoutCost)} cash` : undefined}
+                onClick={() => {
+                  const r = isBuyout
+                    ? s.buyOutLease(leaseDecision.aircraftId)
+                    : s.renewLease(leaseDecision.aircraftId);
+                  if (!r.ok) {
+                    toast.warning(isBuyout ? "Buy-out failed" : "Renewal failed", r.error ?? "Try again");
+                    return;
+                  }
+                  setLeaseDecision(null);
+                }}
+              >
+                {isBuyout ? `Buy out · ${fmtMoney(buyoutCost)}` : `Renew to round ${newEnd}`}
+              </Button>
+            </ModalFooter>
+          </Modal>
+        );
+      })()}
 
       {/* ── Aircraft market modal ─────────────────────────────────── */}
       <AircraftMarketModal

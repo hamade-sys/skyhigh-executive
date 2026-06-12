@@ -136,6 +136,7 @@ import {
 } from "@/lib/airport-auction-runtime";
 import {
   LEASE_BUYOUT_RESIDUAL_PCT,
+  LEASE_TERM_QUARTERS,
   canLeaseSpec,
   isLeaseExpired,
   leaseFleetRatio,
@@ -357,6 +358,16 @@ export interface GameStore extends GameState {
    *  bookValue set to the residual. Available any time during the
    *  12-quarter term and at end-of-term to keep the airframe. */
   buyOutLease(aircraftId: string): { ok: boolean; error?: string; cost?: number };
+
+  /** Renew an expiring lease for another 12-quarter term (June 2026
+   *  Capital Structure bundle). Only available inside the decision
+   *  window — the final 4 quarters of the current term — so it reads
+   *  as a renegotiation moment, not an always-on toggle. No new
+   *  deposit; the per-quarter fee re-prices at the current catalogue
+   *  rate and the buy-out residual basis is preserved. The tradeoff
+   *  vs buy-out is real: 25% residual ≈ 3.3 quarters of lease fees,
+   *  so renewing is the cash-poor airline's path. */
+  renewLease(aircraftId: string): { ok: boolean; error?: string; newEndQuarter?: number };
 
   /** Acquire an airport outright (Sprint 10). Price formula:
    *    base[tier] + 4 × current quarterly slot revenue at this airport.
@@ -2349,7 +2360,57 @@ export const useGame = create<GameStore>()(
           `Lease bought out · ${spec?.name ?? plane.specId}`,
           `${fmtMoneyPlain(cost)} (25% residual). Aircraft is now owned outright.`,
         );
+        // Sync: this mutation predates the D2 push sweep but had no UI
+        // caller until now, so the missing push never fired in anger.
+        void get().pushStateToServer("player.boughtOutLease", { aircraftId, cost });
         return { ok: true, cost };
+      },
+
+      renewLease: (aircraftId) => {
+        const s = get();
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        if (!player) return { ok: false, error: "No player team" };
+        const plane = player.fleet.find((f) => f.id === aircraftId);
+        if (!plane) return { ok: false, error: "Aircraft not found" };
+        if (plane.acquisitionType !== "lease") {
+          return { ok: false, error: "Only leased aircraft can be renewed" };
+        }
+        if (typeof plane.leaseTermEndsAtQuarter !== "number") {
+          return { ok: false, error: "This lease has no recorded term" };
+        }
+        const remaining = plane.leaseTermEndsAtQuarter - s.currentQuarter;
+        if (remaining > 4) {
+          return {
+            ok: false,
+            error: `Too early — the lessor renegotiates in the final 4 quarters (${remaining}Q left on the current term)`,
+          };
+        }
+        if (remaining < 0) {
+          return { ok: false, error: "The lease has already ended" };
+        }
+        const spec = AIRCRAFT_BY_ID[plane.specId];
+        if (!spec) return { ok: false, error: "Unknown aircraft spec" };
+        // Re-price the quarterly fee at the current catalogue rate. The
+        // buy-out residual basis stays at the ORIGINAL capture so a
+        // renewal never silently inflates the exit price.
+        const newPerQuarter = leaseTermsFor(spec).perQuarterUsd;
+        const newEndQuarter = plane.leaseTermEndsAtQuarter + LEASE_TERM_QUARTERS;
+        set({
+          teams: s.teams.map((t) => t.id !== player.id ? t : {
+            ...t,
+            fleet: t.fleet.map((f) => f.id !== aircraftId ? f : {
+              ...f,
+              leaseQuarterly: newPerQuarter,
+              leaseTermEndsAtQuarter: newEndQuarter,
+            }),
+          }),
+        });
+        toast.success(
+          `Lease renewed · ${spec.name}`,
+          `Extended ${LEASE_TERM_QUARTERS}Q to round ${newEndQuarter} at ${fmtMoneyPlain(newPerQuarter)}/Q. No new deposit.`,
+        );
+        void get().pushStateToServer("player.renewedLease", { aircraftId, newEndQuarter });
+        return { ok: true, newEndQuarter };
       },
 
       // Legacy "buy now" entry point — superseded by the bid + approval
@@ -7242,8 +7303,8 @@ export const useGame = create<GameStore>()(
               .join(", ");
             const more = affectedRoutes.length > 3 ? ` and ${affectedRoutes.length - 3} more` : "";
             const detail = affectedRoutes.length > 0
-              ? `${expiringSoon.length} aircraft (on ${routeNames}${more}) — order replacements or negotiate buyouts now.`
-              : `${expiringSoon.length} aircraft return to lessor. Order replacements or convert to buy now.`;
+              ? `${expiringSoon.length} aircraft (on ${routeNames}${more}) — renew or buy out from the Fleet panel, or they return to the lessor.`
+              : `${expiringSoon.length} aircraft return to the lessor unless renewed or bought out — both available on the Fleet panel.`;
             toast.warning("Leases expiring in 3 quarters", detail);
           }
         }
