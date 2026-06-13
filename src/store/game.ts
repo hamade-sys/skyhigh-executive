@@ -181,11 +181,21 @@ import type {
   Sliders,
   Subsidiary,
   Team,
+  CrisisOptionId,
+  PendingCrisis,
+  CrisisPayoff,
 } from "@/types/game";
 import {
   SUBSIDIARY_TIER_REV_MULT,
   SUBSIDIARY_UPGRADE_COST_MULT,
 } from "@/types/game";
+import {
+  crisisOptions,
+  FUEL_SPIKE_THRESHOLD,
+  DEMAND_COLLAPSE_THRESHOLD,
+  CRISIS_COOLDOWN_QUARTERS,
+  CRISIS_PAYOFF_DELAY,
+} from "@/lib/crisis";
 
 // ─── Mocked competitor names for single-team leaderboard ────
 // Hub + brand-color cycle for solo-game competitors. Names are
@@ -279,6 +289,10 @@ export interface GameStore extends GameState {
 
   setSliders(sliders: Partial<Sliders>): void;
   reviseDoctrineAtR20(doctrine: DoctrineId): { ok: boolean; error?: string };
+  /** Resolve the player's live macro-shock board call (W1.8). Applies the
+   *  chosen option's immediate effect and queues its deferred payoff, which
+   *  settles `CRISIS_PAYOFF_DELAY` quarters later in the digest. */
+  resolveCrisis(optionId: CrisisOptionId): { ok: boolean; error?: string };
 
   orderAircraft(args: {
     specId: string;
@@ -953,9 +967,12 @@ function _enqueuePush<T>(work: () => Promise<T>): Promise<T> {
 }
 
 function fmtMoneyPlain(n: number): string {
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
+  // Sign before the $ so negatives read "−$2.9M", not "$-2880000".
+  const sign = n < 0 ? "−" : "";
+  const a = Math.abs(n);
+  if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(0)}K`;
+  return `${sign}$${a.toFixed(0)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1750,6 +1767,63 @@ export const useGame = create<GameStore>()(
         // W1.7 — persist (the action previously didn't, so a pivot was
         // lost on refresh).
         void get().pushStateToServer("player.revisedDoctrine", { doctrine, rebrandCost });
+        return { ok: true };
+      },
+
+      // W1.8 — resolve the live macro-shock board call. Applies the chosen
+      // option's immediate effect now and queues its deferred payoff, which
+      // settles CRISIS_PAYOFF_DELAY quarters later in the digest.
+      resolveCrisis: (optionId) => {
+        const s = get();
+        if (!s.playerTeamId) return { ok: false, error: "No player team" };
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        const crisis = player?.pendingCrisis;
+        if (!player || !crisis) return { ok: false, error: "No active crisis" };
+        const choice = crisisOptions(crisis.kind, player).find((o) => o.id === optionId);
+        if (!choice) return { ok: false, error: "Unknown option" };
+
+        const payoff: CrisisPayoff = {
+          id: `${crisis.id}-${optionId}`,
+          kind: crisis.kind,
+          optionId,
+          raisedAtQuarter: crisis.raisedAtQuarter,
+          resolveAtQuarter: s.currentQuarter + CRISIS_PAYOFF_DELAY,
+          cashUsd: choice.deferred.cashUsd,
+          brandPts: choice.deferred.brandPts,
+          loyaltyPct: choice.deferred.loyaltyPct,
+          headline: choice.deferredHeadline,
+          detail: choice.deferredDetail,
+        };
+
+        set({
+          teams: s.teams.map((t) => {
+            if (t.id !== player.id) return t;
+            return {
+              ...t,
+              cashUsd: t.cashUsd + choice.immediate.cashUsd,
+              brandPts: Math.max(0, t.brandPts + choice.immediate.brandPts),
+              customerLoyaltyPct: Math.max(
+                0,
+                Math.min(100, t.customerLoyaltyPct + choice.immediate.loyaltyPct),
+              ),
+              pendingCrisis: null,
+              crisisPayoffs: [...(t.crisisPayoffs ?? []), payoff],
+            };
+          }),
+        });
+
+        const cashNote =
+          choice.immediate.cashUsd >= 0
+            ? `+${fmtMoneyPlain(choice.immediate.cashUsd)} now`
+            : `${fmtMoneyPlain(choice.immediate.cashUsd)} now`;
+        toast.accent(
+          `Board call: ${choice.label}`,
+          `${cashNote} · the payoff lands in ${CRISIS_PAYOFF_DELAY} quarters.`,
+        );
+        void get().pushStateToServer("player.resolvedCrisis", {
+          kind: crisis.kind,
+          optionId,
+        });
         return { ok: true };
       },
 
@@ -7226,9 +7300,88 @@ export const useGame = create<GameStore>()(
           { quarter: s.currentQuarter, index: Math.round(clampedFuel) },
         ].slice(-16);
 
+        // ─── Macro-shock board calls (W1.8) ────────────────────
+        // Two things at quarter close, for the human player only:
+        //   1. Settle any crisis payoffs whose resolution quarter has
+        //      arrived — the deferred bet lands alongside this digest.
+        //   2. Raise a fresh board call if live conditions just crossed a
+        //      crisis threshold (a fuel spike up through 150, or a demand
+        //      collapse down through 50). Crossing detection + a cooldown
+        //      mean a sustained shock fires the call once, not every
+        //      quarter it stays severe. Bots ride the underlying fuel /
+        //      demand effects the engine already applies, so this never
+        //      blocks a multiplayer advance.
+        const crisisMode = s.session?.campaignMode;
+        const prevTravelIdx = effectiveTravelIndex(s.currentQuarter, crisisMode);
+        const nextTravelIdx = effectiveTravelIndex(nextQ, crisisMode);
+        const playerForCrisis = s.playerTeamId
+          ? teamsAfterScrap.find((t) => t.id === s.playerTeamId)
+          : undefined;
+        let crisisToRaise: PendingCrisis | null = null;
+        if (!s.isObserver && playerForCrisis && !playerForCrisis.pendingCrisis) {
+          const cooldownOk =
+            nextQ - (playerForCrisis.lastCrisisQuarter ?? -CRISIS_COOLDOWN_QUARTERS) >=
+            CRISIS_COOLDOWN_QUARTERS;
+          if (cooldownOk) {
+            if (
+              s.fuelIndex < FUEL_SPIKE_THRESHOLD &&
+              clampedFuel >= FUEL_SPIKE_THRESHOLD
+            ) {
+              crisisToRaise = {
+                id: `fuel-spike-q${nextQ}`,
+                kind: "fuel-spike",
+                raisedAtQuarter: nextQ,
+                fuelIndex: Math.round(clampedFuel),
+                travelIndex: Math.round(nextTravelIdx),
+              };
+            } else if (
+              prevTravelIdx > DEMAND_COLLAPSE_THRESHOLD &&
+              nextTravelIdx <= DEMAND_COLLAPSE_THRESHOLD
+            ) {
+              crisisToRaise = {
+                id: `demand-collapse-q${nextQ}`,
+                kind: "demand-collapse",
+                raisedAtQuarter: nextQ,
+                fuelIndex: Math.round(clampedFuel),
+                travelIndex: Math.round(nextTravelIdx),
+              };
+            }
+          }
+        }
+        const maturedCrisisPayoffs: CrisisPayoff[] = [];
+        const teamsAfterCrisis = s.playerTeamId
+          ? teamsAfterScrap.map((t) => {
+              if (t.id !== s.playerTeamId) return t;
+              const due = (t.crisisPayoffs ?? []).filter(
+                (p) => p.resolveAtQuarter <= nextQ,
+              );
+              if (due.length === 0 && !crisisToRaise) return t;
+              maturedCrisisPayoffs.push(...due);
+              const remaining = (t.crisisPayoffs ?? []).filter(
+                (p) => p.resolveAtQuarter > nextQ,
+              );
+              const cashDelta = due.reduce((a, p) => a + p.cashUsd, 0);
+              const brandDelta = due.reduce((a, p) => a + p.brandPts, 0);
+              const loyaltyDelta = due.reduce((a, p) => a + p.loyaltyPct, 0);
+              return {
+                ...t,
+                cashUsd: t.cashUsd + cashDelta,
+                brandPts: Math.max(0, t.brandPts + brandDelta),
+                customerLoyaltyPct: Math.max(
+                  0,
+                  Math.min(100, t.customerLoyaltyPct + loyaltyDelta),
+                ),
+                crisisPayoffs: remaining,
+                ...(crisisToRaise
+                  ? { pendingCrisis: crisisToRaise, lastCrisisQuarter: nextQ }
+                  : {}),
+              };
+            })
+          : teamsAfterScrap;
+
         _closeCompleted = true; // mark before the set so finally sees it
         set({
-          teams: teamsAfterScrap,
+          teams: teamsAfterCrisis,
           cargoContracts: updatedCargoContracts,
           lastCloseResult: result,
           phase: "quarter-closing",
@@ -7255,6 +7408,22 @@ export const useGame = create<GameStore>()(
               `No buyers in 8 quarters — broker paid +${fmtMoneyPlain(playerScrap.proceeds)} salvage.`,
             );
           }
+        }
+
+        // W1.8 — surface any crisis bet that just landed alongside the
+        // digest. The cash/brand/loyalty deltas were already applied in the
+        // close set; this is the "watch the bet land" moment.
+        if (maturedCrisisPayoffs.length > 0) {
+          const totalCash = maturedCrisisPayoffs.reduce((a, p) => a + p.cashUsd, 0);
+          const lead = maturedCrisisPayoffs[0];
+          const cashTag =
+            totalCash >= 0 ? `+${fmtMoneyPlain(totalCash)}` : fmtMoneyPlain(totalCash);
+          (totalCash >= 0 ? toast.success : toast.info)(
+            `${lead.headline} · ${cashTag}`,
+            maturedCrisisPayoffs.length === 1
+              ? lead.detail
+              : `${lead.detail} (+${maturedCrisisPayoffs.length - 1} more crisis payoff${maturedCrisisPayoffs.length - 1 === 1 ? "" : "s"} settled)`,
+          );
         }
 
         // Phase 6 P0 — surface a sticky toast when the player's team

@@ -361,6 +361,48 @@ export interface DeferredEvent {
   resolvedAtQuarter?: number;
 }
 
+// ─── Macro-shock board calls (W1.8) ──────────────────────
+/** The kind of macro shock that raises a board call. A fuel spike is
+ *  triggered when the fuel index crosses a severe threshold upward; a
+ *  demand collapse (pandemic / deep recession) when the travel index
+ *  crosses a collapse threshold downward. */
+export type CrisisKind = "fuel-spike" | "demand-collapse";
+
+/** The three strategic responses every crisis offers — the board splits
+ *  the room: protect cash, protect the franchise, or seize the upside. */
+export type CrisisOptionId = "defensive" | "fly-through" | "pivot-cargo";
+
+/** A live macro-shock decision awaiting the human player's call. Raised at
+ *  quarter close when conditions cross a crisis threshold, displayed at the
+ *  top of the canvas in the new quarter, and cleared by `resolveCrisis`.
+ *  Player-facing only — bots ride the underlying demand/fuel effects the
+ *  engine already applies, so this never blocks a multiplayer advance. One
+ *  crisis at a time per team. */
+export interface PendingCrisis {
+  id: string;               // `${kind}-q${raisedAtQuarter}`
+  kind: CrisisKind;
+  raisedAtQuarter: number;
+  fuelIndex: number;        // snapshot of the conditions that triggered it
+  travelIndex: number;
+}
+
+/** A deferred payoff queued when the player resolves a crisis. Settled at a
+ *  later quarter close (`resolveAtQuarter`) — the deltas apply to the player
+ *  team and the headline is surfaced in that quarter's digest. This is the
+ *  "watch the bet land" moment: the room argues, then sees the call pay. */
+export interface CrisisPayoff {
+  id: string;
+  kind: CrisisKind;
+  optionId: CrisisOptionId;
+  raisedAtQuarter: number;
+  resolveAtQuarter: number;
+  cashUsd: number;          // applied at resolution (can be ±)
+  brandPts: number;
+  loyaltyPct: number;
+  headline: string;         // digest title
+  detail: string;           // one-line explanation
+}
+
 export type TimedScenarioModifierKind =
   | "digital-full"
   | "digital-phased"
@@ -560,6 +602,17 @@ export interface Team {
   flags: Set<string>;            // gov_board_card, trusted_operator, ...
   deferredEvents: DeferredEvent[];
   timedModifiers?: TimedScenarioModifier[];
+
+  // Macro-shock board calls (W1.8) — set for human-controlled teams only.
+  /** A live macro-shock decision awaiting this player's call, or null/absent
+   *  when no crisis is pending. */
+  pendingCrisis?: PendingCrisis | null;
+  /** Deferred crisis payoffs queued by `resolveCrisis`, settled at a later
+   *  quarter close and surfaced in this player's digest. */
+  crisisPayoffs?: CrisisPayoff[];
+  /** Quarter the last crisis fired for this team — a cooldown guard so a
+   *  sustained shock doesn't raise a fresh board call every quarter. */
+  lastCrisisQuarter?: number;
 
   /** Audit log of every aircraft that has exited the fleet — sold
    *  on the secondary market, retired (auto-scrapped on lifespan
