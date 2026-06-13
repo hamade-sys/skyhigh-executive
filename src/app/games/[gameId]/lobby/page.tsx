@@ -36,6 +36,8 @@ import { GuestAccessPrompt } from "@/components/auth/GuestAccessPrompt";
 import { useMultiplayerSession } from "@/lib/games/useMultiplayerSession";
 import type { GameRow, GameMemberRow } from "@/lib/supabase/types";
 import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
+import { AirlineIconPicker } from "@/components/onboarding/AirlineIconPicker";
+import { type AirlineIconId, isAirlineIconId } from "@/lib/games/airline-icons";
 import {
   AIRLINE_COLOR_BY_ID,
   AIRLINE_COLOR_PALETTE,
@@ -145,6 +147,8 @@ export default function GameLobbyPage({
   // Phase 9 — color picked at lobby. Server enforces uniqueness via
   // /api/games/claim-color (called from inside <AirlineColorPicker/>).
   const [airlineColorId, setAirlineColorId] = useState<AirlineColorId | null>(null);
+  // D-007 — logo picked at lobby. No claim (emblems repeat). null = code letters.
+  const [airlineIconId, setAirlineIconId] = useState<AirlineIconId | null>(null);
   const [setupSaved, setSetupSaved] = useState(false);
   const [setupSaving, setSetupSaving] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
@@ -382,6 +386,7 @@ export default function GameLobbyPage({
           hub: airlineHub,
           doctrine: airlineDoctrine,
           airlineColorId,
+          airlineIconId,
         }),
       });
       const json = await res.json();
@@ -574,6 +579,7 @@ export default function GameLobbyPage({
                               hub?: string;
                               doctrine?: string;
                               airlineColorId?: string;
+                              airlineIconId?: string;
                             }
                           | null;
                         if (saved) {
@@ -585,6 +591,9 @@ export default function GameLobbyPage({
                           }
                           if (typeof saved.airlineColorId === "string" && isAirlineColorId(saved.airlineColorId)) {
                             setAirlineColorId(saved.airlineColorId);
+                          }
+                          if (typeof saved.airlineIconId === "string" && isAirlineIconId(saved.airlineIconId)) {
+                            setAirlineIconId(saved.airlineIconId);
                           }
                         }
                         setEditingSetup(true);
@@ -741,6 +750,20 @@ export default function GameLobbyPage({
                       Chosen: <span className="font-medium text-slate-700">{AIRLINE_COLOR_BY_ID[airlineColorId].label}</span>
                     </p>
                   )}
+                </div>
+
+                {/* D-007 — airline logo. No claim (emblems repeat). */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-2">
+                    Logo
+                  </label>
+                  <AirlineIconPicker
+                    value={airlineIconId}
+                    onChange={setAirlineIconId}
+                    code={airlineCode.trim()}
+                    colorId={airlineColorId}
+                    airlineName={airlineName.trim() || undefined}
+                  />
                 </div>
 
                 {setupError && (

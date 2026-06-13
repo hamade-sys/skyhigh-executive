@@ -24,6 +24,8 @@ import {
   airlineColorFor,
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
+import type { AirlineIconId } from "@/lib/games/airline-icons";
+import { AirlineMark } from "@/components/game/AirlineMark";
 import { cn } from "@/lib/cn";
 
 export interface AnalyticsTeam {
@@ -32,6 +34,7 @@ export interface AnalyticsTeam {
   code: string;
   color: string;
   airlineColorId?: AirlineColorId | null;
+  airlineIconId?: AirlineIconId | null;
   financialsByQuarter: Array<{
     quarter: number;
     cash: number;
@@ -442,15 +445,17 @@ export function MultiAirlineAnalytics({
               </div>
               <div className="space-y-0.5">
                 {tooltipRows.map((row) => {
-                  const teamColor = airlineColorFor({
-                    colorId: row.team.airlineColorId,
-                    fallbackKey: row.team.id,
-                  }).hex;
                   return (
                     <div key={row.team.id} className="flex items-center gap-2 text-body-sm">
-                      <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
-                        style={{ background: teamColor }} />
-                      <span className="font-mono text-ink-2 shrink-0">{row.team.code}</span>
+                      <AirlineMark
+                        code={row.team.code}
+                        colorId={row.team.airlineColorId}
+                        iconId={row.team.airlineIconId}
+                        fallbackKey={row.team.id}
+                        size={20}
+                        shape="rounded"
+                        className="shrink-0"
+                      />
                       <span className="text-ink-2 truncate flex-1 min-w-0">{row.team.name}</span>
                       <span className="font-mono tabular text-ink shrink-0">
                         {config.format(row.value)}

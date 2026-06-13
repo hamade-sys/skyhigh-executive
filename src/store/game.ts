@@ -150,6 +150,7 @@ import {
 } from "@/lib/hub-pricing";
 import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
 import { pickNextAvailableColor, type AirlineColorId } from "@/lib/games/airline-colors";
+import { pickIconForKey, type AirlineIconId } from "@/lib/games/airline-icons";
 import { pickAirlineNames } from "@/data/airline-names";
 import { fetchWithRetry } from "@/lib/games/fetch-with-retry";
 import { captureEvent } from "@/lib/telemetry";
@@ -280,6 +281,9 @@ export interface GameStore extends GameState {
      *  onboarding. Defaults to "teal" (first in the palette). Bot
      *  rivals fill the remaining colors deterministically. */
     airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId;
+    /** D-007 — chosen airline logo/emblem. Optional; null falls back to
+     *  the IATA code letters. Bots get a deterministic emblem. */
+    airlineIconId?: import("@/lib/games/airline-icons").AirlineIconId | null;
   }): void;
   /** Phase 9 — set/change the player's airline color id. Used by the
    *  in-game settings menu so a player can re-tint mid-game without
@@ -1250,6 +1254,8 @@ function makeStartingTeam(args: {
   playerDisplayName?: string | null;
   /** Phase 9 — visual identity color id. */
   airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
+  /** D-007 — chosen airline logo/emblem id (null = fall back to code). */
+  airlineIconId?: import("@/lib/games/airline-icons").AirlineIconId | null;
 }): Team {
   // Derive controlledBy from isPlayer when not passed explicitly. In
   // legacy solo runs, isPlayer === true means "this browser's human"
@@ -1271,6 +1277,7 @@ function makeStartingTeam(args: {
     claimedBySessionId: args.claimedBySessionId ?? null,
     playerDisplayName: args.playerDisplayName ?? null,
     airlineColorId: args.airlineColorId ?? null,
+    airlineIconId: args.airlineIconId ?? null,
     members: [
       { role: "CEO",  name: args.isPlayer ? "Your CEO"  : `${args.code} CEO`,  mvpPts: 0, cards: [] },
       { role: "CFO",  name: args.isPlayer ? "Your CFO"  : `${args.code} CFO`,  mvpPts: 0, cards: [] },
@@ -1400,7 +1407,7 @@ export const useGame = create<GameStore>()(
           airlineName, code, doctrine, hubCode, teamCount = 5,
           tagline, marketFocus, geographicPriority, pricingPhilosophy,
           salaryPhilosophy, marketingLevel, csrTheme,
-          airlineColorId,
+          airlineColorId, airlineIconId,
         } = args;
 
         // Phase 9 — color allocation. Player picks at onboarding (or
@@ -1409,6 +1416,9 @@ export const useGame = create<GameStore>()(
         // deterministically so a solo run visually matches a
         // multiplayer cohort.
         const playerColorId = airlineColorId ?? "sky";
+        // D-007 — chosen logo, or null (the mark falls back to the
+        // code letters). Bots below get a deterministic emblem.
+        const playerIconId = airlineIconId ?? null;
 
         // Player team — built via the shared factory so a solo run
         // produces the SAME starting position as a player joining a
@@ -1425,6 +1435,7 @@ export const useGame = create<GameStore>()(
           salaryPhilosophy, marketingLevel, csrTheme,
           controlledBy: "human",
           airlineColorId: playerColorId,
+          airlineIconId: playerIconId,
         });
 
         // Mock competitors
@@ -1463,6 +1474,8 @@ export const useGame = create<GameStore>()(
             airlineName: meta.name, code: meta.code, doctrine,
             hubCode: hub, isPlayer: false, color: fallbackHex,
             airlineColorId: rivalColorId,
+            // D-007 — deterministic emblem per rival (icons may repeat).
+            airlineIconId: pickIconForKey(meta.code + meta.name),
           });
           // Spread rival difficulties so the cohort feels mixed: a 5-rival
           // game gets ~1 easy / 3 medium / 1 hard; a 9-rival game gets
@@ -8698,6 +8711,7 @@ export const useGame = create<GameStore>()(
             claimedBySessionId: t.claimedBySessionId ?? null,
             playerDisplayName: t.playerDisplayName ?? null,
             airlineColorId: t.airlineColorId ?? null,
+            airlineIconId: t.airlineIconId ?? null,
           });
           // Preserve the team ID so existing membership rows in
           // game_members still resolve to the right team. The factory

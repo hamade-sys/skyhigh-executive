@@ -543,6 +543,15 @@ export interface Team {
    *  a stable color from the team id so the UI never looks unstyled. */
   airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
 
+  /** Chosen airline logo / emblem (D-007). One of 20 Lucide marks picked
+   *  at onboarding, or deterministically assigned for bots. Renders inside
+   *  the brand mark (the colored circle) everywhere the airline appears.
+   *  When null/undefined (legacy save, or a player who skipped the picker)
+   *  the mark falls back to the IATA code letters — the pre-D-007 look —
+   *  so nothing regresses. Unlike color it has NO uniqueness constraint:
+   *  two airlines may share an emblem because their color tells them apart. */
+  airlineIconId?: import("@/lib/games/airline-icons").AirlineIconId | null;
+
   /** @deprecated Use `controlledBy === "human" && claimedBySessionId === activeSessionId`
    *  instead. Retained because 34 callsites in panels/HUD still read
    *  `isPlayer`; kept in sync at every state mutation that changes

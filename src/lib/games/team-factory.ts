@@ -37,6 +37,7 @@ import type {
   SliderLevel,
 } from "@/types/game";
 import type { AirlineColorId } from "@/lib/games/airline-colors";
+import type { AirlineIconId } from "@/lib/games/airline-icons";
 
 export interface CreateInitializedTeamArgs {
   /** Airline display name. */
@@ -85,6 +86,9 @@ export interface CreateInitializedTeamArgs {
    *  When null, the team renders with `airlineColorFor({ fallbackKey })`
    *  derived from the team id — kept for legacy saves. */
   airlineColorId?: AirlineColorId | null;
+  /** Chosen airline logo / emblem (D-007). When null the brand mark falls
+   *  back to the IATA code letters. No uniqueness — emblems may repeat. */
+  airlineIconId?: AirlineIconId | null;
 }
 
 /**
@@ -226,6 +230,7 @@ export function createInitializedTeamFromOnboarding(
     claimedBySessionId: args.claimedBySessionId ?? null,
     playerDisplayName: args.playerDisplayName ?? (isPlayer ? args.airlineName : null),
     airlineColorId: args.airlineColorId ?? null,
+    airlineIconId: args.airlineIconId ?? null,
     members: [
       { role: "CEO",  name: isPlayer ? "Your CEO"  : `${code} CEO`,  mvpPts: 0, cards: [] },
       { role: "CFO",  name: isPlayer ? "Your CFO"  : `${code} CFO`,  mvpPts: 0, cards: [] },

@@ -23,6 +23,7 @@ import {
 import { cityEffectiveDemand } from "@/lib/engine";
 import { cityEventImpact } from "@/lib/city-events";
 import { AirportOwnershipV2 } from "@/components/game/AirportOwnershipV2";
+import { AirlineMark } from "@/components/game/AirlineMark";
 
 /**
  * Airport detail popup — opened when the player double-clicks a city on
@@ -228,12 +229,15 @@ export function AirportDetailModal({
                     >
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
-                          <span
-                            className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-micro font-semibold text-primary-fg shrink-0"
-                            style={{ background: b.team.color }}
-                          >
-                            {b.team.code}
-                          </span>
+                          <AirlineMark
+                            code={b.team.code}
+                            colorId={b.team.airlineColorId}
+                            iconId={b.team.airlineIconId}
+                            fallbackKey={b.team.id}
+                            size={20}
+                            shape="rounded"
+                            className="shrink-0"
+                          />
                           <span className="text-ink truncate font-medium">
                             {b.team.name}
                           </span>
@@ -733,12 +737,15 @@ function AirportOwnership({ cityCode }: { cityCode: string }) {
         </div>
         <div className="rounded-md border border-warning bg-[var(--warning-soft)] p-3">
           <div className="text-body-lg text-ink">
-            <span
-              className="inline-flex w-5 h-5 rounded-sm items-center justify-center font-mono text-micro font-semibold text-primary-fg mr-1.5 align-middle"
-              style={{ background: ownerTeam.color }}
-            >
-              {ownerTeam.code}
-            </span>
+            <AirlineMark
+              code={ownerTeam.code}
+              colorId={ownerTeam.airlineColorId}
+              iconId={ownerTeam.airlineIconId}
+              fallbackKey={ownerTeam.id}
+              size={20}
+              shape="rounded"
+              className="mr-1.5 align-middle"
+            />
             <strong>{ownerTeam.name}</strong> owns this airport and sets the slot rate.
           </div>
           <div className="text-body-sm text-ink-2 mt-1.5 leading-relaxed">

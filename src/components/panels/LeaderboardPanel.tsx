@@ -7,6 +7,7 @@ import { computeAirlineValue, fleetCount, brandRating } from "@/lib/engine";
 import { Plane, Crown, Trophy, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { airlineColorFor } from "@/lib/games/airline-colors";
+import { AirlineMark } from "@/components/game/AirlineMark";
 
 export function LeaderboardPanel() {
   const s = useGame();
@@ -110,25 +111,16 @@ export function LeaderboardPanel() {
                   )}
                 </span>
               )}
-              <span
-                aria-label={`${airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).label} airline — ${t.name}`}
-                className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-label font-semibold shrink-0"
-                style={{
-                  // Phase 9 — prefer the player's chosen airline color
-                  // over the legacy team.color hex. Falls back to a
-                  // deterministic palette pick for legacy teams.
-                  background: airlineColorFor({
-                    colorId: t.airlineColorId,
-                    fallbackKey: t.id,
-                  }).hex,
-                  color: airlineColorFor({
-                    colorId: t.airlineColorId,
-                    fallbackKey: t.id,
-                  }).textOn === "white" ? "#fff" : "#0F172A",
-                }}
-              >
-                {t.code}
-              </span>
+              <AirlineMark
+                code={t.code}
+                colorId={t.airlineColorId}
+                iconId={t.airlineIconId}
+                fallbackKey={t.id}
+                size={32}
+                shape="rounded"
+                ariaLabel={`${airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).label} airline — ${t.name}`}
+                className="shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className={`${isPlayer ? "font-semibold text-ink" : "text-ink-2"} truncate text-body-lg`}>

@@ -17,7 +17,7 @@ import { getTotalRounds } from "@/lib/format";
 import { HelpCircle, Trophy, ChevronDown, Eye, MoreVertical, RotateCcw, X, Hash, MessageCircle, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
-import { airlineColorFor, type AirlineColorId } from "@/lib/games/airline-colors";
+import { AirlineMark } from "@/components/game/AirlineMark";
 import { DOCTRINE_BY_ID } from "@/data/doctrines";
 
 export function TopBar() {
@@ -88,22 +88,16 @@ export function TopBar() {
           className="flex items-center gap-3 min-w-0 hover:bg-surface-hover rounded-md -ml-1.5 pl-1.5 pr-2 py-1 transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
           title="Switch view: see your airline or peek into a rival's network"
         >
-          <span
-            className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-label font-semibold shadow-[var(--shadow-1)]"
-            style={{
-              // Phase 9 — chosen brand color overrides legacy team.color.
-              background: airlineColorFor({
-                colorId: displayTeam.airlineColorId,
-                fallbackKey: displayTeam.id,
-              }).hex,
-              color: airlineColorFor({
-                colorId: displayTeam.airlineColorId,
-                fallbackKey: displayTeam.id,
-              }).textOn === "white" ? "#fff" : "#0F172A",
-            }}
-          >
-            {displayTeam.code}
-          </span>
+          {/* Phase 9 — chosen brand color/logo overrides legacy team.color. */}
+          <AirlineMark
+            code={displayTeam.code}
+            colorId={displayTeam.airlineColorId}
+            iconId={displayTeam.airlineIconId}
+            fallbackKey={displayTeam.id}
+            size={32}
+            shape="rounded"
+            className="shadow-[var(--shadow-1)]"
+          />
           <div className="min-w-0 hidden md:block text-left">
             <div className="font-display text-title text-ink leading-none truncate flex items-center gap-1">
               {displayTeam.name}
@@ -1324,30 +1318,21 @@ function AirlineSwitcher({
                   : "border-line hover:bg-surface-hover",
               )}
             >
-              {(() => {
-                // Use the airline-palette color (the one the player
-                // picked at onboarding / lobby) instead of the legacy
-                // hex stored on team.color, so chips throughout the
-                // app render with the player's chosen brand identity.
-                // textOn carries the contrast-aware foreground so the
-                // 3-letter code stays readable on light pastels.
-                const ac = airlineColorFor({
-                  colorId: t.airlineColorId as AirlineColorId | undefined,
-                  fallbackKey: t.id,
-                });
-                return (
-                  <span
-                    aria-hidden="true"
-                    className="inline-flex w-8 h-8 rounded-md items-center justify-center font-mono text-label font-semibold shrink-0"
-                    style={{
-                      background: ac.hex,
-                      color: ac.textOn === "white" ? "#ffffff" : "#0f172a",
-                    }}
-                  >
-                    {t.code}
-                  </span>
-                );
-              })()}
+              {/* Use the airline-palette color/logo (the one the player
+                  picked at onboarding / lobby) instead of the legacy hex
+                  stored on team.color, so chips throughout the app render
+                  with the player's chosen brand identity. Decorative — the
+                  parent button already carries the airline's accessible
+                  name. */}
+              <AirlineMark
+                code={t.code}
+                colorId={t.airlineColorId}
+                iconId={t.airlineIconId}
+                fallbackKey={t.id}
+                size={32}
+                shape="rounded"
+                className="shrink-0"
+              />
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-ink text-body-lg truncate">
                   {t.name}

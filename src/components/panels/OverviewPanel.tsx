@@ -10,6 +10,7 @@ import { DOCTRINES, DOCTRINE_BY_ID, DOCTRINE_ICON_TINT } from "@/data/doctrines"
 import { CITIES_BY_CODE } from "@/data/cities";
 import { airlineColorFor, type AirlineColorId } from "@/lib/games/airline-colors";
 import { useUi, type PanelId } from "@/store/ui";
+import { AirlineMark } from "@/components/game/AirlineMark";
 import { SecondaryHubModal } from "@/components/game/SecondaryHubModal";
 import { HubInvestmentsModal } from "@/components/game/HubInvestmentsModal";
 import {
@@ -200,24 +201,14 @@ export function OverviewPanel() {
           Airline
         </div>
         <div className="flex items-center gap-3">
-          {(() => {
-            // Player's chosen brand color, with contrast-aware text.
-            const ac = airlineColorFor({
-              colorId: player.airlineColorId as AirlineColorId | undefined,
-              fallbackKey: player.id,
-            });
-            return (
-              <span
-                className="inline-block w-9 h-9 rounded-md flex items-center justify-center font-mono text-body-sm font-semibold"
-                style={{
-                  background: ac.hex,
-                  color: ac.textOn === "white" ? "#ffffff" : "#0f172a",
-                }}
-              >
-                {player.code}
-              </span>
-            );
-          })()}
+          <AirlineMark
+            code={player.code}
+            colorId={player.airlineColorId}
+            iconId={player.airlineIconId}
+            fallbackKey={player.id}
+            size={36}
+            shape="rounded"
+          />
           <div>
             <div className="font-display text-heading text-ink leading-tight">
               {player.name}
