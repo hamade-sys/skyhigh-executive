@@ -1693,6 +1693,32 @@ export const useGame = create<GameStore>()(
         // narrative intent of "a strategic reset" and prevents a
         // premium-doctrine player from inheriting cargo-era staff
         // discipline.
+        // No-op guard — re-confirming the SAME doctrine shouldn't cost
+        // anything or burn the one-time review.
+        if (doctrine === player.doctrine) {
+          return { ok: false, error: "That's already your doctrine — pick a different one to revise." };
+        }
+        // W1.7 — a pivot is a real decision, not a free toggle. Two costs:
+        //   1. Rebrand cost — 3% of airline value (min $40M, cap $400M).
+        //      Repainting the fleet, retraining staff, new positioning.
+        //   2. Brand confusion — an immediate −12 brand-points hit as the
+        //      market re-learns who you are. It recovers naturally over
+        //      the next couple of quarters via normal brand dynamics, so
+        //      the switch stings short-term but pays off if the new
+        //      doctrine genuinely fits (pairs with the W1.2 dividend that
+        //      shows whether your CURRENT doctrine is underperforming).
+        const rebrandCost = Math.max(
+          40_000_000,
+          Math.min(400_000_000, Math.round(computeAirlineValue(player) * 0.03)),
+        );
+        if (player.cashUsd < rebrandCost) {
+          return {
+            ok: false,
+            error: `Rebranding costs ${fmtMoneyPlain(rebrandCost)} (3% of airline value) — not enough cash on hand.`,
+          };
+        }
+        const BRAND_CONFUSION_HIT = 12;
+        // Phase 5.1 — slider streaks reset on doctrine switch.
         const SLIDER_KEYS = ["staff", "marketing", "service", "rewards", "operations", "customerService"] as const;
         const resetStreaks = SLIDER_KEYS.reduce(
           (acc, k) => {
@@ -1707,6 +1733,8 @@ export const useGame = create<GameStore>()(
             return {
               ...t,
               doctrine,
+              cashUsd: t.cashUsd - rebrandCost,
+              brandPts: Math.max(0, t.brandPts - BRAND_CONFUSION_HIT),
               sliderStreaks: resetStreaks,
               flags: new Set([
                 ...(t.flags ?? []),
@@ -1715,7 +1743,13 @@ export const useGame = create<GameStore>()(
             };
           }),
         });
-        toast.accent("Doctrine revised", "Your new operating model is active starting this round.");
+        toast.accent(
+          "Doctrine revised",
+          `New operating model active · ${fmtMoneyPlain(rebrandCost)} rebrand · −${BRAND_CONFUSION_HIT} brand while the market re-learns you.`,
+        );
+        // W1.7 — persist (the action previously didn't, so a pivot was
+        // lost on refresh).
+        void get().pushStateToServer("player.revisedDoctrine", { doctrine, rebrandCost });
         return { ok: true };
       },
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Metric, Modal, ModalBody, ModalFooter, ModalHeader, Sparkline } from "@/components/ui";
 import { fmtMoney, fmtPct, getTotalRounds } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
@@ -63,6 +63,23 @@ export function OverviewPanel() {
   const canReviewDoctrine =
     s.currentQuarter === midRound && !alreadyRevised;
   const airlineValue = computeAirlineValue(player);
+  // W1.7 — rebrand cost mirrors the store guard (3% of airline value,
+  // $40M-$400M) so the player decides informed.
+  const rebrandCost = Math.max(40_000_000, Math.min(400_000_000, Math.round(airlineValue * 0.03)));
+
+  // Consume the cross-component "open doctrine review" signal fired by
+  // the midpoint board-moment banner on the canvas.
+  const doctrineReviewRequested = useUi((u) => u.doctrineReviewRequested);
+  const clearDoctrineReviewRequest = useUi((u) => u.clearDoctrineReviewRequest);
+  useEffect(() => {
+    if (doctrineReviewRequested && canReviewDoctrine) {
+      setDraftDoctrine(currentDoctrine(player.doctrine));
+      setDoctrineError(null);
+      setDoctrineReviewOpen(true);
+    }
+    if (doctrineReviewRequested) clearDoctrineReviewRequest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doctrineReviewRequested]);
   const activeRoutes = player.routes.filter((r) => r.status === "active");
   const totalRevenueLast = player.financialsByQuarter.at(-1)?.revenue ?? 0;
   const prevRevenue = player.financialsByQuarter.at(-2)?.revenue ?? 0;
@@ -569,7 +586,12 @@ export function OverviewPanel() {
           </div>
           <h2 className="font-display text-2xl text-ink">Revise operating doctrine</h2>
           <p className="text-body text-ink-muted mt-1">
-            One strategic reset is unlocked. The new doctrine applies immediately and persists for the rest of the campaign.
+            Your one strategic reset of the campaign. A pivot isn&apos;t free —
+            it costs <strong className="text-ink">{fmtMoney(rebrandCost)}</strong> to
+            rebrand (3% of airline value) and the market needs time to re-learn you
+            (a temporary brand dip that recovers over the next couple of quarters).
+            Worth it only if your current doctrine is genuinely underperforming —
+            check the doctrine dividend on your last quarter close.
           </p>
         </ModalHeader>
         <ModalBody
@@ -628,10 +650,12 @@ export function OverviewPanel() {
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setDoctrineReviewOpen(false)}>
-            Keep current
+            Keep current doctrine
           </Button>
           <Button
             variant="primary"
+            disabled={draftDoctrine === player.doctrine || player.cashUsd < rebrandCost}
+            title={player.cashUsd < rebrandCost ? `Need ${fmtMoney(rebrandCost)} cash to rebrand` : undefined}
             onClick={() => {
               const res = s.reviseDoctrineAtR20(draftDoctrine);
               if (!res.ok) {
@@ -642,7 +666,7 @@ export function OverviewPanel() {
               setDoctrineReviewOpen(false);
             }}
           >
-            Confirm doctrine
+            Pivot · {fmtMoney(rebrandCost)}
           </Button>
         </ModalFooter>
       </Modal>

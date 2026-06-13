@@ -31,6 +31,7 @@ import { RouteSetupModal } from "@/components/game/RouteSetupModal";
 import { AirportDetailModal } from "@/components/game/AirportDetailModal";
 import { RouteLaunchBar } from "@/components/game/RouteLaunchBar";
 import { FirstFlightChecklist } from "@/components/game/FirstFlightChecklist";
+import { DoctrineReviewMoment } from "@/components/game/DoctrineReviewMoment";
 import { QuarterTimerDriver } from "@/components/game/QuarterTimer";
 import { Toaster } from "@/components/game/Toaster";
 import { useShallow } from "zustand/react/shallow";
@@ -489,6 +490,10 @@ function CanvasInner() {
       {/* First-quarter checklist — Q1 only, hidden for observers and
           while a side panel covers its corner. */}
       {!isObserver && !currentPanel && <FirstFlightChecklist />}
+
+      {/* Mid-campaign doctrine review — the one-time strategic pivot
+          board moment, appears only on the midpoint round (W1.7). */}
+      {!isObserver && !currentPanel && <DoctrineReviewMoment />}
 
       {/* Floating route launch bar — hidden for observers. */}
       {!isObserver && (
