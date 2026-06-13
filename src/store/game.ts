@@ -4627,6 +4627,12 @@ export const useGame = create<GameStore>()(
         });
         // Phase B — D2: persist so cash + debt + loans survive a refresh.
         void get().pushStateToServer("player.borrowedCapital", { amount, loanId: loan.id });
+        // Confirm the draw (W1.5) — borrowing was silent; the player
+        // couldn't tell the loan landed or at what rate.
+        toast.success(
+          `Borrowed ${fmtMoneyPlain(amount)}`,
+          `${loan.lenderName ?? "Bank"} · ${ratePct.toFixed(1)}% · interest from next quarter`,
+        );
         return { ok: true };
       },
 
@@ -10372,6 +10378,11 @@ export const useGame = create<GameStore>()(
               secondaryHubCodes: [...t.secondaryHubCodes, cityCode],
             } : t),
           });
+          // W1.5 — confirm + persist. This action had neither a toast
+          // nor a server push, so establishing a hub felt like nothing
+          // and was lost on refresh.
+          toast.success(`${cityCode} is now a secondary hub`, `${fmtMoneyPlain(cost)} · connecting traffic + local demand`);
+          void get().pushStateToServer("player.addedSecondaryHub", { cityCode });
           return { ok: true };
         }
 
@@ -10388,6 +10399,9 @@ export const useGame = create<GameStore>()(
             secondaryHubCodes: [...t.secondaryHubCodes, cityCode],
           } : t),
         });
+        // W1.5 — confirm + persist (was silent and non-persisting).
+        toast.success(`${cityCode} is now a secondary hub`, `${fmtMoneyPlain(activationCost)} · connecting traffic + local demand`);
+        void get().pushStateToServer("player.addedSecondaryHub", { cityCode });
         return { ok: true };
       },
 

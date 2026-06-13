@@ -1838,6 +1838,13 @@ function RouteDetailModal({
       setError(r.error ?? "Failed to save");
       return;
     }
+    // Confirm the save (W1.5) — the standard route edit used to close
+    // silently, so the player couldn't tell their change landed. One
+    // line with the consequence: what's flying and at what fare.
+    toast.success(
+      `${route.originCode}–${route.destCode} updated`,
+      `${Math.round(weeklyFreq)}/wk · ${tier} fares · takes effect next quarter`,
+    );
     onClose();
   }
 
