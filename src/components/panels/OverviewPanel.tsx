@@ -44,6 +44,32 @@ export function OverviewPanel() {
   const [draftDoctrine, setDraftDoctrine] = useState<DoctrineId>("premium-service");
   const [doctrineError, setDoctrineError] = useState<string | null>(null);
 
+  // Consume the cross-component "open doctrine review" signal fired by the
+  // midpoint board-moment banner on the canvas (W1.7). These hooks sit
+  // ABOVE the `if (!player) return null` guard below so they run on every
+  // render (rules-of-hooks). Eligibility is recomputed inside the effect —
+  // guarding on `player` — rather than read from the derived
+  // `canReviewDoctrine`, which is only computed after the guard.
+  const doctrineReviewRequested = useUi((u) => u.doctrineReviewRequested);
+  const clearDoctrineReviewRequest = useUi((u) => u.clearDoctrineReviewRequest);
+  useEffect(() => {
+    if (!doctrineReviewRequested) return;
+    clearDoctrineReviewRequest();
+    if (!player) return;
+    const mid = Math.floor((s.session?.totalRounds ?? 40) / 2);
+    const revised =
+      player.flags.has("doctrine_revised_midgame") ||
+      player.flags.has("doctrine_revised_r20");
+    if (s.currentQuarter === mid && !revised) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setDraftDoctrine(currentDoctrine(player.doctrine));
+      setDoctrineError(null);
+      setDoctrineReviewOpen(true);
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doctrineReviewRequested]);
+
   if (!player) return null;
 
   const doctrineMeta = DOCTRINE_BY_ID[player.doctrine] ?? DOCTRINE_BY_ID["premium-service"];
@@ -68,19 +94,6 @@ export function OverviewPanel() {
   // $40M-$400M) so the player decides informed.
   const rebrandCost = Math.max(40_000_000, Math.min(400_000_000, Math.round(airlineValue * 0.03)));
 
-  // Consume the cross-component "open doctrine review" signal fired by
-  // the midpoint board-moment banner on the canvas.
-  const doctrineReviewRequested = useUi((u) => u.doctrineReviewRequested);
-  const clearDoctrineReviewRequest = useUi((u) => u.clearDoctrineReviewRequest);
-  useEffect(() => {
-    if (doctrineReviewRequested && canReviewDoctrine) {
-      setDraftDoctrine(currentDoctrine(player.doctrine));
-      setDoctrineError(null);
-      setDoctrineReviewOpen(true);
-    }
-    if (doctrineReviewRequested) clearDoctrineReviewRequest();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doctrineReviewRequested]);
   const activeRoutes = player.routes.filter((r) => r.status === "active");
   const totalRevenueLast = player.financialsByQuarter.at(-1)?.revenue ?? 0;
   const prevRevenue = player.financialsByQuarter.at(-2)?.revenue ?? 0;
