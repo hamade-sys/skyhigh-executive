@@ -1936,12 +1936,24 @@ export function computeRouteEconomics(
     // freight tends to track economic activity that already exists.
     // Same plateauRound as the passenger curve.
     const cargoMaturity = Math.max(0.35, marketMaturity(quarter, totalRounds));
+    // Cargo specialization (W1.3) — a committed freight baron's network
+    // should compound, not stay flat. Running ≥3 active freighter routes
+    // under the cargo-dominance doctrine signals a genuine logistics
+    // network and lifts cargo demand +15% across the board. Makes
+    // "freight baron" a real archetype: a player who goes all-in on
+    // cargo feels the doctrine pay off as they scale, instead of
+    // watching freighters bleed against passenger margins.
+    const freighterRouteCount = isDoctrine(team, "cargo-dominance")
+      ? (team.routes ?? []).filter((r) => r.isCargo && r.status === "active").length
+      : 0;
+    const cargoSpecializationBonus = freighterRouteCount >= 3 ? 1.15 : 1.0;
     const cargoDemandT = Math.max(
       0,
       Math.min(
         cityBusinessAtQuarter(origin, quarter) * cargoMultA,
         cityBusinessAtQuarter(dest, quarter) * cargoMultB,
-      ) * cargoFocusBonus * cargoNetworkBonus * cargoShockBonus * cargoSeasonal * freighterPoolShare * cargoMaturity,
+      ) * cargoFocusBonus * cargoNetworkBonus * cargoShockBonus * cargoSeasonal
+        * freighterPoolShare * cargoMaturity * cargoSpecializationBonus,
     );
     const dailyTonnes = Math.max(0, Math.min(dailyCapacityT, cargoDemandT));
     const occupancy = dailyCapacityT > 0 ? Math.max(0, Math.min(1.0, dailyTonnes / dailyCapacityT)) : 0;
@@ -2028,6 +2040,10 @@ export function computeRouteEconomics(
       dailyDemandBus: 0,
       dailyDemandEcon: 0,
       quarterlyFuelTankSavings: cargoFuelTankSavings,
+      // Attribute the doctrine-driven cargo demand multipliers to the
+      // dividend (W1.2/W1.3) so a cargo baron sees the strategy pay off:
+      // network connecting bonus × the ≥3-freighter specialization lift.
+      doctrineDemandMult: cargoNetworkBonus * cargoSpecializationBonus,
     };
   }
 
