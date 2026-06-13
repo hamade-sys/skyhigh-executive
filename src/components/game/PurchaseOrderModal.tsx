@@ -19,7 +19,8 @@ import {
   queuedForSpec,
   PREORDER_DEPOSIT_PCT,
 } from "@/lib/pre-orders";
-import { leaseTermsFor } from "@/lib/lease";
+import { leaseTermsFor, LEASE_TERM_QUARTERS } from "@/lib/lease";
+import { depreciateBookValue, brokerResaleQuoteUsd } from "@/lib/engine";
 import type { AircraftSpec } from "@/types/game";
 
 /**
@@ -580,6 +581,13 @@ function PurchaseOrderBody({
           <CashAffordabilityRow totalCost={cashDueNow} />
           <DeliveryAndRetirementRow quantity={quantity} />
         </div>
+
+        {/* Own-vs-lease comparison (W1.1) — the most common big-money
+            airline decision was invisible: buy-price vs lease/Q with no
+            view of the depreciation trap or the walk-away value of a
+            lease. Shows both paths per airframe, highlights the one
+            chosen, all from existing helpers (zero new math). */}
+        <LeaseVsBuyCompare spec={spec} acquisitionType={acquisitionType} />
       </ModalBody>
 
       <ModalFooter>
@@ -591,6 +599,86 @@ function PurchaseOrderBody({
         />
       </ModalFooter>
     </Modal>
+  );
+}
+
+/** Own-vs-lease comparison card (W1.1). Per single airframe, lays the
+ *  two financing paths side by side so the player makes a real CFO call
+ *  instead of reading buy-price as "too expensive" and defaulting to
+ *  lease. The horizon is the 12-quarter (3-year) lease term so both
+ *  columns cover the same window. All figures come from existing
+ *  helpers — depreciateBookValue / brokerResaleQuoteUsd / leaseTermsFor. */
+function LeaseVsBuyCompare({
+  spec, acquisitionType,
+}: {
+  spec: AircraftSpec;
+  acquisitionType: "buy" | "lease";
+}) {
+  const buy = spec.buyPriceUsd;
+  const horizon = LEASE_TERM_QUARTERS; // 12Q = 3y, the lease term
+  // Own: pay sticker now; if sold after the 3-year horizon, the broker
+  // quotes 50% of the depreciated book. Net cost of owning-then-selling
+  // = price paid − resale recovered. (Holding longer recovers less.)
+  const bookAtHorizon = depreciateBookValue(buy, horizon);
+  const resaleAtHorizon = brokerResaleQuoteUsd(bookAtHorizon);
+  const ownNetIfSold = buy - resaleAtHorizon;
+  // Lease: deposit + every quarterly fee across the term, then walk away
+  // (airframe returns to the lessor — no residual recovered, no
+  // fire-sale risk). Buy-out residual is shown as the keep-it option.
+  const terms = leaseTermsFor(spec);
+  const leaseTotal = terms.depositUsd + terms.perQuarterUsd * terms.termQuarters;
+
+  const Col = ({ chosen, title, headline, sub, lines }: {
+    chosen: boolean; title: string; headline: string; sub: string; lines: string[];
+  }) => (
+    <div className={cn(
+      "rounded-md border p-2.5 flex-1 min-w-0",
+      chosen ? "border-primary bg-[rgba(20,53,94,0.04)]" : "border-line bg-surface-2/30",
+    )}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-caption uppercase tracking-wider text-ink-muted font-semibold">{title}</span>
+        {chosen && <span className="text-micro uppercase tracking-wider text-primary font-bold">your pick</span>}
+      </div>
+      <div className="font-mono tabular text-ink text-title-sm font-semibold mt-1">{headline}</div>
+      <div className="text-micro text-ink-muted">{sub}</div>
+      <ul className="mt-1.5 space-y-0.5">
+        {lines.map((l) => (
+          <li key={l} className="text-label text-ink-2 leading-snug">· {l}</li>
+        ))}
+      </ul>
+    </div>
+  );
+
+  return (
+    <div className="mt-3">
+      <div className="text-label uppercase tracking-wider text-ink-muted font-semibold mb-1.5">
+        Own vs lease · per airframe, over 3 years
+      </div>
+      <div className="flex gap-2">
+        <Col
+          chosen={acquisitionType === "buy"}
+          title="Own it"
+          headline={fmtMoney(buy)}
+          sub="paid up front"
+          lines={[
+            `Book ≈ ${fmtMoney(bookAtHorizon)} after 3y`,
+            `Broker resale ≈ ${fmtMoney(resaleAtHorizon)}`,
+            `Net cost if sold ≈ ${fmtMoney(ownNetIfSold)}`,
+          ]}
+        />
+        <Col
+          chosen={acquisitionType === "lease"}
+          title="Lease it"
+          headline={`${fmtMoney(terms.perQuarterUsd)}/Q`}
+          sub={`${fmtMoney(terms.depositUsd)} deposit`}
+          lines={[
+            `${fmtMoney(leaseTotal)} total over 12Q`,
+            "Walk away free at term end",
+            `or buy out for ${fmtMoney(terms.buyoutResidualUsd)}`,
+          ]}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -8,6 +8,7 @@ import { useGame, selectPlayer } from "@/store/game";
 import { brandRating, computeAirlineValue, effectiveTravelIndex } from "@/lib/engine";
 import { buildQuarterStory, buildRankLine } from "@/lib/quarter-story";
 import { MILESTONES_BY_ID } from "@/data/milestones";
+import { DOCTRINE_BY_ID } from "@/data/doctrines";
 import { TrendingUp, TrendingDown, Newspaper, Plane, Award, Users, FileBarChart, NotebookPen } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { getGamePreference, setGamePreference } from "@/lib/client-preferences";
@@ -542,6 +543,48 @@ export function QuarterCloseModal() {
                       {cashDelta >= 0 ? "+" : ""}{fmtMoney(cashDelta)}
                     </span>
                   </div>
+                </div>
+              );
+            })()}
+
+            {/* Doctrine dividend (W1.2) — makes the player's strategy
+                visible in dollars every quarter, so they double down on
+                a doctrine they can see paying (and feel the pull of the
+                mid-game pivot when it isn't). demandRevenueUsd is ≈
+                (capacity-bound routes clip it); staffDeltaUsd is exact. */}
+            {(() => {
+              const dd = result.doctrineDividend;
+              if (!dd) return null;
+              const net = dd.demandRevenueUsd + dd.staffDeltaUsd;
+              // Only celebrate a POSITIVE dividend. The attribution
+              // under-counts premium-service's edge (its fare-tolerance
+              // and load-factor-ceiling lift live in the elasticity path,
+              // not the demand multiplier we measure), so a net-negative
+              // here would unfairly read as "your doctrine cost you" when
+              // the un-measured yield benefit is the whole point. Hide it
+              // rather than mislead.
+              if (net < 200_000) return null;
+              const doc = player.doctrine ? DOCTRINE_BY_ID[player.doctrine] : undefined;
+              const parts: string[] = [];
+              if (dd.demandRevenueUsd > 200_000) parts.push(`≈ ${fmtMoney(dd.demandRevenueUsd)} demand & yield`);
+              if (dd.staffDeltaUsd > 200_000) parts.push(`${fmtMoney(dd.staffDeltaUsd)} leaner payroll`);
+              if (dd.staffDeltaUsd < -200_000) parts.push(`${fmtMoney(-dd.staffDeltaUsd)} service investment`);
+              return (
+                <div className="rounded-md border border-[var(--accent-soft-2)] bg-[var(--accent-soft)]/50 px-3 py-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-caption uppercase tracking-wider text-accent font-semibold">
+                      {doc?.name ?? "Doctrine"} dividend
+                    </span>
+                    <span className={cn(
+                      "tabular font-mono font-semibold",
+                      net >= 0 ? "text-positive" : "text-negative",
+                    )}>
+                      {net >= 0 ? "+" : ""}{fmtMoney(net)}
+                    </span>
+                  </div>
+                  {parts.length > 0 && (
+                    <div className="text-label text-ink-muted mt-0.5">{parts.join(" · ")}</div>
+                  )}
                 </div>
               );
             })()}
