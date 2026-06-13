@@ -3530,6 +3530,35 @@ export const useGame = create<GameStore>()(
           return { ok: false, error: "Unknown city" };
         if (aircraftIds.length === 0)
           return { ok: false, error: "Assign at least one aircraft" };
+        // Widebody airport gating (W1.4) — the biggest airframes need a
+        // major airport at BOTH ends (runway length, wide-body gates,
+        // ground handling). Widebody = >250-seat passenger or ≥60t
+        // freighter; "major" = Tier 1-2. Regional jets keep their niche
+        // serving the small fields a widebody can't. Existing active
+        // routes are grandfathered (this only gates NEW openings + edits
+        // that add a widebody); the spec card flags the requirement so
+        // the player never hits a surprise here.
+        {
+          const widebodyOnRoute = aircraftIds.some((id) => {
+            const f = player.fleet.find((x) => x.id === id);
+            const spec = f ? AIRCRAFT_BY_ID[f.specId] : undefined;
+            if (!spec) return false;
+            return spec.family === "cargo"
+              ? (spec.cargoTonnes ?? 0) >= 60
+              : spec.seats.first + spec.seats.business + spec.seats.economy > 250;
+          });
+          if (widebodyOnRoute) {
+            const oTier = CITIES_BY_CODE[rawOrigin]?.tier ?? 4;
+            const dTier = CITIES_BY_CODE[rawDest]?.tier ?? 4;
+            if (oTier > 2 || dTier > 2) {
+              const small = oTier > 2 ? rawOrigin : rawDest;
+              return {
+                ok: false,
+                error: `Widebodies need a major airport (Tier 1-2) at both ends — ${small} is too small. Use a narrowbody or regional jet here.`,
+              };
+            }
+          }
+        }
         // Hub-first normalization: a route DXB↔LHR is the same airline
         // operation whether the player picks DXB→LHR or LHR→DXB. Always
         // place the player's hub (or first secondary hub) on the origin
@@ -6156,6 +6185,20 @@ export const useGame = create<GameStore>()(
               const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
               const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
               const isCargo = acSpec?.family === "cargo";
+              // Widebody airport gating (W1.4) — bots obey the same rule
+              // as the player: the biggest airframes need a Tier 1-2
+              // airport at both ends. Skip the plan (the aircraft stays
+              // idle for re-deployment) rather than open an illegal route.
+              if (acSpec) {
+                const isWide = isCargo
+                  ? (acSpec.cargoTonnes ?? 0) >= 60
+                  : acSpec.seats.first + acSpec.seats.business + acSpec.seats.economy > 250;
+                if (isWide &&
+                    ((CITIES_BY_CODE[rp.origin]?.tier ?? 4) > 2 ||
+                     (CITIES_BY_CODE[rp.dest]?.tier ?? 4) > 2)) {
+                  continue;
+                }
+              }
               // Mirror the player flow: routes that need a slot
               // auction to resolve start as "pending" and earn no
               // revenue until the auction lands. Earlier the bot
