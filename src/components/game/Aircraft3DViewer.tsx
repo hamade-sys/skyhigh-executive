@@ -647,7 +647,10 @@ function ProceduralAircraft({ specId }: { specId: string }) {
 /* ───────────────────────── GLB path (real models) ───────────────────────── */
 
 function GlbModel({ path }: { path: string }) {
-  const { scene } = useGLTF(path);
+  // Models are Draco-compressed (mesh) + WebP textures. Passing `true`
+  // tells drei to attach a DRACOLoader (decoder served from the gstatic
+  // CDN); WebP textures decode natively in the browser.
+  const { scene } = useGLTF(path, true);
   const groupRef = useRef<THREE.Group>(null);
   const grabbed = useRef(false);
 
