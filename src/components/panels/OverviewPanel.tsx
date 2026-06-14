@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Metric, Modal, ModalBody, ModalFooter, ModalHeader, Sparkline } from "@/components/ui";
 import { fmtMoney, fmtPct, getTotalRounds } from "@/lib/format";
 import { useGame, selectPlayer } from "@/store/game";
@@ -10,6 +10,7 @@ import { DOCTRINES, DOCTRINE_BY_ID, DOCTRINE_ICON_TINT } from "@/data/doctrines"
 import { CITIES_BY_CODE } from "@/data/cities";
 import { airlineColorFor, type AirlineColorId } from "@/lib/games/airline-colors";
 import { useUi, type PanelId } from "@/store/ui";
+import { AirlineMark } from "@/components/game/AirlineMark";
 import { SecondaryHubModal } from "@/components/game/SecondaryHubModal";
 import { HubInvestmentsModal } from "@/components/game/HubInvestmentsModal";
 import {
@@ -43,6 +44,32 @@ export function OverviewPanel() {
   const [draftDoctrine, setDraftDoctrine] = useState<DoctrineId>("premium-service");
   const [doctrineError, setDoctrineError] = useState<string | null>(null);
 
+  // Consume the cross-component "open doctrine review" signal fired by the
+  // midpoint board-moment banner on the canvas (W1.7). These hooks sit
+  // ABOVE the `if (!player) return null` guard below so they run on every
+  // render (rules-of-hooks). Eligibility is recomputed inside the effect —
+  // guarding on `player` — rather than read from the derived
+  // `canReviewDoctrine`, which is only computed after the guard.
+  const doctrineReviewRequested = useUi((u) => u.doctrineReviewRequested);
+  const clearDoctrineReviewRequest = useUi((u) => u.clearDoctrineReviewRequest);
+  useEffect(() => {
+    if (!doctrineReviewRequested) return;
+    clearDoctrineReviewRequest();
+    if (!player) return;
+    const mid = Math.floor((s.session?.totalRounds ?? 40) / 2);
+    const revised =
+      player.flags.has("doctrine_revised_midgame") ||
+      player.flags.has("doctrine_revised_r20");
+    if (s.currentQuarter === mid && !revised) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setDraftDoctrine(currentDoctrine(player.doctrine));
+      setDoctrineError(null);
+      setDoctrineReviewOpen(true);
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doctrineReviewRequested]);
+
   if (!player) return null;
 
   const doctrineMeta = DOCTRINE_BY_ID[player.doctrine] ?? DOCTRINE_BY_ID["premium-service"];
@@ -63,6 +90,10 @@ export function OverviewPanel() {
   const canReviewDoctrine =
     s.currentQuarter === midRound && !alreadyRevised;
   const airlineValue = computeAirlineValue(player);
+  // W1.7 — rebrand cost mirrors the store guard (3% of airline value,
+  // $40M-$400M) so the player decides informed.
+  const rebrandCost = Math.max(40_000_000, Math.min(400_000_000, Math.round(airlineValue * 0.03)));
+
   const activeRoutes = player.routes.filter((r) => r.status === "active");
   const totalRevenueLast = player.financialsByQuarter.at(-1)?.revenue ?? 0;
   const prevRevenue = player.financialsByQuarter.at(-2)?.revenue ?? 0;
@@ -183,24 +214,14 @@ export function OverviewPanel() {
           Airline
         </div>
         <div className="flex items-center gap-3">
-          {(() => {
-            // Player's chosen brand color, with contrast-aware text.
-            const ac = airlineColorFor({
-              colorId: player.airlineColorId as AirlineColorId | undefined,
-              fallbackKey: player.id,
-            });
-            return (
-              <span
-                className="inline-block w-9 h-9 rounded-md flex items-center justify-center font-mono text-body-sm font-semibold"
-                style={{
-                  background: ac.hex,
-                  color: ac.textOn === "white" ? "#ffffff" : "#0f172a",
-                }}
-              >
-                {player.code}
-              </span>
-            );
-          })()}
+          <AirlineMark
+            code={player.code}
+            colorId={player.airlineColorId}
+            iconId={player.airlineIconId}
+            fallbackKey={player.id}
+            size={36}
+            shape="rounded"
+          />
           <div>
             <div className="font-display text-heading text-ink leading-tight">
               {player.name}
@@ -569,7 +590,12 @@ export function OverviewPanel() {
           </div>
           <h2 className="font-display text-2xl text-ink">Revise operating doctrine</h2>
           <p className="text-body text-ink-muted mt-1">
-            One strategic reset is unlocked. The new doctrine applies immediately and persists for the rest of the campaign.
+            Your one strategic reset of the campaign. A pivot isn&apos;t free —
+            it costs <strong className="text-ink">{fmtMoney(rebrandCost)}</strong> to
+            rebrand (3% of airline value) and the market needs time to re-learn you
+            (a temporary brand dip that recovers over the next couple of quarters).
+            Worth it only if your current doctrine is genuinely underperforming —
+            check the doctrine dividend on your last quarter close.
           </p>
         </ModalHeader>
         <ModalBody
@@ -628,10 +654,12 @@ export function OverviewPanel() {
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setDoctrineReviewOpen(false)}>
-            Keep current
+            Keep current doctrine
           </Button>
           <Button
             variant="primary"
+            disabled={draftDoctrine === player.doctrine || player.cashUsd < rebrandCost}
+            title={player.cashUsd < rebrandCost ? `Need ${fmtMoney(rebrandCost)} cash to rebrand` : undefined}
             onClick={() => {
               const res = s.reviseDoctrineAtR20(draftDoctrine);
               if (!res.ok) {
@@ -642,7 +670,7 @@ export function OverviewPanel() {
               setDoctrineReviewOpen(false);
             }}
           >
-            Confirm doctrine
+            Pivot · {fmtMoney(rebrandCost)}
           </Button>
         </ModalFooter>
       </Modal>

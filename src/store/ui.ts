@@ -45,6 +45,14 @@ interface UiStore {
    *  watches this and renders the modal. Null = closed. */
   airportDetailCode: string | null;
   setAirportDetailCode(code: string | null): void;
+  /** Cross-component signal (W1.7): when true, the Reports → Overview
+   *  panel auto-opens its mid-campaign doctrine-review modal. Set by the
+   *  prominent midpoint board-moment banner (which lives on the canvas);
+   *  OverviewPanel consumes it and clears it. Lets the banner trigger the
+   *  existing review modal without duplicating it. */
+  doctrineReviewRequested: boolean;
+  requestDoctrineReview(): void;
+  clearDoctrineReviewRequest(): void;
 }
 
 /**
@@ -65,4 +73,7 @@ export const useUi = create<UiStore>((set, get) => ({
   setViewingTeamId: (id) => set({ viewingTeamId: id }),
   airportDetailCode: null,
   setAirportDetailCode: (code) => set({ airportDetailCode: code }),
+  doctrineReviewRequested: false,
+  requestDoctrineReview: () => set({ panel: "reports", doctrineReviewRequested: true }),
+  clearDoctrineReviewRequest: () => set({ doctrineReviewRequested: false }),
 }));

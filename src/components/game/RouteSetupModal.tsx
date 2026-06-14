@@ -144,6 +144,11 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
   // Cap frequency to the engine-computed max as soon as aircraft selection
   // changes, so the slider can never exceed the physics-derived ceiling.
   const dist = origin && dest ? distanceBetween(origin, dest) : 0;
+  // Widebody airport gating (W1.4) — both endpoints must be Tier 1-2 for
+  // the biggest airframes. Mirrors the openRoute store guard.
+  const needsMajorAirport =
+    (CITIES_BY_CODE[origin ?? ""]?.tier ?? 4) > 2 ||
+    (CITIES_BY_CODE[dest ?? ""]?.tier ?? 4) > 2;
   const specIds = useMemo(
     () =>
       selectedPlaneIds
@@ -677,7 +682,14 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                 const planeMaxWeekly = canReach
                   ? maxWeeklyRotations(p.specId, dist, p.engineUpgrade ?? null, p.cargoBelly, player.doctrine)
                   : 0;
-                const disabled = !canReach || familyMismatch;
+                // Widebody airport gating (W1.4) — the biggest airframes
+                // can't serve small fields. Mirrors the openRoute store
+                // guard so the player sees WHY before hitting the error.
+                const isWidebody = spec.family === "cargo"
+                  ? (spec.cargoTonnes ?? 0) >= 60
+                  : spec.seats.first + spec.seats.business + spec.seats.economy > 250;
+                const tooBigForAirports = isWidebody && needsMajorAirport;
+                const disabled = !canReach || familyMismatch || tooBigForAirports;
                 return (
                   <label
                     key={p.id}
@@ -734,6 +746,10 @@ export function RouteSetupModal({ open, origin, dest, forceCargo, onClose, onLau
                     </div>
                     {!canReach ? (
                       <Badge tone="negative">Out of range</Badge>
+                    ) : tooBigForAirports ? (
+                      <Badge tone="warning" title="Widebodies need a major airport (Tier 1-2) at both ends.">
+                        Needs major airport
+                      </Badge>
                     ) : familyMismatch ? (
                       <Badge tone="warning">
                         {lockedFamily === "cargo" ? "Cargo route locked" : "Passenger route locked"}

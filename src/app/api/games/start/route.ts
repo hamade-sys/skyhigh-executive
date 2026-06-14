@@ -32,6 +32,10 @@ import {
   pickNextAvailableColor,
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
+import {
+  isAirlineIconId,
+  pickIconForKey,
+} from "@/lib/games/airline-icons";
 import { pickAirlineNames } from "@/data/airline-names";
 import { broadcastGameEvent } from "@/lib/games/realtime-broadcast";
 
@@ -121,6 +125,7 @@ export async function POST(req: NextRequest) {
       const playerSetups = (stateJson.playerSetups as Record<string, {
         airlineName: string; code: string; hub: string; doctrine: string;
         airlineColorId?: string | null;
+        airlineIconId?: string | null;
       }> | undefined) ?? {};
 
       const plannedSeats = (
@@ -218,6 +223,10 @@ export async function POST(req: NextRequest) {
         const memberColorId =
           setupColor ?? pickNextAvailableColor(claimedColorIds);
         claimedColorIds.push(memberColorId);
+        // D-007 — the member's chosen logo (null = code letters).
+        const memberIconId = isAirlineIconId(setup?.airlineIconId)
+          ? setup.airlineIconId
+          : null;
         const team = createInitializedTeamFromOnboarding({
           airlineName: setup?.airlineName ?? (member.display_name
             ? `${member.display_name}'s Airlines`
@@ -230,6 +239,7 @@ export async function POST(req: NextRequest) {
           claimedBySessionId: member.session_id,
           playerDisplayName: member.display_name ?? null,
           airlineColorId: memberColorId,
+          airlineIconId: memberIconId,
         });
         seededTeams.push({
           ...team,
@@ -287,6 +297,10 @@ export async function POST(req: NextRequest) {
           claimedBySessionId: null,
           playerDisplayName: null,
           airlineColorId: botColorId,
+          // D-007 — deterministic emblem per bot (icons may repeat).
+          airlineIconId: pickIconForKey(
+            `${namePick?.code ?? ""}${namePick?.name ?? ""}${i}`,
+          ),
         });
         const botTeam = {
           ...team,
@@ -321,6 +335,10 @@ export async function POST(req: NextRequest) {
             claimedBySessionId: null,
             playerDisplayName: null,
             airlineColorId: fallbackBotColorId,
+            // D-007 — deterministic emblem per fallback bot.
+            airlineIconId: pickIconForKey(
+              `${namePick?.code ?? ""}${namePick?.name ?? ""}${i}`,
+            ),
           });
           seededTeams.push({
             ...team,

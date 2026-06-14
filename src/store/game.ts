@@ -150,6 +150,7 @@ import {
 } from "@/lib/hub-pricing";
 import { createInitializedTeamFromOnboarding } from "@/lib/games/team-factory";
 import { pickNextAvailableColor, type AirlineColorId } from "@/lib/games/airline-colors";
+import { pickIconForKey, type AirlineIconId } from "@/lib/games/airline-icons";
 import { pickAirlineNames } from "@/data/airline-names";
 import { fetchWithRetry } from "@/lib/games/fetch-with-retry";
 import { captureEvent } from "@/lib/telemetry";
@@ -181,11 +182,21 @@ import type {
   Sliders,
   Subsidiary,
   Team,
+  CrisisOptionId,
+  PendingCrisis,
+  CrisisPayoff,
 } from "@/types/game";
 import {
   SUBSIDIARY_TIER_REV_MULT,
   SUBSIDIARY_UPGRADE_COST_MULT,
 } from "@/types/game";
+import {
+  crisisOptions,
+  FUEL_SPIKE_THRESHOLD,
+  DEMAND_COLLAPSE_THRESHOLD,
+  CRISIS_COOLDOWN_QUARTERS,
+  CRISIS_PAYOFF_DELAY,
+} from "@/lib/crisis";
 
 // ─── Mocked competitor names for single-team leaderboard ────
 // Hub + brand-color cycle for solo-game competitors. Names are
@@ -270,6 +281,9 @@ export interface GameStore extends GameState {
      *  onboarding. Defaults to "teal" (first in the palette). Bot
      *  rivals fill the remaining colors deterministically. */
     airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId;
+    /** D-007 — chosen airline logo/emblem. Optional; null falls back to
+     *  the IATA code letters. Bots get a deterministic emblem. */
+    airlineIconId?: import("@/lib/games/airline-icons").AirlineIconId | null;
   }): void;
   /** Phase 9 — set/change the player's airline color id. Used by the
    *  in-game settings menu so a player can re-tint mid-game without
@@ -279,6 +293,10 @@ export interface GameStore extends GameState {
 
   setSliders(sliders: Partial<Sliders>): void;
   reviseDoctrineAtR20(doctrine: DoctrineId): { ok: boolean; error?: string };
+  /** Resolve the player's live macro-shock board call (W1.8). Applies the
+   *  chosen option's immediate effect and queues its deferred payoff, which
+   *  settles `CRISIS_PAYOFF_DELAY` quarters later in the digest. */
+  resolveCrisis(optionId: CrisisOptionId): { ok: boolean; error?: string };
 
   orderAircraft(args: {
     specId: string;
@@ -953,9 +971,12 @@ function _enqueuePush<T>(work: () => Promise<T>): Promise<T> {
 }
 
 function fmtMoneyPlain(n: number): string {
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
+  // Sign before the $ so negatives read "−$2.9M", not "$-2880000".
+  const sign = n < 0 ? "−" : "";
+  const a = Math.abs(n);
+  if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(0)}K`;
+  return `${sign}$${a.toFixed(0)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1233,6 +1254,8 @@ function makeStartingTeam(args: {
   playerDisplayName?: string | null;
   /** Phase 9 — visual identity color id. */
   airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
+  /** D-007 — chosen airline logo/emblem id (null = fall back to code). */
+  airlineIconId?: import("@/lib/games/airline-icons").AirlineIconId | null;
 }): Team {
   // Derive controlledBy from isPlayer when not passed explicitly. In
   // legacy solo runs, isPlayer === true means "this browser's human"
@@ -1254,6 +1277,7 @@ function makeStartingTeam(args: {
     claimedBySessionId: args.claimedBySessionId ?? null,
     playerDisplayName: args.playerDisplayName ?? null,
     airlineColorId: args.airlineColorId ?? null,
+    airlineIconId: args.airlineIconId ?? null,
     members: [
       { role: "CEO",  name: args.isPlayer ? "Your CEO"  : `${args.code} CEO`,  mvpPts: 0, cards: [] },
       { role: "CFO",  name: args.isPlayer ? "Your CFO"  : `${args.code} CFO`,  mvpPts: 0, cards: [] },
@@ -1383,7 +1407,7 @@ export const useGame = create<GameStore>()(
           airlineName, code, doctrine, hubCode, teamCount = 5,
           tagline, marketFocus, geographicPriority, pricingPhilosophy,
           salaryPhilosophy, marketingLevel, csrTheme,
-          airlineColorId,
+          airlineColorId, airlineIconId,
         } = args;
 
         // Phase 9 — color allocation. Player picks at onboarding (or
@@ -1392,6 +1416,9 @@ export const useGame = create<GameStore>()(
         // deterministically so a solo run visually matches a
         // multiplayer cohort.
         const playerColorId = airlineColorId ?? "sky";
+        // D-007 — chosen logo, or null (the mark falls back to the
+        // code letters). Bots below get a deterministic emblem.
+        const playerIconId = airlineIconId ?? null;
 
         // Player team — built via the shared factory so a solo run
         // produces the SAME starting position as a player joining a
@@ -1408,6 +1435,7 @@ export const useGame = create<GameStore>()(
           salaryPhilosophy, marketingLevel, csrTheme,
           controlledBy: "human",
           airlineColorId: playerColorId,
+          airlineIconId: playerIconId,
         });
 
         // Mock competitors
@@ -1446,6 +1474,8 @@ export const useGame = create<GameStore>()(
             airlineName: meta.name, code: meta.code, doctrine,
             hubCode: hub, isPlayer: false, color: fallbackHex,
             airlineColorId: rivalColorId,
+            // D-007 — deterministic emblem per rival (icons may repeat).
+            airlineIconId: pickIconForKey(meta.code + meta.name),
           });
           // Spread rival difficulties so the cohort feels mixed: a 5-rival
           // game gets ~1 easy / 3 medium / 1 hard; a 9-rival game gets
@@ -1693,6 +1723,32 @@ export const useGame = create<GameStore>()(
         // narrative intent of "a strategic reset" and prevents a
         // premium-doctrine player from inheriting cargo-era staff
         // discipline.
+        // No-op guard — re-confirming the SAME doctrine shouldn't cost
+        // anything or burn the one-time review.
+        if (doctrine === player.doctrine) {
+          return { ok: false, error: "That's already your doctrine — pick a different one to revise." };
+        }
+        // W1.7 — a pivot is a real decision, not a free toggle. Two costs:
+        //   1. Rebrand cost — 3% of airline value (min $40M, cap $400M).
+        //      Repainting the fleet, retraining staff, new positioning.
+        //   2. Brand confusion — an immediate −12 brand-points hit as the
+        //      market re-learns who you are. It recovers naturally over
+        //      the next couple of quarters via normal brand dynamics, so
+        //      the switch stings short-term but pays off if the new
+        //      doctrine genuinely fits (pairs with the W1.2 dividend that
+        //      shows whether your CURRENT doctrine is underperforming).
+        const rebrandCost = Math.max(
+          40_000_000,
+          Math.min(400_000_000, Math.round(computeAirlineValue(player) * 0.03)),
+        );
+        if (player.cashUsd < rebrandCost) {
+          return {
+            ok: false,
+            error: `Rebranding costs ${fmtMoneyPlain(rebrandCost)} (3% of airline value) — not enough cash on hand.`,
+          };
+        }
+        const BRAND_CONFUSION_HIT = 12;
+        // Phase 5.1 — slider streaks reset on doctrine switch.
         const SLIDER_KEYS = ["staff", "marketing", "service", "rewards", "operations", "customerService"] as const;
         const resetStreaks = SLIDER_KEYS.reduce(
           (acc, k) => {
@@ -1707,6 +1763,8 @@ export const useGame = create<GameStore>()(
             return {
               ...t,
               doctrine,
+              cashUsd: t.cashUsd - rebrandCost,
+              brandPts: Math.max(0, t.brandPts - BRAND_CONFUSION_HIT),
               sliderStreaks: resetStreaks,
               flags: new Set([
                 ...(t.flags ?? []),
@@ -1715,7 +1773,70 @@ export const useGame = create<GameStore>()(
             };
           }),
         });
-        toast.accent("Doctrine revised", "Your new operating model is active starting this round.");
+        toast.accent(
+          "Doctrine revised",
+          `New operating model active · ${fmtMoneyPlain(rebrandCost)} rebrand · −${BRAND_CONFUSION_HIT} brand while the market re-learns you.`,
+        );
+        // W1.7 — persist (the action previously didn't, so a pivot was
+        // lost on refresh).
+        void get().pushStateToServer("player.revisedDoctrine", { doctrine, rebrandCost });
+        return { ok: true };
+      },
+
+      // W1.8 — resolve the live macro-shock board call. Applies the chosen
+      // option's immediate effect now and queues its deferred payoff, which
+      // settles CRISIS_PAYOFF_DELAY quarters later in the digest.
+      resolveCrisis: (optionId) => {
+        const s = get();
+        if (!s.playerTeamId) return { ok: false, error: "No player team" };
+        const player = s.teams.find((t) => t.id === s.playerTeamId);
+        const crisis = player?.pendingCrisis;
+        if (!player || !crisis) return { ok: false, error: "No active crisis" };
+        const choice = crisisOptions(crisis.kind, player).find((o) => o.id === optionId);
+        if (!choice) return { ok: false, error: "Unknown option" };
+
+        const payoff: CrisisPayoff = {
+          id: `${crisis.id}-${optionId}`,
+          kind: crisis.kind,
+          optionId,
+          raisedAtQuarter: crisis.raisedAtQuarter,
+          resolveAtQuarter: s.currentQuarter + CRISIS_PAYOFF_DELAY,
+          cashUsd: choice.deferred.cashUsd,
+          brandPts: choice.deferred.brandPts,
+          loyaltyPct: choice.deferred.loyaltyPct,
+          headline: choice.deferredHeadline,
+          detail: choice.deferredDetail,
+        };
+
+        set({
+          teams: s.teams.map((t) => {
+            if (t.id !== player.id) return t;
+            return {
+              ...t,
+              cashUsd: t.cashUsd + choice.immediate.cashUsd,
+              brandPts: Math.max(0, t.brandPts + choice.immediate.brandPts),
+              customerLoyaltyPct: Math.max(
+                0,
+                Math.min(100, t.customerLoyaltyPct + choice.immediate.loyaltyPct),
+              ),
+              pendingCrisis: null,
+              crisisPayoffs: [...(t.crisisPayoffs ?? []), payoff],
+            };
+          }),
+        });
+
+        const cashNote =
+          choice.immediate.cashUsd >= 0
+            ? `+${fmtMoneyPlain(choice.immediate.cashUsd)} now`
+            : `${fmtMoneyPlain(choice.immediate.cashUsd)} now`;
+        toast.accent(
+          `Board call: ${choice.label}`,
+          `${cashNote} · the payoff lands in ${CRISIS_PAYOFF_DELAY} quarters.`,
+        );
+        void get().pushStateToServer("player.resolvedCrisis", {
+          kind: crisis.kind,
+          optionId,
+        });
         return { ok: true };
       },
 
@@ -3530,6 +3651,35 @@ export const useGame = create<GameStore>()(
           return { ok: false, error: "Unknown city" };
         if (aircraftIds.length === 0)
           return { ok: false, error: "Assign at least one aircraft" };
+        // Widebody airport gating (W1.4) — the biggest airframes need a
+        // major airport at BOTH ends (runway length, wide-body gates,
+        // ground handling). Widebody = >250-seat passenger or ≥60t
+        // freighter; "major" = Tier 1-2. Regional jets keep their niche
+        // serving the small fields a widebody can't. Existing active
+        // routes are grandfathered (this only gates NEW openings + edits
+        // that add a widebody); the spec card flags the requirement so
+        // the player never hits a surprise here.
+        {
+          const widebodyOnRoute = aircraftIds.some((id) => {
+            const f = player.fleet.find((x) => x.id === id);
+            const spec = f ? AIRCRAFT_BY_ID[f.specId] : undefined;
+            if (!spec) return false;
+            return spec.family === "cargo"
+              ? (spec.cargoTonnes ?? 0) >= 60
+              : spec.seats.first + spec.seats.business + spec.seats.economy > 250;
+          });
+          if (widebodyOnRoute) {
+            const oTier = CITIES_BY_CODE[rawOrigin]?.tier ?? 4;
+            const dTier = CITIES_BY_CODE[rawDest]?.tier ?? 4;
+            if (oTier > 2 || dTier > 2) {
+              const small = oTier > 2 ? rawOrigin : rawDest;
+              return {
+                ok: false,
+                error: `Widebodies need a major airport (Tier 1-2) at both ends — ${small} is too small. Use a narrowbody or regional jet here.`,
+              };
+            }
+          }
+        }
         // Hub-first normalization: a route DXB↔LHR is the same airline
         // operation whether the player picks DXB→LHR or LHR→DXB. Always
         // place the player's hub (or first secondary hub) on the origin
@@ -4598,6 +4748,12 @@ export const useGame = create<GameStore>()(
         });
         // Phase B — D2: persist so cash + debt + loans survive a refresh.
         void get().pushStateToServer("player.borrowedCapital", { amount, loanId: loan.id });
+        // Confirm the draw (W1.5) — borrowing was silent; the player
+        // couldn't tell the loan landed or at what rate.
+        toast.success(
+          `Borrowed ${fmtMoneyPlain(amount)}`,
+          `${loan.lenderName ?? "Bank"} · ${ratePct.toFixed(1)}% · interest from next quarter`,
+        );
         return { ok: true };
       },
 
@@ -6156,6 +6312,20 @@ export const useGame = create<GameStore>()(
               const ac = updated.fleet.find((f) => f.id === rp.aircraftId);
               const acSpec = ac ? AIRCRAFT_BY_ID[ac.specId] : undefined;
               const isCargo = acSpec?.family === "cargo";
+              // Widebody airport gating (W1.4) — bots obey the same rule
+              // as the player: the biggest airframes need a Tier 1-2
+              // airport at both ends. Skip the plan (the aircraft stays
+              // idle for re-deployment) rather than open an illegal route.
+              if (acSpec) {
+                const isWide = isCargo
+                  ? (acSpec.cargoTonnes ?? 0) >= 60
+                  : acSpec.seats.first + acSpec.seats.business + acSpec.seats.economy > 250;
+                if (isWide &&
+                    ((CITIES_BY_CODE[rp.origin]?.tier ?? 4) > 2 ||
+                     (CITIES_BY_CODE[rp.dest]?.tier ?? 4) > 2)) {
+                  continue;
+                }
+              }
               // Mirror the player flow: routes that need a slot
               // auction to resolve start as "pending" and earn no
               // revenue until the auction lands. Earlier the bot
@@ -7143,9 +7313,88 @@ export const useGame = create<GameStore>()(
           { quarter: s.currentQuarter, index: Math.round(clampedFuel) },
         ].slice(-16);
 
+        // ─── Macro-shock board calls (W1.8) ────────────────────
+        // Two things at quarter close, for the human player only:
+        //   1. Settle any crisis payoffs whose resolution quarter has
+        //      arrived — the deferred bet lands alongside this digest.
+        //   2. Raise a fresh board call if live conditions just crossed a
+        //      crisis threshold (a fuel spike up through 150, or a demand
+        //      collapse down through 50). Crossing detection + a cooldown
+        //      mean a sustained shock fires the call once, not every
+        //      quarter it stays severe. Bots ride the underlying fuel /
+        //      demand effects the engine already applies, so this never
+        //      blocks a multiplayer advance.
+        const crisisMode = s.session?.campaignMode;
+        const prevTravelIdx = effectiveTravelIndex(s.currentQuarter, crisisMode);
+        const nextTravelIdx = effectiveTravelIndex(nextQ, crisisMode);
+        const playerForCrisis = s.playerTeamId
+          ? teamsAfterScrap.find((t) => t.id === s.playerTeamId)
+          : undefined;
+        let crisisToRaise: PendingCrisis | null = null;
+        if (!s.isObserver && playerForCrisis && !playerForCrisis.pendingCrisis) {
+          const cooldownOk =
+            nextQ - (playerForCrisis.lastCrisisQuarter ?? -CRISIS_COOLDOWN_QUARTERS) >=
+            CRISIS_COOLDOWN_QUARTERS;
+          if (cooldownOk) {
+            if (
+              s.fuelIndex < FUEL_SPIKE_THRESHOLD &&
+              clampedFuel >= FUEL_SPIKE_THRESHOLD
+            ) {
+              crisisToRaise = {
+                id: `fuel-spike-q${nextQ}`,
+                kind: "fuel-spike",
+                raisedAtQuarter: nextQ,
+                fuelIndex: Math.round(clampedFuel),
+                travelIndex: Math.round(nextTravelIdx),
+              };
+            } else if (
+              prevTravelIdx > DEMAND_COLLAPSE_THRESHOLD &&
+              nextTravelIdx <= DEMAND_COLLAPSE_THRESHOLD
+            ) {
+              crisisToRaise = {
+                id: `demand-collapse-q${nextQ}`,
+                kind: "demand-collapse",
+                raisedAtQuarter: nextQ,
+                fuelIndex: Math.round(clampedFuel),
+                travelIndex: Math.round(nextTravelIdx),
+              };
+            }
+          }
+        }
+        const maturedCrisisPayoffs: CrisisPayoff[] = [];
+        const teamsAfterCrisis = s.playerTeamId
+          ? teamsAfterScrap.map((t) => {
+              if (t.id !== s.playerTeamId) return t;
+              const due = (t.crisisPayoffs ?? []).filter(
+                (p) => p.resolveAtQuarter <= nextQ,
+              );
+              if (due.length === 0 && !crisisToRaise) return t;
+              maturedCrisisPayoffs.push(...due);
+              const remaining = (t.crisisPayoffs ?? []).filter(
+                (p) => p.resolveAtQuarter > nextQ,
+              );
+              const cashDelta = due.reduce((a, p) => a + p.cashUsd, 0);
+              const brandDelta = due.reduce((a, p) => a + p.brandPts, 0);
+              const loyaltyDelta = due.reduce((a, p) => a + p.loyaltyPct, 0);
+              return {
+                ...t,
+                cashUsd: t.cashUsd + cashDelta,
+                brandPts: Math.max(0, t.brandPts + brandDelta),
+                customerLoyaltyPct: Math.max(
+                  0,
+                  Math.min(100, t.customerLoyaltyPct + loyaltyDelta),
+                ),
+                crisisPayoffs: remaining,
+                ...(crisisToRaise
+                  ? { pendingCrisis: crisisToRaise, lastCrisisQuarter: nextQ }
+                  : {}),
+              };
+            })
+          : teamsAfterScrap;
+
         _closeCompleted = true; // mark before the set so finally sees it
         set({
-          teams: teamsAfterScrap,
+          teams: teamsAfterCrisis,
           cargoContracts: updatedCargoContracts,
           lastCloseResult: result,
           phase: "quarter-closing",
@@ -7172,6 +7421,22 @@ export const useGame = create<GameStore>()(
               `No buyers in 8 quarters — broker paid +${fmtMoneyPlain(playerScrap.proceeds)} salvage.`,
             );
           }
+        }
+
+        // W1.8 — surface any crisis bet that just landed alongside the
+        // digest. The cash/brand/loyalty deltas were already applied in the
+        // close set; this is the "watch the bet land" moment.
+        if (maturedCrisisPayoffs.length > 0) {
+          const totalCash = maturedCrisisPayoffs.reduce((a, p) => a + p.cashUsd, 0);
+          const lead = maturedCrisisPayoffs[0];
+          const cashTag =
+            totalCash >= 0 ? `+${fmtMoneyPlain(totalCash)}` : fmtMoneyPlain(totalCash);
+          (totalCash >= 0 ? toast.success : toast.info)(
+            `${lead.headline} · ${cashTag}`,
+            maturedCrisisPayoffs.length === 1
+              ? lead.detail
+              : `${lead.detail} (+${maturedCrisisPayoffs.length - 1} more crisis payoff${maturedCrisisPayoffs.length - 1 === 1 ? "" : "s"} settled)`,
+          );
         }
 
         // Phase 6 P0 — surface a sticky toast when the player's team
@@ -8446,6 +8711,7 @@ export const useGame = create<GameStore>()(
             claimedBySessionId: t.claimedBySessionId ?? null,
             playerDisplayName: t.playerDisplayName ?? null,
             airlineColorId: t.airlineColorId ?? null,
+            airlineIconId: t.airlineIconId ?? null,
           });
           // Preserve the team ID so existing membership rows in
           // game_members still resolve to the right team. The factory
@@ -10329,6 +10595,11 @@ export const useGame = create<GameStore>()(
               secondaryHubCodes: [...t.secondaryHubCodes, cityCode],
             } : t),
           });
+          // W1.5 — confirm + persist. This action had neither a toast
+          // nor a server push, so establishing a hub felt like nothing
+          // and was lost on refresh.
+          toast.success(`${cityCode} is now a secondary hub`, `${fmtMoneyPlain(cost)} · connecting traffic + local demand`);
+          void get().pushStateToServer("player.addedSecondaryHub", { cityCode });
           return { ok: true };
         }
 
@@ -10345,6 +10616,9 @@ export const useGame = create<GameStore>()(
             secondaryHubCodes: [...t.secondaryHubCodes, cityCode],
           } : t),
         });
+        // W1.5 — confirm + persist (was silent and non-persisting).
+        toast.success(`${cityCode} is now a secondary hub`, `${fmtMoneyPlain(activationCost)} · connecting traffic + local demand`);
+        void get().pushStateToServer("player.addedSecondaryHub", { cityCode });
         return { ok: true };
       },
 

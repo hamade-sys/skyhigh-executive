@@ -24,6 +24,7 @@ import {
   airlineColorFor,
   type AirlineColorId,
 } from "@/lib/games/airline-colors";
+import { AirlineMark } from "@/components/game/AirlineMark";
 import { DOCTRINE_BY_ID, DOCTRINE_ICON_TINT } from "@/data/doctrines";
 import { CITIES_BY_CODE } from "@/data/cities";
 import type { Team } from "@/types/game";
@@ -136,15 +137,15 @@ export function CohortReveal({ gameId, teams, onContinue }: Props) {
                 <div className="p-4 md:p-5">
                   {/* Header row — code chip, name, human/bot tag */}
                   <div className="flex items-center gap-3 mb-3">
-                    <span
-                      className="shrink-0 w-11 h-11 rounded-lg flex items-center justify-center font-mono text-xs font-bold tabular"
-                      style={{
-                        backgroundColor: color.hex,
-                        color: color.textOn === "white" ? "#ffffff" : "#0f172a",
-                      }}
-                    >
-                      {team.code}
-                    </span>
+                    <AirlineMark
+                      code={team.code}
+                      colorId={team.airlineColorId}
+                      iconId={team.airlineIconId}
+                      fallbackKey={team.id}
+                      size={44}
+                      shape="rounded"
+                      className="shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="text-title-sm font-semibold text-white truncate">
                         {team.name}

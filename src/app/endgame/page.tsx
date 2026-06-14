@@ -12,6 +12,7 @@ import { SCENARIOS_BY_ID } from "@/data/scenarios";
 import { Award, TrendingUp, TrendingDown, Trophy, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { airlineColorFor } from "@/lib/games/airline-colors";
+import { AirlineMark } from "@/components/game/AirlineMark";
 import { MultiAirlineAnalytics } from "@/components/endgame/MultiAirlineAnalytics";
 import type { Team } from "@/types/game";
 
@@ -251,8 +252,6 @@ export default function Endgame() {
           const lRoutes = l.routes.filter((r) => r.status === "active").length;
           const wFleet = w.fleet.filter((f) => f.status === "active").length;
           const lFleet = l.fleet.filter((f) => f.status === "active").length;
-          const wCol = airlineColorFor({ colorId: w.airlineColorId, fallbackKey: w.id });
-          const lCol = airlineColorFor({ colorId: l.airlineColorId, fallbackKey: l.id });
 
           type H2HRow = { label: string; wVal: string; lVal: string; wNum: number; lNum: number; lowerWins?: boolean };
           const h2hRows: H2HRow[] = [
@@ -277,12 +276,15 @@ export default function Endgame() {
                 {/* Team name headers */}
                 <div className="grid grid-cols-[1fr_6rem_1fr] gap-3 mb-1 pb-3 border-b border-line">
                   <div className="flex items-center gap-2">
-                    <span
-                      className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded font-mono text-caption font-semibold"
-                      style={{ background: wCol.hex, color: wCol.textOn === "white" ? "#fff" : "#0f172a" }}
-                    >
-                      {w.code}
-                    </span>
+                    <AirlineMark
+                      code={w.code}
+                      colorId={w.airlineColorId}
+                      iconId={w.airlineIconId}
+                      fallbackKey={w.id}
+                      size={36}
+                      shape="rounded"
+                      className="shrink-0"
+                    />
                     <div className="min-w-0">
                       <div className="text-title-sm font-semibold text-ink truncate">{w.name}</div>
                       <div className="text-caption uppercase tracking-wide text-positive font-semibold mt-0.5">🥇 Winner</div>
@@ -294,12 +296,15 @@ export default function Endgame() {
                       <div className="text-title-sm font-semibold text-ink truncate">{l.name}</div>
                       <div className="text-caption uppercase tracking-wide text-ink-muted font-semibold mt-0.5">🥈 Runner-up</div>
                     </div>
-                    <span
-                      className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded font-mono text-caption font-semibold"
-                      style={{ background: lCol.hex, color: lCol.textOn === "white" ? "#fff" : "#0f172a" }}
-                    >
-                      {l.code}
-                    </span>
+                    <AirlineMark
+                      code={l.code}
+                      colorId={l.airlineColorId}
+                      iconId={l.airlineIconId}
+                      fallbackKey={l.id}
+                      size={36}
+                      shape="rounded"
+                      className="shrink-0"
+                    />
                   </div>
                 </div>
                 {/* Metric rows */}
@@ -495,12 +500,15 @@ export default function Endgame() {
                     <span className="font-mono text-body-lg text-ink-muted w-6 tabular text-center">
                       #{i + 1}
                     </span>
-                    <span
-                      className="inline-block w-7 h-7 rounded flex items-center justify-center font-mono text-caption font-semibold text-primary-fg shrink-0"
-                      style={{ background: airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).hex }}
-                    >
-                      {t.code}
-                    </span>
+                    <AirlineMark
+                      code={t.code}
+                      colorId={t.airlineColorId}
+                      iconId={t.airlineIconId}
+                      fallbackKey={t.id}
+                      size={28}
+                      shape="rounded"
+                      className="shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`text-title-sm truncate ${!isObserver && t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}`}>
@@ -647,15 +655,15 @@ export default function Endgame() {
                       {/* Team label — only shown when comparing 2 airlines */}
                       {ranked.length === 2 && (
                         <div className="flex items-center gap-2 mb-3">
-                          <span
-                            className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded font-mono text-micro font-semibold"
-                            style={{
-                              background: arcCol.hex,
-                              color: arcCol.textOn === "white" ? "#fff" : "#0f172a",
-                            }}
-                          >
-                            {arcTeam.code}
-                          </span>
+                          <AirlineMark
+                            code={arcTeam.code}
+                            colorId={arcTeam.airlineColorId}
+                            iconId={arcTeam.airlineIconId}
+                            fallbackKey={arcTeam.id}
+                            size={24}
+                            shape="rounded"
+                            className="shrink-0"
+                          />
                           <span className="text-body-lg font-semibold text-ink">{arcTeam.name}</span>
                           {teamIdx === 0 && <Badge tone="accent">Winner</Badge>}
                           {teamIdx === 1 && <span className="text-label text-ink-muted uppercase tracking-wide">Runner-up</span>}
@@ -962,12 +970,14 @@ export default function Endgame() {
                     <td className="py-3 w-10 font-mono text-ink-muted">{i + 1}</td>
                     <td className="py-3">
                       <div className="flex items-center gap-2.5">
-                        <span
-                          className="inline-block w-6 h-6 rounded flex items-center justify-center font-mono text-caption font-semibold text-primary-fg"
-                          style={{ background: airlineColorFor({ colorId: t.airlineColorId, fallbackKey: t.id }).hex }}
-                        >
-                          {t.code}
-                        </span>
+                        <AirlineMark
+                          code={t.code}
+                          colorId={t.airlineColorId}
+                          iconId={t.airlineIconId}
+                          fallbackKey={t.id}
+                          size={24}
+                          shape="rounded"
+                        />
                         <span className={!isObserver && t.id === player.id ? "font-semibold text-ink" : "text-ink-2"}>
                           {t.name}
                         </span>
@@ -988,9 +998,9 @@ export default function Endgame() {
 
         {/* MVP Award (PRD §15.2) */}
         {(() => {
-          type MvpCandidate = { teamCode: string; teamName: string; teamColor: string; member: (typeof focusTeam.members)[number] };
+          type MvpCandidate = { teamId: string; teamCode: string; teamName: string; teamColorId: typeof focusTeam.airlineColorId; teamIconId: typeof focusTeam.airlineIconId; member: (typeof focusTeam.members)[number] };
           const allMembers: MvpCandidate[] = effectiveTeams.flatMap((t) =>
-            t.members.map((m) => ({ teamCode: t.code, teamName: t.name, teamColor: t.color, member: m }))
+            t.members.map((m) => ({ teamId: t.id, teamCode: t.code, teamName: t.name, teamColorId: t.airlineColorId, teamIconId: t.airlineIconId, member: m }))
           );
           const ranked = [...allMembers].sort((a, b) => b.member.mvpPts - a.member.mvpPts);
           const winner = ranked[0];
@@ -1005,12 +1015,15 @@ export default function Endgame() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3 p-3 rounded-md border border-accent bg-[var(--accent-soft)] mb-3">
-                  <span
-                    className="inline-block w-8 h-8 rounded flex items-center justify-center font-mono text-label font-semibold text-primary-fg shrink-0"
-                    style={{ background: winner.teamColor }}
-                  >
-                    {winner.teamCode}
-                  </span>
+                  <AirlineMark
+                    code={winner.teamCode}
+                    colorId={winner.teamColorId}
+                    iconId={winner.teamIconId}
+                    fallbackKey={winner.teamId}
+                    size={32}
+                    shape="rounded"
+                    className="shrink-0"
+                  />
                   <div className="flex-1">
                     <div className="font-display text-heading text-ink leading-tight">
                       {winner.member.name}
@@ -1086,6 +1099,7 @@ function PodiumStep({
     code: string;
     color: string;
     airlineColorId?: import("@/lib/games/airline-colors").AirlineColorId | null;
+    airlineIconId?: import("@/lib/games/airline-icons").AirlineIconId | null;
     finalAirlineValue: number;
   };
   isPlayer: boolean;
@@ -1109,21 +1123,15 @@ function PodiumStep({
         <div className="text-2xl leading-none mb-1.5" aria-hidden>
           {medal.emoji}
         </div>
-        <div
-          className="inline-flex items-center justify-center w-9 h-9 rounded mb-1.5 font-mono text-label font-semibold shrink-0"
-          style={{
-            background: airlineColorFor({
-              colorId: team.airlineColorId,
-              fallbackKey: team.id,
-            }).hex,
-            color: airlineColorFor({
-              colorId: team.airlineColorId,
-              fallbackKey: team.id,
-            }).textOn === "white" ? "#fff" : "#0F172A",
-          }}
-        >
-          {team.code}
-        </div>
+        <AirlineMark
+          code={team.code}
+          colorId={team.airlineColorId}
+          iconId={team.airlineIconId}
+          fallbackKey={team.id}
+          size={36}
+          shape="rounded"
+          className="mb-1.5 shrink-0"
+        />
         <div className="font-display text-title text-ink leading-tight">
           {team.name}
         </div>

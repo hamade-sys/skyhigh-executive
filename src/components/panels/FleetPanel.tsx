@@ -712,6 +712,15 @@ export function FleetPanel() {
                     <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
                       <div className="text-caption uppercase tracking-wider text-ink-muted">Book value</div>
                       <div className="font-mono tabular text-ink mt-0.5">{fmtMoney(f.bookValue)}</div>
+                      {/* Live broker quote (W1.1) — makes the depreciation
+                          reality visible at a glance: a near-new jet
+                          resells for ~50% of book, so flipping is plainly
+                          a loss without opening the Sell modal. */}
+                      {f.acquisitionType === "buy" && (
+                        <div className="text-micro text-ink-muted mt-0.5 tabular">
+                          resale ≈ {fmtMoney(brokerResaleQuoteUsd(f.bookValue))}
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-md bg-surface-2/40 border border-line/60 px-2 py-1.5">
                       <div className="text-caption uppercase tracking-wider text-ink-muted">Acquisition</div>

@@ -9,20 +9,7 @@ import { CITIES } from "@/data/cities";
 import { runQuarterClose } from "@/lib/engine";
 import { toast } from "@/store/toasts";
 import { cn } from "@/lib/cn";
-import {
-  airlineColorFor,
-  type AirlineColorId,
-} from "@/lib/games/airline-colors";
-
-/** Resolve a team's brand color from the airline palette. Used by
- *  every team-swatch render in this panel so the colors match the
- *  player's pick instead of legacy seed hexes. */
-function teamSwatch(t: { id: string; airlineColorId?: string | null }): string {
-  return airlineColorFor({
-    colorId: t.airlineColorId as AirlineColorId | undefined,
-    fallbackKey: t.id,
-  }).hex;
-}
+import { AirlineMark } from "@/components/game/AirlineMark";
 
 export function AdminPanel() {
   const s = useGame();
@@ -272,12 +259,14 @@ export function AdminPanel() {
           {s.teams.map((t) => (
             <div key={t.id} className="flex items-center justify-between text-body py-1 border-b border-line last:border-0">
               <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-caption text-primary-fg"
-                  style={{ background: teamSwatch(t) }}
-                >
-                  {t.code}
-                </span>
+                <AirlineMark
+                  code={t.code}
+                  colorId={t.airlineColorId}
+                  iconId={t.airlineIconId}
+                  fallbackKey={t.id}
+                  size={20}
+                  shape="rounded"
+                />
                 <span className="truncate">{t.name}</span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -441,12 +430,15 @@ export function AdminPanel() {
                     key={t.id}
                     className="flex items-center gap-2 text-body-sm"
                   >
-                    <span
-                      className="inline-block w-5 h-5 rounded flex items-center justify-center font-mono text-caption text-primary-fg shrink-0"
-                      style={{ background: teamSwatch(t) }}
-                    >
-                      {t.code}
-                    </span>
+                    <AirlineMark
+                      code={t.code}
+                      colorId={t.airlineColorId}
+                      iconId={t.airlineIconId}
+                      fallbackKey={t.id}
+                      size={20}
+                      shape="rounded"
+                      className="shrink-0"
+                    />
                     <span className="text-ink-2 truncate flex-1 min-w-0">
                       {t.name}
                     </span>
@@ -925,13 +917,15 @@ function FullCounterOfferAdmin() {
               key={t.id}
               className="flex items-baseline gap-2 rounded-md border border-warning/40 bg-[var(--warning-soft)]/40 px-2.5 py-2 text-body-sm"
             >
-              <span
-                className="inline-flex w-5 h-5 rounded items-center justify-center font-mono text-micro font-semibold text-primary-fg shrink-0"
-                style={{ background: teamSwatch(t) }}
-                aria-hidden="true"
-              >
-                {t.code}
-              </span>
+              <AirlineMark
+                code={t.code}
+                colorId={t.airlineColorId}
+                iconId={t.airlineIconId}
+                fallbackKey={t.id}
+                size={20}
+                shape="rounded"
+                className="shrink-0"
+              />
               <span className="text-ink font-medium flex-1 truncate">
                 {t.name}
               </span>
@@ -1010,13 +1004,15 @@ function StaffSurchargeAdmin() {
               key={t.id}
               className="flex items-baseline gap-2 rounded-md border border-line bg-surface-2/40 px-2.5 py-2 text-body-sm"
             >
-              <span
-                className="inline-flex w-5 h-5 rounded items-center justify-center font-mono text-micro font-semibold text-primary-fg shrink-0"
-                style={{ background: teamSwatch(t) }}
-                aria-hidden="true"
-              >
-                {t.code}
-              </span>
+              <AirlineMark
+                code={t.code}
+                colorId={t.airlineColorId}
+                iconId={t.airlineIconId}
+                fallbackKey={t.id}
+                size={20}
+                shape="rounded"
+                className="shrink-0"
+              />
               <span className="text-ink font-medium flex-1 truncate">
                 {t.name}
               </span>

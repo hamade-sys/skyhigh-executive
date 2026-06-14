@@ -1649,6 +1649,13 @@ export interface RouteEconomics {
    *  (discounted fuel cost). Zero for routes without a fuel tank
    *  at origin. Surfaced inline on the fuel cost line. */
   quarterlyFuelTankSavings?: number;
+  /** The combined doctrine demand multiplier the engine applied to this
+   *  route (shock absorption × tier-2/3 bonus × connecting × premium-cabin
+   *  lift). 1.0 = no doctrine demand effect. Used by the close to attribute
+   *  a "doctrine dividend" — revenue ≈ × (1 − 1/mult) is doctrine-driven.
+   *  Approximate where the route is capacity-bound (extra demand can't
+   *  convert to seats), so the digest labels it "≈". */
+  doctrineDemandMult?: number;
 }
 
 export function slotFeeUsd(tier: 1 | 2 | 3 | 4): number {
@@ -1929,12 +1936,24 @@ export function computeRouteEconomics(
     // freight tends to track economic activity that already exists.
     // Same plateauRound as the passenger curve.
     const cargoMaturity = Math.max(0.35, marketMaturity(quarter, totalRounds));
+    // Cargo specialization (W1.3) — a committed freight baron's network
+    // should compound, not stay flat. Running ≥3 active freighter routes
+    // under the cargo-dominance doctrine signals a genuine logistics
+    // network and lifts cargo demand +15% across the board. Makes
+    // "freight baron" a real archetype: a player who goes all-in on
+    // cargo feels the doctrine pay off as they scale, instead of
+    // watching freighters bleed against passenger margins.
+    const freighterRouteCount = isDoctrine(team, "cargo-dominance")
+      ? (team.routes ?? []).filter((r) => r.isCargo && r.status === "active").length
+      : 0;
+    const cargoSpecializationBonus = freighterRouteCount >= 3 ? 1.15 : 1.0;
     const cargoDemandT = Math.max(
       0,
       Math.min(
         cityBusinessAtQuarter(origin, quarter) * cargoMultA,
         cityBusinessAtQuarter(dest, quarter) * cargoMultB,
-      ) * cargoFocusBonus * cargoNetworkBonus * cargoShockBonus * cargoSeasonal * freighterPoolShare * cargoMaturity,
+      ) * cargoFocusBonus * cargoNetworkBonus * cargoShockBonus * cargoSeasonal
+        * freighterPoolShare * cargoMaturity * cargoSpecializationBonus,
     );
     const dailyTonnes = Math.max(0, Math.min(dailyCapacityT, cargoDemandT));
     const occupancy = dailyCapacityT > 0 ? Math.max(0, Math.min(1.0, dailyTonnes / dailyCapacityT)) : 0;
@@ -2021,6 +2040,10 @@ export function computeRouteEconomics(
       dailyDemandBus: 0,
       dailyDemandEcon: 0,
       quarterlyFuelTankSavings: cargoFuelTankSavings,
+      // Attribute the doctrine-driven cargo demand multipliers to the
+      // dividend (W1.2/W1.3) so a cargo baron sees the strategy pay off:
+      // network connecting bonus × the ≥3-freighter specialization lift.
+      doctrineDemandMult: cargoNetworkBonus * cargoSpecializationBonus,
     };
   }
 
@@ -2683,6 +2706,7 @@ export function computeRouteEconomics(
     dailyDemandBus,
     dailyDemandEcon,
     quarterlyFuelTankSavings: fuelTankSavings,
+    doctrineDemandMult: doctrineDemandBonus,
   };
 }
 
@@ -3349,6 +3373,17 @@ export interface QuarterCloseResult {
   prevBrandValue: number;
   /** Milestones earned during THIS quarter close (not all-time). */
   milestonesEarnedThisQuarter: string[];
+  /** Doctrine dividend (W1.2) — what the team's strategy doctrine was
+   *  worth this quarter. `demandRevenueUsd` ≈ revenue driven by doctrine
+   *  demand multipliers (approximate; capacity-bound routes clip it).
+   *  `staffDeltaUsd` is the exact staff-cost effect, signed as helped-
+   *  profit (budget saving = +, premium service investment = −). Both 0
+   *  for a doctrine with no quantifiable lever (e.g. plain global-network
+   *  in a no-shock quarter). */
+  doctrineDividend?: {
+    demandRevenueUsd: number;
+    staffDeltaUsd: number;
+  };
   /** News items mentioning the player's network this quarter, with city impacts. */
   newsImpacts: Array<{
     headline: string;
@@ -3548,6 +3583,12 @@ export function runQuarterClose(
   let revenue = 0;
   let passengerRevenue = 0;
   let cargoRevenue = 0;
+  // Doctrine dividend (W1.2) — revenue this quarter attributable to the
+  // team's doctrine demand multipliers (shock absorption, tier-2/3
+  // bonus, connecting traffic, premium-cabin lift). Accumulated per
+  // route as revenue × (1 − 1/mult). Approximate where the route is
+  // capacity-bound; the digest labels it "≈".
+  let doctrineDemandRevenueUsd = 0;
   let fuelCost = 0;
   let slotCost = 0;
   let totalPassengers = 0;
@@ -3605,6 +3646,11 @@ export function runQuarterClose(
       );
       const boostedRevenue = econ.quarterlyRevenue * legacyBonus * firstMoverBonus;
       revenue += boostedRevenue;
+      // Attribute the doctrine-driven slice of this route's revenue.
+      const docMult = econ.doctrineDemandMult ?? 1;
+      if (docMult > 1.0001) {
+        doctrineDemandRevenueUsd += boostedRevenue * (1 - 1 / docMult);
+      }
       // Cargo P&L line should reflect ALL cargo earnings — dedicated
       // freighters AND the belly cargo carried on passenger frames.
       // Previously belly revenue was silently folded into the
@@ -3867,6 +3913,14 @@ export function runQuarterClose(
   if (isDoctrine(next, "premium-service")) doctrineStaffMult *= 1.15;
   let staffCost =
     staffBase * STAFF_MULTIPLIER[next.sliders.staff] * staffSurchargeMult * doctrineStaffMult;
+  // Doctrine dividend (W1.2) — exact staff-cost delta vs a neutral
+  // doctrine. Budget runs lean (−20% → a saving, positive dividend);
+  // Premium invests in service (+15% → a cost, negative). Computed off
+  // the same base so it ties out to the cent. Signed as "helped profit":
+  // a staff SAVING is +, extra staff is −.
+  const doctrineStaffDeltaUsd =
+    -(staffBase * STAFF_MULTIPLIER[next.sliders.staff] * staffSurchargeMult) *
+    (doctrineStaffMult - 1);
   // Underdog Boost — Government Tailwind (R20A) waives staff cost for
   // 3 rounds. Effect is "the package reimburses staff payroll costs
   // in full." Surface a clear note so the player sees why their P&L
@@ -4839,6 +4893,10 @@ export function runQuarterClose(
     newRoutesActivatedThisQuarter,
     triggeredEvents,
     notes,
+    doctrineDividend: {
+      demandRevenueUsd: doctrineDemandRevenueUsd,
+      staffDeltaUsd: doctrineStaffDeltaUsd,
+    },
   };
 }
 

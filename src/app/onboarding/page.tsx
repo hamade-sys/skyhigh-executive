@@ -15,6 +15,8 @@ import {
 } from "@/lib/hub-pricing";
 import type { DoctrineId, Team } from "@/types/game";
 import { AirlineColorPicker } from "@/components/onboarding/AirlineColorPicker";
+import { AirlineIconPicker } from "@/components/onboarding/AirlineIconPicker";
+import { type AirlineIconId } from "@/lib/games/airline-icons";
 import {
   AIRLINE_COLOR_BY_ID,
   type AirlineColorId,
@@ -44,6 +46,8 @@ export default function Onboarding() {
   const [code, setCode] = useState("");
   const [tagline, setTagline] = useState("");
   const [airlineColorId, setAirlineColorId] = useState<AirlineColorId>("sky");
+  // Step 1 — airline logo (D-007). null = use the IATA code letters.
+  const [airlineIconId, setAirlineIconId] = useState<AirlineIconId | null>(null);
   // Step 2 — doctrine
   const [doctrine, setDoctrine] = useState<DoctrineId>("premium-service");
   // Step 3 — hub (now with cost-tier deduction)
@@ -78,6 +82,7 @@ export default function Onboarding() {
       marketingLevel: marketing,
       csrTheme: csr,
       airlineColorId,
+      airlineIconId,
     });
     router.push("/");
   }
@@ -172,6 +177,23 @@ export default function Onboarding() {
                     <p className="text-body-sm text-ink-muted mt-2">
                       Chosen: <span className="font-medium text-ink">{AIRLINE_COLOR_BY_ID[airlineColorId].label}</span>
                     </p>
+                  </Field>
+
+                  {/* D-007 — airline logo. Sits right under the color so
+                      the whole brand identity is set together; the selected
+                      tile previews in the chosen color. */}
+                  <Field label="Logo">
+                    <p className="text-body-sm text-ink-muted mb-3 -mt-1">
+                      Your emblem on the brand mark across the app. Keep
+                      your code letters, or pick one of 20 marks.
+                    </p>
+                    <AirlineIconPicker
+                      value={airlineIconId}
+                      onChange={setAirlineIconId}
+                      code={code.trim()}
+                      colorId={airlineColorId}
+                      airlineName={airlineName.trim() || undefined}
+                    />
                   </Field>
                 </div>
               </div>
