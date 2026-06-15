@@ -52,8 +52,11 @@ const SPEC_TO_MODEL: Record<string, string> = {
   "B737-900": "B739", "B737-MAX-9": "B739", "B737-MAX-10": "B739",
   // ── Boeing 757 ──────────────────────────────────────────────
   "B757-200": "B757", "B757-200F": "B757",
-  // ── Boeing 767 → clean 787-9 body (own model was broken) ────
-  "B767-300ER": "B789", "B767-300F": "B789",
+  // ── Boeing 767 → blank A330 body. Its own model was broken, and
+  //    every Boeing widebody mesh carries painted "Boeing 7xx" livery
+  //    text. The A330 widebody twin is the only unmarked (text-free)
+  //    widebody with proper window/panel detail, so the 767 borrows it.
+  "B767-300ER": "A333", "B767-300F": "A332",
   // ── Boeing 777 ──────────────────────────────────────────────
   "B777-200": "B772", "B777-200ER": "B772", "B777-200LR": "B772",
   "B777X-8": "B772",
