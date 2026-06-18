@@ -3002,7 +3002,22 @@ export function computeBrandValueBreakdown(team: Team): BrandValueBreakdown {
         100,
         airlineValue > 0 ? 100 - (positiveDebt / airlineValue) * 100 : 0,
       );
-  const revGrowth = 50;
+  // Real revenue-growth score from the last two closed quarters.
+  // 50 = flat, 100 = +25%+ QoQ, 0 = −25%+ QoQ. Stays neutral (50) until
+  // there are two quarters of history, so a brand-new airline isn't
+  // penalised for having no prior revenue to grow from.
+  const fin = team.financialsByQuarter ?? [];
+  let revGrowth = 50;
+  if (fin.length >= 2) {
+    const prevRev = fin[fin.length - 2].revenue;
+    const currRev = fin[fin.length - 1].revenue;
+    if (prevRev > 0) {
+      const growthPct = (currRev - prevRev) / prevRev; // 0.10 = +10% QoQ
+      revGrowth = clamp(0, 100, 50 + growthPct * 200); // ±25% spans 0..100
+    } else if (currRev > 0) {
+      revGrowth = 100; // grew from zero revenue into the black
+    }
+  }
 
   const financialHealth = clamp(
     0,

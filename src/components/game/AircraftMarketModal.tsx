@@ -5,6 +5,8 @@ import { Badge, Button, Input, Modal, ModalBody, ModalFooter, ModalHeader } from
 import { AIRCRAFT, AIRCRAFT_BY_ID } from "@/data/aircraft";
 import { planeImagePath } from "@/lib/aircraft-images";
 
+import { Viewer3DBoundary } from "@/components/game/Viewer3DBoundary";
+
 // Dynamic import keeps Three.js (~1 MB) out of the initial bundle.
 // It only loads when the user expands an aircraft card.
 const Aircraft3DViewer = lazy(() =>
@@ -837,36 +839,45 @@ function ExpandedConfigurator({
           </button>
         </div>
 
-        {view3d ? (
-          /* 3-D interactive viewer */
-          <>
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center text-ink-muted text-[0.75rem] animate-pulse">
-                  Loading 3D…
-                </div>
-              }
-            >
-              <Aircraft3DViewer specId={spec.id} className="w-full h-full" />
-            </Suspense>
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none">
-              <span className="text-[0.6rem] text-ink-muted bg-surface/70 backdrop-blur-sm px-2 py-0.5 rounded-full border border-line/40">
-                Drag to rotate · Scroll to zoom
-              </span>
+        {(() => {
+          // Flat 2-D content — shown in 2-D mode AND used as the graceful
+          // fallback if the 3-D viewer throws (WebGL loss / bad model).
+          const twoD = imgSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imgSrc}
+              alt={`${spec.name} 3-view illustration`}
+              className="w-full h-full object-contain p-4"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Plane size={64} className="text-ink-muted" strokeWidth={1.0} />
             </div>
-          </>
-        ) : imgSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imgSrc}
-            alt={`${spec.name} 3-view illustration`}
-            className="w-full h-full object-contain p-4"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Plane size={64} className="text-ink-muted" strokeWidth={1.0} />
-          </div>
-        )}
+          );
+
+          if (!view3d) return twoD;
+
+          return (
+            <>
+              <Viewer3DBoundary fallback={twoD}>
+                <Suspense
+                  fallback={
+                    <div className="w-full h-full flex items-center justify-center text-ink-muted text-[0.75rem] animate-pulse">
+                      Loading 3D…
+                    </div>
+                  }
+                >
+                  <Aircraft3DViewer specId={spec.id} className="w-full h-full" />
+                </Suspense>
+              </Viewer3DBoundary>
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none">
+                <span className="text-[0.6rem] text-ink-muted bg-surface/70 backdrop-blur-sm px-2 py-0.5 rounded-full border border-line/40">
+                  Drag to rotate · Scroll to zoom
+                </span>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Spec readout — slightly more detailed than the collapsed row.
