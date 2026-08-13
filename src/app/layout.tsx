@@ -17,12 +17,12 @@ export const metadata: Metadata = {
     template: "%s | ICAN Simulations",
   },
   description:
-    "Custom executive simulations built around your team's competencies. Airline live now; Banking, Hospitality, Agriculture, Real Estate, and Healthcare next.",
+    "Custom executive simulations built around your team’s competencies. Airline live now; Banking, Hospitality, Agriculture, Real Estate, and Healthcare next.",
   metadataBase: new URL("https://sim.icanmena.com"),
   openGraph: {
     title: "ICAN Simulations — Executive Industry Simulations",
     description:
-      "Lead an industry, not a spreadsheet. Custom executive simulations built around your team's competencies.",
+      "Lead an industry, not a spreadsheet. Custom executive simulations built around your team’s competencies.",
     type: "website",
     url: "https://sim.icanmena.com",
     siteName: "ICAN Simulations",
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ICAN Simulations — Executive Industry Simulations",
     description:
-      "Custom executive simulations built around your team's competencies.",
+      "Custom executive simulations built around your team’s competencies.",
     images: ["/opengraph-image.png"],
   },
   icons: {
