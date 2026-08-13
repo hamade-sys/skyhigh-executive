@@ -27,11 +27,16 @@ export const metadata: Metadata = {
     url: "https://sim.icanmena.com",
     siteName: "ICAN Simulations",
     locale: "en_AE",
+    // opengraph-image.png is built from the real ICAN wordmark. It replaced
+    // og-image.png, which was a stale copy of the ICAN CRM card — it read
+    // "ICAN MENA · CRM / Sales pipeline, built for HR consulting" on a
+    // simulations site, and carried an auto-generated "IC" initials badge.
     images: [
       {
-        url: "/og-image.png",
+        url: "/opengraph-image.png",
         width: 1200,
         height: 630,
+        type: "image/png",
         alt: "ICAN Simulations — Lead an industry, not a spreadsheet.",
       },
     ],
@@ -41,7 +46,7 @@ export const metadata: Metadata = {
     title: "ICAN Simulations — Executive Industry Simulations",
     description:
       "Custom executive simulations built around your team's competencies.",
-    images: ["/og-image.png"],
+    images: ["/opengraph-image.png"],
   },
   icons: {
     icon: "/favicon.png",
