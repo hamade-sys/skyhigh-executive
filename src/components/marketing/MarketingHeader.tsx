@@ -20,7 +20,7 @@ import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth-context";
 
 interface Props {
-  current?: "home" | "about" | "lobby" | "trivia";
+  current?: "home" | "about" | "lobby";
   variant?: "default" | "onDark";
 }
 
@@ -28,7 +28,6 @@ const NAV_LINKS = [
   { href: "/", label: "Home", key: "home" },
   { href: "/about", label: "About", key: "about" },
   { href: "/lobby", label: "Public lobby", key: "lobby" },
-  { href: "/trivia", label: "ICAN Trivia", key: "trivia" },
 ] as const;
 
 export function MarketingHeader({ current, variant = "default" }: Props) {

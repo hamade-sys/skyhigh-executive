@@ -31,6 +31,19 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_GIT_SHA: gitSha,
   },
+  // ICAN Trivia moved to portal.icanmena.com/trivia, onto the portal's
+  // Frankfurt database. An old link (a join QR on a slide, a bookmarked
+  // board) lands on the same page there. Temporary redirects, so nothing
+  // caches them for good.
+  async redirects() {
+    const portal = "https://portal.icanmena.com";
+    return [
+      { source: "/trivia", destination: `${portal}/trivia`, permanent: false },
+      { source: "/trivia/:path*", destination: `${portal}/trivia/:path*`, permanent: false },
+      { source: "/play", destination: `${portal}/trivia/play`, permanent: false },
+      { source: "/play/:code", destination: `${portal}/trivia/play/:code`, permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;
