@@ -115,7 +115,6 @@ function Landing() {
           }
         }}
       />
-      <TriviaBand />
       <Features selectedSim={selectedSim} />
       <Doctrines selectedSim={selectedSim} />
       <HowItWorks />
@@ -645,55 +644,6 @@ function Portfolio({
               </button>
             );
           })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── ICAN Trivia ─────────────────────────────────────────────
-// The second game type on the site: a Jeopardy-style quiz for
-// workshops and team events. A short band that hands off to /trivia.
-function TriviaBand() {
-  return (
-    <section className="border-y border-slate-100 bg-[linear-gradient(135deg,#EFF6FF_0%,#FFFFFF_45%,#E6F9FA_100%)]">
-      <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-16 md:grid-cols-[1.2fr_1fr]">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#02797F]">New game type</p>
-          <h2 className="mt-2 text-4xl font-display font-bold tracking-tight text-slate-900">
-            ICAN <span className="t-hl text-[#02797F]">Trivia</span>
-          </h2>
-          <p className="mt-4 max-w-xl text-lg leading-relaxed text-slate-600">
-            A Jeopardy-style quiz for workshops and team events. Build a board or start from an ICAN template, set up to five teams, and everyone buzzes in from their phone with a four-letter code — Traditional rules, or Competitive with steals, blocks and double downs.
-          </p>
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Link href="/trivia" className="inline-flex items-center gap-2 rounded-lg bg-[#02797F] px-5 py-3 text-sm font-semibold text-white hover:bg-[#026a6f]">
-              Explore ICAN Trivia <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link href="/play" className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50">
-              Join a game with a code
-            </Link>
-          </div>
-        </div>
-        <div className="trivia-stage grid aspect-[16/10] grid-cols-4 gap-1.5 rounded-2xl p-3 shadow-[0_24px_50px_-20px_rgba(2,121,127,0.45)]" aria-hidden>
-          {["Leadership", "Strategy", "HR Metrics", "Wordplay"].map((t) => (
-            <div key={t} className="t-cell t-category grid place-items-center rounded px-1 text-center text-[11px] text-white">
-              {t}
-            </div>
-          ))}
-          {[200, 400, 600].flatMap((v, r) =>
-            [0, 1, 2, 3].map((c) =>
-              (r + c) % 5 === 2 ? (
-                <div key={`${v}-${c}`} className="grid place-items-center rounded text-[11px] font-bold text-[#0b1d20]" style={{ background: c % 2 ? "#F7E300" : "#00C2CB" }}>
-                  {c % 2 ? "Pearls" : "Falcons"}
-                </div>
-              ) : (
-                <div key={`${v}-${c}`} className="t-cell grid place-items-center rounded">
-                  <span className="t-value text-lg">{v}</span>
-                </div>
-              ),
-            ),
-          )}
         </div>
       </div>
     </section>
