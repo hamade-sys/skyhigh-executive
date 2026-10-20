@@ -51,7 +51,13 @@ export function ActiveGameRibbon() {
   // post-game scoring screen is especially confusing — that game
   // just ended; there's no resume.
   const path = pathname ?? "";
-  const insideActiveGame = path.startsWith("/games/") || path.startsWith("/endgame");
+  const insideActiveGame =
+    path.startsWith("/games/") ||
+    path.startsWith("/endgame") ||
+    // ICAN Trivia's live screens (host console, big screen, phones) run full-bleed.
+    path.startsWith("/trivia/host") ||
+    path.startsWith("/trivia/display") ||
+    path.startsWith("/play");
 
   useEffect(() => {
     if (authLoading) return;
