@@ -641,3 +641,197 @@ dialog:not([open]) {
 .city-select-pulse {
   animation: city-select-pulse 1.4s var(--ease-out-quart) infinite;
 }
+
+/* ───────────────────────────────────────────────────────────────
+   ICAN Trivia — the ICAN standard brand (portal.icanmena.com,
+   crm.icanmena.com), not the simulations' dark game skin.
+   Light canvas, white cards, Montserrat headings in soft charcoal,
+   bright ICAN teal for actions (white labels), deep teal for the
+   board, sage for success, and the yellow highlighter as the one
+   signature accent. Tokens mirror ican-one's globals.css.
+   ─────────────────────────────────────────────────────────────── */
+.trivia-stage {
+  --t-bg: #f8fafc;              /* --ican-canvas */
+  --t-bg-2: #ffffff;
+  --t-panel: #ffffff;
+  --t-panel-2: #f1f5f9;
+  --t-line: #e2e8f0;
+  --t-line-strong: #cbd5e1;
+  --t-text: #1e293b;
+  --t-ink: #545454;             /* --ican-ink: every heading */
+  --t-muted: #64748b;
+  --t-faint: #94a3b8;
+  --t-teal: #00c2cb;            /* --brand-bright: actions, white label */
+  --t-teal-strong: #009aa1;     /* hover */
+  --t-teal-deep: #02797f;       /* --brand-primary: the board */
+  --t-teal-ink: #01585d;        /* teal text on light */
+  --t-teal-soft: #e6f2f2;
+  --t-yellow: #f7e300;          /* highlighter only */
+  --t-sage: #56a98f;
+  --t-sage-strong: #3d8a70;
+  --t-sage-soft: rgba(86, 169, 143, 0.15);
+  --t-red: #e11d48;
+  --t-red-soft: #fff1f2;
+  --t-cell-top: #02939b;
+  --t-cell-bottom: #02797f;
+  --t-cell-used: #eef2f6;
+  color-scheme: light;
+  background: var(--t-bg);
+  color: var(--t-text);
+  font-family: var(--font-trivia-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.trivia-wash {
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 45%, #e6f9fa 100%);
+}
+.trivia-stage ::selection {
+  background: rgba(0, 194, 203, 0.2);
+  color: #0f172a;
+}
+.trivia-stage :focus-visible {
+  outline: 2px solid var(--t-teal-deep);
+  outline-offset: 2px;
+}
+
+.t-font {
+  font-family: var(--font-trivia), var(--font-display);
+}
+
+/* Board cells — ICAN deep teal tiles with white numbers. */
+.t-cell {
+  background: linear-gradient(180deg, var(--t-cell-top), var(--t-cell-bottom));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 1px 2px rgba(15, 23, 42, 0.08);
+}
+.t-cell-used {
+  background: var(--t-cell-used);
+}
+.t-head {
+  background: #ffffff;
+  border: 1px solid var(--t-line);
+}
+.t-value {
+  font-family: var(--font-trivia), var(--font-display);
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+.t-category {
+  font-family: var(--font-trivia), var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* The ICAN highlighter stroke (www.icanmena.com signature), pivoted
+   from the centre so it stays a marker stroke at any length. */
+.t-hl {
+  position: relative;
+  z-index: 0;
+  white-space: nowrap;
+}
+.t-hl::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  height: 0.4em;
+  bottom: 0.04em;
+  left: -0.09em;
+  right: -0.17em;
+  border-radius: 1px;
+  opacity: 0.6;
+  transform: rotate(-2deg);
+  transform-origin: center;
+  background: linear-gradient(101deg, transparent 0, #f7e300 4%, #f7e300 89%, transparent 100%);
+}
+
+@keyframes t-pop-in {
+  from { opacity: 0; transform: scale(0.82) translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.t-pop-in { animation: t-pop-in 320ms var(--ease-out-quart) both; }
+
+@keyframes t-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+.t-rise { animation: t-rise 420ms var(--ease-out-quart) both; }
+
+@keyframes t-zoom-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+.t-zoom-in { animation: t-zoom-in 360ms var(--ease-out-quart) both; }
+
+@keyframes t-stamp {
+  0% { opacity: 0; transform: scale(2.4) rotate(-18deg); }
+  60% { opacity: 1; transform: scale(0.96) rotate(3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+.t-stamp { animation: t-stamp 700ms var(--ease-out-quart) both; }
+
+@keyframes t-flash {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.t-flash { animation: t-flash 1400ms ease-out both; }
+
+@keyframes t-shake {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-6px); }
+  40%, 60% { transform: translateX(6px); }
+}
+.t-shake { animation: t-shake 420ms ease-in-out both; }
+
+@keyframes t-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.18); opacity: 0; }
+}
+.t-ring { animation: t-ring 1.4s ease-out infinite; }
+
+@keyframes t-confetti {
+  0% { transform: translate3d(0, -10vh, 0) rotate(0); opacity: 1; }
+  100% { transform: translate3d(var(--dx, 0), 110vh, 0) rotate(var(--rot, 540deg)); opacity: 0.9; }
+}
+.t-confetti {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 16px;
+  border-radius: 2px;
+  animation: t-confetti var(--dur, 3.2s) cubic-bezier(0.3, 0.6, 0.4, 1) var(--delay, 0s) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-ring { animation: none; }
+  .t-confetti { display: none; }
+}
+
+/* Long questions shrink to fit instead of overflowing the screen. */
+.t-question {
+  font-family: var(--font-trivia), var(--font-display);
+  font-weight: 700;
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+/* A team's name: dark, legible text led by a chip of the team's colour.
+   Team colours (yellow, lime, sky…) can't be text on a light ground, and
+   colour is never the only label. Set `--team` inline; data-team="plain"
+   drops the chip where a TeamBadge already sits beside the name. */
+[data-team] {
+  color: inherit;
+}
+[data-team]:not([data-team="plain"])::before {
+  content: "";
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-right: 0.38em;
+  border-radius: 30%;
+  background: var(--team, #cbd5e1);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
+  vertical-align: 0.04em;
+}
