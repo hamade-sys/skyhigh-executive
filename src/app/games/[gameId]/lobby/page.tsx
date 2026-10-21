@@ -850,11 +850,18 @@ export default function GameLobbyPage({
                 // "Player" as a last resort.
                 const memberSetup = member
                   ? (playerSetups[member.session_id] as
-                      | { airlineName?: string }
+                      | { airlineName?: string; hub?: string; doctrine?: string }
                       | undefined)
                   : undefined;
                 const seatLabel =
                   memberSetup?.airlineName ?? member?.display_name ?? "Player";
+                // Hub pick is surfaced PUBLICLY on each seat card so
+                // the cohort can see who's clustering on which gateway.
+                // Sealed-bid conflict resolution at game start (next
+                // PR) uses this same visibility — if two players pick
+                // the same hub, the lobby shows the contention before
+                // the game ever begins.
+                const memberHub = memberSetup?.hub ?? null;
                 return (
                   <SeatCard
                     key={i}
@@ -863,6 +870,7 @@ export default function GameLobbyPage({
                     isMe={isMe}
                     hasSetup={hasSetup}
                     seatLabel={seatLabel}
+                    memberHub={memberHub}
                     seatConfig={cfg}
                     botColorPreview={botColorByIndex.get(i) ?? null}
                     canEditConfig={(isHost || isFacilitator) && !member && game.status === "lobby"}
@@ -1083,7 +1091,7 @@ function HostPanel({
 }
 
 function SeatCard({
-  index, member, isMe, hasSetup, seatLabel, seatConfig, botColorPreview,
+  index, member, isMe, hasSetup, seatLabel, memberHub, seatConfig, botColorPreview,
   canEditConfig, canRerollBotColor, onConfigChange, onRerollBotColor,
 }: {
   index: number;
@@ -1091,6 +1099,12 @@ function SeatCard({
   isMe: boolean;
   hasSetup: boolean;
   seatLabel: string;
+  /** Hub the seated player picked in onboarding (e.g. "DXB"). null
+   *  when the player hasn't saved their setup yet, or the seat is
+   *  unclaimed. Exposed publicly on the seat card so the cohort can
+   *  see who's clustering on which gateway — feeds into the
+   *  sealed-bid conflict resolution at game start. */
+  memberHub: string | null;
   seatConfig: SeatConfig;
   botColorPreview: AirlineColorId | null;
   canEditConfig: boolean;
@@ -1186,6 +1200,21 @@ function SeatCard({
                    member.role === "host" ? "Host" :
                    member.role === "spectator" ? "Spectator" : "Player"}
                 </span>
+                {/* Public hub pick — IATA chip rendered when the
+                    player has saved their onboarding setup. Lets the
+                    cohort see at-a-glance who's clustering on which
+                    gateway BEFORE the game starts. Hubs that overlap
+                    will go to a sealed-bid auction at start (follow-up
+                    PR). */}
+                {memberHub && (
+                  <span
+                    className="font-mono text-[10px] font-semibold tabular px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700"
+                    title={`Hub: ${memberHub}`}
+                    aria-label={`Hub ${memberHub}`}
+                  >
+                    {memberHub}
+                  </span>
+                )}
                 {/* Phase 6 P1 — away indicator. Surfaces "Away 3m"
                     in amber when last_seen_at is stale by more than
                     2 minutes; rose at 5 minutes (long away).
